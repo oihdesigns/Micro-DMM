@@ -1,6 +1,6 @@
 LTspice 24.0.12 for Windows
-Circuit: * C:\Users\Nick\Documents\GitHub\Micro-DMM\LTSpiceModelling.asc
-Start Time: Sun Jun 22 17:28:20 2025
+Circuit: * C:\Users\Nick\Documents\GitHub\Micro-DMM\LTSpice\LTSpiceModelling.asc
+Start Time: Sun Jun 22 17:33:02 2025
 Warning: Multiple definitions of model "2scr375p" Type: BJT
 Warning: Multiple definitions of model "bc857b" Type: BJT
 Warning: Multiple definitions of model "bc847c" Type: BJT
@@ -11,5 +11,5 @@ tnom = 27
 temp = 27
 method = modified trap
 Direct Newton iteration for .op point succeeded.
-Total elapsed time: 0.332 seconds.
+Total elapsed time: 0.190 seconds.
 
