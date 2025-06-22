@@ -1535,10 +1535,13 @@ void updateDisplay() {
       }
       display.setTextSize(1);
       display.setCursor(0, 32);
-      if (preciseMode) {
-        display.println("Precise Mode");
+      if (zeroOffsetRes != 0) {
+        
         display.print("null mOhms:");
-        display.print(zeroOffsetRes*1000, 2);
+        display.println(zeroOffsetRes*1000, 2);
+        if(preciseMode){
+          display.print("Precise Mode");
+          }
       }
       if (debugMode) {
         display.setCursor(60, 32);
@@ -1673,16 +1676,20 @@ void formatResistanceValue(float value, float &outValue, String &outSuffix, int 
     if (value < 0.9) {           // use milli-ohm (if we ever measure sub-ohm)
       outValue = value * 1000.0;
       outSuffix = "m";
+      if(value < 0.09){
+        outDigits = 1;
+      }else{
       outDigits = 2;
+      }
     } else {
       outValue = value;
       outSuffix = "";
       if (value >= 100.0) {
         outDigits = 2;
       } else if (value < 9.5) {
-        outDigits = 5;
-      } else {
         outDigits = 4;
+      } else {
+        outDigits = 3;
       }
     }
   }
