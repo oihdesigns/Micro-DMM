@@ -1,0 +1,110 @@
+Micro-Meter (uMeter) DMM Use Guide
+
+Preamble and Nomenclature:
+- Voltage references generally refer to the ABS value of the voltage. They apply to + and - polarity unless otherwise noted. 
+
+
+---Safety:---
+
+This is brief. Please read it.
+
+Never use for circuits with voltage amplitudes above 50VDC. The unit is tested for and uses components with this rating. Higher voltages may harm the meter and/or user. The meter may survive significantly higher voltages for brief periods. In the case of accidentally contact with higher voltages cease measurement immediately. 
+
+Never use the resistance circuit on live circuits. Depending on voltage and regulation this can kill the meter (generally by taking out the range switching MOSFET, an SI2302 (?) @ Q#). 
+
+Avoid plugging the meter into building power and apply the low-side *resistance* probe to a live circuit that is also connected to building power. This could blow fuses or damage external equipment. (Measuring voltage correctly using the voltage contacts is not a hazard to equipment, but will cause ground loops without proper isolation.)
+
+Phrased in a positive instead of negative light:
+To hurt the ADC chip and/or yourself: Measure voltages with amplitudes greater than 50vdc. Especially for longer than the time it takes to realize your mistake.
+To kill the resistance circuit: Attempt to measure voltages. Especially unregulated.
+To play voltage roulette your computer's overcurrent protections: Plug the meter into the computer's USB port and stick the low-side resistance probe into a hot outlet. 
+
+
+
+---Power:---
+
+Power Switch:
+The two position power switch is essentially on and off, but more technically "On" connects the battery, whereas "Off" allows for a USB connection with the battery out of circuit. In normal usage the switch should be set to on even when running off USB so the battery can charge. The use-case for the USB-Only mode is running the uMeter at minimal current (no battery charging), which is desirable when using a USB isolator. 
+
+Battery:
+The internal battery gives 4-6 hours of runtime from full (4.2vdc) to 30% (3.7vdc) and charges when the uMeter is plugged in. The power LED on the MCU blinks when the battery is charging. Charging is slow and can take awhile.
+
+
+---General Use---
+
+
+Mode Selection:
+
+Resistance / Impedance / Diode Measurements:
+The uMeter boots into resistance mode. To return to resistance mode short the measurement leads.
+
+Voltage:
+The meter automatically enters voltage mode when more than 1vdc is detected on the probe. The meter can also be forced into voltage mode by touching the red probe to the resistance center pin. 
+
+Current:
+The meter automatically displays current measurements when an ammeter module is detected at boot. 
+
+---
+
+Interface:
+
+Top Button:
+
+Min / Max Display:
+Enable the Min / Max / Range display by holding down the top button for more than 1 second. Reset the values by again holding the button for more than 1 second. 
+
+Type Values:
+Type the currently displayed value via keyboard emulation over the USB port by pressing the top button. The value is typed and then the "right arrow" key is sent. This moves to the next column over in a spreadsheet. This behavior can be configured in the source code. 
+
+Down Button:
+Changes Mode.
+
+Reset Button:
+The MCU has a reset button, labelled "R." This is the same as power cycling, and is often faster. 
+
+---
+
+Resistance / Impedance / Diode Measurements:
+
+Theory of Operation, in brief: The resistance circuit has a high range where up to +4vdc is applied or a low range where up to 20mA is applied, for a maximum theoretical energy of 80mW across the terminals. The range switches automatically. The voltage on the live (center pin) is measured and a resistance is calculated and displayed.
+
+Zero Offset: Short the leads when booting to set the zero point offset. Anytime the initial resistance reading is less than 10 Ohms the null is set automatically. 
+
+Impedance and Diode measurements: The meter automatically displays the voltage between the two leads in mV. When measuring a diode or impedance otherwise this is your measurement. 
+
+Power Save: After 30 seconds if the reading on the meter is >1000 Ohms the meter enters power-save mode. Short the probes to wake the circuit. 
+
+Accuracy and Precision: The practical range is from less than 10mOhms to ~1MOhms. 
+-At the low range, differences of <2mOhms can be read, but this requires extreme care for the null offset and contact method. 
+-At the high range, the meter loses accuracy very quickly above 1MOhms. It will read out values up several times that, but these should be treated as rough approximations.
+
+The firmware applies an averaging to the resistance measurement for more stable readings. When there is a big resistance change (e.g. first probe contact) the uMeter will first show the instantaneous reading, and then will show a stable, more accurate reading after a moment (typically one or two screen refreshes).
+
+
+---
+
+Voltage Measurements:
+
+Theory of Operation, in brief: This is a differential measurement between a constant voltage on the "low" side and the voltage on the "high" side. Both sides of the input start with a ~0.5MOhm current-limit resistor, then divided across a ~22k resistor. The gives an effective input impedance of just over 1MOhm. The difference between the constant and divided voltages is then read and scaled back up for display.
+
+Safety and Range:
+
+The circuit is tested for accuracy and function up to +/-50VDC, and is not designed for or systemically tested at higher voltages. The accidental measurement of higher voltages is far more a concern for your safety as a person than the uMeter's voltage circuit. The uMeter has a pair of diodes to prevent overvoltage to the ADS. I have tested some units with a 1000v megaohmmeter, and nothing bad happened. 
+
+DC Measurements:
+The meter is generally designed for DC measurements and displays the DC reading by default. The firmware applies an averaging to measurements for more stable readings. When there is a big voltage change (e.g. first probe contact) the uMeter will show the instantaneous reading, and on a stable source after several moments will switch to the averaged reading. 
+
+AC Measurements:
+The meter is always monitoring for AC voltage, and displays it when above a threshold of 1 Vrms. This is customizable in the firmware. The firmware is not particularly optimized for accurate or reliable AC measurements, nor is there filtering place, and this function is much more of a sanity check than anything. Using an external active 1:50 differential voltage input (often sold for scopes) the uMeter will accurately show standard US wall power as 2.3VAC RMS. For the best amplitude measurements when the waveform is known enable the "min/max" mode and calculate the from there. 
+
+
+Ground Loops: 
+
+Anytime the uMeter's and test subject's grounds are connected you will get ground loops, making voltage measurements unusable. This typically occurs if have the uMeter plugged into wall power (or a computer running off wall power) and make voltage measurements on another device plugged into wall power. There are ways to handle this:
+- Run off the internal battery. Easiest but no connection.
+- Run either your computer or the device you're making measurements on off a battery (easier if you're using a laptop).
+- Use a USB isolator. Adafruit makes a nice one, although they say it is limited to 100mA. The uMeter draws about 90mA when in USB-only power mode, so in theory it is okay. I have added a heatsink and active cooling to my isolator board to reduce my automatic alarm bells going off from the heat.
+
+---SERIAL GUI---
+
+There is a serial GUI. 
