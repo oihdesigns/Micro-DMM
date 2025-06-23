@@ -68,6 +68,7 @@ enum Mode {
   Type,
   Low,
   AltUnitsMode,
+  HighRMode,
   //Impedance,
   Charging,
   NUM_MODES
@@ -498,7 +499,7 @@ if(digitalRead(LowerButton) == 0){
     
 
 if(!powerSave){
-    if(ohmsVoltage>EEPROM_MAXV-0.002 && !timeHighset){
+    if(ohmsVoltage>EEPROM_MAXV-0.002 && !timeHighset && currentMode != HighRMode){
       timeHigh = millis();
       timeHighset = true;
     }
@@ -511,10 +512,11 @@ if(!powerSave){
 }
 
 
-if(powerSave){
+
+if(powerSave || currentMode==Charging){
   analogWrite(OHMPWMPIN, 254);
     
-  if(ohmsVoltage < EEPROM_SleepV-0.004){
+  if(ohmsVoltage < EEPROM_SleepV-0.01){
       powerSave = false;
       timeHighset = false;
       analogWrite(OHMPWMPIN, 0);
@@ -1128,10 +1130,16 @@ void measureResistance() {
   ohmsVoltage = adcCount * kGainFactors[gainIndex] / 1000.0f;
   //Serial.println(ohmsVoltage);
 
+
+
 if(powerSave){
   ZENER_MAX_V = EEPROM_SleepV;
 }else{
-ZENER_MAX_V = EEPROM_MAXV;
+  if(ohmsVoltage>ZENER_MAX_V){
+    ohmsVoltage = ZENER_MAX_V-0.0001;
+  }else{
+    ZENER_MAX_V = EEPROM_MAXV;
+  }
 }
 
   // --- Compute raw resistance ---
@@ -1158,8 +1166,7 @@ ZENER_MAX_V = EEPROM_MAXV;
   }
 
   // --- Adjust display update rate & data rate ---
-  if (!isBetween(rawResistance, prevResistance * 0.2f, prevResistance * 5.0f)&& ohmsVoltage<4.995) {
-    
+  if (!isBetween(rawResistance, prevResistance * 0.2f, prevResistance * 5.0f)&& ohmsVoltage<4.995) { 
     ads.setDataRate(RATE_ADS1115_475SPS);  // speed up for big change
     if(!powerSave){
       LCD_INTERVAL = 200;
@@ -1191,21 +1198,22 @@ ZENER_MAX_V = EEPROM_MAXV;
   else  calibratedResistance = rawResistance * CF_O;
 
 
-
-  // --- Open-circuit detection & final assignment ---
-  if (ohmsVoltage > (ZENER_MAX_V - 0.007f)) {
-    currentResistance = 8e6f;  // treat as open
-    if (!voltageDisplay) {
-      ads.setDataRate(RATE_ADS1115_475SPS);
-    }
-  } else {
     currentResistance = calibratedResistance;
     if (altUnits) {
       // Convert to °F via thermistor equation
       currentResistance = (1.0f / ((1.0f/298.15f) + (log(currentResistance/10000.0f)/3694.0f)) - 273.15f) * 1.8f + 32.0f;
     }
+
+  // --- Open-circuit detection & final assignment ---
+  if(currentMode != HighRMode){
+  if (ohmsVoltage > (ZENER_MAX_V - 0.007f)) {
+    currentResistance = 8e6f;  // treat as open    
+    if (!voltageDisplay) {
+      ads.setDataRate(RATE_ADS1115_475SPS);
+    }
   }
-}
+  } 
+} //This closes resistance measurement
 
 void measureVoltage() {
   static float   prevVoltage     = 0.0f;
@@ -1509,7 +1517,7 @@ void updateDisplay() {
   } else {
     // Resistance display mode
     
-    if (ohmsVoltage < (ZENER_MAX_V - 0.007)) {
+    if (ohmsVoltage < (ZENER_MAX_V - 0.007) || currentMode == HighRMode) {
       // If within measurable range, display the resistance value
       /*
       if(powerSave){
@@ -1698,10 +1706,18 @@ void logCurrentData(float voltage, float timeSec, float current) {
 
 void formatResistanceValue(float value, float &outValue, String &outSuffix, int &outDigits) {
   // Format resistance value into appropriate scale (Ω, kΩ, MΩ) for display
-  if (value > 500000.0) {        // use megaohm
+  if(value > 90000000.0){
     outValue = value / 1000000.0;
     outSuffix = "M";
-    outDigits = 4;
+    outDigits = 1;  
+  }else if(value > 9000000.0){
+    outValue = value / 1000000.0;
+    outSuffix = "M";
+    outDigits = 2;
+  }else if (value > 900000.0) {        // use megaohm
+    outValue = value / 1000000.0;
+    outSuffix = "M";
+    outDigits = 3;
   } else if (value > 900.0) {    // use kiloohm
     outValue = value / 1000.0;
     outSuffix = "k";
