@@ -49,8 +49,8 @@ void eepromSetup(){
       CF_M = 1.0218;
       CF_N = 1.0725;
       CF_O = 1.2269;
-      EEPROM_MAXV = 4.9965;
-      EEPROM_SleepV = 0.619;
+      EEPROM_MAXV = 4.994;
+      EEPROM_SleepV = 0.615;
       constantI = 0.020087;
       VOLTAGE_SCALE = (46.4564*2); // 20250619
   } else if(EEPROM.read(1) == 4){

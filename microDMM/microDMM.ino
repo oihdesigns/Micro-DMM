@@ -65,9 +65,11 @@ float EEPROM_SleepV = 0.615;
 enum Mode {
   Default,
   Voltmeter,
+  Type,
   Low,
   AltUnitsMode,
-  Impedance,
+  //Impedance,
+  Charging,
   NUM_MODES
 };
 #define BUTTON_PIN 10         // Set your button input pin
@@ -106,6 +108,7 @@ int16_t adcReadingVoltage = 0;  // raw ADC reading for voltage (differential)
 int16_t adcReadingOhms    = 0;  // raw ADC reading for resistance
 int16_t adcReadingCurrent = 0;  // raw ADC reading for current
 float batteryVoltage = 0.0;     // measured battery voltage (V)
+int16_t countV;
 
 float newVoltageReading = 0.0;  // latest measured voltage (V)
 float averageVoltage = 0.0;     // moving average (DC) of voltage
@@ -232,6 +235,10 @@ bool altUnits = false; //Display alternate temp/voltage
 bool preciseMode = false;
 bool deepSleepTrigger = false;
 bool screenSleep = false;
+bool deltaMode = false;
+bool deltaTrigger = false;
+float deltaV = 0.0;
+int deltaVdigits = 0;
 
 // Flags for transient states
 bool flashlightMode = false;  // flashlight mode active (button held at startup)
@@ -416,6 +423,13 @@ void loop() {
     preciseMode = false;
   }
 
+  if(currentMode == Type){
+    deltaMode = false;
+    deltaV = 0;
+  }else{
+    deltaMode = true;
+  }
+
 
   // Check for flashlight mode trigger (once after startup)
   if (!flashlightChecked) {
@@ -508,10 +522,9 @@ if(powerSave){
   }
 
     
-
     // Determine which primary measurement to display automatically
     
-    if (fabs(newVoltageReading) > 0.2 || VAC > 0.2 || currentMode == Voltmeter) {
+    if ( countV>500  || currentMode == Voltmeter) {
       voltageDisplay = true;
       if(preciseMode){
       ads.setDataRate(RATE_ADS1115_16SPS); //slow sampling if 0 is set  
@@ -520,7 +533,7 @@ if(powerSave){
       }
     
     }
-    if (isBetween(currentResistance, -10.0, 100.0)) {
+    if (isBetween(currentResistance, -10.0, 100.0)&& currentMode != Voltmeter) {
       voltageDisplay = false;
       ads.setDataRate(RATE_ADS1115_32SPS); // Slow sampling in resistance mode
     }
@@ -995,6 +1008,7 @@ void handleButtonInput() {
       MinMaxDisplay = true;
     } else if (pressDuration > 50) {
       // Short press: type current reading via USB keyboard
+      if(currentMode==Type){      
       if (voltageDisplay) {
         Keyboard.print(newVoltageReading, vDigits);
       } else {
@@ -1006,7 +1020,27 @@ void handleButtonInput() {
       }
       // Press Right Arrow after typing (to move cursor, e.g., to next cell)
       Keyboard.press(0xD7);
-      Keyboard.releaseAll();
+        Keyboard.releaseAll();
+      }else{
+        if(voltageDisplay){
+        deltaVdigits = vDigits-1;
+        if(preciseMode){
+          deltaV = newVoltageReading;
+          }else{
+          deltaV = averageVoltage;  
+          }
+        }else{
+          if(zeroOffsetRes==0){
+          zeroOffsetRes = currentResistance;
+          }else{
+            zeroOffsetRes = 0;
+          }
+
+        }
+
+        }
+        
+      
     }
   }
   // If button is held, and in flashlight mode, adjust LED brightness (done in updateAlerts)
@@ -1189,7 +1223,7 @@ void measureVoltage() {
   if (!(VACPresense && altUnits)) {
     // dynamic gain based on raw counts
     ads.setGain(kGainLevels[gainIndexVolt]);
-    int16_t countV = ads.readADC_Differential_0_1();
+    countV = ads.readADC_Differential_0_1();
     if (abs(countV) > ADC_COUNT_HIGH_THRESHOLD && gainIndexVolt > 0) {
       --gainIndexVolt;
       ads.setGain(kGainLevels[gainIndexVolt]);
@@ -1204,7 +1238,7 @@ void measureVoltage() {
   } else {
     // fixed mid‐range gain in VAC‑altUnits mode
     ads.setGain(GAIN_EIGHT);
-    int16_t countV = ads.readADC_Differential_0_1();
+    countV = ads.readADC_Differential_0_1();
     newVoltageReading = (countV * GAIN_FACTOR_8 / 1000.0f) * VOLTAGE_SCALE;
   }
 
@@ -1326,7 +1360,7 @@ void measureCurrent() {
 void updateDisplay() {
   // Prepare values for display
   display.clearDisplay();
-  if(!screenSleep){
+  if(!screenSleep && currentMode!=Charging){
 
   // Determine which voltage value to use for display (fast vs smoothed)
   float voltageToDisplay;
@@ -1407,28 +1441,28 @@ void updateDisplay() {
         display.print(roundedV, (vDigits+1));    
         //display.print(newVoltageReading, (vDigits+1));
         display.println(vSuffix);
+        /*
         if(fabs(averageVoltage)<1.1 && newVoltageReading<3){
         display.setTextSize(1);
         display.println("VDC_avg:");
         display.print(averageVoltage,vDigits+5);
         }
-        /*
-        display.print("ADS:");  
-        float intADCreading = 0.0;
-        intADCreading = adcReadingVoltage;
-        display.print(intADCreading,0);
         */
       } else {
-        
-        if (fabs(averageVoltage) <= 0.001 && VAC < 0.1) {
-      // If voltage is virtually zero, show "<1mV"
-      display.print("<1mV");
-      
-    }else{
       display.print(roundedV, vDigits);    
-      display.println(vSuffix);    
-    }
-    }
+      display.println(vSuffix);
+      }
+      
+      if(deltaV != 0){
+      display.setTextSize(1);
+      display.print("ref:");
+      display.println(deltaV, deltaVdigits);
+      display.print("delta:");
+      display.println(newVoltageReading-deltaV, 4);  
+      }
+
+    
+    
     }
     
     if (MinMaxDisplay) {
@@ -1731,6 +1765,7 @@ void ReZero() {
   IHigh = -6.0;
   ILow = 6.0;
   IMedian = 0.0;
+  deltaV = 0;
   // Note: zeroOffsetRes is not cleared here, as we want to keep the user-set zero through resets
   // Also keep initialZeroSet as true to not auto-zero again unless explicitly cleared.
 }
