@@ -70,6 +70,7 @@ enum Mode {
   AltUnitsMode,
   HighRMode,
   //Impedance,
+  RelayControl,
   Charging,
   NUM_MODES
 };
