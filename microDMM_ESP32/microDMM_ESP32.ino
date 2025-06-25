@@ -4,12 +4,13 @@
 #include <Adafruit_SSD1306.h>
 #include <IRremote.h>
 //#include <Keyboard.h> // This one is for the RA4M1
-#include <analogWave.h> // Include the library for analog waveform generation
+//#include <analogWave.h> // Include the library for analog waveform generation
 #include <EEPROM.h>
 
 #include <USB.h>//These three are for the ESP32 HID 
 #include <USBHID.h>
 #include <USBHIDKeyboard.h>
+USBHIDKeyboard Keyboard;
 
 
 
@@ -27,8 +28,8 @@ const int SETRANGE_PIN = 7;   // Controls high/low resistance range
 #define IR_RECEIVE_PIN   8      // IR receiver input pin
 const int OHMPWMPIN = 9;
 //const int BATT_PIN      = A2;   // Battery voltage analog input
-#define enablePin  BAT_READ_EN  // Pin for enabling battery voltage reading
-#define BATT_PIN BAT_DET_PIN
+//#define enablePin  BAT_READ_EN  // Only for RA4M1
+//#define BATT_PIN BAT_DET_PIN  // Only for RA4M1
 const int TYPE_PIN      = 3;    // Mode button (also triggers flashlight mode if held at boot)
 const int KBPin = 8;   // Toggle: if LOW -> keyboard mode; if HIGH -> serial mode
 const int logPin = 1; // take log pin
@@ -314,19 +315,20 @@ void setup() {
   Serial.begin(115200);
   delay(100);
   Serial.println("Setup Start");
+  USB.begin();
   Keyboard.begin();
   
   // Configure pins
   pinMode(TYPE_PIN, INPUT_PULLUP);
   pinMode(CONTINUITY_PIN, OUTPUT);
   pinMode(SETRANGE_PIN, OUTPUT);
-  pinMode(BATT_PIN, INPUT);
+  //pinMode(BATT_PIN, INPUT);// Only for RA4M1
   pinMode(BUTTON_PIN, INPUT_PULLUP); // Assuming active-low button
   pinMode(OHMPWMPIN, OUTPUT);
   pinMode(logPin, INPUT_PULLUP);
 
-  pinMode(enablePin, OUTPUT);  // Set the enable pin as an output
-  digitalWrite(enablePin, HIGH); // Set the pin high to enable battery voltage reading
+//  pinMode(enablePin, OUTPUT);  // Set the enable pin as an output// Only for RA4M1
+//  digitalWrite(enablePin, HIGH); // Set the pin high to enable battery voltage reading// Only for RA4M1
 
 
   eepromSetup(); //This reads the EEPROM and sets the analog corrective factors
@@ -484,6 +486,7 @@ if(digitalRead(LowerButton) == 0){
   handleIRRemote();
   handleButtonInput();
 
+/* // Only for RA4M1
   // Periodic battery voltage reading
   if (currentMillis - previousBattMillis >= BATT_INTERVAL) {
     previousBattMillis = currentMillis;
@@ -492,6 +495,7 @@ if(digitalRead(LowerButton) == 0){
     batteryVoltage = raw * (3.3 / 1023.0)*2; // assuming a divider that scales VIN to <5V
     // (This factor 4.545 is derived from the original code comment "0.0048*4.545")
   }
+*/
 
   // Periodic ADC measurements
   if (currentMillis - previousAdcMillis >= ADC_INTERVAL) {
@@ -761,10 +765,20 @@ void handleIRRemote() {
           Serial.println("Voltage smoothing toggled");
           break;
         case TYPE_RESISTANCE_CODE: // Type out resistance via USB keyboard
-          Keyboard.print(displayResistance, rDigits);
+          char buf[16];
+          dtostrf(displayResistance, 0, rDigits, buf);
+          for (char* p = buf; *p; ++p) {
+            Keyboard.write(*p);
+            }
+            //Keyboard.print(displayResistance, rDigits);
           break;
         case TYPE_VOLTAGE_CODE:  // Type out voltage via USB keyboard
-          Keyboard.print(averageVoltage, vDigits);
+          //char buf[16];
+          dtostrf(averageVoltage, 0, vDigits, buf);
+          for (char* p = buf; *p; ++p) {
+            Keyboard.write(*p);
+            }
+          //Keyboard.write(averageVoltage, vDigits);
           break;
         case KEY_DELETE_CODE:    // Simulate Delete key
           Keyboard.press(0xD4); Keyboard.releaseAll();
@@ -782,7 +796,12 @@ void handleIRRemote() {
           Keyboard.press(0xD7); Keyboard.releaseAll();
           break;
         case TYPE_MOVE_CODE:     // Type resistance, then press Right Arrow (to move to next cell, etc.)
-          Keyboard.print(displayResistance, rDigits);
+          dtostrf(displayResistance, 0, rDigits, buf);
+          for (char* p = buf; *p; ++p) {
+            Keyboard.write(*p);
+            }
+          
+          //Keyboard.write(displayResistance, rDigits);
           Keyboard.press(0xD7); Keyboard.releaseAll();
           break;
         case CLEAR_MINMAX_CODE:  // Toggle displaying min/max on screen
@@ -1014,15 +1033,30 @@ void handleButtonInput() {
       ReZero();
       MinMaxDisplay = true;
     } else if (pressDuration > 50) {
-      // Short press: type current reading via USB keyboard
+      // Short press: type current reading via USB Keyboard
       if(currentMode==Type){      
       if (voltageDisplay) {
-        Keyboard.print(newVoltageReading, vDigits);
+          char buf[16];
+          dtostrf(newVoltageReading, 0, vDigits, buf);
+          for (char* p = buf; *p; ++p) {
+            Keyboard.write(*p);
+            }                
+        //Keyboard.write(newVoltageReading, vDigits);
       } else {
         if(displayResistance<1){
-        Keyboard.print(displayResistance, rDigits+2);
+        char buf[16];
+          dtostrf(displayResistance, 0, rDigits+2, buf);
+          for (char* p = buf; *p; ++p) {
+            Keyboard.write(*p);
+            }                
+        //Keyboard.write(displayResistance, rDigits+2);
         }else{
-        Keyboard.print(displayResistance, rDigits);  
+          char buf[16];
+          dtostrf(displayResistance, 0, rDigits, buf);
+          for (char* p = buf; *p; ++p) {
+            Keyboard.write(*p);
+            }                
+        //Keyboard.write(displayResistance, rDigits);  
         }
       }
       // Press Right Arrow after typing (to move cursor, e.g., to next cell)
