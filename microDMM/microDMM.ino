@@ -1310,59 +1310,87 @@ void measureVoltage() {
 }
 
 void measureCurrent() {
+  static float prevCurrent        = 0.0f;
+  static bool  firstCurrentRun    = true;
+  static size_t gainIndexCurrent;
+
+  // remember last reading
+  prevCurrent = Ireading;
+
+  if (firstCurrentRun) {
+    // start at highest resolution
+    gainIndexCurrent  = kNumGainLevels - 1;
+    firstCurrentRun   = false;
+  }
+
   if (!currentOnOff && !ampsMode) {
-    // Skip current measurement entirely if system is off and user isn't interested in current
+    // skip entirely if user/system doesn’t need current
     return;
   }
-  float prevCurrent = Ireading;
+
+  int32_t countI;
+
   if (Irange) {
-    // High-range current (using ~2.5V baseline)
-    ads.setGain(GAIN_TWOTHIRDS);
-    adcReadingCurrent = ads.readADC_SingleEnded(3);
-    currentShuntVoltage = (adcReadingCurrent * GAIN_FACTOR_TWOTHIRDS / 1000.0) - Izero;
-    // Convert voltage to current (shunt calibration factor ~0.185 V/A)
-    Ireading = currentShuntVoltage / 0.185;
+    // —— High-RANGE mode: fixed mid-gain for best noise performance ——
+    ads.setGain(GAIN_ONE);
+    countI = ads.readADC_SingleEnded(3);
+    // convert to shunt voltage (mV)
+    currentShuntVoltage = (countI * GAIN_FACTOR_1 / 1000.0f)/ 0.185f;
+
+
   } else {
-    // Low-range current (baseline ~0, higher gain)
-    // Dynamically adjust gain based on last reading to maximize resolution
-    if (prevCurrent > 0.2) {
-      ads.setGain(GAIN_ONE);
-    } else if (prevCurrent < 0.1) {
-      ads.setGain(GAIN_EIGHT);
-    } else {
-      ads.setGain(GAIN_TWO);
+    // —— Low-RANGE mode: auto-ranging like measureVoltage() ——
+    // set and read at current gain index
+    ads.setGain(kGainLevels[gainIndexCurrent]);
+    countI = ads.readADC_SingleEnded(3);
+
+    // if we’re saturating, step DOWN resolution
+    if (abs(countI) > ADC_COUNT_HIGH_THRESHOLD && gainIndexCurrent > 0) {
+      --gainIndexCurrent;
+      ads.setGain(kGainLevels[gainIndexCurrent]);
+      countI = ads.readADC_SingleEnded(3);
+
+    // if we’re far from full-scale, step UP resolution
+    } else if (abs(countI) < ADC_COUNT_LOW_THRESHOLD 
+               && gainIndexCurrent < kNumGainLevels - 1) {
+      ++gainIndexCurrent;
+      ads.setGain(kGainLevels[gainIndexCurrent]);
+      countI = ads.readADC_SingleEnded(3);
     }
-    adcReadingCurrent = ads.readADC_SingleEnded(3);
-    float gainFactor;
-    // Determine which gain factor was used:
-    if      (ads.getGain() == GAIN_ONE)      gainFactor = GAIN_FACTOR_1;
-    else if (ads.getGain() == GAIN_EIGHT)    gainFactor = GAIN_FACTOR_8;
-    else                                     gainFactor = GAIN_FACTOR_2;
-    currentShuntVoltage = adcReadingCurrent * gainFactor / 1000.0;
-    // Convert to current (calibration for low-range)
-    Ireading = currentShuntVoltage / 5.0;
+
+        // convert to amps (your low-range calibration)
+    Ireading = currentShuntVoltage / 1.0f;
+
+    // convert to shunt voltage (mV), then subtract zero‐offset Izero (also in mV)
+    currentShuntVoltage = (countI * kGainFactors[gainIndexCurrent] / 1000.0f)
+                          - Izero;
+    // convert to amps (your high-range calibration)
+    Ireading = currentShuntVoltage/1 ; //Value of the sense resistor
   }
-  // Ignore very small currents as zero (noise threshold)
-  if ((Irange && isBetween(Ireading, -0.01, 0.1)) || (!Irange && Ireading < 0.0005)) {
-    Ireading = 0.0;
+
+  // apply noise floor
+  if ((Irange && isBetween(Ireading, -0.01f,  0.1f)) ||
+      (!Irange && Ireading < 0.0005f)) {
+    Ireading = 0.0f;
   } else {
-    // Update current min/max and log if new extremes
+    // update min/max and log extremes
     if (Ireading > IHigh || Ireading < ILow) {
-      float nowSec = millis() / 1000.0;
+      float nowSec = millis() / 1000.0f;
       logCurrentData(newVoltageReading, nowSec, Ireading);
       if (Ireading > IHigh) {
-        IHigh = Ireading;
-        voltageAtMaxI = newVoltageReading;
-        timeAtMaxI = formatTime(millis());
+        IHigh          = Ireading;
+        voltageAtMaxI  = newVoltageReading;
+        timeAtMaxI     = formatTime(millis());
       }
       if (Ireading < ILow) {
-        ILow = Ireading;
-        voltageAtMinI = newVoltageReading;
-        timeAtMinI = formatTime(millis());
+        ILow           = Ireading;
+        voltageAtMinI  = newVoltageReading;
+        timeAtMinI     = formatTime(millis());
       }
     }
   }
 }
+
 
 // ========== Display and Alert Functions ========== 
 
@@ -1403,7 +1431,7 @@ void updateDisplay() {
   //}
 
   // If notable current present or in ampsMode, overlay current reading on display
-  if (((Irange && !isBetween(Ireading, -0.01, 0.01)) || (!Irange && Ireading > 0.0005))
+  if (((Irange && !isBetween(Ireading, -0.01, 0.01)) || (!Irange && currentOnOff))
        || ampsMode) {
     display.setTextSize(2);
     display.setCursor(0, 16);
@@ -1412,7 +1440,13 @@ void updateDisplay() {
       display.print(Ireading, 2);
     } else {
       display.print("mA:");
+      if(Ireading>0.100){
       display.print(Ireading * 1000.0, 2);
+      }else if(Ireading>0.010){
+      display.print(Ireading * 1000.0, 3);
+      }else{
+      display.print(Ireading * 1000.0, 4);
+      }
     }
   }
   // If any current has been recorded (min/max), display them in small text
