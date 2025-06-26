@@ -3,10 +3,9 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <IRremote.h>
-#include <Keyboard.h> // This one is for the RA4M1
+#include <Keyboard.h>
 #include <analogWave.h> // Include the library for analog waveform generation
 #include <EEPROM.h>
-
 
 
 
@@ -66,18 +65,20 @@ float EEPROM_SleepV = 0.615;
 enum Mode {
   Default,
   Voltmeter,
+  VACmanual,
   Type,
   Low,
   AltUnitsMode,
   HighRMode,
   //Impedance,
-  RelayControl,
+  //RelayControl,
   Charging,
   NUM_MODES
 };
 #define BUTTON_PIN 10         // Set your button input pin
 
 Mode currentMode = Default;
+Mode previousMode = Default;
 
 unsigned long lastDebounceTime = 0;
 bool lastButtonState = HIGH;
@@ -411,6 +412,8 @@ void setup() {
 void loop() {
     //  Serial.println("Loop Start");
   unsigned long currentMillis = millis();
+
+  previousMode=currentMode;
 
   checkModeButton();//Check for mode button
 
@@ -1303,7 +1306,7 @@ void measureVoltage() {
     VAC = 0; //VAC should be 0 when we are in precise (have an Ohm offset) mode
   }
 
-  if( VAC > 4.9 && (!altUnits && averageVoltage < 0.1) || (altUnits && VAC > 10)){
+  if( (VAC > 4.9 && (!altUnits && averageVoltage < 0.1) || (altUnits && VAC > 10)) || currentMode == VACmanual){
     VACPresense = true; //If there is more than 1VAC for the reading and average voltage is low, assume reading is VAC. 
   }else{
     VACPresense = false;
@@ -1417,19 +1420,19 @@ void updateDisplay() {
   formatResistanceValue(lowR, roundedRlow, rSuffixlow, rDigitslow);
   formatResistanceValue(highR, roundedRhigh, rSuffixhigh, rDigitshigh);
 
-  // Battery voltage indicator
+  // Battery voltage / mode indicator
   display.setTextSize(1);
   display.setCursor(72, 56);
   display.print("VIN:");
-  //if (batteryVoltage > 3.0) {
     display.print(batteryVoltage, 1);
     if (batteryVoltage < 5.1) {
       display.setCursor(72, 48);
-      //display.print("BATT:LOW");
     }
-  //} else {
-  //  display.print("USB"); // if VIN is below 3V, assume running from USB 5V
-  //}
+  
+  //Mode Display
+  display.setCursor(120, 0);
+  display.print(currentMode);
+
 
   // If notable current present or in ampsMode, overlay current reading on display
   if (((Irange && !isBetween(Ireading, -0.01, 0.01)) || (!Irange && currentOnOff))
@@ -1528,7 +1531,7 @@ void updateDisplay() {
       display.print("Range:");
       display.print(highV - lowV, 3);
     }
-    if (VAC > 0.5 && !VACPresense) {
+    if (VAC > 0.1 && !VACPresense) {
       // Show AC component if significant
       display.setCursor(0, 48);
       display.setTextSize(1);
@@ -1674,7 +1677,7 @@ void updateAlerts() {
                       //|| (prevResistance > 2000000 && currentResistance < 1000000)
                       ;
 
-    bool logicVoltage = (fabs(newVoltageReading) > 3.2 || (VACPresense && VAC > 1.0));
+    bool logicVoltage = ((!altUnits && (fabs(newVoltageReading) > 3.2 || (VACPresense && VAC > 1.0))) ||(altUnits && (fabs(newVoltageReading) > 30.2 || (VACPresense && VAC > 15.0))));
     if (continuity) {
       // If continuity detected, beep/flash the continuity pin
       if (!rFlag) {

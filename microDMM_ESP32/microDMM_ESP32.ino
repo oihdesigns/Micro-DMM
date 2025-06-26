@@ -355,7 +355,7 @@ void setup() {
   //display.drawBitmap(0, 0, MICRO_5x7, 5, 7, SSD1306_WHITE);
   display.setCursor(0, 0);
   display.print("uMeter #");
-  display.print(EEPROM.read(1),2);//Reads the EEPROM and determines the correct splash   
+  display.print(EEPROM.read(1));//Reads the EEPROM and determines the correct splash   
   display.setCursor(0, 48);
   display.println("XIAO RA4M1");
   
