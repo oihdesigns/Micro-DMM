@@ -3,13 +3,10 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <IRremote.h>
-//#include <Keyboard.h> // This one is for the RA4M1
+#include <Keyboard.h> // This one is for the RA4M1
 #include <analogWave.h> // Include the library for analog waveform generation
 #include <EEPROM.h>
 
-#include <USB.h>//These three are for the ESP32 HID 
-#include <USBHID.h>
-#include <USBHIDKeyboard.h>
 
 
 

@@ -32,7 +32,7 @@ const int OHMPWMPIN = 9;
 //#define BATT_PIN BAT_DET_PIN  // Only for RA4M1
 const int TYPE_PIN      = 3;    // Mode button (also triggers flashlight mode if held at boot)
 const int KBPin = 8;   // Toggle: if LOW -> keyboard mode; if HIGH -> serial mode
-const int logPin = 1; // take log pin
+const int logPin = 2; // take log pin
 //const int LowerButton = 10;   // 
 
 
@@ -75,7 +75,7 @@ enum Mode {
   AltUnitsMode,
   HighRMode,
   //Impedance,
-  RelayControl,
+  //RelayControl,
   Charging,
   NUM_MODES
 };
@@ -95,6 +95,7 @@ const float dividerR = 22000.0;   // Series resistor (Ω) for high resistance di
 const float ZENER_MAX_V =5.0; //EEPROM2:4.353;  // Zener/reference voltage in high-range mode (V)
 */
 float VOLTAGE_SCALE = 63.539; // Calibration scale factor for voltage input
+
 
 // Timing intervals (ms)
 const unsigned long ADC_INTERVAL    = 1;     // ADC sampling interval
@@ -330,6 +331,10 @@ void setup() {
 //  pinMode(enablePin, OUTPUT);  // Set the enable pin as an output// Only for RA4M1
 //  digitalWrite(enablePin, HIGH); // Set the pin high to enable battery voltage reading// Only for RA4M1
 
+  if (!EEPROM.begin(512)) {
+    Serial.println("EEPROM failed to initialise!");
+    while(true) delay(10);
+    }
 
   eepromSetup(); //This reads the EEPROM and sets the analog corrective factors
 
@@ -350,7 +355,7 @@ void setup() {
   //display.drawBitmap(0, 0, MICRO_5x7, 5, 7, SSD1306_WHITE);
   display.setCursor(0, 0);
   display.print("uMeter #");
-  display.print(EEPROM.read(1));//Reads the EEPROM and determines the correct splash   
+  display.print(EEPROM.read(1),2);//Reads the EEPROM and determines the correct splash   
   display.setCursor(0, 48);
   display.println("XIAO RA4M1");
   
