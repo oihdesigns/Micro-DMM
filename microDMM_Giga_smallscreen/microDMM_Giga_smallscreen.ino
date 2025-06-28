@@ -1,8 +1,7 @@
-@ -0,0 +1,1839 @@
 #include <Wire.h>
 #include <Adafruit_ADS1X15.h>
-//#include <Adafruit_GFX.h>
-//#include <Adafruit_SSD1306.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 //#include <IRremote.h>
 //#include <Keyboard.h>
 //#include <analogWave.h> // Include the library for analog waveform generation
@@ -31,34 +30,25 @@ const float defaultCalib[19] = {
 
 // ===== Hardware Setup Constants =====
 Adafruit_ADS1115 ads;
-
-/*
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET    -1
 #define SCREEN_ADDRESS 0x3C
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-*/
-#include <Arduino_GigaDisplay_GFX.h>
-
-GigaDisplay_GFX display;
-
-#define BLACK 0x0000
-#define WHITE 0xFFFF
 
 // Pin definitions
 const int CONTINUITY_PIN = 6;   // Buzzer or LED for continuity/alerts
 const int SETRANGE_PIN = 7;   // Controls high/low resistance range
 //#define IR_RECEIVE_PIN   8      // IR receiver input pin
-const int OHMPWMPIN = 9;
+const int OHMPWMPIN = 2;
 //const int BATT_PIN      = A2;   // Battery voltage analog input
 //#define enablePin  BAT_READ_EN  // Pin for enabling battery voltage reading
 //#define BATT_PIN BAT_DET_PIN
 const int TYPE_PIN      = 3;    // Mode button (also triggers flashlight mode if held at boot)
 const int KBPin = 8;   // Toggle: if LOW -> keyboard mode; if HIGH -> serial mode
-const int logPin = 2; // take log pin
+const int logPin = A1; // take log pin
 //const int LowerButton = 10;   // 
-
+#define BUTTON_PIN 4         // Set your button input pin
 
 // ADS1115 gain factors (mV per bit) for each gain setting
 const float GAIN_FACTOR_TWOTHIRDS = 0.1875;  // 2/3x (±6.144V range)
@@ -104,7 +94,7 @@ enum Mode {
   Charging,
   NUM_MODES
 };
-#define BUTTON_PIN 10         // Set your button input pin
+
 
 Mode currentMode = Default;
 Mode previousMode = Default;
@@ -390,14 +380,14 @@ void setup() {
 
 
   // Initialize OLED display
-
-  display.begin();             // init hardware
-  display.setRotation(1);      // landscape mode
-  display.fillScreen(BLACK);   // clear to black
-
-
+  if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+    Serial.println(F("OLED init failed"));
+    analogWrite(CONTINUITY_PIN, 10); // brief buzz to signal error
+    while (1); // halt
+  }
+  display.clearDisplay();
   display.setTextSize(2);
-  display.setTextColor(WHITE);
+  display.setTextColor(SSD1306_WHITE);
   // Splash screen
 
   //display.setCursor(0, 0);  
@@ -408,19 +398,18 @@ void setup() {
   display.setCursor(0, 48);
   display.println("XIAO RA4M1");
   
-  //display.display();
+  display.display();
   delay(200);
 
   // Initialize ADS1115 ADC
   if (!ads.begin()) {
     Serial.println("ADS1115 init failed!");
-    display.fillScreen(BLACK);
-
+    display.clearDisplay();
     display.setCursor(0, 0);
     display.setTextSize(1);
     Serial.println("ADS1115 not found");
     display.println("ADS1115 not found");
-    //display.display();
+    display.display();
     while (1); // halt
   }
   Serial.println("ADS1115 good");
@@ -458,7 +447,8 @@ void setup() {
   }
   
  
-    display.fillScreen(BLACK);
+  display.clearDisplay();
+
     Serial.println("Setup End");
 
 //  wave.sine(freq);
@@ -1390,10 +1380,7 @@ void measureCurrent() {
 
 void updateDisplay() {
   // Prepare values for display
-  //display.fillScreen(BLACK);
-  display.fillRect(0, 0, 128, 64, BLACK);
-  display.setTextColor(WHITE,BLACK);
-  
+  display.clearDisplay();
   if(!screenSleep && currentMode!=Charging){
 
   // Determine which voltage value to use for display (fast vs smoothed)
@@ -1657,7 +1644,7 @@ void updateDisplay() {
     display.setTextSize(1);
     display.print(".");
   }
-  //display.display(); // update the OLED with all the drawn content
+  display.display(); // update the OLED with all the drawn content
 }
 
 void updateAlerts() {
