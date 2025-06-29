@@ -54,7 +54,7 @@ Arduino_GigaDisplayTouch touch;
 const uint16_t btnX[4] = { 600, 500, 600, 500 };
 const uint16_t btnY[4] = {  80,  80, 180, 180 };
 const uint16_t btnColor[4] = { RED, GREEN, BLUE, YELLOW };
-const char*    btnLabel[4] = { "MODE", "LOG", "Blue", "Yellow" };
+const char*    btnLabel[4] = { "MODE", "LOG", "MinMax", "Ref" };
 
 // Press flags
 bool redPress    = false;
@@ -576,6 +576,47 @@ void loop() {
 
   previousMode=currentMode;
 
+  if(bluePress){
+    MinMaxDisplay = true;
+    ReZero();
+  }
+
+  if(yellowPress){
+          // Short press: type current reading via USB keyboard
+      if(currentMode==Type){      
+      if (voltageDisplay) {
+        Keyboard.printf("%.*f\r\n",vDigits,newVoltageReading);
+      } else {
+        if(displayResistance<1){
+        Keyboard.printf("%.*f\r\n", rDigits+2, displayResistance);
+        }else{
+        Keyboard.printf("%.*f\r\n", rDigits, displayResistance);  
+        }
+      }
+      // Press Right Arrow after typing (to move cursor, e.g., to next cell)
+      Keyboard.key_code(RIGHT_ARROW);
+        //Keyboard.releaseAll();
+      }else{
+        if(voltageDisplay){
+        deltaVdigits = vDigits-1;
+        if(preciseMode){
+          deltaV = newVoltageReading;
+          }else{
+          deltaV = averageVoltage;  
+          }
+        }else{
+          if(zeroOffsetRes==0){
+          zeroOffsetRes = currentResistance;
+          }else{
+            zeroOffsetRes = 0;
+          }
+
+        }
+
+        }
+
+  }
+  
   checkModeButton();//Check for mode button
 
   if(currentMode==AltUnitsMode){
@@ -1079,16 +1120,16 @@ void handleButtonInput() {
     buttonPressed = true;
     buttonPressTime = millis();
   }
-  if ((!isPressed && buttonPressed)|| bluePress || yellowPress) {
+  if (!isPressed && buttonPressed) {
     // Button was released
     unsigned long pressDuration = millis() - buttonPressTime;
     buttonPressed = false;
     analogWrite(CONTINUITY_PIN, 0);  // turn off any flashlight LED dimming
-    if (pressDuration > 400 || yellowPress) {
+    if (pressDuration > 400) {
       // Long press: reset min/max and enable display
       ReZero();
       MinMaxDisplay = true;
-    } else if (pressDuration > 50 || bluePress) {
+    } else if (pressDuration > 50) {
       // Short press: type current reading via USB keyboard
       if(currentMode==Type){      
       if (voltageDisplay) {
