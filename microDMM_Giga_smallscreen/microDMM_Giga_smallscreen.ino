@@ -14,18 +14,21 @@ USBKeyboard Keyboard;
 //#include <FlashStorage.h>
 //#include <array>
 
-// 1) Make FlashStorage hold your std::array<float,19>
-//using CalibBlock = std::array<float,19>;
-//FlashStorage(calStore, CalibBlock);
+#include <Arduino_USBHostMbed5.h>
+#include <DigitalOut.h>
+#include <FATFileSystem.h>
 
-// 2) Your working RAM arrays
-//float calib[19];
+USBHostMSD    msd;               // USB mass-storage driver
+mbed::FATFileSystem usb("usb");  // mount point = "/usb"
+mbed::DigitalOut otg(PB_8, 1);   // keep OTG PHY powered
+
+
 const float defaultCalib[19] = {
   // initial calibration list (19 entries)
   0.9828, 0.9958, 0.9999, 0.9979, 0.9954,
   0.9965, 0.9980, 1.0034, 1.0021, 1.0012,
   1.0031, 1.0073, 1.0176, 1.0611, 1.1130,
-  0.020073, 0.6120, 4.9980, 46.4680
+  0.020073, 0.6119, 4.979, 46.4680
 };
 
 // ===== Hardware Setup Constants =====

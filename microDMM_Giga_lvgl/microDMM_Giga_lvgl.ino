@@ -1,11 +1,5 @@
 #include <Wire.h>
 #include <Adafruit_ADS1X15.h>
-//#include <Adafruit_GFX.h>
-//#include <Adafruit_SSD1306.h>
-//#include <IRremote.h>
-//#include <Keyboard.h>
-//#include <analogWave.h> // Include the library for analog waveform generation
-//#include <EEPROM.h>
 
 //GIGA HID Related
 #include "PluggableUSBHID.h"
@@ -14,9 +8,14 @@ USBKeyboard Keyboard;
 //#include <FlashStorage.h>
 //#include <array>
 
-// 1) Make FlashStorage hold your std::array<float,19>
-//using CalibBlock = std::array<float,19>;
-//FlashStorage(calStore, CalibBlock);
+#include "Arduino_H7_Video.h"
+#include "Arduino_GigaDisplayTouch.h"
+#include "lvgl.h"
+
+Arduino_H7_Video Display(800, 480, GigaDisplayShield);  // 800x480 resolution
+Arduino_GigaDisplayTouch Touch;
+
+
 
 // 2) Your working RAM arrays
 //float calib[19];
@@ -25,57 +24,26 @@ const float defaultCalib[19] = {
   0.9828, 0.9958, 0.9999, 0.9979, 0.9954,
   0.9965, 0.9980, 1.0034, 1.0021, 1.0012,
   1.0031, 1.0073, 1.0176, 1.0611, 1.1130,
-  0.020073, 0.6119, 4.979, 46.4680
+  0.020073, 0.6120, 4.9980, 46.4680
 };
 
 // ===== Hardware Setup Constants =====
 Adafruit_ADS1115 ads;
 
-/*
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
-#define OLED_RESET    -1
-#define SCREEN_ADDRESS 0x3C
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-*/
-#include <Arduino_GigaDisplay_GFX.h>
-#include <Arduino_GigaDisplayTouch.h>    // Touch polling functions :contentReference[oaicite:1]{index=1}
-
-GigaDisplay_GFX display;
-Arduino_GigaDisplayTouch touch;
-
-#define BLACK 0x0000
-#define WHITE 0xFFFF
-#define RED 0xF800
-#define GREEN   0x07E0
-#define BLUE    0x001F
-#define YELLOW  0xFFE0
-
-const uint16_t btnX[4] = { 400, 500, 400, 500 };
-const uint16_t btnY[4] = {  80,  80, 180, 180 };
-const uint16_t btnColor[4] = { RED, GREEN, BLUE, YELLOW };
-const char*    btnLabel[4] = { "MODE", "LOG", "Blue", "Yellow" };
-
-// Press flags
-bool redPress    = false;
-bool greenPress  = false;
-bool bluePress   = false;
-bool yellowPress = false;
 
 
 // Pin definitions
 const int CONTINUITY_PIN = 6;   // Buzzer or LED for continuity/alerts
 const int SETRANGE_PIN = 7;   // Controls high/low resistance range
 //#define IR_RECEIVE_PIN   8      // IR receiver input pin
-const int OHMPWMPIN = 2;
+const int OHMPWMPIN = 9;
 //const int BATT_PIN      = A2;   // Battery voltage analog input
 //#define enablePin  BAT_READ_EN  // Pin for enabling battery voltage reading
 //#define BATT_PIN BAT_DET_PIN
 const int TYPE_PIN      = 3;    // Mode button (also triggers flashlight mode if held at boot)
 const int KBPin = 8;   // Toggle: if LOW -> keyboard mode; if HIGH -> serial mode
-const int logPin = A1; // take log pin
+const int logPin = 2; // take log pin
 //const int LowerButton = 10;   // 
-#define BUTTON_PIN 4         // For Mode
 
 
 // ADS1115 gain factors (mV per bit) for each gain setting
@@ -122,6 +90,7 @@ enum Mode {
   Charging,
   NUM_MODES
 };
+#define BUTTON_PIN 10         // Set your button input pin
 
 Mode currentMode = Default;
 Mode previousMode = Default;
@@ -152,7 +121,6 @@ unsigned long previousSerialMillis= 0;
 unsigned long lastIrReceiveMillis = 0;
 unsigned long deepSleepStart = 0;
 unsigned int seconds = 0;
-unsigned long previousTouchTime;
 
 // Global measurement variables
 int16_t adcReadingVoltage = 0;  // raw ADC reading for voltage (differential)
@@ -291,8 +259,6 @@ bool deltaTrigger = false;
 float deltaV = 0.0;
 int deltaVdigits = 0;
 
-bool continuity = false;
-
 // Flags for transient states
 bool flashlightMode = false;  // flashlight mode active (button held at startup)
 bool flashlightChecked = false; // whether we have checked the button for flashlight mode at startup
@@ -337,31 +303,15 @@ void ReZero();
 
 
 
+
 // ========== Setup Function ========== 
 void setup() {
-  
-  /*
-  
-  pinMode(KBPin, INPUT_PULLUP);
-  useKeyboard = (digitalRead(KBPin) == LOW);
-
-    // Initialize USB communication based on mode:
-  if (useKeyboard) {
-    Keyboard.begin();
-  } else {
-    Serial.begin(115200);
-    while (!Serial);
-    Serial.println("Serial mode active");
-  }
-
-  */
 
 
 
   Serial.begin(115200);
   delay(100);
   Serial.println("Setup Start");
-  //Keyboard.begin();
   
   // Configure pins
   pinMode(TYPE_PIN, INPUT_PULLUP);
@@ -373,6 +323,8 @@ void setup() {
   pinMode(logPin, INPUT_PULLUP);
 
 
+
+
   // 5) Assign your named variables
   EEPROM_MAXV  = defaultCalib[17];
   EEPROM_SleepV = defaultCalib[16];
@@ -382,55 +334,173 @@ void setup() {
 
   // Initialize OLED display
 
-  display.begin();             // init hardware
-  display.setRotation(1);      // landscape mode
-  //touch.setRotation(1);
-  display.fillScreen(BLACK);   // clear to black
+
+    // ... (existing initialization: Wire, ads.begin, etc.)
+    lv_init();                      // Initialize LVGL library
+    Display.begin();                // Initialize display and LVGL integration:contentReference[oaicite:3]{index=3}
+    Touch.begin();                  // Initialize touch screen input:contentReference[oaicite:4]{index=4}
+    // (Optional) lv_disp_set_rotation or lv_disp_set_orientation if needed
+    
+    // Create GUI objects (labels, bars, buttons, etc.)
+
+    lv_obj_t * valueLabel = lv_label_create(lv_scr_act());
+    lv_obj_set_style_text_font(valueLabel, &lv_font_montserrat_28, 0); // large font
+    lv_label_set_text(valueLabel, "0.00 V");  
+    lv_obj_align(valueLabel, LV_ALIGN_TOP_MID, 0, 20);  // position near top-center
+
+    lv_obj_t * valueBar = lv_bar_create(lv_scr_act());
+    lv_obj_set_size(valueBar, 700, 20);                 // wide bar
+    lv_obj_align(valueBar, LV_ALIGN_TOP_MID, 0, 60);    // below the label
+    lv_bar_set_range(valueBar, 0, 1000);                // initial range (e.g., 0-1000 for scaling)
+    lv_bar_set_value(valueBar, 0, LV_ANIM_OFF);
+
+    // Create a generic styled button function
+auto makeButton = [&](const char * txt, lv_align_t align, lv_coord_t x_ofs) {
+    lv_obj_t * btn = lv_btn_create(lv_scr_act());
+    lv_obj_set_size(btn, 180, 50);
+    lv_obj_align(btn, align, x_ofs, -10);  // align relative to bottom
+    lv_obj_t * label = lv_label_create(btn);
+    lv_label_set_text(label, txt);
+    lv_obj_center(label);
+    return btn;
+};
+lv_obj_t * nullBtn = makeButton("Null/Type", LV_ALIGN_BOTTOM_LEFT, 20);
+lv_obj_t * logBtn  = makeButton("Log",       LV_ALIGN_BOTTOM_MID,   0);
+lv_obj_t * modeBtn = makeButton("Mode",      LV_ALIGN_BOTTOM_RIGHT,-20);
+
+lv_obj_t * modeDrop = lv_dropdown_create(lv_scr_act());
+lv_dropdown_set_options(modeDrop,
+    "Resistance\n"       // index 0
+    "Voltage (DC)\n"     // index 1
+    "Voltage (AC)\n"     // index 2
+    "Current\n"          // index 3
+    "High Ω Mode\n"      // index 4
+    "Type (USB)"         // index 5
+);
+lv_obj_set_width(modeDrop, 150);
+lv_obj_align(modeDrop, LV_ALIGN_TOP_LEFT, 10, 10);
+lv_dropdown_set_selected(modeDrop, 0);  // start at "Resistance"
+
+lv_obj_t * autoSwitch = lv_switch_create(lv_scr_act());
+lv_obj_align(autoSwitch, LV_ALIGN_TOP_RIGHT, -60, 15);
+lv_obj_t * swLabel = lv_label_create(lv_scr_act());
+lv_label_set_text(swLabel, "Auto Range");
+lv_obj_align(swLabel, LV_ALIGN_TOP_RIGHT, -120, 20);
+lv_obj_add_state(autoSwitch, LV_STATE_CHECKED);  // start ON by default
+
+lv_obj_add_event_cb(nullBtn, [](lv_event_t * e) {
+    if(lv_event_get_code(e) == LV_EVENT_LONG_PRESSED) {
+        ReZero();                          // long press: reset min/max
+        MinMaxDisplay = true;
+    } 
+    else if(lv_event_get_code(e) == LV_EVENT_CLICKED) {
+        // short press: either type value or set null offset
+        if(currentMode == Type) {
+            // If in "Type" mode, send the value via USB keyboard
+            if(voltageDisplay) {
+                Keyboard.printf("%.*f\r\n", vDigits, newVoltageReading);
+            } else {
+                // If displaying resistance, send that value
+                if(displayResistance < 1)
+                    Keyboard.printf("%.*f\r\n", rDigits+2, displayResistance);
+                else
+                    Keyboard.printf("%.*f\r\n", rDigits, displayResistance);
+            }
+            Keyboard.key_code(RIGHT_ARROW);  // move cursor right (Excel/Sheets) after typing
+        } else {
+            // If not in Type mode: toggle relative zero (null)
+            if(voltageDisplay) {
+                // For voltage mode, capture current reading as reference
+                deltaV = (preciseMode ? newVoltageReading : averageVoltage);
+                deltaVdigits = vDigits - 1;
+            } else {
+                // For resistance mode, set or clear zero offset (null):contentReference[oaicite:6]{index=6}
+                if(zeroOffsetRes == 0.0f)
+                    zeroOffsetRes = currentResistance;
+                else 
+                    zeroOffsetRes = 0.0f;
+            }
+        }
+    }
+}, LV_EVENT_ALL, NULL);
+
+lv_obj_add_event_cb(logBtn, [](lv_event_t * e) {
+    if(lv_event_get_code(e) == LV_EVENT_CLICKED) {
+        takeLog = true;
+        tLogStart = millis() / 1000.0;  // mark log start time:contentReference[oaicite:10]{index=10}
+        // (The loop will handle logging and set takeLog false when done)
+    }
+}, LV_EVENT_CLICKED, NULL);
+
+lv_obj_add_event_cb(modeBtn, [](lv_event_t * e) {
+    if(lv_event_get_code(e) == LV_EVENT_CLICKED) {
+        currentMode = static_cast<Mode>((currentMode + 1) % NUM_MODES);
+        Serial.printf("Mode changed to %d\n", currentMode);
+        // Update dropdown selection to match the new mode:
+        int ddIndex = 0;
+        switch(currentMode) {
+            case Default:      ddIndex = 0; break;  // Resistance
+            case Voltmeter:    ddIndex = 1; break;  // DC Voltage
+            case VACmanual:    ddIndex = 2; break;  // AC Voltage
+            case Type:         ddIndex = 5; break;  // Type (USB)
+            case HighRMode:    ddIndex = 4; break;  // High Ω
+            // (If other modes like Low, AltUnits, Charging are encountered, you could handle or ignore them)
+        }
+        lv_dropdown_set_selected(modeDrop, ddIndex);
+    }
+}, LV_EVENT_CLICKED, NULL);
 
 
-  display.setTextSize(4);
-  display.setTextColor(WHITE);
+lv_obj_add_event_cb(modeDrop, [](lv_event_t * e) {
+    if(lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED) {
+        uint16_t sel = lv_dropdown_get_selected(modeDrop);
+        switch(sel) {
+            case 0: currentMode = Default;    break;  // Resistance mode
+            case 1: currentMode = Voltmeter;  break;  // DC Voltage mode
+            case 2: currentMode = VACmanual;  break;  // AC Voltage mode
+            case 3: 
+                // Current mode (no direct Mode enum; enable current reading)
+                currentMode = Voltmeter;   // set a safe base mode (voltage) 
+                ampsMode   = true;         // focus on current measurements:contentReference[oaicite:14]{index=14}
+                break;
+            case 4: currentMode = HighRMode;  break;  // High resistance mode
+            case 5: currentMode = Type;       break;  // USB keyboard output mode
+        }
+        // Sync any related flags
+        if(sel != 3) { 
+            ampsMode = (currentMode == Charging) ? true : false; // only keep ampsMode for a dedicated current mode if defined
+            if(sel != 0 && sel != 4) zeroOffsetRes = 0.0f;  // clear resistance offset when leaving resistance modes
+        }
+        Serial.printf("Mode set to %d via dropdown\n", currentMode);
+    }
+}, LV_EVENT_VALUE_CHANGED, NULL);
+
+
+lv_obj_add_event_cb(autoSwitch, [](lv_event_t * e) {
+    if(lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED) {
+        bool on = lv_obj_has_state(autoSwitch, LV_STATE_CHECKED);
+        ohmsAutoRange = on;
+        Serial.println(on ? "Auto-range On" : "Auto-range Off");
+        // (Optionally, if turning auto-range off, one could allow manual range selection via UI)
+    }
+}, LV_EVENT_VALUE_CHANGED, NULL);
+
+
   // Splash screen
 
+/*
   //display.setCursor(0, 0);  
   //display.drawBitmap(0, 0, MICRO_5x7, 5, 7, SSD1306_WHITE);
   display.setCursor(0, 0);
-  display.print("uMeter #GIGA");
+  display.print("uMeter #");
   //display.print(EEPROM.read(1));//Reads the EEPROM and determines the correct splash   
   display.setCursor(0, 48);
-  display.println("GIGA METER");
-  display.fillScreen(BLACK);   // clear to black
-
+  display.println("XIAO RA4M1");
   
   //display.display();
   delay(200);
+*/
 
-  // draw our four buttons
-  display.setTextSize(2);
-  for (int i = 0; i < 4; i++) {
-    // outer black border
-    display.fillRect(btnX[i], btnY[i], 100, 100, BLACK);
-    // inner colored square
-    display.fillRect(btnX[i] + 10, btnY[i] + 10, 80, 80, btnColor[i]);
-
-    // label centered
-    display.setTextColor(
-      (btnColor[i] == YELLOW) ? BLACK : WHITE
-    );
-    // approximate centering
-    int16_t w = strlen(btnLabel[i]) * 6 * 2;    // 6px per char × textSize(2)
-    int16_t h = 8  * 2;                         // 8px font height × textSize(2)
-    int16_t tx = btnX[i] + (100 - w)/2;
-    int16_t ty = btnY[i] + (100 - h)/2;
-    display.setCursor(tx, ty);
-    display.print(btnLabel[i]);
-  }
-
-  // initialize touch
-  if (!touch.begin()) {
-    // touch init failed — halt
-    while (1) {}
-  }
 
   // Initialize ADS1115 ADC
   if (!ads.begin()) {
@@ -479,7 +549,7 @@ void setup() {
   }
   
  
-    //display.fillScreen(BLACK);
+    display.fillScreen(BLACK);
     Serial.println("Setup End");
 
 //  wave.sine(freq);
@@ -491,68 +561,6 @@ void setup() {
 void loop() {
     //  Serial.println("Loop Start");
   unsigned long currentMillis = millis();
-
-    // read touch points
-      uint8_t contacts;
-      GDTpoint_t points[5];
-      contacts = touch.getTouchPoints(points);
-
-      // clear all flags by default
-      redPress    = greenPress = bluePress = yellowPress = false;
-
-      if (contacts > 0 && currentMillis > previousTouchTime + 500) {
-        previousTouchTime = millis();
-        
-        uint16_t x = points[0].x;
-        uint16_t y = points[0].y;
-
-        uint16_t rawX = points[0].x;
-        uint16_t rawY = points[0].y;
-        //uint16_t x, y;
-
-        switch (1) {  // the same value you passed to display.setRotation()
-          case 0:  // no rotation
-            x = rawX;
-            y = rawY;
-            break;
-          case 1:  // 90° CW
-            x = rawY;
-            y = display.width() - rawX - 350;
-            break;
-          case 2:  // 180°
-            x = display.width()  - rawX;
-            y = display.height() - rawY;
-            break;
-          case 3:  // 270° CW (or 90° CCW)
-            x = display.height() - rawY;
-            y = rawX;
-            break;
-        }
-
-      Serial.print("raw:("); Serial.print(rawX); Serial.print(',');
-      Serial.print(rawY); Serial.print(") → mapped:(");
-      Serial.print(x); Serial.print(',');
-      Serial.print(y); Serial.println(')');
-
-      // check each button
-      for (int i = 0; i < 4; i++) {
-        if ( x >= btnX[i]
-          && x <  btnX[i] + 100
-          && y >= btnY[i]
-          && y <  btnY[i] + 100
-        ) {
-          switch(i) {
-            case 0: redPress    = true; break;
-            case 1: greenPress  = true; break;
-            case 2: bluePress   = true; break;
-            case 3: yellowPress = true; break;
-          }
-          break;
-        }
-      }
-    }
-
-
 
   previousMode=currentMode;
 
@@ -596,7 +604,7 @@ void loop() {
   }
 */
 
-if((digitalRead(logPin)==0) || greenPress) {
+if(digitalRead(logPin)==0){
   takeLog = true;
   }
 
@@ -615,28 +623,8 @@ if(takeLog == true){
       }
 }
 
-/*
-if(digitalRead(LowerButton) == 0){
-  altUnits = !altUnits;
-}
-*/
-
-  // Handle user inputs
-  //handleIRRemote();
   handleButtonInput();
 
-  /*
-
-  // Periodic battery voltage reading
-  if (currentMillis - previousBattMillis >= BATT_INTERVAL) {
-    previousBattMillis = currentMillis;
-    int raw = analogRead(BATT_PIN);
-    // Example conversion: adjust 5V ADC reading to actual battery voltage
-    batteryVoltage = raw * (3.3 / 1023.0)*2; // assuming a divider that scales VIN to <5V
-    // (This factor 4.545 is derived from the original code comment "0.0048*4.545")
-  }
-
-  */
 
   // Periodic ADC measurements
   if (currentMillis - previousAdcMillis >= ADC_INTERVAL) {
@@ -830,6 +818,61 @@ if(powerSave || currentMode==Charging){
     previousLcdMillis = currentMillis;
     LCD_INTERVAL = screenRefreshFast ? 500 : 1000; // adjust refresh rate if toggled
     updateDisplay();
+    
+    if(ampsMode || currentMode == Charging) {
+        // Display current reading
+        float Ival = Ireading;
+        const char * unit = "A";
+        float displayVal;
+        if(!Irange) {
+            // low-range: show in mA
+            displayVal = Ival * 1000.0f;
+            unit = "mA";
+        } else {
+            displayVal = Ival;
+            unit = "A";
+        }
+        lv_label_set_text_fmt(valueLabel, "%.3f %s", displayVal, unit);
+        // Set bar value relative to max (e.g., 100mA or 5A full scale)
+        int barMax = Irange ? 5000 : 100;  // example: 5A = 5000 mA max if high-range, 100 mA max if low-range
+        int barVal = (int)((Ival * 1000.0f) > barMax ? barMax : (Ival * 1000.0f));
+        lv_bar_set_range(valueBar, 0, barMax);
+        lv_bar_set_value(valueBar, barVal, LV_ANIM_OFF);
+    } 
+    else if(voltageDisplay) {
+        // Display voltage reading (DC or AC)
+        float Vval = (voltageDisplay && !VACPresense ? roundedV : VAC);  // if AC present and in AC mode, use VAC
+        const char * unit = VACPresense ? "VAC" : "V";
+        lv_label_set_text_fmt(valueLabel, "%.3f %s", Vval, unit);
+        // Set bar relative to, say, 6.0 V full scale
+        int barVal = (int)((fabs(Vval) / 6.0f) * 1000);
+        if(barVal > 1000) barVal = 1000;
+        lv_bar_set_range(valueBar, 0, 1000);
+        lv_bar_set_value(valueBar, barVal, LV_ANIM_OFF);
+    } 
+    else {
+        // Display resistance reading
+        float Rval = displayResistance;
+        // Choose an appropriate unit (Ω, kΩ, MΩ) for display
+        char unit[3] = "Ω";
+        float dispVal = Rval;
+        if(fabs(Rval) >= 1e6) {
+            dispVal = Rval / 1e6; strcpy(unit, "MΩ");
+        } else if(fabs(Rval) >= 1e3) {
+            dispVal = Rval / 1e3; strcpy(unit, "kΩ");
+        }
+        lv_label_set_text_fmt(valueLabel, "%.3f %s", dispVal, unit);
+        // Set bar range dynamically (e.g., 0 to 1e6 Ω for normal mode, extend for HighR)
+        int maxRange = (currentMode == HighRMode) ? 10000000 : 1000000;  // 10M for high-range mode
+        int barVal = (Rval > maxRange ? maxRange : (int)Rval);
+        lv_bar_set_range(valueBar, 0, maxRange);
+        lv_bar_set_value(valueBar, barVal, LV_ANIM_OFF);
+    }
+
+    // Feed the LVGL engine to handle rendering and input
+    lv_timer_handler();
+    delay(5);  // small delay to avoid 100% CPU usage
+}
   }
 
   if(powerSave && newVoltageReading<0.1 && !VACPresense && Ireading==0){
@@ -845,20 +888,6 @@ if(powerSave || currentMode==Charging){
     screenSleep = false;
     deepSleepTrigger = false;
   }
-
-
-
-
-/*
-  if(calibratedResistance>10){ //DAC Output
-    //freq=100;
-    //wave.freq(freq);
-    analogWrite(A0, 2000);
-  }else{
-    freq=1000;
-    wave.freq(freq);
-  }
-*/  
 
 }
 
@@ -1476,12 +1505,6 @@ void updateDisplay() {
   //display.fillScreen(BLACK);
   display.fillRect(0, 0, 128, 64, BLACK);
   display.setTextColor(WHITE,BLACK);
-
-  if(continuity){
-    display.fillRect(760, 0, 40, 40, RED);
-  }else{
-    display.fillRect(760, 0, 40, 40, BLACK);
-  }
   
   if(!screenSleep && currentMode!=Charging){
 
@@ -1754,7 +1777,7 @@ void updateAlerts() {
   unsigned long now = millis();
   if (!flashlightMode) {
     // Continuity check (low resistance)
-    continuity = (isBetween(currentResistance, -20.0, 1.0) ||
+    bool continuity = (isBetween(currentResistance, -20.0, 1.0) ||
                       (isBetween(currentResistance, -20.0, 20.0) && ohmsHighRange))
                       //|| (prevResistance > 2000000 && currentResistance < 1000000)
                       ;
@@ -1912,7 +1935,7 @@ void checkModeButton() {
   unsigned long currentTime = millis();
 
   // Detect new press only when button transitions from HIGH to LOW
-  if ((buttonState == LOW || redPress) && !buttonPreviouslyPressed && (currentTime - lastDebounceTime+100 > DEBOUNCE_DELAY)) {
+  if (buttonState == LOW && !buttonPreviouslyPressed && (currentTime - lastDebounceTime > DEBOUNCE_DELAY)) {
     lastDebounceTime = currentTime;
     buttonPreviouslyPressed = true;
 
