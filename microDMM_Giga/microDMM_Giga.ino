@@ -1073,22 +1073,22 @@ void handleSerialCommands(char command) {
 }
 
 void handleButtonInput() {
-  bool isPressed = (digitalRead(TYPE_PIN) == LOW);
+  bool isPressed = (digitalRead(TYPE_PIN) == LOW ) ;
   if (isPressed && !buttonPressed) {
     // Button was just pressed
     buttonPressed = true;
     buttonPressTime = millis();
   }
-  if (!isPressed && buttonPressed) {
+  if ((!isPressed && buttonPressed)|| bluePress || yellowPress) {
     // Button was released
     unsigned long pressDuration = millis() - buttonPressTime;
     buttonPressed = false;
     analogWrite(CONTINUITY_PIN, 0);  // turn off any flashlight LED dimming
-    if (pressDuration > 400) {
+    if (pressDuration > 400 || yellowPress) {
       // Long press: reset min/max and enable display
       ReZero();
       MinMaxDisplay = true;
-    } else if (pressDuration > 50) {
+    } else if (pressDuration > 50 || bluePress) {
       // Short press: type current reading via USB keyboard
       if(currentMode==Type){      
       if (voltageDisplay) {
