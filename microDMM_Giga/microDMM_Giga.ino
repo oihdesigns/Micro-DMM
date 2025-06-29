@@ -51,7 +51,7 @@ Arduino_GigaDisplayTouch touch;
 #define BLUE    0x001F
 #define YELLOW  0xFFE0
 
-const uint16_t btnX[4] = { 400, 500, 400, 500 };
+const uint16_t btnX[4] = { 600, 500, 600, 500 };
 const uint16_t btnY[4] = {  80,  80, 180, 180 };
 const uint16_t btnColor[4] = { RED, GREEN, BLUE, YELLOW };
 const char*    btnLabel[4] = { "MODE", "LOG", "Blue", "Yellow" };
@@ -61,6 +61,23 @@ bool redPress    = false;
 bool greenPress  = false;
 bool bluePress   = false;
 bool yellowPress = false;
+
+
+// Insert your data array and its length somewhere above or in another file:
+extern const float samples[];    // e.g. float samples[] = {1.2, 2.3, 1.8, …};
+extern const int SAMPLE_COUNT_PLOT = 100;   // set to the number of elements in samples[]
+
+// Plot configuration:
+static const int PLOT_SIZE = 400;   // 400 px square
+static const int PLOT_X    = 0;     // top-left corner of plot area
+static const int PLOT_Y    = 80;
+
+// Color definitions (RGB565):
+#define COLOR_BG     0x0000  // black
+#define COLOR_DATA   0xFFFF  // white
+#define COLOR_MIN    0x07E0  // green
+#define COLOR_MEAN   0xFFE0  // yellow
+#define COLOR_MAX    0xF800  // red
 
 
 // Pin definitions
@@ -399,11 +416,14 @@ void setup() {
   //display.print(EEPROM.read(1));//Reads the EEPROM and determines the correct splash   
   display.setCursor(0, 48);
   display.println("GIGA METER");
+  delay(200);
   display.fillScreen(BLACK);   // clear to black
+
+  //drawPlot(voltageSamples, SAMPLE_COUNT_PLOT);
 
   
   //display.display();
-  delay(200);
+  
 
   // draw our four buttons
   display.setTextSize(2);
@@ -1635,6 +1655,9 @@ void updateDisplay() {
         
       }
     }
+    
+    drawPlot(voltageSamples, SAMPLE_COUNT_PLOT);
+  
   } else {
     // Resistance display mode
     
@@ -1926,4 +1949,55 @@ void checkModeButton() {
   if (buttonState == HIGH && buttonPreviouslyPressed) {
     buttonPreviouslyPressed = false;
   }
+}
+
+void drawPlot(const float data[], int n) {
+  // 1) Compute min, max, mean
+  float minY = data[0], maxY = data[0], sumY = data[0];
+  for (int i = 1; i < n; i++) {
+    float v = data[i];
+    sumY += v;
+    if (v < minY) minY = v;
+    if (v > maxY) maxY = v;
+  }
+  float meanY = sumY / n;
+  float rangeY = maxY - minY;
+
+  // 2) Add 10% total margin (5% top, 5% bottom)
+  float margin = rangeY * 0.10f;
+  float plotMin = minY - margin * 0.5f;
+  float plotMax = maxY + margin * 0.5f;
+  float yScale  = float(PLOT_SIZE) / (plotMax - plotMin);
+
+  // 3) Clear plot area
+  display.fillRect(PLOT_X, PLOT_Y, PLOT_SIZE+100, PLOT_SIZE, COLOR_BG);
+
+  // 4) Draw data polyline
+  for (int i = 0; i < n - 1; i++) {
+    int x1 = PLOT_X + (i    * PLOT_SIZE) / (n - 1);
+    int y1 = PLOT_Y + PLOT_SIZE - int((data[i]     - plotMin) * yScale);
+    int x2 = PLOT_X + ((i+1)* PLOT_SIZE) / (n - 1);
+    int y2 = PLOT_Y + PLOT_SIZE - int((data[i+1]   - plotMin) * yScale);
+    display.drawLine(x1, y1, x2, y2, COLOR_DATA);
+  }
+
+  // 5) Draw dashed lines and labels for min, mean, max
+  drawStatLine(minY, plotMin, yScale, COLOR_MIN);
+  drawStatLine(meanY, plotMin, yScale, COLOR_MEAN);
+  drawStatLine(maxY, plotMin, yScale, COLOR_MAX);
+}
+
+// Helper: draw one dashed horizontal line and its value
+void drawStatLine(float value, float plotMin, float yScale, uint16_t color) {
+  int y = PLOT_Y + PLOT_SIZE - int((value - plotMin) * yScale);
+  const int dashLen = 6;
+  for (int x = PLOT_X; x < PLOT_X + PLOT_SIZE; x += dashLen) {
+    display.drawFastHLine(x, y, dashLen / 2, color);
+  }
+  // Label the line
+  char buf[16];
+  display.setCursor(PLOT_X + PLOT_SIZE + 5, y - 4);
+  display.setTextColor(color);
+  display.print(value, 3);   // prints `value` with 2 decimal places
+  display.print(buf);
 }
