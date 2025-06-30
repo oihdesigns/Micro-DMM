@@ -1535,14 +1535,16 @@ void measureCurrent() {
 void updateDisplay() {
   // Prepare values for display
   //display.fillScreen(BLACK);
-  display.fillRect(0, 0, 128, 64, BLACK);
+  display.fillRect(0, 0, 128, 72, BLACK);
   display.setTextColor(WHITE,BLACK);
 
+  /*
   if(continuity){
     display.fillRect(760, 0, 40, 40, RED);
   }else{
     display.fillRect(760, 0, 40, 40, BLACK);
   }
+  */
   
   if(!screenSleep && currentMode!=Charging){
 
@@ -1573,8 +1575,8 @@ void updateDisplay() {
     }
   
   //Mode Display
-  display.setCursor(120, 0);
-  display.print(currentMode);
+  display.setCursor(0, 65);
+  display.print(modeToString(currentMode));
 
 
   // If notable current present or in ampsMode, overlay current reading on display
@@ -1989,6 +1991,20 @@ void checkModeButton() {
   // Detect button release
   if (buttonState == HIGH && buttonPreviouslyPressed) {
     buttonPreviouslyPressed = false;
+  }
+}
+
+const char* modeToString(Mode m) {
+  switch (m) {
+    case Default:   return "Default";
+    case Voltmeter:  return "Voltmeter";
+    case VACmanual: return "VAC";
+    case Type:       return "Type";
+    case Low:       return "Low";
+    case AltUnitsMode:       return "AltUnits";
+    case HighRMode:       return "High R";
+    case Charging:       return "Charging";
+    default:        return "Unknown";
   }
 }
 
