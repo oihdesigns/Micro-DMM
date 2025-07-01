@@ -2,16 +2,9 @@
 #include <Adafruit_ADS1X15.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <IRremote.h>
-//#include <Keyboard.h> // This one is for the RA4M1
+#include <Keyboard.h>
 //#include <analogWave.h> // Include the library for analog waveform generation
-#include <EEPROM.h>
-
-
-#include <USB.h>//These three are for the ESP32 HID 
-#include <USBHID.h>
-#include <USBHIDKeyboard.h>
-USBHIDKeyboard Keyboard;
+//#include <EEPROM.h>
 
 
 
@@ -29,11 +22,11 @@ const int SETRANGE_PIN = 7;   // Controls high/low resistance range
 #define IR_RECEIVE_PIN   8      // IR receiver input pin
 const int OHMPWMPIN = 9;
 //const int BATT_PIN      = A2;   // Battery voltage analog input
-//#define enablePin  BAT_READ_EN  // Only for RA4M1
-//#define BATT_PIN BAT_DET_PIN  // Only for RA4M1
+//#define enablePin  BAT_READ_EN  // Pin for enabling battery voltage reading
+//#define BATT_PIN BAT_DET_PIN
 const int TYPE_PIN      = 3;    // Mode button (also triggers flashlight mode if held at boot)
 const int KBPin = 8;   // Toggle: if LOW -> keyboard mode; if HIGH -> serial mode
-const int logPin = 2; // take log pin
+const int logPin = 1; // take log pin
 //const int LowerButton = 10;   // 
 
 
@@ -71,6 +64,7 @@ float EEPROM_SleepV = 0.615;
 enum Mode {
   Default,
   Voltmeter,
+  VACmanual,
   Type,
   Low,
   AltUnitsMode,
@@ -83,6 +77,7 @@ enum Mode {
 #define BUTTON_PIN 10         // Set your button input pin
 
 Mode currentMode = Default;
+Mode previousMode = Default;
 
 unsigned long lastDebounceTime = 0;
 bool lastButtonState = HIGH;
@@ -95,8 +90,7 @@ const float constantR = 330.0;//EEPROM2:240    // Internal resistor (Ω) in cons
 const float dividerR = 22000.0;   // Series resistor (Ω) for high resistance divider
 const float ZENER_MAX_V =5.0; //EEPROM2:4.353;  // Zener/reference voltage in high-range mode (V)
 */
-float VOLTAGE_SCALE = 63.539; // Calibration scale factor for voltage input
-
+float VOLTAGE_SCALE = 46.392; // Calibration scale factor for voltage input
 
 // Timing intervals (ms)
 const unsigned long ADC_INTERVAL    = 1;     // ADC sampling interval
@@ -270,7 +264,6 @@ float loggedVoltagesAtI[LOG_SIZE] = {0};
 float loggedTimeStamps[LOG_SIZE] = {0};
 
 // ========== Function Prototypes ========== 
-void handleIRRemote();
 void handleSerialCommands(char command);
 void handleButtonInput();
 void measureVoltage();
@@ -317,27 +310,22 @@ void setup() {
   Serial.begin(115200);
   delay(100);
   Serial.println("Setup Start");
-  USB.begin();
   Keyboard.begin();
   
   // Configure pins
   pinMode(TYPE_PIN, INPUT_PULLUP);
   pinMode(CONTINUITY_PIN, OUTPUT);
   pinMode(SETRANGE_PIN, OUTPUT);
-  //pinMode(BATT_PIN, INPUT);// Only for RA4M1
+  //pinMode(BATT_PIN, INPUT);
   pinMode(BUTTON_PIN, INPUT_PULLUP); // Assuming active-low button
   pinMode(OHMPWMPIN, OUTPUT);
   pinMode(logPin, INPUT_PULLUP);
 
-//  pinMode(enablePin, OUTPUT);  // Set the enable pin as an output// Only for RA4M1
-//  digitalWrite(enablePin, HIGH); // Set the pin high to enable battery voltage reading// Only for RA4M1
+//  pinMode(enablePin, OUTPUT);  // Set the enable pin as an output
+//  digitalWrite(enablePin, HIGH); // Set the pin high to enable battery voltage reading
 
-  if (!EEPROM.begin(512)) {
-    Serial.println("EEPROM failed to initialise!");
-    while(true) delay(10);
-    }
 
-  eepromSetup(); //This reads the EEPROM and sets the analog corrective factors
+  //eepromSetup(); //This reads the EEPROM and sets the analog corrective factors
 
   
 
@@ -356,9 +344,9 @@ void setup() {
   //display.drawBitmap(0, 0, MICRO_5x7, 5, 7, SSD1306_WHITE);
   display.setCursor(0, 0);
   display.print("uMeter #");
-  display.print(EEPROM.read(1));//Reads the EEPROM and determines the correct splash   
+  //display.print(EEPROM.read(1));//Reads the EEPROM and determines the correct splash   
   display.setCursor(0, 48);
-  display.println("XIAO RA4M1");
+  display.println("XIAO RP2350");
   
   display.display();
   delay(200);
@@ -422,6 +410,8 @@ void setup() {
 void loop() {
     //  Serial.println("Loop Start");
   unsigned long currentMillis = millis();
+
+  previousMode=currentMode;
 
   checkModeButton();//Check for mode button
 
@@ -489,10 +479,9 @@ if(digitalRead(LowerButton) == 0){
 */
 
   // Handle user inputs
-  handleIRRemote();
   handleButtonInput();
+/*
 
-/* // Only for RA4M1
   // Periodic battery voltage reading
   if (currentMillis - previousBattMillis >= BATT_INTERVAL) {
     previousBattMillis = currentMillis;
@@ -501,7 +490,8 @@ if(digitalRead(LowerButton) == 0){
     batteryVoltage = raw * (3.3 / 1023.0)*2; // assuming a divider that scales VIN to <5V
     // (This factor 4.545 is derived from the original code comment "0.0048*4.545")
   }
-*/
+
+  */
 
   // Periodic ADC measurements
   if (currentMillis - previousAdcMillis >= ADC_INTERVAL) {
@@ -729,112 +719,6 @@ if(powerSave || currentMode==Charging){
 
 // ========== Input Handling Functions ========== 
 
-void handleIRRemote() {
-  // Check IR receiver for a decoded command
-  if (IrReceiver.decode()) {
-    if (millis() - lastIrReceiveMillis >= IR_DEBOUNCE_INTERVAL) {
-      lastIrReceiveMillis = millis();
-      uint32_t irCode = IrReceiver.decodedIRData.command;
-      switch (irCode) {
-        case SET_ZERO_CODE:      // Set current resistance as zero reference
-          zeroOffsetRes = currentResistance;
-          initialZeroSet = true;
-          break;
-        case CLEAR_ZERO_CODE:    // Clear resistance zero reference
-          zeroOffsetRes = 0.0;
-          break;
-        case SERIAL_SEND_CODE:   // Send one-time readings over Serial
-          Serial.print("Res: ");
-          if (displayResistance > -100.0 && displayResistance < 8000000.0) {
-            Serial.print(displayResistance);
-          } else {
-            Serial.print("OPEN");
-          }
-          if (debugMode) {
-            Serial.print(" Vr: ");
-            Serial.print(ohmsVoltage, 4);
-          }
-          Serial.print(" Vdc: ");
-          Serial.print(roundedV, vDigits);
-          Serial.print(vSuffix);
-          Serial.print(" I: ");
-          Serial.print(Ireading * 1000.0, 0);
-          Serial.println(" mA");
-          break;
-        case R_RANGE_CODE:       // Toggle manual resistance range (if auto-range off)
-          ohmsHighRange = !ohmsHighRange;
-          Serial.print("Resistance Range toggled: ");
-          Serial.println(ohmsHighRange ? "High" : "Low");
-          break;
-        case V_SMOOTH_CODE:      // Toggle voltage smoothing mode (manual mode only)
-          smoothVmode = !smoothVmode;
-          Serial.println("Voltage smoothing toggled");
-          break;
-        case TYPE_RESISTANCE_CODE: // Type out resistance via USB keyboard
-          char buf[16];
-          dtostrf(displayResistance, 0, rDigits, buf);
-          for (char* p = buf; *p; ++p) {
-            Keyboard.write(*p);
-            }
-            //Keyboard.print(displayResistance, rDigits);
-          break;
-        case TYPE_VOLTAGE_CODE:  // Type out voltage via USB keyboard
-          //char buf[16];
-          dtostrf(averageVoltage, 0, vDigits, buf);
-          for (char* p = buf; *p; ++p) {
-            Keyboard.write(*p);
-            }
-          //Keyboard.write(averageVoltage, vDigits);
-          break;
-        case KEY_DELETE_CODE:    // Simulate Delete key
-          Keyboard.press(0xD4); Keyboard.releaseAll();
-          break;
-        case KEY_UP_CODE:        // Simulate Up Arrow key
-          Keyboard.press(0xDA); Keyboard.releaseAll();
-          break;
-        case KEY_DOWN_CODE:      // Simulate Down Arrow
-          Keyboard.press(0xD9); Keyboard.releaseAll();
-          break;
-        case KEY_LEFT_CODE:      // Simulate Left Arrow
-          Keyboard.press(0xD8); Keyboard.releaseAll();
-          break;
-        case KEY_RIGHT_CODE:     // Simulate Right Arrow
-          Keyboard.press(0xD7); Keyboard.releaseAll();
-          break;
-        case TYPE_MOVE_CODE:     // Type resistance, then press Right Arrow (to move to next cell, etc.)
-          dtostrf(displayResistance, 0, rDigits, buf);
-          for (char* p = buf; *p; ++p) {
-            Keyboard.write(*p);
-            }
-          
-          //Keyboard.write(displayResistance, rDigits);
-          Keyboard.press(0xD7); Keyboard.releaseAll();
-          break;
-        case CLEAR_MINMAX_CODE:  // Toggle displaying min/max on screen
-          MinMaxDisplay = !MinMaxDisplay;
-          break;
-        case RESET_MINMAX_CODE:  // Reset min/max values and timers
-          ReZero();
-          break;
-        case AUTO_RANGE_CODE:    // Toggle auto-ranging for resistance
-          ohmsAutoRange = !ohmsAutoRange;
-          Serial.print("Auto-Range: ");
-          Serial.println(ohmsAutoRange ? "On" : "Off");
-          break;
-        case CURRENT_MODE_CODE:  // Toggle current-focused mode
-          ampsMode = !ampsMode;
-          Serial.print("Current Mode: ");
-          Serial.println(ampsMode ? "On" : "Off");
-          break;
-        default:
-          // Unrecognized IR code (could print for debugging)
-          break;
-      }
-    }
-    IrReceiver.resume(); // ready to receive next IR signal
-  }
-}
-
 void handleSerialCommands(char command) {
   // Handle a single-character command from Serial
   switch (command) {
@@ -1039,30 +923,15 @@ void handleButtonInput() {
       ReZero();
       MinMaxDisplay = true;
     } else if (pressDuration > 50) {
-      // Short press: type current reading via USB Keyboard
+      // Short press: type current reading via USB keyboard
       if(currentMode==Type){      
       if (voltageDisplay) {
-          char buf[16];
-          dtostrf(newVoltageReading, 0, vDigits, buf);
-          for (char* p = buf; *p; ++p) {
-            Keyboard.write(*p);
-            }                
-        //Keyboard.write(newVoltageReading, vDigits);
+        Keyboard.print(newVoltageReading, vDigits);
       } else {
         if(displayResistance<1){
-        char buf[16];
-          dtostrf(displayResistance, 0, rDigits+2, buf);
-          for (char* p = buf; *p; ++p) {
-            Keyboard.write(*p);
-            }                
-        //Keyboard.write(displayResistance, rDigits+2);
+        Keyboard.print(displayResistance, rDigits+2);
         }else{
-          char buf[16];
-          dtostrf(displayResistance, 0, rDigits, buf);
-          for (char* p = buf; *p; ++p) {
-            Keyboard.write(*p);
-            }                
-        //Keyboard.write(displayResistance, rDigits);  
+        Keyboard.print(displayResistance, rDigits);  
         }
       }
       // Press Right Arrow after typing (to move cursor, e.g., to next cell)
@@ -1346,7 +1215,7 @@ void measureVoltage() {
     VAC = 0; //VAC should be 0 when we are in precise (have an Ohm offset) mode
   }
 
-  if( VAC > 4.9 && (!altUnits && averageVoltage < 0.1) || (altUnits && VAC > 10)){
+  if( (VAC > 4.9 && (!altUnits && averageVoltage < 0.1) || (altUnits && VAC > 10)) || currentMode == VACmanual){
     VACPresense = true; //If there is more than 1VAC for the reading and average voltage is low, assume reading is VAC. 
   }else{
     VACPresense = false;
@@ -1460,19 +1329,19 @@ void updateDisplay() {
   formatResistanceValue(lowR, roundedRlow, rSuffixlow, rDigitslow);
   formatResistanceValue(highR, roundedRhigh, rSuffixhigh, rDigitshigh);
 
-  // Battery voltage indicator
+  // Battery voltage / mode indicator
   display.setTextSize(1);
   display.setCursor(72, 56);
   display.print("VIN:");
-  //if (batteryVoltage > 3.0) {
     display.print(batteryVoltage, 1);
     if (batteryVoltage < 5.1) {
       display.setCursor(72, 48);
-      //display.print("BATT:LOW");
     }
-  //} else {
-  //  display.print("USB"); // if VIN is below 3V, assume running from USB 5V
-  //}
+  
+  //Mode Display
+  display.setCursor(120, 0);
+  display.print(currentMode);
+
 
   // If notable current present or in ampsMode, overlay current reading on display
   if (((Irange && !isBetween(Ireading, -0.01, 0.01)) || (!Irange && currentOnOff))
@@ -1571,7 +1440,7 @@ void updateDisplay() {
       display.print("Range:");
       display.print(highV - lowV, 3);
     }
-    if (VAC > 0.5 && !VACPresense) {
+    if (VAC > 0.1 && !VACPresense) {
       // Show AC component if significant
       display.setCursor(0, 48);
       display.setTextSize(1);
@@ -1717,7 +1586,7 @@ void updateAlerts() {
                       //|| (prevResistance > 2000000 && currentResistance < 1000000)
                       ;
 
-    bool logicVoltage = (fabs(newVoltageReading) > 3.2 || (VACPresense && VAC > 1.0));
+    bool logicVoltage = ((!altUnits && (fabs(newVoltageReading) > 3.2 || (VACPresense && VAC > 1.0))) ||(altUnits && (fabs(newVoltageReading) > 30.2 || (VACPresense && VAC > 15.0))));
     if (continuity) {
       // If continuity detected, beep/flash the continuity pin
       if (!rFlag) {
