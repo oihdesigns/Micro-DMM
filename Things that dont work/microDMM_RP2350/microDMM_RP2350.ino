@@ -308,8 +308,9 @@ void setup() {
 
 
   Serial.begin(115200);
-  delay(100);
+  
   Serial.println("Setup Start");
+  delay(100);
   Keyboard.begin();
   
   // Configure pins
