@@ -1,25 +1,22 @@
 #include <Wire.h>
 #include <Adafruit_ADS1X15.h>
-//#include <Adafruit_GFX.h>
-//#include <Adafruit_SSD1306.h>
-//#include <IRremote.h>
-//#include <Keyboard.h>
-//#include <analogWave.h> // Include the library for analog waveform generation
-//#include <EEPROM.h>
 
 //GIGA HID Related
 #include "PluggableUSBHID.h"
 #include "USBKeyboard.h"
 USBKeyboard Keyboard;
-//#include <FlashStorage.h>
-//#include <array>
 
-// 1) Make FlashStorage hold your std::array<float,19>
-//using CalibBlock = std::array<float,19>;
-//FlashStorage(calStore, CalibBlock);
+//Giga USB Related
+#include <Arduino_USBHostMbed5.h>
+#include <DigitalOut.h>
+#include <FATFileSystem.h>
 
-// 2) Your working RAM arrays
-//float calib[19];
+// ————— USB mass-storage objects —————
+USBHostMSD        msd;
+mbed::FATFileSystem usb("usb");
+
+
+
 const float defaultCalib[19] = {
   // initial calibration list (19 entries)
   0.9828, 0.9958, 0.9999, 0.9979, 0.9954,
@@ -31,13 +28,7 @@ const float defaultCalib[19] = {
 // ===== Hardware Setup Constants =====
 Adafruit_ADS1115 ads;
 
-/*
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
-#define OLED_RESET    -1
-#define SCREEN_ADDRESS 0x3C
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-*/
+
 #include <Arduino_GigaDisplay_GFX.h>
 #include <Arduino_GigaDisplayTouch.h>    // Touch polling functions :contentReference[oaicite:1]{index=1}
 
@@ -356,30 +347,38 @@ void ReZero();
 
 // ========== Setup Function ========== 
 void setup() {
-  
-  /*
-  
-  pinMode(KBPin, INPUT_PULLUP);
-  useKeyboard = (digitalRead(KBPin) == LOW);
-
-    // Initialize USB communication based on mode:
-  if (useKeyboard) {
-    Keyboard.begin();
-  } else {
-    Serial.begin(115200);
-    while (!Serial);
-    Serial.println("Serial mode active");
-  }
-
-  */
-
-
 
   Serial.begin(115200);
   delay(100);
+  while (!Serial) { /* wait for USB-Serial */ }
   Serial.println("Setup Start");
-  //Keyboard.begin();
-  
+
+    //Related to USB stick usage
+        // Enable the USB-A port
+      pinMode(PA_15, OUTPUT);
+      digitalWrite(PA_15, HIGH);
+
+      // Some carriers require explicit VBUS enable
+      mbed::DigitalOut vbusEnable(PB_8, 1);
+
+      // Wait for drive to appear
+      Serial.print("Waiting for USB drive");
+      while (!msd.connect()) {
+        Serial.print('.');
+        delay(500);
+      }
+      Serial.println("\nDrive connected.");
+
+      // Mount the FAT32 filesystem
+      int err = usb.mount(&msd);
+      if (err) {
+        Serial.print("Mount failed: ");
+        Serial.println(err);
+        while (true);  // halt
+      }
+      Serial.println("Filesystem mounted.");
+
+
   // Configure pins
   pinMode(TYPE_PIN, INPUT_PULLUP);
   pinMode(CONTINUITY_PIN, OUTPUT);
@@ -673,31 +672,23 @@ if(takeLog == true){
         samplesTaken = 0;
         analogWrite(CONTINUITY_PIN, 100);
         Serial.println("Samples logged!");
+
+      //USB File Write
+              // open for append
+          FILE* f = fopen("/usb/data.csv", "a");
+          if (f) {
+            fprintf(f,"%.2f,%.2f,%lu\n", newVoltageReading, previousVoltage, millis());
+            fclose(f);
+            Serial.println("Logged: " + String(newVoltageReading) + "," + String(previousVoltage) + "," + String(millis()));
+          } else {
+            Serial.println("Error: could not open data.csv");
+          }
       }
 }
 
-/*
-if(digitalRead(LowerButton) == 0){
-  altUnits = !altUnits;
-}
-*/
 
-  // Handle user inputs
-  //handleIRRemote();
   handleButtonInput();
 
-  /*
-
-  // Periodic battery voltage reading
-  if (currentMillis - previousBattMillis >= BATT_INTERVAL) {
-    previousBattMillis = currentMillis;
-    int raw = analogRead(BATT_PIN);
-    // Example conversion: adjust 5V ADC reading to actual battery voltage
-    batteryVoltage = raw * (3.3 / 1023.0)*2; // assuming a divider that scales VIN to <5V
-    // (This factor 4.545 is derived from the original code comment "0.0048*4.545")
-  }
-
-  */
 
   // Periodic ADC measurements
   if (currentMillis - previousAdcMillis >= ADC_INTERVAL) {
@@ -906,20 +897,6 @@ if(powerSave || currentMode==Charging){
     screenSleep = false;
     deepSleepTrigger = false;
   }
-
-
-
-
-/*
-  if(calibratedResistance>10){ //DAC Output
-    //freq=100;
-    //wave.freq(freq);
-    analogWrite(A0, 2000);
-  }else{
-    freq=1000;
-    wave.freq(freq);
-  }
-*/  
 
 }
 
@@ -1300,27 +1277,6 @@ if(powerSave){
   } else if (!voltageDisplay && (ohmsVoltage < (ZENER_MAX_V - 0.02f))) {
     ads.setDataRate(RATE_ADS1115_128SPS);
   }
-
-/*
-
-  // --- Calibration correction factors ---
-  if      (rawResistance < 0.75f)   calibratedResistance = rawResistance * CF_A;
-  else if (rawResistance < 3.0f)    calibratedResistance = rawResistance * CF_B;
-  else if (rawResistance < 7.0f)    calibratedResistance = rawResistance * CF_C;
-  else if (rawResistance < 20.0f)   calibratedResistance = rawResistance * CF_D;
-  else if (rawResistance < 70.0f)   calibratedResistance = rawResistance * CF_E;
-  else if (rawResistance < 170.0f)  calibratedResistance = rawResistance * CF_F;
-  else if (rawResistance < 700.0f)  calibratedResistance = rawResistance * CF_G;
-  else if (rawResistance < 1700.0f) calibratedResistance = rawResistance * CF_H;
-  else if (rawResistance < 7000.0f) calibratedResistance = rawResistance * CF_I;
-  else if (rawResistance < 17000.0f)calibratedResistance = rawResistance * CF_J;
-  else if (rawResistance < 70000.0f)calibratedResistance = rawResistance * CF_K;
-  else if (rawResistance < 170000.0f)calibratedResistance = rawResistance * CF_L;
-  else if (rawResistance < 700000.0f)calibratedResistance = rawResistance * CF_M;
-  else if (rawResistance < 1700000.0f)calibratedResistance = rawResistance * CF_N;
-  else  calibratedResistance = rawResistance * CF_O;
-
-*/
 
       const float limits[15] = {
         0.75f, 3.0f, 7.0f, 20.0f, 70.0f,
