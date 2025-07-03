@@ -300,6 +300,8 @@ float deltaV = 0.0;
 int deltaVdigits = 0;
 
 bool continuity = false;
+bool logMode = false;
+int usbDelay = 0;
 
 // Flags for transient states
 bool flashlightMode = false;  // flashlight mode active (button held at startup)
@@ -311,8 +313,8 @@ bool rFlag = false;           // indicates resistance continuity alert is active
 bool VACPresense = false;       // indicates VAC presence
 
 // Logging buffers for current vs time (for 'L' command)
-const int LOG_SIZE = 120;
-const int SAMPLE_COUNT = 120;
+const int LOG_SIZE = 100;
+const int SAMPLE_COUNT = 100;
 bool takeLog = false;
 int samplesTaken = 0;
 float tLogStart = 0;
@@ -320,6 +322,19 @@ float tLogEnd = 0;
 float loggedCurrents[LOG_SIZE] = {0};
 float loggedVoltagesAtI[LOG_SIZE] = {0};
 float loggedTimeStamps[LOG_SIZE] = {0};
+
+
+//Auto Log Related
+
+#define NUM_AUTO_VALUES 50
+float VAutoArray[NUM_AUTO_VALUES] = {0};
+float TAutoArray[NUM_AUTO_VALUES] = {0};
+float IAutoArray[NUM_AUTO_VALUES] = {0};
+float Istep = 0.1;
+bool AutologTriggered = 0;
+bool writePrimed = 0;
+float lastLoggedI = 0;
+float ItHighm;
 
 // ========== Function Prototypes ========== 
 void handleIRRemote();
@@ -336,6 +351,8 @@ void formatVoltageValue(float value, float &outValue, String &outSuffix, int &ou
 bool isBetween(float value, float low, float high);
 String formatTime(unsigned long milliseconds);
 void ReZero();
+
+
 
 
 //DAC Output
@@ -361,29 +378,40 @@ void setup() {
       // Some carriers require explicit VBUS enable
       mbed::DigitalOut vbusEnable(PB_8, 1);
 
+      
       // Wait for drive to appear
       Serial.print("Waiting for USB drive");
-      while (!msd.connect()) {
-        Serial.print('.');
-        delay(500);
-      }
-      Serial.println("\nDrive connected.");
+      
 
-      // Mount the FAT32 filesystem
+      while (!msd.connect() && usbDelay<2){
+        delay(500);
+        usbDelay++;
+        }
+
+        if(msd.connect()){
+
+        logMode = true;
+        Serial.print('\nDrive connected.');
+
+
+        // Mount the FAT32 filesystem
       int err = usb.mount(&msd);
       if (err) {
         Serial.print("Mount failed: ");
         Serial.println(err);
         while (true);  // halt
       }
-      Serial.println("Filesystem mounted.");
+      Serial.println("Filesystem mounted.");      
+      }else{
+        logMode = false;
+        Serial.println("No USB Drive.");
+      }
 
 
   // Configure pins
   pinMode(TYPE_PIN, INPUT_PULLUP);
   pinMode(CONTINUITY_PIN, OUTPUT);
   pinMode(SETRANGE_PIN, OUTPUT);
-  //pinMode(BATT_PIN, INPUT);
   pinMode(BUTTON_PIN, INPUT_PULLUP); // Assuming active-low button
   pinMode(OHMPWMPIN, OUTPUT);
   pinMode(logPin, INPUT_PULLUP);
@@ -444,6 +472,11 @@ void setup() {
     display.setCursor(tx, ty);
     display.print(btnLabel[i]);
   }
+
+  display.setCursor(800, 350);
+  display.print("USB?: ");
+  display.print(logMode);
+
 
   // initialize touch
   if (!touch.begin()) {
@@ -673,17 +706,32 @@ if(takeLog == true){
         analogWrite(CONTINUITY_PIN, 100);
         Serial.println("Samples logged!");
 
+      if(logMode){
       //USB File Write
               // open for append
+          
+          manuallogArraysToCSV();
+          
+          /*
+          
           FILE* f = fopen("/usb/data.csv", "a");
           if (f) {
+            fprintf(f,"DataLog:");
             fprintf(f,"%.2f,%.2f,%lu\n", newVoltageReading, previousVoltage, millis());
             fclose(f);
             Serial.println("Logged: " + String(newVoltageReading) + "," + String(previousVoltage) + "," + String(millis()));
           } else {
             Serial.println("Error: could not open data.csv");
           }
+          
+          */
+          
+          }   
+      
+      
+      
       }
+      
 }
 
 
@@ -699,48 +747,45 @@ if(takeLog == true){
     measureVoltage();
     measureCurrent();
     
-
-if(!powerSave){
-    if(ohmsVoltage>EEPROM_MAXV-0.002 && !timeHighset && currentMode != HighRMode){
-      timeHigh = millis();
-      timeHighset = true;
+  //PowerSave Related
+    if(!powerSave){
+        if(ohmsVoltage>EEPROM_MAXV-0.002 && !timeHighset && currentMode != HighRMode){
+          timeHigh = millis();
+          timeHighset = true;
+        }
+        if (timeHighset && currentResistance < 2000){
+          timeHighset = false;
+        }    
+        if (timeHighset && timeHigh + 5000 < millis()){
+          powerSave = true;
+        }
     }
-    if (timeHighset && currentResistance < 2000){
-      timeHighset = false;
-    }    
-    if (timeHighset && timeHigh + 5000 < millis()){
-      powerSave = true;
-    }
-}
 
-
-
-if(powerSave || currentMode==Charging){
-  analogWrite(OHMPWMPIN, 254);
-    
-  if(ohmsVoltage < EEPROM_SleepV-0.01){
-      powerSave = false;
-      timeHighset = false;
-      analogWrite(OHMPWMPIN, 0);
-    }
-  }
-
-    
+    if(powerSave || currentMode==Charging){
+      analogWrite(OHMPWMPIN, 254);
+        
+      if(ohmsVoltage < EEPROM_SleepV-0.01){
+          powerSave = false;
+          timeHighset = false;
+          analogWrite(OHMPWMPIN, 0);
+        }
+      }
+  
     // Determine which primary measurement to display automatically
     
-    if ( countV>500  || currentMode == Voltmeter) {
-      voltageDisplay = true;
-      if(preciseMode){
-      ads.setDataRate(RATE_ADS1115_16SPS); //slow sampling if 0 is set  
-      }else{
-      ads.setDataRate(RATE_ADS1115_860SPS); //fast sampling for voltage
-      }
-    
+  if ( countV>500  || currentMode == Voltmeter) {
+    voltageDisplay = true;
+    if(preciseMode){
+    ads.setDataRate(RATE_ADS1115_16SPS); //slow sampling if 0 is set  
+    }else{
+    ads.setDataRate(RATE_ADS1115_860SPS); //fast sampling for voltage
     }
-    if (isBetween(currentResistance, -10.0, 100.0)&& currentMode != Voltmeter) {
-      voltageDisplay = false;
-      ads.setDataRate(RATE_ADS1115_32SPS); // Slow sampling in resistance mode
-    }
+  
+  }
+  if (isBetween(currentResistance, -10.0, 100.0)&& currentMode != Voltmeter) {
+    voltageDisplay = false;
+    ads.setDataRate(RATE_ADS1115_32SPS); // Slow sampling in resistance mode
+  }
 
     // Calculate displayResistance after zero offset
     displayResistance = currentResistance - zeroOffsetRes;
@@ -877,6 +922,33 @@ if(powerSave || currentMode==Charging){
   // Update buzzer/LED alerts or flashlight LED brightness
   updateAlerts();
 
+  if(!AutologTriggered && writePrimed){
+    autologArraysToCSV();
+  }
+  
+  
+  if(
+  (logMode && currentOnOff) && ( //SD mode and Current mode are on, AND
+  (IHigh==Ireading && IHigh > 0.05) || (ILow==Ireading && ILow < -0.05) || (newVoltageReading==highV && highV>0.05) || (newVoltageReading==lowV && lowV < -0.05 ) || //if either I/ V high / low is triggered OR
+  (abs(lastLoggedI)>(abs(Ireading)+Istep) || abs(lastLoggedI)<(abs(Ireading)-Istep)) // If I reading is more than Istep different than the previous reading
+  // || digitalRead(RED_PIN) == LOW 
+  )//SD mode close
+)
+{
+    //analogWrite(CONTINUITY_PIN, 10);             
+    float TimeS;
+    TimeS = (millis());
+    TimeS = TimeS/1000;          
+    ItHighm = TimeS;
+
+    logValues(newVoltageReading, ItHighm, Ireading);
+    AutologTriggered=1;
+    writePrimed=1;
+    lastLoggedI = Ireading;
+
+}else{
+  
+  
   // Update display at interval
   if ((currentMillis - previousLcdMillis >= LCD_INTERVAL)&&!takeLog) {
     previousLcdMillis = currentMillis;
@@ -897,7 +969,7 @@ if(powerSave || currentMode==Charging){
     screenSleep = false;
     deepSleepTrigger = false;
   }
-
+}
 }
 
 // ========== Input Handling Functions ========== 
@@ -1230,84 +1302,84 @@ void measureResistance() {
 
 
 
-if(powerSave){
-  ZENER_MAX_V = EEPROM_SleepV;
-}else{
-  if(ohmsVoltage>ZENER_MAX_V){
-    ohmsVoltage = ZENER_MAX_V-0.0001;
+  if(powerSave){
+    ZENER_MAX_V = EEPROM_SleepV;
   }else{
-    ZENER_MAX_V = EEPROM_MAXV;
-  }
-}
-
-  // --- Compute raw resistance ---
-  if (currentRangeHigh) {
-    // High-range: resistive divider + Zener reference
-    rawResistance = dividerR * (ohmsVoltage / (ZENER_MAX_V - ohmsVoltage));
-  } else {
-    // Low-range: constant-current measurement
-    rawResistance = ohmsVoltage / (constantI - (ohmsVoltage / constantR));
-  }
-
-  // --- Initial auto-zero ---
-  if (!initialZeroSet) {
-    analogWrite(OHMPWMPIN, 0);
-    if (currentResistance > 0.001f && currentResistance < 10.0f) {
-      zeroOffsetRes    = currentResistance;
-      initialZeroSet   = true;
-      Serial.print("Auto-zero set: ");
-      Serial.println(zeroOffsetRes);
-    } else if (currentResistance > 10.0f && currentResistance < 1e6f) {
-      initialZeroSet = true;
-      Serial.println("No auto zero applied");
+    if(ohmsVoltage>ZENER_MAX_V){
+      ohmsVoltage = ZENER_MAX_V-0.0001;
+    }else{
+      ZENER_MAX_V = EEPROM_MAXV;
     }
   }
 
-  // --- Adjust display update rate & data rate ---
-  if (!isBetween(rawResistance, prevResistance * 0.2f, prevResistance * 5.0f)&& ohmsVoltage<4.995) { 
-    ads.setDataRate(RATE_ADS1115_475SPS);  // speed up for big change
-    if(!powerSave){
-      LCD_INTERVAL = 200;
+    // --- Compute raw resistance ---
+    if (currentRangeHigh) {
+      // High-range: resistive divider + Zener reference
+      rawResistance = dividerR * (ohmsVoltage / (ZENER_MAX_V - ohmsVoltage));
+    } else {
+      // Low-range: constant-current measurement
+      rawResistance = ohmsVoltage / (constantI - (ohmsVoltage / constantR));
     }
-  
-  
-  } else if (!voltageDisplay && preciseMode && rawResistance < 3e6f
-             && isBetween(rawResistance, prevResistance * 0.98f, prevResistance * 1.02f)) {
-    ads.setDataRate(RATE_ADS1115_16SPS);    // slow when stable & null set
-  } else if (!voltageDisplay && (ohmsVoltage < (ZENER_MAX_V - 0.02f))) {
-    ads.setDataRate(RATE_ADS1115_128SPS);
-  }
 
-      const float limits[15] = {
-        0.75f, 3.0f, 7.0f, 20.0f, 70.0f,
-        170.0f, 700.0f, 1700.0f, 7000.0f, 17000.0f,
-        70000.0f, 170000.0f, 700000.0f, 1700000.0f, 7000000.0f
-      };
-
-      //float calib[15];
-
-      size_t i = 0;
-      while (rawResistance >= limits[i]) {
-        i++;
+    // --- Initial auto-zero ---
+    if (!initialZeroSet) {
+      analogWrite(OHMPWMPIN, 0);
+      if (currentResistance > 0.001f && currentResistance < 10.0f) {
+        zeroOffsetRes    = currentResistance;
+        initialZeroSet   = true;
+        Serial.print("Auto-zero set: ");
+        Serial.println(zeroOffsetRes);
+      } else if (currentResistance > 10.0f && currentResistance < 1e6f) {
+        initialZeroSet = true;
+        Serial.println("No auto zero applied");
       }
-      calibratedResistance = rawResistance * defaultCalib[i];
-
-
-    currentResistance = calibratedResistance;
-    if (altUnits) {
-      // Convert to °F via thermistor equation
-      currentResistance = (1.0f / ((1.0f/298.15f) + (log(currentResistance/10000.0f)/3694.0f)) - 273.15f) * 1.8f + 32.0f;
     }
 
-  // --- Open-circuit detection & final assignment ---
-  if(currentMode != HighRMode){
-  if (ohmsVoltage > (ZENER_MAX_V - 0.007f)) {
-    currentResistance = 8e6f;  // treat as open    
-    if (!voltageDisplay) {
-      ads.setDataRate(RATE_ADS1115_475SPS);
+    // --- Adjust display update rate & data rate ---
+    if (!isBetween(rawResistance, prevResistance * 0.2f, prevResistance * 5.0f)&& ohmsVoltage<4.995) { 
+      ads.setDataRate(RATE_ADS1115_475SPS);  // speed up for big change
+      if(!powerSave){
+        LCD_INTERVAL = 200;
+      }
+    
+    
+    } else if (!voltageDisplay && preciseMode && rawResistance < 3e6f
+              && isBetween(rawResistance, prevResistance * 0.98f, prevResistance * 1.02f)) {
+      ads.setDataRate(RATE_ADS1115_16SPS);    // slow when stable & null set
+    } else if (!voltageDisplay && (ohmsVoltage < (ZENER_MAX_V - 0.02f))) {
+      ads.setDataRate(RATE_ADS1115_128SPS);
     }
-  }
-  } 
+
+        const float limits[15] = {
+          0.75f, 3.0f, 7.0f, 20.0f, 70.0f,
+          170.0f, 700.0f, 1700.0f, 7000.0f, 17000.0f,
+          70000.0f, 170000.0f, 700000.0f, 1700000.0f, 7000000.0f
+        };
+
+        //float calib[15];
+
+        size_t i = 0;
+        while (rawResistance >= limits[i]) {
+          i++;
+        }
+        calibratedResistance = rawResistance * defaultCalib[i];
+
+
+      currentResistance = calibratedResistance;
+      if (altUnits) {
+        // Convert to °F via thermistor equation
+        currentResistance = (1.0f / ((1.0f/298.15f) + (log(currentResistance/10000.0f)/3694.0f)) - 273.15f) * 1.8f + 32.0f;
+      }
+
+    // --- Open-circuit detection & final assignment ---
+    if(currentMode != HighRMode){
+    if (ohmsVoltage > (ZENER_MAX_V - 0.007f)) {
+      currentResistance = 8e6f;  // treat as open    
+      if (!voltageDisplay) {
+        ads.setDataRate(RATE_ADS1115_475SPS);
+      }
+    }
+    } 
 } //This closes resistance measurement
 
 void measureVoltage() {
@@ -2014,3 +2086,82 @@ void drawStatLine(float value, float plotMin, float yScale, uint16_t color) {
   display.print(value, 3);   // prints `value` with 2 decimal places
   display.print(buf);
 }
+
+template<typename T>
+void printArrayCSV(FILE* f, const T* arr, size_t len, const char* fmt) {
+  for (size_t i = 0; i < len; ++i) {
+    fprintf(f, fmt, arr[i]);
+    if (i + 1 < len) fputc(',', f);
+  }
+  fputc('\n', f);
+}
+
+void manuallogArraysToCSV() {
+  FILE* f = fopen("/usb/data.csv", "a");
+  if (!f) {
+    Serial.println("Error opening data.csv");
+    return;
+  }
+  fprintf(f,"DataLog End Time: ");
+  fprintf(f, "%.2f\n", tLogEnd);
+  printArrayCSV(f,
+      loggedVoltagesAtI,
+      sizeof(loggedVoltagesAtI) / sizeof(loggedVoltagesAtI[0]),
+      "%.3f");        // two decimal places
+  if(currentOnOff){
+    printArrayCSV(f,
+        loggedCurrents,
+        sizeof(loggedCurrents) / sizeof(loggedCurrents[0]),
+        "%.3f");        // two decimal places  
+  }
+  printArrayCSV(f,
+      loggedTimeStamps,
+      sizeof(loggedTimeStamps) / sizeof(loggedTimeStamps[0]),
+      "%.3f");        // two decimal places  
+    fclose(f);
+  Serial.println("All arrays logged as separate CSV rows.");
+}
+
+
+
+
+
+void shiftAndStore(float* array, float newValue) {
+    for (int i = NUM_AUTO_VALUES - 1; i > 0; i--) {
+        array[i] = array[i - 1];
+    }
+    array[0] = newValue;
+}
+void logValues(float VatIHigh, float ItHighm, float IHigh) {
+    shiftAndStore(VAutoArray, VatIHigh);
+    shiftAndStore(TAutoArray, ItHighm);
+    shiftAndStore(IAutoArray, IHigh);
+}
+
+void autologArraysToCSV() {
+  FILE* f = fopen("/usb/data_autologged.csv", "a");
+  if (!f) {
+    Serial.println("Error opening data.csv");
+    return;
+  }
+  fprintf(f,"DataLog End Time: ");
+  fprintf(f, "%.2f\n", tLogEnd);
+  printArrayCSV(f,
+      VAutoArray,
+      sizeof(VAutoArray) / sizeof(VAutoArray[0]),
+      "%.3f");        // two decimal places
+  if(currentOnOff){
+    printArrayCSV(f,
+        IAutoArray,
+        sizeof(IAutoArray) / sizeof(IAutoArray[0]),
+        "%.3f");        // two decimal places  
+  }
+  printArrayCSV(f,
+      TAutoArray,
+      sizeof(TAutoArray) / sizeof(TAutoArray[0]),
+      "%.3f");        // two decimal places  
+    fclose(f);
+  Serial.println("AutoLog Trigger");
+}
+
+          
