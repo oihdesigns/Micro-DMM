@@ -54,14 +54,21 @@ As of writing I have functional versions (I confirmed the core functions work) t
 If you're interested in helping develop this please feel free to reach out. 
 
 # FAQ:
+- Q: What is the logic voltage?
+  - A:  The current PCB is 5V specific, except for a couple I've modified with level shifter modules on the SDA/SCL lines. The next version will have the level shifters integrated that allow use with either a 5V or 3.3V logic level board. 
+
 - Q: Is there voltage isolation on the USB?
-  - A: There is enough isolation (500K Ohms) that you will not hurt anything by measuring voltage on something connected to the wall while the meter is also connected to the wall, but not enough to prevent ground loops from interfering with measurements. See the longer, full write up on my website, and then buy the Adafruit USB voltage isolation board.
+  - A: There is enough isolation (500K Ohms) that you will not hurt anything by measuring voltage (in either polarity) on something connected to the wall while the meter is also connected to the wall, but not enough to prevent ground loops from interfering with measurements. See the longer, full write up on my website, and then buy the Adafruit USB voltage isolation board.
 
 
 - Q: The Adafruit isolation board says "100mA." What does the meter draw?
   - A: With the XIAO RA4M1, 50-60mA typical when measuring voltage. Closer to 100mA when measuring resistance. The resistance circuit goes into low-power mode several seconds after being open (except in a no-sleep mode).
 
+- Q: Does it work on an Arduino Uno R3?
+  - A: As a basic meter, yes, but there's no keyboard emulation.    
 
 - Q: Can I buy one?
-  - A: Eventually, yes, probably? I do not have a current timeline for bringing these to market. If you want one please reach out to me. If you want to hand-solder it yourself I can sell you a single PCB and maybe some of the components with higher individual costs. 
+  - A: Eventually, yes, probably? I do not have a current timeline for bringing these to market. If you want one please reach out to me. If you want to hand-solder it yourself I can sell you a single PCB and maybe some of the components with higher individual costs.
+ 
+
 
