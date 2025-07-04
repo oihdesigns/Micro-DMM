@@ -111,7 +111,7 @@ void eepromSetup(){
       CF_O = 1.0;
       VOLTAGE_SCALE = 46.41618; // 
       constantI = 0.020062;
-      EEPROM_SleepV = 0.634;
+      EEPROM_SleepV = 0.627;
       EEPROM_MAXV = 5.006;
   }else{ //If EEPROM addr 1 is not 1 use these
     // Calibration correction factors for resistance (piecewise)

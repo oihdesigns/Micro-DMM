@@ -326,7 +326,7 @@ float loggedTimeStamps[LOG_SIZE] = {0};
 
 //Auto Log Related
 
-#define NUM_AUTO_VALUES 50
+#define NUM_AUTO_VALUES 32
 float VAutoArray[NUM_AUTO_VALUES] = {0};
 float TAutoArray[NUM_AUTO_VALUES] = {0};
 float IAutoArray[NUM_AUTO_VALUES] = {0};
@@ -497,7 +497,8 @@ void setup() {
     //display.display();
     while (1); // halt
   }
-  Serial.println("ADS1115 good");
+  //
+  //Serial.println("ADS1115 good");
   ads.setDataRate(RATE_ADS1115_16SPS); // slow rate b/c default is resistance
   delay(300);
 
@@ -927,16 +928,19 @@ if(takeLog == true){
 
   if(!AutologTriggered && writePrimed){    
     autologArraysToCSV();
+
+      
     analogWrite(CONTINUITY_PIN, 100);
     autologCount++;
     Serial.println("Values Autologged:");
     Serial.println(autologCount);
+    
     writePrimed = 0;
   }
   
   
   if(
-  (logMode && currentOnOff) && ( //SD mode and Current mode are on, AND
+  (logMode) && ( //SD mode and Current mode are on, AND
   (IHigh==Ireading && IHigh > 0.05) || (ILow==Ireading && ILow < -0.05) || (newVoltageReading==highV && highV>0.05) || (newVoltageReading==lowV && lowV < -0.05 ) || //if either I/ V high / low is triggered OR
   (abs(lastLoggedI)>(abs(Ireading)+Istep) || abs(lastLoggedI)<(abs(Ireading)-Istep)) // If I reading is more than Istep different than the previous reading
   // || digitalRead(RED_PIN) == LOW 
@@ -944,15 +948,14 @@ if(takeLog == true){
 )
 {
     //analogWrite(CONTINUITY_PIN, 10);             
-    float TimeS;
-    TimeS = (millis());
-    TimeS = TimeS/1000;          
-    ItHighm = TimeS;
-
-    logValues(newVoltageReading, ItHighm, Ireading);
+    float TimeS = (millis());
+    tLogEnd  = millis() / 1000.0;
+    logValues(newVoltageReading, (TimeS/1000), Ireading);
     AutologTriggered=1;
     writePrimed=1;
     lastLoggedI = Ireading;
+
+
 
 }else{
 
@@ -2153,7 +2156,7 @@ void autologArraysToCSV() {
     Serial.println("Error opening data.csv");
     return;
   }
-  fprintf(f,"DataLog End Time: ");
+  fprintf(f,"DataLogged End Time: ");
   fprintf(f, "%.2f\n", tLogEnd);
   printArrayCSV(f,
       VAutoArray,
@@ -2164,7 +2167,7 @@ void autologArraysToCSV() {
         IAutoArray,
         sizeof(IAutoArray) / sizeof(IAutoArray[0]),
         "%.3f");        // two decimal places  
-  }
+    }
   printArrayCSV(f,
       TAutoArray,
       sizeof(TAutoArray) / sizeof(TAutoArray[0]),
