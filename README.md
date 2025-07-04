@@ -23,7 +23,14 @@ I have a long and detailed write-up of the circuitry design on my personal websi
 ![20250623_203203_470_1DXII copy](https://github.com/user-attachments/assets/2eb9bdcf-79eb-4e2a-9211-deb4775e8079)
 
 ## Design Prioities and Compromises
-I've made the following design decisions on how I 
+This meter is designed to complement and support the more expensive equimpent generally found in a lab, rather than replace it. With that in mide, I've made the following design decisions on my priorites:
+
+### Minimal Protections
+- The voltmeter circuitry is not designed to measure amplitudes higher than is dangerous to humans. By not designing a tool that is supposed to keep people safe I can dramatically simplify and shrink the design. (The said, I've nailed the voltmeter circuit with a 1000V megaohmmeter. No problem)
+- Likewise, the resistance circuit can be damaged if you accidentally measure too much /unregulated voltage. This is a tradeoff for a very fast and accurate autoranging ohmmeter circuit that can accurately read from less than 0.01 to more than 5,000,000 Ohms. 
+
+### Streamlined Functions
+- There is no built in ammeter, inductance, or capacitance function. Ammeter function is easily added as needed with either an off-the-shelf module, or a low value resistor across the voltmeter. There isn't an easy way to add indutance or capacitance. I don't use any of these often enough for them to be worth taking up the PCB space.  
 
 ## Current Support:
 
@@ -33,11 +40,24 @@ As of writing I have functional versions (I confirmed the core functions work) t
 - Arduino ESP32 Nano (via jumpers)
 - Seeed Studio XIAO RA4M1 (same processer as the Uno R4) 
 
-
 ## (Some of my) Future Plans:
 - Make a version that uses an ADS1256 instead of the ADS1115 to support measurements speeds up to 30,000 samples/second and resolutions of up to 24bits.
 - Make a version that runs off a Raspberry Pi.
 - Implement WiFi/Bluetooth features on the boards that support it.
 - Implement DAC output as a simple function generator for the boards that support it.
+- Add a jumper on the PCB and write the code to allow four-wire resistance readings.
 
 If you're interested in helping develop this please feel free to reach out. 
+
+# FAQ:
+- Q: Is there voltage isolation on the USB?
+  - A: There is enough isolation (500K Ohms) that you will not hurt anything by measuring voltage on something connected to the wall while the meter is also connected to the wall, but not enough to prevent ground loops from interfering with measurements. See the longer, full write up on my website, and then buy the Adafruit USB voltage isolation board.
+
+
+- Q: The Adafruit isolation board says "100mA." What does the meter draw?
+  - A: With the XIAO RA4M1, 50-60mA typical when measuring voltage. Closer to 100mA when measuring resistance. The resistance circuit goes into low-power mode several seconds after being open (except in a no-sleep mode).
+
+
+- Q: Can I buy one?
+  - A: Eventually, yes, probably? I do not have a current timeline for bringing these to market. If you want one please reach out to me. If you want to hand-solder it yourself I can sell you a single PCB and maybe some of the components with higher individual costs. 
+
