@@ -1,35 +1,49 @@
 #include <Wire.h>
 #include <Adafruit_ADS1X15.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
-#include <IRremote.h>
-#include <Keyboard.h>
-#include <analogWave.h> // Include the library for analog waveform generation
-#include <EEPROM.h>
+
+//GIGA HID Related
+#include "PluggableUSBHID.h"
+#include "USBKeyboard.h"
+USBKeyboard Keyboard;
+//#include <FlashStorage.h>
+//#include <array>
+
+#include "Arduino_H7_Video.h"
+#include "Arduino_GigaDisplayTouch.h"
+#include "lvgl.h"
+
+Arduino_H7_Video Display(800, 480, GigaDisplayShield);  // 800x480 resolution
+Arduino_GigaDisplayTouch Touch;
 
 
+
+// 2) Your working RAM arrays
+//float calib[19];
+const float defaultCalib[19] = {
+  // initial calibration list (19 entries)
+  0.9828, 0.9958, 0.9999, 0.9979, 0.9954,
+  0.9965, 0.9980, 1.0034, 1.0021, 1.0012,
+  1.0031, 1.0073, 1.0176, 1.0611, 1.1130,
+  0.020073, 0.6120, 4.9980, 46.4680
+};
 
 // ===== Hardware Setup Constants =====
 Adafruit_ADS1115 ads;
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
-#define OLED_RESET    -1
-#define SCREEN_ADDRESS 0x3C
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+
 
 // Pin definitions
 const int CONTINUITY_PIN = 6;   // Buzzer or LED for continuity/alerts
 const int SETRANGE_PIN = 7;   // Controls high/low resistance range
-#define IR_RECEIVE_PIN   8      // IR receiver input pin
+//#define IR_RECEIVE_PIN   8      // IR receiver input pin
 const int OHMPWMPIN = 9;
 //const int BATT_PIN      = A2;   // Battery voltage analog input
-#define enablePin  BAT_READ_EN  // Pin for enabling battery voltage reading
-#define BATT_PIN BAT_DET_PIN
+//#define enablePin  BAT_READ_EN  // Pin for enabling battery voltage reading
+//#define BATT_PIN BAT_DET_PIN
 const int TYPE_PIN      = 3;    // Mode button (also triggers flashlight mode if held at boot)
 const int KBPin = 8;   // Toggle: if LOW -> keyboard mode; if HIGH -> serial mode
-const int logPin = 1; // take log pin
+const int logPin = 2; // take log pin
 //const int LowerButton = 10;   // 
-#define MODE_BUTTON 10         // Set your button input pin
 
 
 // ADS1115 gain factors (mV per bit) for each gain setting
@@ -76,6 +90,7 @@ enum Mode {
   Charging,
   NUM_MODES
 };
+#define BUTTON_PIN 10         // Set your button input pin
 
 Mode currentMode = Default;
 Mode previousMode = Default;
@@ -288,62 +303,215 @@ void ReZero();
 
 
 
+
 // ========== Setup Function ========== 
 void setup() {
+
+
 
   Serial.begin(115200);
   delay(100);
   Serial.println("Setup Start");
-  Keyboard.begin();
   
   // Configure pins
   pinMode(TYPE_PIN, INPUT_PULLUP);
   pinMode(CONTINUITY_PIN, OUTPUT);
   pinMode(SETRANGE_PIN, OUTPUT);
-  pinMode(BATT_PIN, INPUT);
-  pinMode(MODE_BUTTON, INPUT_PULLUP); // Assuming active-low button
+  //pinMode(BATT_PIN, INPUT);
+  pinMode(BUTTON_PIN, INPUT_PULLUP); // Assuming active-low button
   pinMode(OHMPWMPIN, OUTPUT);
   pinMode(logPin, INPUT_PULLUP);
 
-  pinMode(enablePin, OUTPUT);  // Set the enable pin as an output
-  digitalWrite(enablePin, HIGH); // Set the pin high to enable battery voltage reading
 
 
-  eepromSetup(); //This reads the EEPROM and sets the analog corrective factors
 
-  
+  // 5) Assign your named variables
+  EEPROM_MAXV  = defaultCalib[17];
+  EEPROM_SleepV = defaultCalib[16];
+  constantI     = defaultCalib[15];
+  VOLTAGE_SCALE= defaultCalib[18];
+
 
   // Initialize OLED display
-  if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
-    Serial.println(F("OLED init failed"));
-    analogWrite(CONTINUITY_PIN, 10); // brief buzz to signal error
-    while (1); // halt
-  }
-  display.clearDisplay();
-  display.setTextSize(2);
-  display.setTextColor(SSD1306_WHITE);
+
+
+    // ... (existing initialization: Wire, ads.begin, etc.)
+    lv_init();                      // Initialize LVGL library
+    Display.begin();                // Initialize display and LVGL integration:contentReference[oaicite:3]{index=3}
+    Touch.begin();                  // Initialize touch screen input:contentReference[oaicite:4]{index=4}
+    // (Optional) lv_disp_set_rotation or lv_disp_set_orientation if needed
+    
+    // Create GUI objects (labels, bars, buttons, etc.)
+
+    lv_obj_t * valueLabel = lv_label_create(lv_scr_act());
+    lv_obj_set_style_text_font(valueLabel, &lv_font_montserrat_28, 0); // large font
+    lv_label_set_text(valueLabel, "0.00 V");  
+    lv_obj_align(valueLabel, LV_ALIGN_TOP_MID, 0, 20);  // position near top-center
+
+    lv_obj_t * valueBar = lv_bar_create(lv_scr_act());
+    lv_obj_set_size(valueBar, 700, 20);                 // wide bar
+    lv_obj_align(valueBar, LV_ALIGN_TOP_MID, 0, 60);    // below the label
+    lv_bar_set_range(valueBar, 0, 1000);                // initial range (e.g., 0-1000 for scaling)
+    lv_bar_set_value(valueBar, 0, LV_ANIM_OFF);
+
+    // Create a generic styled button function
+auto makeButton = [&](const char * txt, lv_align_t align, lv_coord_t x_ofs) {
+    lv_obj_t * btn = lv_btn_create(lv_scr_act());
+    lv_obj_set_size(btn, 180, 50);
+    lv_obj_align(btn, align, x_ofs, -10);  // align relative to bottom
+    lv_obj_t * label = lv_label_create(btn);
+    lv_label_set_text(label, txt);
+    lv_obj_center(label);
+    return btn;
+};
+lv_obj_t * nullBtn = makeButton("Null/Type", LV_ALIGN_BOTTOM_LEFT, 20);
+lv_obj_t * logBtn  = makeButton("Log",       LV_ALIGN_BOTTOM_MID,   0);
+lv_obj_t * modeBtn = makeButton("Mode",      LV_ALIGN_BOTTOM_RIGHT,-20);
+
+lv_obj_t * modeDrop = lv_dropdown_create(lv_scr_act());
+lv_dropdown_set_options(modeDrop,
+    "Resistance\n"       // index 0
+    "Voltage (DC)\n"     // index 1
+    "Voltage (AC)\n"     // index 2
+    "Current\n"          // index 3
+    "High Ω Mode\n"      // index 4
+    "Type (USB)"         // index 5
+);
+lv_obj_set_width(modeDrop, 150);
+lv_obj_align(modeDrop, LV_ALIGN_TOP_LEFT, 10, 10);
+lv_dropdown_set_selected(modeDrop, 0);  // start at "Resistance"
+
+lv_obj_t * autoSwitch = lv_switch_create(lv_scr_act());
+lv_obj_align(autoSwitch, LV_ALIGN_TOP_RIGHT, -60, 15);
+lv_obj_t * swLabel = lv_label_create(lv_scr_act());
+lv_label_set_text(swLabel, "Auto Range");
+lv_obj_align(swLabel, LV_ALIGN_TOP_RIGHT, -120, 20);
+lv_obj_add_state(autoSwitch, LV_STATE_CHECKED);  // start ON by default
+
+lv_obj_add_event_cb(nullBtn, [](lv_event_t * e) {
+    if(lv_event_get_code(e) == LV_EVENT_LONG_PRESSED) {
+        ReZero();                          // long press: reset min/max
+        MinMaxDisplay = true;
+    } 
+    else if(lv_event_get_code(e) == LV_EVENT_CLICKED) {
+        // short press: either type value or set null offset
+        if(currentMode == Type) {
+            // If in "Type" mode, send the value via USB keyboard
+            if(voltageDisplay) {
+                Keyboard.printf("%.*f\r\n", vDigits, newVoltageReading);
+            } else {
+                // If displaying resistance, send that value
+                if(displayResistance < 1)
+                    Keyboard.printf("%.*f\r\n", rDigits+2, displayResistance);
+                else
+                    Keyboard.printf("%.*f\r\n", rDigits, displayResistance);
+            }
+            Keyboard.key_code(RIGHT_ARROW);  // move cursor right (Excel/Sheets) after typing
+        } else {
+            // If not in Type mode: toggle relative zero (null)
+            if(voltageDisplay) {
+                // For voltage mode, capture current reading as reference
+                deltaV = (preciseMode ? newVoltageReading : averageVoltage);
+                deltaVdigits = vDigits - 1;
+            } else {
+                // For resistance mode, set or clear zero offset (null):contentReference[oaicite:6]{index=6}
+                if(zeroOffsetRes == 0.0f)
+                    zeroOffsetRes = currentResistance;
+                else 
+                    zeroOffsetRes = 0.0f;
+            }
+        }
+    }
+}, LV_EVENT_ALL, NULL);
+
+lv_obj_add_event_cb(logBtn, [](lv_event_t * e) {
+    if(lv_event_get_code(e) == LV_EVENT_CLICKED) {
+        takeLog = true;
+        tLogStart = millis() / 1000.0;  // mark log start time:contentReference[oaicite:10]{index=10}
+        // (The loop will handle logging and set takeLog false when done)
+    }
+}, LV_EVENT_CLICKED, NULL);
+
+lv_obj_add_event_cb(modeBtn, [](lv_event_t * e) {
+    if(lv_event_get_code(e) == LV_EVENT_CLICKED) {
+        currentMode = static_cast<Mode>((currentMode + 1) % NUM_MODES);
+        Serial.printf("Mode changed to %d\n", currentMode);
+        // Update dropdown selection to match the new mode:
+        int ddIndex = 0;
+        switch(currentMode) {
+            case Default:      ddIndex = 0; break;  // Resistance
+            case Voltmeter:    ddIndex = 1; break;  // DC Voltage
+            case VACmanual:    ddIndex = 2; break;  // AC Voltage
+            case Type:         ddIndex = 5; break;  // Type (USB)
+            case HighRMode:    ddIndex = 4; break;  // High Ω
+            // (If other modes like Low, AltUnits, Charging are encountered, you could handle or ignore them)
+        }
+        lv_dropdown_set_selected(modeDrop, ddIndex);
+    }
+}, LV_EVENT_CLICKED, NULL);
+
+
+lv_obj_add_event_cb(modeDrop, [](lv_event_t * e) {
+    if(lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED) {
+        uint16_t sel = lv_dropdown_get_selected(modeDrop);
+        switch(sel) {
+            case 0: currentMode = Default;    break;  // Resistance mode
+            case 1: currentMode = Voltmeter;  break;  // DC Voltage mode
+            case 2: currentMode = VACmanual;  break;  // AC Voltage mode
+            case 3: 
+                // Current mode (no direct Mode enum; enable current reading)
+                currentMode = Voltmeter;   // set a safe base mode (voltage) 
+                ampsMode   = true;         // focus on current measurements:contentReference[oaicite:14]{index=14}
+                break;
+            case 4: currentMode = HighRMode;  break;  // High resistance mode
+            case 5: currentMode = Type;       break;  // USB keyboard output mode
+        }
+        // Sync any related flags
+        if(sel != 3) { 
+            ampsMode = (currentMode == Charging) ? true : false; // only keep ampsMode for a dedicated current mode if defined
+            if(sel != 0 && sel != 4) zeroOffsetRes = 0.0f;  // clear resistance offset when leaving resistance modes
+        }
+        Serial.printf("Mode set to %d via dropdown\n", currentMode);
+    }
+}, LV_EVENT_VALUE_CHANGED, NULL);
+
+
+lv_obj_add_event_cb(autoSwitch, [](lv_event_t * e) {
+    if(lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED) {
+        bool on = lv_obj_has_state(autoSwitch, LV_STATE_CHECKED);
+        ohmsAutoRange = on;
+        Serial.println(on ? "Auto-range On" : "Auto-range Off");
+        // (Optionally, if turning auto-range off, one could allow manual range selection via UI)
+    }
+}, LV_EVENT_VALUE_CHANGED, NULL);
+
+
   // Splash screen
 
+/*
   //display.setCursor(0, 0);  
   //display.drawBitmap(0, 0, MICRO_5x7, 5, 7, SSD1306_WHITE);
   display.setCursor(0, 0);
   display.print("uMeter #");
-  display.print(EEPROM.read(1));//Reads the EEPROM and determines the correct splash   
+  //display.print(EEPROM.read(1));//Reads the EEPROM and determines the correct splash   
   display.setCursor(0, 48);
   display.println("XIAO RA4M1");
   
-  display.display();
+  //display.display();
   delay(200);
+*/
+
 
   // Initialize ADS1115 ADC
   if (!ads.begin()) {
     Serial.println("ADS1115 init failed!");
-    display.clearDisplay();
+    display.fillScreen(BLACK);
+
     display.setCursor(0, 0);
     display.setTextSize(1);
     Serial.println("ADS1115 not found");
     display.println("ADS1115 not found");
-    display.display();
+    //display.display();
     while (1); // halt
   }
   Serial.println("ADS1115 good");
@@ -381,10 +549,11 @@ void setup() {
   }
   
  
-  display.clearDisplay();
-
+    display.fillScreen(BLACK);
     Serial.println("Setup End");
 
+//  wave.sine(freq);
+//  analogWriteResolution(12);
 
 }
 
@@ -409,7 +578,7 @@ void loop() {
     preciseMode = false;
   }
 
-  if(currentMode == Type || currentMode==HighRMode){
+  if(currentMode == Type){
     deltaMode = false;
     deltaV = 0;
   }else{
@@ -424,6 +593,16 @@ void loop() {
     }
     flashlightChecked = true;
   }
+
+/*
+  //Check for Log Pin
+  if(LowerButton == 0){
+    float nowSec = millis() / 1000.0;
+    logCurrentData(newVoltageReading, nowSec, Ireading);
+    analogWrite(CONTINUITY_PIN,100);
+    Serial.print("data logged");
+  }
+*/
 
 if(digitalRead(logPin)==0){
   takeLog = true;
@@ -444,18 +623,8 @@ if(takeLog == true){
       }
 }
 
-  // Handle user inputs
-  handleIRRemote();
   handleButtonInput();
 
-  // Periodic battery voltage reading
-  if (currentMillis - previousBattMillis >= BATT_INTERVAL) {
-    previousBattMillis = currentMillis;
-    int raw = analogRead(BATT_PIN);
-    // Example conversion: adjust 5V ADC reading to actual battery voltage
-    batteryVoltage = raw * (3.3 / 1023.0)*2; // assuming a divider that scales VIN to <5V
-    // (This factor 4.545 is derived from the original code comment "0.0048*4.545")
-  }
 
   // Periodic ADC measurements
   if (currentMillis - previousAdcMillis >= ADC_INTERVAL) {
@@ -649,9 +818,64 @@ if(powerSave || currentMode==Charging){
     previousLcdMillis = currentMillis;
     LCD_INTERVAL = screenRefreshFast ? 500 : 1000; // adjust refresh rate if toggled
     updateDisplay();
+    
+    if(ampsMode || currentMode == Charging) {
+        // Display current reading
+        float Ival = Ireading;
+        const char * unit = "A";
+        float displayVal;
+        if(!Irange) {
+            // low-range: show in mA
+            displayVal = Ival * 1000.0f;
+            unit = "mA";
+        } else {
+            displayVal = Ival;
+            unit = "A";
+        }
+        lv_label_set_text_fmt(valueLabel, "%.3f %s", displayVal, unit);
+        // Set bar value relative to max (e.g., 100mA or 5A full scale)
+        int barMax = Irange ? 5000 : 100;  // example: 5A = 5000 mA max if high-range, 100 mA max if low-range
+        int barVal = (int)((Ival * 1000.0f) > barMax ? barMax : (Ival * 1000.0f));
+        lv_bar_set_range(valueBar, 0, barMax);
+        lv_bar_set_value(valueBar, barVal, LV_ANIM_OFF);
+    } 
+    else if(voltageDisplay) {
+        // Display voltage reading (DC or AC)
+        float Vval = (voltageDisplay && !VACPresense ? roundedV : VAC);  // if AC present and in AC mode, use VAC
+        const char * unit = VACPresense ? "VAC" : "V";
+        lv_label_set_text_fmt(valueLabel, "%.3f %s", Vval, unit);
+        // Set bar relative to, say, 6.0 V full scale
+        int barVal = (int)((fabs(Vval) / 6.0f) * 1000);
+        if(barVal > 1000) barVal = 1000;
+        lv_bar_set_range(valueBar, 0, 1000);
+        lv_bar_set_value(valueBar, barVal, LV_ANIM_OFF);
+    } 
+    else {
+        // Display resistance reading
+        float Rval = displayResistance;
+        // Choose an appropriate unit (Ω, kΩ, MΩ) for display
+        char unit[3] = "Ω";
+        float dispVal = Rval;
+        if(fabs(Rval) >= 1e6) {
+            dispVal = Rval / 1e6; strcpy(unit, "MΩ");
+        } else if(fabs(Rval) >= 1e3) {
+            dispVal = Rval / 1e3; strcpy(unit, "kΩ");
+        }
+        lv_label_set_text_fmt(valueLabel, "%.3f %s", dispVal, unit);
+        // Set bar range dynamically (e.g., 0 to 1e6 Ω for normal mode, extend for HighR)
+        int maxRange = (currentMode == HighRMode) ? 10000000 : 1000000;  // 10M for high-range mode
+        int barVal = (Rval > maxRange ? maxRange : (int)Rval);
+        lv_bar_set_range(valueBar, 0, maxRange);
+        lv_bar_set_value(valueBar, barVal, LV_ANIM_OFF);
+    }
+
+    // Feed the LVGL engine to handle rendering and input
+    lv_timer_handler();
+    delay(5);  // small delay to avoid 100% CPU usage
+}
   }
 
-  if(powerSave && fabs(newVoltageReading)<0.1 && !VACPresense && Ireading==0){
+  if(powerSave && newVoltageReading<0.1 && !VACPresense && Ireading==0){
     if(!deepSleepTrigger){
     deepSleepStart= millis();
     deepSleepTrigger = true;
@@ -669,96 +893,6 @@ if(powerSave || currentMode==Charging){
 
 // ========== Input Handling Functions ========== 
 
-void handleIRRemote() {
-  // Check IR receiver for a decoded command
-  if (IrReceiver.decode()) {
-    if (millis() - lastIrReceiveMillis >= IR_DEBOUNCE_INTERVAL) {
-      lastIrReceiveMillis = millis();
-      uint32_t irCode = IrReceiver.decodedIRData.command;
-      switch (irCode) {
-        case SET_ZERO_CODE:      // Set current resistance as zero reference
-          zeroOffsetRes = currentResistance;
-          initialZeroSet = true;
-          break;
-        case CLEAR_ZERO_CODE:    // Clear resistance zero reference
-          zeroOffsetRes = 0.0;
-          break;
-        case SERIAL_SEND_CODE:   // Send one-time readings over Serial
-          Serial.print("Res: ");
-          if (displayResistance > -100.0 && displayResistance < 8000000.0) {
-            Serial.print(displayResistance);
-          } else {
-            Serial.print("OPEN");
-          }
-          if (debugMode) {
-            Serial.print(" Vr: ");
-            Serial.print(ohmsVoltage, 4);
-          }
-          Serial.print(" Vdc: ");
-          Serial.print(roundedV, vDigits);
-          Serial.print(vSuffix);
-          Serial.print(" I: ");
-          Serial.print(Ireading * 1000.0, 0);
-          Serial.println(" mA");
-          break;
-        case R_RANGE_CODE:       // Toggle manual resistance range (if auto-range off)
-          ohmsHighRange = !ohmsHighRange;
-          Serial.print("Resistance Range toggled: ");
-          Serial.println(ohmsHighRange ? "High" : "Low");
-          break;
-        case V_SMOOTH_CODE:      // Toggle voltage smoothing mode (manual mode only)
-          smoothVmode = !smoothVmode;
-          Serial.println("Voltage smoothing toggled");
-          break;
-        case TYPE_RESISTANCE_CODE: // Type out resistance via USB keyboard
-          Keyboard.print(displayResistance, rDigits);
-          break;
-        case TYPE_VOLTAGE_CODE:  // Type out voltage via USB keyboard
-          Keyboard.print(averageVoltage, vDigits);
-          break;
-        case KEY_DELETE_CODE:    // Simulate Delete key
-          Keyboard.press(0xD4); Keyboard.releaseAll();
-          break;
-        case KEY_UP_CODE:        // Simulate Up Arrow key
-          Keyboard.press(0xDA); Keyboard.releaseAll();
-          break;
-        case KEY_DOWN_CODE:      // Simulate Down Arrow
-          Keyboard.press(0xD9); Keyboard.releaseAll();
-          break;
-        case KEY_LEFT_CODE:      // Simulate Left Arrow
-          Keyboard.press(0xD8); Keyboard.releaseAll();
-          break;
-        case KEY_RIGHT_CODE:     // Simulate Right Arrow
-          Keyboard.press(0xD7); Keyboard.releaseAll();
-          break;
-        case TYPE_MOVE_CODE:     // Type resistance, then press Right Arrow (to move to next cell, etc.)
-          Keyboard.print(displayResistance, rDigits);
-          Keyboard.press(0xD7); Keyboard.releaseAll();
-          break;
-        case CLEAR_MINMAX_CODE:  // Toggle displaying min/max on screen
-          MinMaxDisplay = !MinMaxDisplay;
-          break;
-        case RESET_MINMAX_CODE:  // Reset min/max values and timers
-          ReZero();
-          break;
-        case AUTO_RANGE_CODE:    // Toggle auto-ranging for resistance
-          ohmsAutoRange = !ohmsAutoRange;
-          Serial.print("Auto-Range: ");
-          Serial.println(ohmsAutoRange ? "On" : "Off");
-          break;
-        case CURRENT_MODE_CODE:  // Toggle current-focused mode
-          ampsMode = !ampsMode;
-          Serial.print("Current Mode: ");
-          Serial.println(ampsMode ? "On" : "Off");
-          break;
-        default:
-          // Unrecognized IR code (could print for debugging)
-          break;
-      }
-    }
-    IrReceiver.resume(); // ready to receive next IR signal
-  }
-}
 
 void handleSerialCommands(char command) {
   // Handle a single-character command from Serial
@@ -965,19 +1099,19 @@ void handleButtonInput() {
       MinMaxDisplay = true;
     } else if (pressDuration > 50) {
       // Short press: type current reading via USB keyboard
-      if(currentMode==Type || currentMode==HighRMode){      
+      if(currentMode==Type){      
       if (voltageDisplay) {
-        Keyboard.print(newVoltageReading, vDigits);
+        Keyboard.printf("%.*f\r\n",vDigits,newVoltageReading);
       } else {
         if(displayResistance<1){
-        Keyboard.print(displayResistance, rDigits+2);
+        Keyboard.printf("%.*f\r\n", rDigits+2, displayResistance);
         }else{
-        Keyboard.print(displayResistance, rDigits);  
+        Keyboard.printf("%.*f\r\n", rDigits, displayResistance);  
         }
       }
       // Press Right Arrow after typing (to move cursor, e.g., to next cell)
-      Keyboard.press(0xD7);
-        Keyboard.releaseAll();
+      Keyboard.key_code(RIGHT_ARROW);
+        //Keyboard.releaseAll();
       }else{
         if(voltageDisplay){
         deltaVdigits = vDigits-1;
@@ -1032,142 +1166,160 @@ void measureResistance() {
 
   prevResistance = rawResistance;
 
-    // --- Initialize on first run ---
-    if (firstRun) {
-      currentRangeHigh = (digitalRead(SETRANGE_PIN) == HIGH);
-      gainIndex        = currentRangeHigh ? 0 : (kNumGainLevels - 1);
-      firstRun         = false;
-    }
+  // --- Initialize on first run ---
+  if (firstRun) {
+    currentRangeHigh = (digitalRead(SETRANGE_PIN) == HIGH);
+    gainIndex        = currentRangeHigh ? 0 : (kNumGainLevels - 1);
+    firstRun         = false;
+  }
 
-    // --- Range control (auto vs. manual) ---
-    if (ohmsAutoRange && !powerSave) {
-      if (!currentRangeHigh && prevResistance > OHMS_HIGH_THRESHOLD) {
-        currentRangeHigh = true;
-        digitalWrite(SETRANGE_PIN, HIGH);
-      } else if ( currentRangeHigh && prevResistance < OHMS_LOW_THRESHOLD) {
-        currentRangeHigh = false;
-        digitalWrite(SETRANGE_PIN, LOW);
-      }
-    } 
-      else if(powerSave){
+  // --- Range control (auto vs. manual) ---
+  if (ohmsAutoRange && !powerSave) {
+    if (!currentRangeHigh && prevResistance > OHMS_HIGH_THRESHOLD) {
       currentRangeHigh = true;
-      digitalWrite(SETRANGE_PIN, HIGH);  
-    } 
-    else {
-      // Manual mode: force based on user setting
-      if (ohmsHighRange && !currentRangeHigh) {
-        currentRangeHigh = true;
-        digitalWrite(SETRANGE_PIN, HIGH);
-      } else if (!ohmsHighRange && currentRangeHigh) {
-        currentRangeHigh = false;
-        digitalWrite(SETRANGE_PIN, LOW);
-      }
+      digitalWrite(SETRANGE_PIN, HIGH);
+    } else if ( currentRangeHigh && prevResistance < OHMS_LOW_THRESHOLD) {
+      currentRangeHigh = false;
+      digitalWrite(SETRANGE_PIN, LOW);
     }
-
-    // --- ADC measurement & dynamic gain adjustment ---
-    ads.setGain(kGainLevels[gainIndex]);
-    int16_t adcCount = ads.readADC_SingleEnded(2);
-
-    // If too close to rails, step gain down for larger range
-    if (adcCount > ADC_COUNT_HIGH_THRESHOLD && gainIndex > 0) {
-      gainIndex--;
-      ads.setGain(kGainLevels[gainIndex]);
-      adcCount = ads.readADC_SingleEnded(2);
-    }
-    // If well below full-scale, step gain up for better resolution
-    else if (adcCount < ADC_COUNT_LOW_THRESHOLD && gainIndex < kNumGainLevels - 1) {
-      gainIndex++;
-      ads.setGain(kGainLevels[gainIndex]);
-      adcCount = ads.readADC_SingleEnded(2);
-    }
-
-    // Convert ADC counts to voltage (V)
-    ohmsVoltage = adcCount * kGainFactors[gainIndex] / 1000.0f;
-    //Serial.println(ohmsVoltage);
-
-
-
-  if(powerSave){
-    ZENER_MAX_V = EEPROM_SleepV;
-  }else{
-    if(ohmsVoltage>ZENER_MAX_V){
-      ohmsVoltage = ZENER_MAX_V-0.0001;
-    }else{
-      ZENER_MAX_V = EEPROM_MAXV;
+  } 
+    else if(powerSave){
+    currentRangeHigh = true;
+    digitalWrite(SETRANGE_PIN, HIGH);  
+  } 
+  else {
+    // Manual mode: force based on user setting
+    if (ohmsHighRange && !currentRangeHigh) {
+      currentRangeHigh = true;
+      digitalWrite(SETRANGE_PIN, HIGH);
+    } else if (!ohmsHighRange && currentRangeHigh) {
+      currentRangeHigh = false;
+      digitalWrite(SETRANGE_PIN, LOW);
     }
   }
 
-    // --- Compute raw resistance ---
-    if (currentRangeHigh) {
-      // High-range: resistive divider + Zener reference
-      rawResistance = dividerR * (ohmsVoltage / (ZENER_MAX_V - ohmsVoltage));
-    } else {
-      // Low-range: constant-current measurement
-      rawResistance = ohmsVoltage / (constantI - (ohmsVoltage / constantR));
+  // --- ADC measurement & dynamic gain adjustment ---
+  ads.setGain(kGainLevels[gainIndex]);
+  int16_t adcCount = ads.readADC_SingleEnded(2);
+
+  // If too close to rails, step gain down for larger range
+  if (adcCount > ADC_COUNT_HIGH_THRESHOLD && gainIndex > 0) {
+    gainIndex--;
+    ads.setGain(kGainLevels[gainIndex]);
+    adcCount = ads.readADC_SingleEnded(2);
+  }
+  // If well below full-scale, step gain up for better resolution
+  else if (adcCount < ADC_COUNT_LOW_THRESHOLD && gainIndex < kNumGainLevels - 1) {
+    gainIndex++;
+    ads.setGain(kGainLevels[gainIndex]);
+    adcCount = ads.readADC_SingleEnded(2);
+  }
+
+  // Convert ADC counts to voltage (V)
+  ohmsVoltage = adcCount * kGainFactors[gainIndex] / 1000.0f;
+  //Serial.println(ohmsVoltage);
+
+
+
+if(powerSave){
+  ZENER_MAX_V = EEPROM_SleepV;
+}else{
+  if(ohmsVoltage>ZENER_MAX_V){
+    ohmsVoltage = ZENER_MAX_V-0.0001;
+  }else{
+    ZENER_MAX_V = EEPROM_MAXV;
+  }
+}
+
+  // --- Compute raw resistance ---
+  if (currentRangeHigh) {
+    // High-range: resistive divider + Zener reference
+    rawResistance = dividerR * (ohmsVoltage / (ZENER_MAX_V - ohmsVoltage));
+  } else {
+    // Low-range: constant-current measurement
+    rawResistance = ohmsVoltage / (constantI - (ohmsVoltage / constantR));
+  }
+
+  // --- Initial auto-zero ---
+  if (!initialZeroSet) {
+    analogWrite(OHMPWMPIN, 0);
+    if (currentResistance > 0.001f && currentResistance < 10.0f) {
+      zeroOffsetRes    = currentResistance;
+      initialZeroSet   = true;
+      Serial.print("Auto-zero set: ");
+      Serial.println(zeroOffsetRes);
+    } else if (currentResistance > 10.0f && currentResistance < 1e6f) {
+      initialZeroSet = true;
+      Serial.println("No auto zero applied");
+    }
+  }
+
+  // --- Adjust display update rate & data rate ---
+  if (!isBetween(rawResistance, prevResistance * 0.2f, prevResistance * 5.0f)&& ohmsVoltage<4.995) { 
+    ads.setDataRate(RATE_ADS1115_475SPS);  // speed up for big change
+    if(!powerSave){
+      LCD_INTERVAL = 200;
+    }
+  
+  
+  } else if (!voltageDisplay && preciseMode && rawResistance < 3e6f
+             && isBetween(rawResistance, prevResistance * 0.98f, prevResistance * 1.02f)) {
+    ads.setDataRate(RATE_ADS1115_16SPS);    // slow when stable & null set
+  } else if (!voltageDisplay && (ohmsVoltage < (ZENER_MAX_V - 0.02f))) {
+    ads.setDataRate(RATE_ADS1115_128SPS);
+  }
+
+/*
+
+  // --- Calibration correction factors ---
+  if      (rawResistance < 0.75f)   calibratedResistance = rawResistance * CF_A;
+  else if (rawResistance < 3.0f)    calibratedResistance = rawResistance * CF_B;
+  else if (rawResistance < 7.0f)    calibratedResistance = rawResistance * CF_C;
+  else if (rawResistance < 20.0f)   calibratedResistance = rawResistance * CF_D;
+  else if (rawResistance < 70.0f)   calibratedResistance = rawResistance * CF_E;
+  else if (rawResistance < 170.0f)  calibratedResistance = rawResistance * CF_F;
+  else if (rawResistance < 700.0f)  calibratedResistance = rawResistance * CF_G;
+  else if (rawResistance < 1700.0f) calibratedResistance = rawResistance * CF_H;
+  else if (rawResistance < 7000.0f) calibratedResistance = rawResistance * CF_I;
+  else if (rawResistance < 17000.0f)calibratedResistance = rawResistance * CF_J;
+  else if (rawResistance < 70000.0f)calibratedResistance = rawResistance * CF_K;
+  else if (rawResistance < 170000.0f)calibratedResistance = rawResistance * CF_L;
+  else if (rawResistance < 700000.0f)calibratedResistance = rawResistance * CF_M;
+  else if (rawResistance < 1700000.0f)calibratedResistance = rawResistance * CF_N;
+  else  calibratedResistance = rawResistance * CF_O;
+
+*/
+
+      const float limits[15] = {
+        0.75f, 3.0f, 7.0f, 20.0f, 70.0f,
+        170.0f, 700.0f, 1700.0f, 7000.0f, 17000.0f,
+        70000.0f, 170000.0f, 700000.0f, 1700000.0f, 7000000.0f
+      };
+
+      //float calib[15];
+
+      size_t i = 0;
+      while (rawResistance >= limits[i]) {
+        i++;
+      }
+      calibratedResistance = rawResistance * defaultCalib[i];
+
+
+    currentResistance = calibratedResistance;
+    if (altUnits) {
+      // Convert to °F via thermistor equation
+      currentResistance = (1.0f / ((1.0f/298.15f) + (log(currentResistance/10000.0f)/3694.0f)) - 273.15f) * 1.8f + 32.0f;
     }
 
-    // --- Initial auto-zero ---
-    if (!initialZeroSet) {
-      analogWrite(OHMPWMPIN, 0);
-      if (currentResistance > 0.001f && currentResistance < 10.0f) {
-        zeroOffsetRes    = currentResistance;
-        initialZeroSet   = true;
-        Serial.print("Auto-zero set: ");
-        Serial.println(zeroOffsetRes);
-      } else if (currentResistance > 10.0f && currentResistance < 1e6f) {
-        initialZeroSet = true;
-        Serial.println("No auto zero applied");
-      }
+  // --- Open-circuit detection & final assignment ---
+  if(currentMode != HighRMode){
+  if (ohmsVoltage > (ZENER_MAX_V - 0.007f)) {
+    currentResistance = 8e6f;  // treat as open    
+    if (!voltageDisplay) {
+      ads.setDataRate(RATE_ADS1115_475SPS);
     }
-
-    // --- Adjust display update rate & data rate ---
-    if (!isBetween(rawResistance, prevResistance * 0.2f, prevResistance * 5.0f)&& ohmsVoltage<4.995) { 
-      ads.setDataRate(RATE_ADS1115_475SPS);  // speed up for big change
-      if(!powerSave){
-        LCD_INTERVAL = 200;
-      }
-    
-    
-    } else if (!voltageDisplay && preciseMode && rawResistance < 3e6f
-              && isBetween(rawResistance, prevResistance * 0.98f, prevResistance * 1.02f)) {
-      ads.setDataRate(RATE_ADS1115_16SPS);    // slow when stable & null set
-    } else if (!voltageDisplay && (ohmsVoltage < (ZENER_MAX_V - 0.02f))) {
-      ads.setDataRate(RATE_ADS1115_128SPS);
-    }
-
-    // --- Calibration correction factors ---
-    if      (rawResistance < 0.75f)   calibratedResistance = rawResistance * CF_A;
-    else if (rawResistance < 3.0f)    calibratedResistance = rawResistance * CF_B;
-    else if (rawResistance < 7.0f)    calibratedResistance = rawResistance * CF_C;
-    else if (rawResistance < 20.0f)   calibratedResistance = rawResistance * CF_D;
-    else if (rawResistance < 70.0f)   calibratedResistance = rawResistance * CF_E;
-    else if (rawResistance < 170.0f)  calibratedResistance = rawResistance * CF_F;
-    else if (rawResistance < 700.0f)  calibratedResistance = rawResistance * CF_G;
-    else if (rawResistance < 1700.0f) calibratedResistance = rawResistance * CF_H;
-    else if (rawResistance < 7000.0f) calibratedResistance = rawResistance * CF_I;
-    else if (rawResistance < 17000.0f)calibratedResistance = rawResistance * CF_J;
-    else if (rawResistance < 70000.0f)calibratedResistance = rawResistance * CF_K;
-    else if (rawResistance < 170000.0f)calibratedResistance = rawResistance * CF_L;
-    else if (rawResistance < 700000.0f)calibratedResistance = rawResistance * CF_M;
-    else if (rawResistance < 1700000.0f)calibratedResistance = rawResistance * CF_N;
-    else  calibratedResistance = rawResistance * CF_O;
-
-
-      currentResistance = calibratedResistance;
-      if (altUnits) {
-        // Convert to °F via thermistor equation
-        currentResistance = (1.0f / ((1.0f/298.15f) + (log(currentResistance/10000.0f)/3694.0f)) - 273.15f) * 1.8f + 32.0f;
-      }
-
-    // --- Open-circuit detection & final assignment ---
-    if(currentMode != HighRMode){
-    if (ohmsVoltage > (ZENER_MAX_V - 0.007f)) {
-      currentResistance = 8e6f;  // treat as open    
-      if (!voltageDisplay) {
-        ads.setDataRate(RATE_ADS1115_475SPS);
-      }
-    }
-    } 
+  }
+  } 
 } //This closes resistance measurement
 
 void measureVoltage() {
@@ -1350,7 +1502,10 @@ void measureCurrent() {
 
 void updateDisplay() {
   // Prepare values for display
-  display.clearDisplay();
+  //display.fillScreen(BLACK);
+  display.fillRect(0, 0, 128, 64, BLACK);
+  display.setTextColor(WHITE,BLACK);
+  
   if(!screenSleep && currentMode!=Charging){
 
   // Determine which voltage value to use for display (fast vs smoothed)
@@ -1614,7 +1769,7 @@ void updateDisplay() {
     display.setTextSize(1);
     display.print(".");
   }
-  display.display(); // update the OLED with all the drawn content
+  //display.display(); // update the OLED with all the drawn content
 }
 
 void updateAlerts() {
@@ -1776,7 +1931,7 @@ void ReZero() {
 }
 
 void checkModeButton() {
-  bool buttonState = digitalRead(MODE_BUTTON);
+  bool buttonState = digitalRead(BUTTON_PIN);
   unsigned long currentTime = millis();
 
   // Detect new press only when button transitions from HIGH to LOW

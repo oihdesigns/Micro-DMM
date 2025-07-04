@@ -1,3 +1,4 @@
+/*
 void eepromSetup(){
     if(EEPROM.read(1) == 1){ //Read the EEPROM, if address 1 is 1 then use these coefficients
       CF_A = 1;
@@ -111,7 +112,7 @@ void eepromSetup(){
       CF_O = 1.0;
       VOLTAGE_SCALE = 46.41618; // 
       constantI = 0.020062;
-      EEPROM_SleepV = 0.627;
+      EEPROM_SleepV = 0.634;
       EEPROM_MAXV = 5.006;
   }else{ //If EEPROM addr 1 is not 1 use these
     // Calibration correction factors for resistance (piecewise)
@@ -133,3 +134,4 @@ void eepromSetup(){
     VOLTAGE_SCALE = 46.467649; //previous default: 63.5; // Calibration scale factor for voltage input
   }
 }
+*/

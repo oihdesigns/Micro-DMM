@@ -111,8 +111,28 @@ void eepromSetup(){
       CF_O = 1.0;
       VOLTAGE_SCALE = 46.41618; // 
       constantI = 0.020062;
-      EEPROM_SleepV = 0.627;
+      EEPROM_SleepV = 0.634;
       EEPROM_MAXV = 5.006;
+    } else if(EEPROM.read(1) == 10){ //ESP32 board
+      CF_A = 1.0;
+      CF_B = 1.0;
+      CF_C = 1.0;
+      CF_D = 1.0;
+      CF_E = 1.0;
+      CF_F = 1.0;
+      CF_G = 1.0;
+      CF_H = 1.0;
+      CF_I = 1.0;
+      CF_J = 1.0;
+      CF_K = 1.0;
+      CF_L = 1.0;
+      CF_M = 1.0;
+      CF_N = 1.0;
+      CF_O = 1.0;
+      VOLTAGE_SCALE = 46.41618; // 
+      constantI = 0.020062;
+      EEPROM_SleepV = 0.634;
+      EEPROM_MAXV = 5.003;
   }else{ //If EEPROM addr 1 is not 1 use these
     // Calibration correction factors for resistance (piecewise)
     CF_A = 1.0;
