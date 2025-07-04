@@ -33,12 +33,16 @@ This meter is designed to complement and support the more expensive equimpent ge
 - There is no built in ammeter, inductance, or capacitance function. Ammeter function is easily added as needed with either an off-the-shelf module, or a low value resistor across the voltmeter. There isn't an easy way to add indutance or capacitance. I don't use any of these often enough for them to be worth taking up the PCB space.  
 
 ## Current Support:
-
 As of writing I have functional versions (I confirmed the core functions work) that support the:
 - Arduino Uno R4
 - Arduino Giga (with or without the display shield)
 - Arduino ESP32 Nano (via jumpers)
 - Seeed Studio XIAO RA4M1 (same processer as the Uno R4) 
+
+![2025-06-30 15 28 38-1](https://github.com/user-attachments/assets/d1df3a64-35a9-4641-99ba-be2e2ba61623)
+![2025-06-25 20 25 30](https://github.com/user-attachments/assets/2e6708fb-ebba-4c70-9a25-8d26cee135b0)
+
+
 
 ## (Some of my) Future Plans:
 - Make a version that uses an ADS1256 instead of the ADS1115 to support measurements speeds up to 30,000 samples/second and resolutions of up to 24bits.
