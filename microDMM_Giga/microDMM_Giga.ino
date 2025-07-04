@@ -335,6 +335,7 @@ bool AutologTriggered = 0;
 bool writePrimed = 0;
 float lastLoggedI = 0;
 float ItHighm;
+int autologCount = 0;
 
 // ========== Function Prototypes ========== 
 void handleIRRemote();
@@ -366,8 +367,8 @@ void ReZero();
 void setup() {
 
   Serial.begin(115200);
-  delay(100);
-  while (!Serial) { /* wait for USB-Serial */ }
+  delay(1000);
+  //while (!Serial) { /* wait for USB-Serial */ }
   Serial.println("Setup Start");
 
     //Related to USB stick usage
@@ -509,10 +510,10 @@ void setup() {
 
   // Initial current zero calibration
   ads.setGain(GAIN_TWOTHIRDS);  // ±6.144V range to read baseline
-  Serial.print("ADS gain set");
+  
   adcReadingCurrent = ads.readADC_SingleEnded(3);
   delay(100);
-  Serial.print("ADS3Read");
+  
   currentShuntVoltage = adcReadingCurrent * GAIN_FACTOR_TWOTHIRDS / 1000.0;
   if (adcReadingCurrent < 300 || isBetween(currentShuntVoltage, 2.3, 2.7)) {
     // If no current (shunt pulled to ground) or baseline ~2.5V, current sensor is present
@@ -524,9 +525,11 @@ void setup() {
       Izero = 0.0;
     }
     currentOnOff = true;
+    Serial.println("Ammeter Enabled");
   } else {
     // Current sensor not connected or reading abnormal -> disable current measurement
     currentOnOff = false;
+    Serial.println("Ammeter Disabled");
     Ireading = 0.0;
   }
   
@@ -922,8 +925,13 @@ if(takeLog == true){
   // Update buzzer/LED alerts or flashlight LED brightness
   updateAlerts();
 
-  if(!AutologTriggered && writePrimed){
+  if(!AutologTriggered && writePrimed){    
     autologArraysToCSV();
+    analogWrite(CONTINUITY_PIN, 100);
+    autologCount++;
+    Serial.println("Values Autologged:");
+    Serial.println(autologCount);
+    writePrimed = 0;
   }
   
   
@@ -947,6 +955,8 @@ if(takeLog == true){
     lastLoggedI = Ireading;
 
 }else{
+
+  AutologTriggered=0;
   
   
   // Update display at interval
@@ -1608,8 +1618,7 @@ void updateDisplay() {
 
 
   // If notable current present or in ampsMode, overlay current reading on display
-  if (((Irange && !isBetween(Ireading, -0.01, 0.01)) || (!Irange && currentOnOff))
-       || ampsMode) {
+  if (currentOnOff) {
     display.setTextSize(2);
     display.setCursor(0, 16);
     if (Irange) {
@@ -2161,7 +2170,7 @@ void autologArraysToCSV() {
       sizeof(TAutoArray) / sizeof(TAutoArray[0]),
       "%.3f");        // two decimal places  
     fclose(f);
-  Serial.println("AutoLog Trigger");
+  
 }
 
           
