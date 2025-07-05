@@ -498,7 +498,7 @@ void setup() {
     }
   
   
-  display.fillScreen(BLUE);
+  display.fillScreen(BLACK);
   
   // draw our four buttons
   display.setTextSize(2);
@@ -1818,7 +1818,7 @@ void updateDisplay() {
       if (zeroOffsetRes != 0) {
         
         display.print("null mOhms:");
-        display.println(zeroOffsetRes*1000, 2);
+        display.println(zeroOffsetRes*1000, 1);
         
       }
       if (debugMode) {
