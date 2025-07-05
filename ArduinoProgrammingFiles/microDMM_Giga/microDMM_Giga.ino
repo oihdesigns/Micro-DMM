@@ -1,5 +1,6 @@
 #include <Wire.h>
 #include <Adafruit_ADS1X15.h>
+#include <Arduino_GigaDisplay.h>
 
 //GIGA HID Related
 #include "PluggableUSBHID.h"
@@ -11,11 +12,13 @@ USBKeyboard Keyboard;
 #include <DigitalOut.h>
 #include <FATFileSystem.h>
 
+GigaDisplayRGB rgb; //create rgb object
+
 // ————— USB mass-storage objects —————
 USBHostMSD        msd;
 mbed::FATFileSystem usb("usb");
 
-
+/*
 
 const float defaultCalib[19] = {
   // initial calibration list (19 entries)
@@ -24,6 +27,8 @@ const float defaultCalib[19] = {
   1.0031, 1.0073, 1.0176, 1.0611, 1.1130,
   0.020073, 0.6119, 4.979, 46.4680
 };
+
+*/
 
 // ===== Hardware Setup Constants =====
 Adafruit_ADS1115 ads;
@@ -111,9 +116,9 @@ static const adsGain_t kGainLevels[] = {
 float constantI            = 0.02016f;   // A for low-resistance constant-current source
 const float constantR            = 330.0f;     // Ω internal resistor in constant-current circuit
 const float dividerR             = 22000.0f;   // Ω series resistor for high-resistance divider
-float ZENER_MAX_V          = 5.0f;       // V reference in high-range mode
-float EEPROM_MAXV = 5.0f;
-float EEPROM_SleepV = 0.615;
+float ZENER_MAX_V          = 4.979f;       // V reference in high-range mode
+float EEPROM_MAXV = 4.979f;
+float EEPROM_SleepV = 0.6118;
 
 //Mode Rotate Related
 #define DEBOUNCE_DELAY 50    // debounce time in milliseconds
@@ -124,6 +129,7 @@ enum Mode {
   Type,
   Low,
   AltUnitsMode,
+  rPlotMode,
   HighRMode,
   //Impedance,
   //RelayControl,
@@ -159,7 +165,7 @@ unsigned long previousLcdMillis   = 0;
 unsigned long previousSerialMillis= 0;
 unsigned long lastIrReceiveMillis = 0;
 unsigned long deepSleepStart = 0;
-unsigned int seconds = 0;
+unsigned int secondsTime = 0;
 unsigned long previousTouchTime;
 
 // Global measurement variables
@@ -201,6 +207,12 @@ float voltageSquaredSamples[NUM_VOLTAGE_SAMPLES] = {0.0};
 int voltageSampleIndex = 0;
 float voltageSum = 0.0;
 float squaredVoltageSum = 0.0;
+
+//Rolling Buffer for Resistance Samples
+const int NUM_RESISTANCE_SAMPLES = 100;
+float resistanceSamples[NUM_VOLTAGE_SAMPLES] = {0.0};
+int resistanceSampleIndex = 0;
+
 
 // Min/Max tracking for voltage and resistance
 float highV = -100.0, lowV = 100.0;
@@ -419,12 +431,13 @@ void setup() {
   pinMode(logPin, INPUT_PULLUP);
 
 
+/*
   // 5) Assign your named variables
   EEPROM_MAXV  = defaultCalib[17];
   EEPROM_SleepV = defaultCalib[16];
   constantI     = defaultCalib[15];
   VOLTAGE_SCALE= defaultCalib[18];
-
+*/
 
   // Initialize OLED display
 
@@ -521,6 +534,8 @@ void setup() {
     display.print(btnLabel[i]);
   }
  
+    
+    rgb.begin(); //init the library
     
     Serial.println("Setup End");
 
@@ -694,6 +709,7 @@ if(takeLog == true){
         tLogEnd  = millis() / 1000.0;
         samplesTaken = 0;
         analogWrite(CONTINUITY_PIN, 100);
+        rgb.on(0, 255, 0); //Green On
         Serial.println("Samples logged!");
 
       if(logMode){
@@ -918,6 +934,7 @@ if(takeLog == true){
 
       
     analogWrite(CONTINUITY_PIN, 100);
+    rgb.on(0, 255, 0); //Green On
     autologCount++;
     Serial.println("Values Autologged:");
     Serial.println(autologCount);
@@ -1350,10 +1367,34 @@ void measureResistance() {
       ads.setDataRate(RATE_ADS1115_128SPS);
     }
 
+        
+      // --- Calibration correction factors ---
+    if      (rawResistance < 0.75f)   calibratedResistance = rawResistance * CF_A;
+    else if (rawResistance < 3.0f)    calibratedResistance = rawResistance * CF_B;
+    else if (rawResistance < 7.0f)    calibratedResistance = rawResistance * CF_C;
+    else if (rawResistance < 20.0f)   calibratedResistance = rawResistance * CF_D;
+    else if (rawResistance < 70.0f)   calibratedResistance = rawResistance * CF_E;
+    else if (rawResistance < 170.0f)  calibratedResistance = rawResistance * CF_F;
+    else if (rawResistance < 700.0f)  calibratedResistance = rawResistance * CF_G;
+    else if (rawResistance < 1700.0f) calibratedResistance = rawResistance * CF_H;
+    else if (rawResistance < 7000.0f) calibratedResistance = rawResistance * CF_I;
+    else if (rawResistance < 17000.0f)calibratedResistance = rawResistance * CF_J;
+    else if (rawResistance < 70000.0f)calibratedResistance = rawResistance * CF_K;
+    else if (rawResistance < 170000.0f)calibratedResistance = rawResistance * CF_L;
+    else if (rawResistance < 700000.0f)calibratedResistance = rawResistance * CF_M;
+    else if (rawResistance < 1700000.0f)calibratedResistance = rawResistance * CF_N;
+    else  calibratedResistance = rawResistance * CF_O;      
+        
+        
+        
+        
+        /*
+        
         const float limits[15] = {
           0.75f, 3.0f, 7.0f, 20.0f, 70.0f,
           170.0f, 700.0f, 1700.0f, 7000.0f, 17000.0f,
-          70000.0f, 170000.0f, 700000.0f, 1700000.0f, 7000000.0f
+          70000.0f, 170000.0f, 700000.0f, 1700000.0f, 700
+           0000.0f
         };
 
         //float calib[15];
@@ -1364,6 +1405,8 @@ void measureResistance() {
         }
         calibratedResistance = rawResistance * defaultCalib[i];
 
+        */
+
 
       currentResistance = calibratedResistance;
       if (altUnits) {
@@ -1371,6 +1414,10 @@ void measureResistance() {
         currentResistance = (1.0f / ((1.0f/298.15f) + (log(currentResistance/10000.0f)/3694.0f)) - 273.15f) * 1.8f + 32.0f;
       }
 
+    resistanceSamples[resistanceSampleIndex] = ohmsVoltage;
+    resistanceSampleIndex = (resistanceSampleIndex + 1) % NUM_RESISTANCE_SAMPLES;
+    
+    
     // --- Open-circuit detection & final assignment ---
     if(currentMode != HighRMode){
     if (ohmsVoltage > (ZENER_MAX_V - 0.007f)) {
@@ -1432,6 +1479,7 @@ void measureVoltage() {
     LCD_INTERVAL = 200;  // speed up display to reflect change
     if (MinMaxDisplay && voltageDisplay) {
       analogWrite(CONTINUITY_PIN, 200); // flash LED briefly on new max
+      rgb.on(0, 255, 0); //Green On
       // (The LED flash here is very short; main alert logic handles sustained flashing)
     }
   }
@@ -1777,6 +1825,8 @@ void updateDisplay() {
   } else {
     // Resistance display mode
     
+    
+
     if (ohmsVoltage < (ZENER_MAX_V - 0.007) || currentMode == HighRMode) {
 
       if(altUnits){
@@ -1826,6 +1876,8 @@ void updateDisplay() {
         display.print("ADC:");
         display.print(adcReadingOhms);
       }
+
+      
       //}
     } else {
       // Out of range (open circuit or over-limit)
@@ -1850,11 +1902,17 @@ void updateDisplay() {
         display.print(rSuffixhigh);
       }
     }   
+      
+      if(currentMode == rPlotMode || currentMode == HighRMode){
+      display.setTextSize(2); //Resistance Voltage Plot
+      drawPlot(resistanceSamples, SAMPLE_COUNT_PLOT);
+      }
+  
   }
   }else{
     display.fillRect(0, 0, 500, 480, BLACK);
     formatTime(millis());
-    int step = seconds % 10;    
+    int step = secondsTime % 10;    
     display.setCursor((8+(4*step)), 32);
     display.setTextSize(1);
     display.print(".");
@@ -1877,26 +1935,33 @@ void updateAlerts() {
       if (!rFlag) {
         // Start of beep
         analogWrite(CONTINUITY_PIN, 200);
+        rgb.on(255, 255, 255); //turn on blue pixel
         rFlag = true;
       } else if ((now % 1000 <= 100 || isBetween(now % 1000, 300, 400)) && rFlag) {
         // Keep beeping in a pattern: on for 100ms, then off, with a double pulse
         analogWrite(CONTINUITY_PIN, 50);
+        rgb.on(0, 0, 255); //turn on blue pixel
       } else {
         analogWrite(CONTINUITY_PIN, 0);
+        rgb.off(); //turn off all pixels
       }
     } else if (logicVoltage) {
       // If significant voltage in resistance mode, warning flash
       if (!vFlag) {
         analogWrite(CONTINUITY_PIN, 200);
+        rgb.on(255, 255, 255); //
         vFlag = true;
       } else if ((now % 1000 <= 100) && vFlag && (!VACPresense)) {
         analogWrite(CONTINUITY_PIN, 50);
+        rgb.on(255, 0, 0); //      
       } else {
         analogWrite(CONTINUITY_PIN, 0);
+        rgb.off(); //turn off all pixels
       }
     } else {
       // No alert condition
       analogWrite(CONTINUITY_PIN, 0);
+      rgb.off(); //turn off all pixels
       vFlag = false;
       rFlag = false;
     }
@@ -1999,9 +2064,9 @@ String formatTime(unsigned long milliseconds) {
   // Convert milliseconds to "MM:SS" format
   unsigned long totalSeconds = milliseconds / 1000;
   unsigned int minutes = totalSeconds / 60;
-  seconds = totalSeconds % 60;
+  secondsTime = totalSeconds % 60;
   char buf[6];
-  snprintf(buf, sizeof(buf), "%02u:%02u", minutes, seconds);
+  snprintf(buf, sizeof(buf), "%02u:%02u", minutes, secondsTime);
   return String(buf);
 }
 
@@ -2064,7 +2129,20 @@ void drawPlot(const float data[], int n) {
     if (v > maxY) maxY = v;
   }
   float meanY = sumY / n;
-  float rangeY = maxY - minY;
+  float rangeY = 1;
+  
+
+  if(maxY - minY <0.05 && voltageDisplay && currentMode == Low){
+    rangeY = 0.1;
+
+  }else if(maxY - minY <0.2 && voltageDisplay && currentMode != Low){
+    rangeY = 0.4;
+
+  }else{
+    rangeY = maxY - minY;
+  }
+  
+  //float rangeY = maxY - minY;
 
   // 2) Add 10% total margin (5% top, 5% bottom)
   float margin = rangeY * 0.10f;
