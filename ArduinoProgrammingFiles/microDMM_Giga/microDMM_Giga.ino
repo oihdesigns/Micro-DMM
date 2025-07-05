@@ -213,6 +213,11 @@ const int NUM_RESISTANCE_SAMPLES = 100;
 float resistanceSamples[NUM_VOLTAGE_SAMPLES] = {0.0};
 int resistanceSampleIndex = 0;
 
+//Rolling Buffer for Current Samples
+const int NUM_CURRENT_SAMPLES = 100;
+float currentSamples[NUM_VOLTAGE_SAMPLES] = {0.0};
+int currentSampleIndex = 0;
+
 
 // Min/Max tracking for voltage and resistance
 float highV = -100.0, lowV = 100.0;
@@ -1603,6 +1608,10 @@ void measureCurrent() {
       }
     }
   }
+
+    currentSamples[currentSampleIndex] = Ireading;
+    currentSampleIndex = (currentSampleIndex + 1) % NUM_current_SAMPLES;
+
 }
 
 
@@ -2181,6 +2190,55 @@ void drawStatLine(float value, float plotMin, float yScale, uint16_t color) {
   display.setTextColor(color);
   display.print(value, 3);   // prints `value` with 2 decimal places
   display.print(buf);
+}
+
+void drawTwoPlots(const float data[], const float data2[],  int n) {
+  // 1) Compute min, max, mean
+  float minY = data[0], maxY = data[0], sumY = data[0];
+  for (int i = 1; i < n; i++) {
+    float v = data[i];
+    sumY += v;
+    if (v < minY) minY = v;
+    if (v > maxY) maxY = v;
+  }
+  float meanY = sumY / n;
+  float rangeY = 1;
+  
+
+  if(maxY - minY <0.05 && voltageDisplay && currentMode == Low){
+    rangeY = 0.1;
+
+  }else if(maxY - minY <0.2 && voltageDisplay && currentMode != Low){
+    rangeY = 0.4;
+
+  }else{
+    rangeY = maxY - minY;
+  }
+  
+  //float rangeY = maxY - minY;
+
+  // 2) Add 10% total margin (5% top, 5% bottom)
+  float margin = rangeY * 0.10f;
+  float plotMin = minY - margin * 0.5f;
+  float plotMax = maxY + margin * 0.5f;
+  float yScale  = float(PLOT_SIZE) / (plotMax - plotMin);
+
+  // 3) Clear plot area
+  display.fillRect(PLOT_X, PLOT_Y, PLOT_SIZE+100, PLOT_SIZE, COLOR_BG);
+
+  // 4) Draw data polyline
+  for (int i = 0; i < n - 1; i++) {
+    int x1 = PLOT_X + (i    * PLOT_SIZE) / (n - 1);
+    int y1 = PLOT_Y + PLOT_SIZE - int((data[i]     - plotMin) * yScale);
+    int x2 = PLOT_X + ((i+1)* PLOT_SIZE) / (n - 1);
+    int y2 = PLOT_Y + PLOT_SIZE - int((data[i+1]   - plotMin) * yScale);
+    display.drawLine(x1, y1, x2, y2, COLOR_DATA);
+  }
+
+  // 5) Draw dashed lines and labels for min, mean, max
+  drawStatLine(minY, plotMin, yScale, COLOR_MIN);
+  drawStatLine(meanY, plotMin, yScale, COLOR_MEAN);
+  drawStatLine(maxY, plotMin, yScale, COLOR_MAX);
 }
 
 template<typename T>
