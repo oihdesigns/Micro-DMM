@@ -42,8 +42,8 @@ Arduino_GigaDisplayTouch touch;
 #define BLUE    0x001F
 #define YELLOW  0xFFE0
 
-const uint16_t btnX[4] = { 600, 500, 600, 500 };
-const uint16_t btnY[4] = {  80,  80, 180, 180 };
+const uint16_t btnX[4] = { 700, 600, 700, 600 };
+const uint16_t btnY[4] = {  0,  0, 100, 100 };
 const uint16_t btnColor[4] = { RED, GREEN, BLUE, YELLOW };
 const char*    btnLabel[4] = { "MODE", "LOG", "MinMax", "Ref" };
 
@@ -336,6 +336,7 @@ bool writePrimed = 0;
 float lastLoggedI = 0;
 float ItHighm;
 int autologCount = 0;
+int manuallogCount = 0;
 
 // ========== Function Prototypes ========== 
 void handleIRRemote();
@@ -430,7 +431,6 @@ void setup() {
   display.begin();             // init hardware
   display.setRotation(1);      // landscape mode
   //touch.setRotation(1);
-  display.fillScreen(BLACK);   // clear to black
 
 
   display.setTextSize(4);
@@ -439,20 +439,67 @@ void setup() {
 
   //display.setCursor(0, 0);  
   //display.drawBitmap(0, 0, MICRO_5x7, 5, 7, SSD1306_WHITE);
+  display.fillScreen(BLUE);   // clear to black
   display.setCursor(0, 0);
   display.print("uMeter #GIGA");
   //display.print(EEPROM.read(1));//Reads the EEPROM and determines the correct splash   
   display.setCursor(0, 48);
   display.println("GIGA METER");
   delay(200);
-  display.fillScreen(BLACK);   // clear to black
-
-  //drawPlot(voltageSamples, SAMPLE_COUNT_PLOT);
-
   
-  //display.display();
-  
+  // initialize touch
+  if (!touch.begin()) {
+    // touch init failed — halt
+    while (1) {}
+  }
 
+  // Initialize ADS1115 ADC
+  if (!ads.begin()) {
+    Serial.println("ADS1115 init failed!");
+
+    display.setCursor(0, 0);
+    display.setTextSize(1);
+    Serial.println("ADS1115 not found");
+    display.println("ADS1115 not found");
+    //display.display();
+    while (1); // halt
+  }
+  //
+  //Serial.println("ADS1115 good");
+  ads.setDataRate(RATE_ADS1115_16SPS); // slow rate b/c default is resistance
+  delay(300);
+
+  // Print available commands (for user reference)
+  Serial.println(F("Commands: Q,q,Z,C,R,S,V,A,F,M,B,D,e,E,I,L,?"));
+
+  // Initial current zero calibration
+  ads.setGain(GAIN_TWOTHIRDS);  // ±6.144V range to read baseline
+  
+  //Ammeter Auto Detect
+    adcReadingCurrent = ads.readADC_SingleEnded(3);
+    delay(100);
+    currentShuntVoltage = adcReadingCurrent * GAIN_FACTOR_TWOTHIRDS / 1000.0;
+    if (adcReadingCurrent < 300 || isBetween(currentShuntVoltage, 2.3, 2.7)) {
+      // If no current (shunt pulled to ground) or baseline ~2.5V, current sensor is present
+      if (isBetween(currentShuntVoltage, 2.3, 2.7)) {
+        Irange = true;         // high-range current mode
+        Izero = currentShuntVoltage; // store baseline (~2.5V)
+      } else {
+        Irange = false;        // low-range current mode
+        Izero = 0.0;
+      }
+      currentOnOff = true;
+      Serial.println("Ammeter Enabled");
+    } else {
+      // Current sensor not connected or reading abnormal -> disable current measurement
+      currentOnOff = false;
+      Serial.println("Ammeter Disabled");
+      Ireading = 0.0;
+    }
+  
+  
+  display.fillScreen(BLUE);
+  
   // draw our four buttons
   display.setTextSize(2);
   for (int i = 0; i < 4; i++) {
@@ -473,69 +520,8 @@ void setup() {
     display.setCursor(tx, ty);
     display.print(btnLabel[i]);
   }
-
-  display.setCursor(800, 350);
-  display.print("USB?: ");
-  display.print(logMode);
-
-
-  // initialize touch
-  if (!touch.begin()) {
-    // touch init failed — halt
-    while (1) {}
-  }
-
-  // Initialize ADS1115 ADC
-  if (!ads.begin()) {
-    Serial.println("ADS1115 init failed!");
-    display.fillScreen(BLACK);
-
-    display.setCursor(0, 0);
-    display.setTextSize(1);
-    Serial.println("ADS1115 not found");
-    display.println("ADS1115 not found");
-    //display.display();
-    while (1); // halt
-  }
-  //
-  //Serial.println("ADS1115 good");
-  ads.setDataRate(RATE_ADS1115_16SPS); // slow rate b/c default is resistance
-  delay(300);
-
-  // Initialize IR Receiver
-  //IrReceiver.begin(IR_RECEIVE_PIN, ENABLE_LED_FEEDBACK);
-
-  // Print available commands (for user reference)
-  Serial.println(F("Commands: Q,q,Z,C,R,S,V,A,F,M,B,D,e,E,I,L,?"));
-
-
-  // Initial current zero calibration
-  ads.setGain(GAIN_TWOTHIRDS);  // ±6.144V range to read baseline
-  
-  adcReadingCurrent = ads.readADC_SingleEnded(3);
-  delay(100);
-  
-  currentShuntVoltage = adcReadingCurrent * GAIN_FACTOR_TWOTHIRDS / 1000.0;
-  if (adcReadingCurrent < 300 || isBetween(currentShuntVoltage, 2.3, 2.7)) {
-    // If no current (shunt pulled to ground) or baseline ~2.5V, current sensor is present
-    if (isBetween(currentShuntVoltage, 2.3, 2.7)) {
-      Irange = true;         // high-range current mode
-      Izero = currentShuntVoltage; // store baseline (~2.5V)
-    } else {
-      Irange = false;        // low-range current mode
-      Izero = 0.0;
-    }
-    currentOnOff = true;
-    Serial.println("Ammeter Enabled");
-  } else {
-    // Current sensor not connected or reading abnormal -> disable current measurement
-    currentOnOff = false;
-    Serial.println("Ammeter Disabled");
-    Ireading = 0.0;
-  }
-  
  
-    //display.fillScreen(BLACK);
+    
     Serial.println("Setup End");
 
 //  wave.sine(freq);
@@ -715,6 +701,7 @@ if(takeLog == true){
               // open for append
           
           manuallogArraysToCSV();
+          manuallogCount++;
           
           /*
           
@@ -786,7 +773,7 @@ if(takeLog == true){
     }
   
   }
-  if (isBetween(currentResistance, -10.0, 100.0)&& currentMode != Voltmeter) {
+  if (isBetween(currentResistance, -10.0, 100.0)&& currentMode != Voltmeter || currentMode == HighRMode) {
     voltageDisplay = false;
     ads.setDataRate(RATE_ADS1115_32SPS); // Slow sampling in resistance mode
   }
@@ -940,7 +927,7 @@ if(takeLog == true){
   
   
   if(
-  (logMode) && ( //SD mode and Current mode are on, AND
+  (logMode && !VACPresense) && ( //SD mode is on and we're not traking AC, AND
   (IHigh==Ireading && IHigh > 0.05) || (ILow==Ireading && ILow < -0.05) || (newVoltageReading==highV && highV>0.05) || (newVoltageReading==lowV && lowV < -0.05 ) || //if either I/ V high / low is triggered OR
   (abs(lastLoggedI)>(abs(Ireading)+Istep) || abs(lastLoggedI)<(abs(Ireading)-Istep)) // If I reading is more than Istep different than the previous reading
   // || digitalRead(RED_PIN) == LOW 
@@ -1576,16 +1563,13 @@ void measureCurrent() {
 void updateDisplay() {
   // Prepare values for display
   //display.fillScreen(BLACK);
-  display.fillRect(0, 0, 128, 72, BLACK);
+  display.fillRect(0, 0, 192, 72, BLACK);
   display.setTextColor(WHITE,BLACK);
 
-  /*
-  if(continuity){
-    display.fillRect(760, 0, 40, 40, RED);
-  }else{
-    display.fillRect(760, 0, 40, 40, BLACK);
-  }
-  */
+  int gfxLine = 8;
+
+  int mmHomeX = 192;
+  int mmHomeY = 0;
   
   if(!screenSleep && currentMode!=Charging){
 
@@ -1606,6 +1590,7 @@ void updateDisplay() {
   formatResistanceValue(lowR, roundedRlow, rSuffixlow, rDigitslow);
   formatResistanceValue(highR, roundedRhigh, rSuffixhigh, rDigitshigh);
 
+/*
   // Battery voltage / mode indicator
   display.setTextSize(1);
   display.setCursor(72, 56);
@@ -1614,16 +1599,50 @@ void updateDisplay() {
     if (batteryVoltage < 5.1) {
       display.setCursor(72, 48);
     }
-  
+*/  
   //Mode Display
-  display.setCursor(0, 65);
+  display.fillRect(660, 460-(gfxLine*2), 144, 32, BLACK);
+  display.setTextSize(2);
+  display.setCursor(660, 460-(gfxLine*2));
   display.print(modeToString(currentMode));
+
+  //Time Display
+  display.setCursor(660, 460);
+  display.setTextSize(2);
+  display.print(formatTime(millis()));
+
+  //Logging Display  
+  if(logMode){
+    int logHomeX = 660;
+    int logHomeY = 350;
+    
+    display.setTextSize(2);
+    display.setCursor(logHomeX, logHomeY);
+    display.print("USB?: ");
+    display.print(logMode);
+    display.setCursor(logHomeX, logHomeY+(gfxLine*2));
+    display.print("Auto#: ");
+    display.print(autologCount);    
+    display.setCursor(logHomeX, logHomeY+(gfxLine*4));
+    display.print("Manual#: ");
+    display.print(manuallogCount);
+    }
+
+
 
 
   // If notable current present or in ampsMode, overlay current reading on display
   if (currentOnOff) {
+    
+    int IHomeX = 424;
+    int IHomeY = 0;
+
+
+
+
+    display.fillRect(IHomeX, IHomeY, 128, 72, BLACK);    
     display.setTextSize(2);
-    display.setCursor(0, 16);
+    display.setCursor(IHomeX, IHomeY);
     if (Irange) {
       display.print("A:");
       display.print(Ireading, 2);
@@ -1637,28 +1656,37 @@ void updateDisplay() {
       display.print(Ireading * 1000.0, 4);
       }
     }
-  }
-  // If any current has been recorded (min/max), display them in small text
-  if (IHigh != -6.0) {
-    display.setTextSize(1);
-    display.setCursor(0, 32);
-    display.print("Ilow:");
-    display.print(ILow, 3);
-    display.print(" t:");
-    display.print(timeAtMinI);
-    display.println();
-    display.print("Ihigh:");
-    display.print(IHigh, 3);
-    display.print(" t:");
-    display.print(timeAtMaxI);
+  
+    // If any current has been recorded (min/max), display them in small text
+    if (IHigh != -6.0) {
+    
+      display.setTextSize(2);
+      display.setCursor(IHomeX, IHomeY+(gfxLine*2));
+      display.print("Ilow:");
+      display.print(ILow, 3);
+      display.print(" t:");
+      display.print(timeAtMinI);
+      display.setCursor(IHomeX, IHomeY+(gfxLine*4));
+      display.print("Ihigh:");
+      display.print(IHigh, 3);
+      display.print(" t:");
+      display.print(timeAtMaxI);
+    }
   }
 
   // Primary measurement display
-  display.setTextSize(2);
-  display.setCursor(0, 0);
+  
+  int PrimeX = 0;
+  int PrimeY = 0;
+  
+
+
+  
+  display.setTextSize(3);
+  display.setCursor(PrimeX, PrimeY);
   if (voltageDisplay) {
     // Voltage display mode
-    if(VACPresense){
+    if(currentMode == VACmanual){
       display.print("VAC:");
       if(altUnits){
       display.print(VAC, 1);
@@ -1669,26 +1697,21 @@ void updateDisplay() {
     display.print("VDC:");
 
       if(preciseMode){
-        display.setCursor(0, 16);
+        display.setCursor(PrimeX, (PrimeY+ gfxLine*4));
         display.print(roundedV, (vDigits+1));    
         //display.print(newVoltageReading, (vDigits+1));
         display.println(vSuffix);
-        /*
-        if(fabs(averageVoltage)<1.1 && newVoltageReading<3){
-        display.setTextSize(1);
-        display.println("VDC_avg:");
-        display.print(averageVoltage,vDigits+5);
-        }
-        */
       } else {
       display.print(roundedV, vDigits);    
       display.println(vSuffix);
       }
       
       if(deltaV != 0){
-      display.setTextSize(1);
+      display.setCursor(PrimeX, (PrimeY+ gfxLine*4));
+      display.setTextSize(2);
       display.print("ref:");
       display.println(deltaV, deltaVdigits);
+      display.setCursor(PrimeX, (PrimeY+ gfxLine*6));
       display.print("delta:");
       display.println(newVoltageReading-deltaV, 4);  
       }
@@ -1697,40 +1720,49 @@ void updateDisplay() {
     
     }
     
+    
+
     if (MinMaxDisplay) {
       // Show min and max voltage with timestamps
-      display.setTextSize(1);
-      display.setCursor(0, 16);
+
+      display.fillRect(mmHomeX, mmHomeY, 232, 72, BLACK);
+      display.setTextSize(2);
+      display.setCursor(mmHomeX, mmHomeY);
       display.print("Min:");
       display.print(roundedVlow, vDigitslow);
       display.print(vSuffixlow);
       display.print("  t:");
       display.print(timeAtMinV);
-      display.println();
+      display.setCursor(mmHomeX, (mmHomeY+gfxLine*2));
+      
       display.print("Max:");
       display.print(roundedVhigh, vDigitshigh);
       display.print(vSuffixhigh);
       display.print("  t:");
       display.print(timeAtMaxV);
-      display.println();
+      
+      display.setCursor(mmHomeX, (mmHomeY+gfxLine*4));
       display.print("Range:");
       display.print(highV - lowV, 3);
     }
-    if (VAC > 0.1 && !VACPresense) {
-      // Show AC component if significant
-      display.setCursor(0, 48);
-      display.setTextSize(1);
-      display.print("VAC");
-      display.setCursor(0, 56);
-      display.print("RMS:");
-      display.setCursor(26, 48);
-      display.setTextSize(2);
-      display.print(VAC, 1);
-    } else {
+    
+    if(currentMode != Low){ 
+      if (currentMode == VACmanual) {
+        // Show AC component if significant
+        display.setCursor(PrimeX, (PrimeY+ gfxLine*6));
+        display.setTextSize(2);
+        display.print("VDC: ");
+        display.print(roundedV, vDigits);
+      } else {
+        display.setCursor(PrimeX, (PrimeY+ gfxLine*6));
+        display.setTextSize(2);
+        display.print("VAC: ");
+        display.print(VAC, vDigits);
+    }
+
+
       // Otherwise, show elapsed time or debug info
-      display.setCursor(0, 48);
-      display.setTextSize(2);
-      display.print(formatTime(millis()));
+      
       if (debugMode) {
         display.setCursor(0, 32);
         display.setTextSize(1);
@@ -1739,27 +1771,14 @@ void updateDisplay() {
       }
     }
     
+    display.setTextSize(2);
     drawPlot(voltageSamples, SAMPLE_COUNT_PLOT);
   
   } else {
     // Resistance display mode
     
     if (ohmsVoltage < (ZENER_MAX_V - 0.007) || currentMode == HighRMode) {
-      // If within measurable range, display the resistance value
-      /*
-      if(powerSave){
-        display.setTextSize(1);
-        display.print("R:");
-        display.println("SLEEP");
-        display.print("mVR:");
-        if(ohmsVoltage<1){
-        display.print(ohmsVoltage * 1000.0, 1);
-        }else{
-        display.print(ohmsVoltage * 1000.0, 0);
-        }
-      
-      }else{      
-      */
+
       if(altUnits){
         display.print("F:");  
         }else{
@@ -1771,46 +1790,36 @@ void updateDisplay() {
       //display.setCursor(16, 0);
       display.print(roundedR, rDigits);
       display.print(rSuffix);
+      
       if (MinMaxDisplay) {
         // Show min and max resistance
-        display.setTextSize(1);
-        display.setCursor(0, 16);
+        display.setTextSize(2);
+        display.setCursor(mmHomeX, mmHomeY);
         display.print("Min:");
         display.print(roundedRlow, rDigitslow);
         display.print(rSuffixlow);
-        display.println();
+        display.setCursor(mmHomeX, mmHomeY+(gfxLine*2));
         display.print("Max:");
         display.print(roundedRhigh, rDigitshigh);
-        display.print(rSuffixhigh);
-        // Also display the small voltage across resistor in mV (for debug/reference)
-        display.setCursor(102, 0);
-        display.print("mVR:");
-        display.setCursor(102, 8);
-        if(ohmsVoltage<1){
-        display.print(ohmsVoltage * 1000.0, 1);
-        }else{
-        display.print(ohmsVoltage * 1000.0, 0);
-        }
-      } else {
-        // If not showing min/max, at least show the mV drop in line
+        display.print(rSuffixhigh);        
+      } 
+        //Show voltage drop:
         display.setTextSize(2);
-        display.println();
+        display.setCursor(PrimeX, (PrimeY+ gfxLine*4));
         display.print("mVR:");
         if(ohmsVoltage<1){
         display.print(ohmsVoltage * 1000.0, 1);
         }else{
         display.print(ohmsVoltage * 1000.0, 0);
-        }
+        
       }
-      display.setTextSize(1);
-      display.setCursor(0, 32);
+      display.setTextSize(2);
+      display.setCursor(PrimeX, (PrimeY+ gfxLine*6));
       if (zeroOffsetRes != 0) {
         
         display.print("null mOhms:");
         display.println(zeroOffsetRes*1000, 2);
-        if(preciseMode){
-          display.print("Precise Mode");
-          }
+        
       }
       if (debugMode) {
         display.setCursor(60, 32);
@@ -1822,7 +1831,8 @@ void updateDisplay() {
       // Out of range (open circuit or over-limit)
       if(!altUnits){
         display.println("R:OPEN");
-        display.setTextSize(1);
+        display.setCursor(PrimeX, (PrimeY+ gfxLine*4));
+        display.setTextSize(2);
         display.print("mV:");
         display.print(ohmsVoltage * 1000.0, 2);
         }else{
@@ -1839,20 +1849,16 @@ void updateDisplay() {
         display.print(roundedRhigh, rDigitshigh);
         display.print(rSuffixhigh);
       }
-    }
-      display.setCursor(0, 48);
-      display.setTextSize(2);
-      display.print(formatTime(millis()));
-    
+    }   
   }
   }else{
+    display.fillRect(0, 0, 500, 480, BLACK);
     formatTime(millis());
     int step = seconds % 10;    
     display.setCursor((8+(4*step)), 32);
     display.setTextSize(1);
     display.print(".");
   }
-  //display.display(); // update the OLED with all the drawn content
 }
 
 void updateAlerts() {
