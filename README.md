@@ -1,9 +1,15 @@
 ![20250623_204616_470_1DXII copy](https://github.com/user-attachments/assets/606b6dc2-5ae6-4be6-a74b-a8d9c2276296)
+
+
 # Micro-DMM
 
 This is the PCB design and code for a 4.5 digit DMM/ instrumentation module. It is designed and written primairly for Arduino-style development boards.
 
 I've developed this DMM in my work testing and troubleshooting electronics to make my life easier. 
+
+I've had Deep-Wiki index my documentation. It did a mostly okay job. You can read its summary here:
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/oihdesigns/Micro-DMM)
+
 
 ![20250623_205912_480_1DXII copy](https://github.com/user-attachments/assets/18e67b72-3f34-445f-8bca-6235bc45dc89)
 
@@ -17,6 +23,12 @@ I've developed this DMM in my work testing and troubleshooting electronics to ma
 
 I have a long and detailed write-up of the circuitry design on my personal website: https://www.oihdesigns.com/arduino-multimeter-project
 
+There are a couple videos here:
+https://youtu.be/rzj-ar2Qv_A
+and here:
+https://youtu.be/hZ4eH-7RNsU
+
+Here are more photos:
 
 ![20250623_205043_760_1DXII copy](https://github.com/user-attachments/assets/1e8d43a8-2d98-4d29-bcc4-4436717be3c0)
 ![20250623_202545_180_1DXII copy](https://github.com/user-attachments/assets/012b9ef7-557c-4ccc-9eac-9cd608fcdfd7)
