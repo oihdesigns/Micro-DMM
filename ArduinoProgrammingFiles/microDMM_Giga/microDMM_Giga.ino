@@ -794,7 +794,7 @@ if(takeLog == true){
     }
   
   }
-  if (isBetween(currentResistance, -10.0, 100.0)&& currentMode != Voltmeter || currentMode == HighRMode) {
+  if (isBetween(currentResistance, -10.0, 100.0)&& currentMode != Voltmeter || currentMode == HighRMode || currentMode == rPlotMode) {
     voltageDisplay = false;
     ads.setDataRate(RATE_ADS1115_32SPS); // Slow sampling in resistance mode
   }
@@ -1247,7 +1247,8 @@ void handleButtonInput() {
 
 
 // Range‐switch thresholds (200 Ω ±5%)
-static const float OHMS_RANGE_THRESHOLD   = 400.0f;
+
+float OHMS_RANGE_THRESHOLD   = 400.0f;
 static const float OHMS_RANGE_DEADBAND    = 0.05f;
 static const float OHMS_LOW_THRESHOLD     = OHMS_RANGE_THRESHOLD * (1.0f - OHMS_RANGE_DEADBAND);
 static const float OHMS_HIGH_THRESHOLD    = OHMS_RANGE_THRESHOLD * (1.0f + OHMS_RANGE_DEADBAND);
@@ -1274,6 +1275,12 @@ void measureResistance() {
     currentRangeHigh = (digitalRead(SETRANGE_PIN) == HIGH);
     gainIndex        = currentRangeHigh ? 0 : (kNumGainLevels - 1);
     firstRun         = false;
+  }
+
+  if(currentMode != rPlotMode || currentMode != HighRMode){
+  float OHMS_RANGE_THRESHOLD   = 400.0f;
+  }else{
+    float OHMS_RANGE_THRESHOLD   = 40.0f;
   }
 
   // --- Range control (auto vs. manual) ---
@@ -1610,7 +1617,7 @@ void measureCurrent() {
   }
 
     currentSamples[currentSampleIndex] = Ireading;
-    currentSampleIndex = (currentSampleIndex + 1) % NUM_current_SAMPLES;
+    currentSampleIndex = (currentSampleIndex + 1) % NUM_CURRENT_SAMPLES;
 
 }
 
@@ -2123,6 +2130,7 @@ const char* modeToString(Mode m) {
     case Low:       return "Low";
     case AltUnitsMode:       return "AltUnits";
     case HighRMode:       return "High R";
+    case rPlotMode:       return "rPlotMode";
     case Charging:       return "Charging";
     default:        return "Unknown";
   }
@@ -2145,7 +2153,7 @@ void drawPlot(const float data[], int n) {
     rangeY = 0.1;
 
   }else if(maxY - minY <0.2 && voltageDisplay && currentMode != Low){
-    rangeY = 0.4;
+    rangeY = 0.2;
 
   }else{
     rangeY = maxY - minY;
@@ -2154,7 +2162,7 @@ void drawPlot(const float data[], int n) {
   //float rangeY = maxY - minY;
 
   // 2) Add 10% total margin (5% top, 5% bottom)
-  float margin = rangeY * 0.10f;
+  float margin = rangeY * 0.05f;
   float plotMin = minY - margin * 0.5f;
   float plotMax = maxY + margin * 0.5f;
   float yScale  = float(PLOT_SIZE) / (plotMax - plotMin);
@@ -2175,6 +2183,7 @@ void drawPlot(const float data[], int n) {
   drawStatLine(minY, plotMin, yScale, COLOR_MIN);
   drawStatLine(meanY, plotMin, yScale, COLOR_MEAN);
   drawStatLine(maxY, plotMin, yScale, COLOR_MAX);
+  
 }
 
 // Helper: draw one dashed horizontal line and its value
@@ -2189,7 +2198,7 @@ void drawStatLine(float value, float plotMin, float yScale, uint16_t color) {
   display.setCursor(PLOT_X + PLOT_SIZE + 5, y - 4);
   display.setTextColor(color);
   display.print(value, 3);   // prints `value` with 2 decimal places
-  display.print(buf);
+  //display.print(buf);
 }
 
 void drawTwoPlots(const float data[], const float data2[],  int n) {
