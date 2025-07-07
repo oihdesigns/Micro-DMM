@@ -54,9 +54,21 @@ As of writing I have functional versions (I confirmed the core functions work) t
 ![2025-06-30 15 28 38-1](https://github.com/user-attachments/assets/d1df3a64-35a9-4641-99ba-be2e2ba61623)
 ![2025-06-25 20 25 30](https://github.com/user-attachments/assets/2e6708fb-ebba-4c70-9a25-8d26cee135b0)
 
+# Future Plans:
 
+## Major Function Things to Address:
+- Writing to MicroSD cards over the AUX SPI Bux on the RA4M1 XIAO boards. I set this up and tested it, but it didn't work and needs to be troubleshot.
+- Getting the code to run on the XIAO RP2350 board. It compiles but does not run. 
 
-## (Some of my) Future Plans:
+## Potential Refinements To-Do List:
+- Revise the PCB design to shrink the physical size (the current design was made with hand-soldering in mind). This would involve:
+  - Smaller footprint components for things like the pullup resistors.
+  - Dedicated multiple transistor packages for the switching functions rather than the discreet components.
+  - There are probably other ways to shrink the design.
+  - There is some potential performance improvement room to the analog circuit if I take advantage of the ADS1115's max input voltage of ~6.144vdc instead of 5vdc.
+- There is always room for cleanup in the code to make it more elegant. 
+
+## Ideas for Expanding on the Current Function / :
 - Make a version that uses an ADS1256 instead of the ADS1115 to support measurements speeds up to 30,000 samples/second and resolutions of up to 24bits.
 - Make a version that runs off a Raspberry Pi.
 - Implement WiFi/Bluetooth features on the boards that support it.
