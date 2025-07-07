@@ -151,7 +151,7 @@ const float constantR = 330.0;//EEPROM2:240    // Internal resistor (Ω) in cons
 const float dividerR = 22000.0;   // Series resistor (Ω) for high resistance divider
 const float ZENER_MAX_V =5.0; //EEPROM2:4.353;  // Zener/reference voltage in high-range mode (V)
 */
-float VOLTAGE_SCALE = 63.539; // Calibration scale factor for voltage input
+float VOLTAGE_SCALE = 46.44648; // Calibration scale factor for voltage input
 
 // Timing intervals (ms)
 const unsigned long ADC_INTERVAL    = 1;     // ADC sampling interval
@@ -276,21 +276,23 @@ const uint8_t MICRO_5x7[] PROGMEM = {    // µ, 5 wide × 7 high
 };
 
 //create default corrections
-float CF_A = 1.0;
-float CF_B = 1.0;
-float CF_C = 1.0;
-float CF_D = 1.0;
-float CF_E = 1.0;
-float CF_F = 1.0;
-float CF_G = 1.0;
-float CF_H = 1.0;
-float CF_I = 1.0;
-float CF_J = 1.0;
-float CF_K = 1.0;
-float CF_L = 1.0;
-float CF_M = 1.0;
-float CF_N = 1.0;
-float CF_O = 1.0;
+float CF_A = 0.9607;
+float CF_B = 0.9848;
+float CF_C = 0.997;
+float CF_D = 0.9958;
+float CF_E = 0.9934;
+float CF_F = 0.9965;
+float CF_G = 0.9982;
+float CF_H = 1.0028;
+float CF_I = 1.0012;
+float CF_J = 1.0005;
+float CF_K = 1.0017;
+float CF_L = 1.0035;
+float CF_M = 1.0075;
+float CF_N = 1.0237;
+float CF_O = 1.1226;
+
+
 
 // Flags and modes
 bool ohmsHighRange = true;    // user-selected range for resistance (if auto-range off): true = high-range, false = low-range
@@ -1204,12 +1206,12 @@ void handleButtonInput() {
       // Short press: type current reading via USB keyboard
       if(currentMode==Type){      
       if (voltageDisplay) {
-        Keyboard.printf("%.*f\r\n",vDigits,newVoltageReading);
+        Keyboard.printf("%.*f",vDigits,newVoltageReading);
       } else {
         if(displayResistance<1){
-        Keyboard.printf("%.*f\r\n", rDigits+2, displayResistance);
+        Keyboard.printf("%.*f", rDigits+2, displayResistance);
         }else{
-        Keyboard.printf("%.*f\r\n", rDigits, displayResistance);  
+        Keyboard.printf("%.*f", rDigits, displayResistance);  
         }
       }
       // Press Right Arrow after typing (to move cursor, e.g., to next cell)
