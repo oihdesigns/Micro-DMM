@@ -18,17 +18,22 @@ GigaDisplayRGB rgb; //create rgb object
 USBHostMSD        msd;
 mbed::FATFileSystem usb("usb");
 
-/*
+//GigaDAC
+#include <Arduino_AdvancedAnalog.h>
+AdvancedDAC dac0(A12);
 
-const float defaultCalib[19] = {
-  // initial calibration list (19 entries)
-  0.9828, 0.9958, 0.9999, 0.9979, 0.9954,
-  0.9965, 0.9980, 1.0034, 1.0021, 1.0012,
-  1.0031, 1.0073, 1.0176, 1.0611, 1.1130,
-  0.020073, 0.6119, 4.979, 46.4680
+
+uint16_t lut[] = {
+
+    0x0800,0x08c8,0x098f,0x0a52,0x0b0f,0x0bc5,0x0c71,0x0d12,0x0da7,0x0e2e,0x0ea6,0x0f0d,0x0f63,0x0fa7,0x0fd8,0x0ff5,
+    0x0fff,0x0ff5,0x0fd8,0x0fa7,0x0f63,0x0f0d,0x0ea6,0x0e2e,0x0da7,0x0d12,0x0c71,0x0bc5,0x0b0f,0x0a52,0x098f,0x08c8,
+    0x0800,0x0737,0x0670,0x05ad,0x04f0,0x043a,0x038e,0x02ed,0x0258,0x01d1,0x0159,0x00f2,0x009c,0x0058,0x0027,0x000a,
+    0x0000,0x000a,0x0027,0x0058,0x009c,0x00f2,0x0159,0x01d1,0x0258,0x02ed,0x038e,0x043a,0x04f0,0x05ad,0x0670,0x0737
+
 };
 
-*/
+
+static size_t lut_size = sizeof(lut) / sizeof(lut[0]);
 
 // ===== Hardware Setup Constants =====
 Adafruit_ADS1115 ads;
@@ -548,8 +553,12 @@ void setup() {
     
     Serial.println("Setup End");
 
-//  wave.sine(freq);
-//  analogWriteResolution(12);
+
+if (!dac0.begin(AN_RESOLUTION_12, 10000 * lut_size, 64, 128)) {
+        Serial.println("Failed to start DAC1 !");
+        while (1);
+
+    }
 
 }
 
@@ -954,14 +963,14 @@ if(takeLog == true){
   }
   
   
-  if(
-  (logMode && !VACPresense) && ( //SD mode is on and we're not traking AC, AND
-  (IHigh==Ireading && IHigh > 0.05) || (ILow==Ireading && ILow < -0.05) || (newVoltageReading==highV && highV>0.05) || (newVoltageReading==lowV && lowV < -0.05 ) || //if either I/ V high / low is triggered OR
-  (abs(lastLoggedI)>(abs(Ireading)+Istep) || abs(lastLoggedI)<(abs(Ireading)-Istep)) // If I reading is more than Istep different than the previous reading
-  // || digitalRead(RED_PIN) == LOW 
-  )//SD mode close
-)
-{
+  if( //Autolog Conditions
+    (logMode && !VACPresense) && ( //SD mode is on and we're not traking AC, AND
+    (IHigh==Ireading && IHigh > 0.05) || (ILow==Ireading && ILow < -0.05) || (newVoltageReading==highV && highV>0.05) || (newVoltageReading==lowV && lowV < -0.05 ) || //if either I/ V high / low is triggered OR
+    (abs(lastLoggedI)>(abs(Ireading)+Istep) || abs(lastLoggedI)<(abs(Ireading)-Istep)) // If I reading is more than Istep different than the previous reading
+    // || digitalRead(RED_PIN) == LOW 
+    )//SD mode close
+  )
+  {
     //analogWrite(CONTINUITY_PIN, 10);             
     float TimeS = (millis());
     tLogEnd  = millis() / 1000.0;
@@ -972,17 +981,17 @@ if(takeLog == true){
 
 
 
-}else{
+  }else{ //Update display when autolog not triggered
 
   AutologTriggered=0;
   
   
   // Update display at interval
-  if ((currentMillis - previousLcdMillis >= LCD_INTERVAL)&&!takeLog) {
-    previousLcdMillis = currentMillis;
-    LCD_INTERVAL = screenRefreshFast ? 500 : 1000; // adjust refresh rate if toggled
-    updateDisplay();
-  }
+    if ((currentMillis - previousLcdMillis >= LCD_INTERVAL)&&!takeLog) {
+      previousLcdMillis = currentMillis;
+      LCD_INTERVAL = screenRefreshFast ? 500 : 1000; // adjust refresh rate if toggled
+      updateDisplay();
+    }
 
   if(powerSave && newVoltageReading<0.1 && !VACPresense && Ireading==0){
     if(!deepSleepTrigger){
@@ -997,6 +1006,21 @@ if(takeLog == true){
     screenSleep = false;
     deepSleepTrigger = false;
   }
+}
+    
+    //DAC output
+    static size_t lut_offs = 0;
+    if (dac0.available()) {
+        // Get a free buffer for writing.
+        SampleBuffer buf = dac0.dequeue();
+        // Write data to buffer.
+        for (size_t i=0; i<buf.size(); i++, lut_offs++) {
+            buf[i] =  lut[lut_offs % lut_size];
+        }
+        // Write the buffer to DAC.
+        dac0.write(buf);
+
+
 }
 }
 
