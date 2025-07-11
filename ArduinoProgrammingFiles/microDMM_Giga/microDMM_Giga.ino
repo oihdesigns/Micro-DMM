@@ -18,11 +18,6 @@ GigaDisplayRGB rgb; //create rgb object
 USBHostMSD        msd;
 mbed::FATFileSystem usb("usb");
 
-//GigaDAC
-#include <Arduino_AdvancedAnalog.h>
-AdvancedDAC dac0(A12);
-
-
 uint16_t lut[] = {
 
     0x0800,0x08c8,0x098f,0x0a52,0x0b0f,0x0bc5,0x0c71,0x0d12,0x0da7,0x0e2e,0x0ea6,0x0f0d,0x0f63,0x0fa7,0x0fd8,0x0ff5,
@@ -94,6 +89,7 @@ const int KBPin = 8;   // Toggle: if LOW -> keyboard mode; if HIGH -> serial mod
 const int logPin = A1; // take log pin
 //const int LowerButton = 10;   // 
 #define BUTTON_PIN 4         // For Mode
+const int cycleTrack = 52; // take log pin
 
 
 // ADS1115 gain factors (mV per bit) for each gain setting
@@ -337,6 +333,7 @@ unsigned long buttonPressTime = 0; // timestamp when button was pressed
 bool vFlag = false;           // indicates voltage alert is active (to manage flashing pattern)
 bool rFlag = false;           // indicates resistance continuity alert is active
 bool VACPresense = false;       // indicates VAC presence
+bool cycleTracking = false;
 
 // Logging buffers for current vs time (for 'L' command)
 const int LOG_SIZE = 100;
@@ -379,15 +376,6 @@ void formatVoltageValue(float value, float &outValue, String &outSuffix, int &ou
 bool isBetween(float value, float low, float high);
 String formatTime(unsigned long milliseconds);
 void ReZero();
-
-
-
-
-//DAC Output
-
-//analogWave wave(DAC);   // Create an instance of the analogWave class, using the DAC pin
-//int freq = 10;  // in hertz, change accordingly
-
 
 
 // ========== Setup Function ========== 
@@ -443,6 +431,7 @@ void setup() {
   pinMode(BUTTON_PIN, INPUT_PULLUP); // Assuming active-low button
   pinMode(OHMPWMPIN, OUTPUT);
   pinMode(logPin, INPUT_PULLUP);
+  pinMode(cycleTrack, OUTPUT);
 
 
 /*
@@ -554,11 +543,7 @@ void setup() {
     Serial.println("Setup End");
 
 
-if (!dac0.begin(AN_RESOLUTION_12, 10000 * lut_size, 64, 128)) {
-        Serial.println("Failed to start DAC1 !");
-        while (1);
 
-    }
 
 }
 
@@ -566,6 +551,13 @@ if (!dac0.begin(AN_RESOLUTION_12, 10000 * lut_size, 64, 128)) {
 void loop() {
     //  Serial.println("Loop Start");
   unsigned long currentMillis = millis();
+
+  cycleTracking = !cycleTracking;
+  if(cycleTracking){
+    digitalWrite(cycleTrack, HIGH);
+    }else{
+    digitalWrite(cycleTrack, LOW); 
+    }
 
     // read touch points
       uint8_t contacts;
@@ -1007,22 +999,10 @@ if(takeLog == true){
     deepSleepTrigger = false;
   }
 }
-    
-    //DAC output
-    static size_t lut_offs = 0;
-    if (dac0.available()) {
-        // Get a free buffer for writing.
-        SampleBuffer buf = dac0.dequeue();
-        // Write data to buffer.
-        for (size_t i=0; i<buf.size(); i++, lut_offs++) {
-            buf[i] =  lut[lut_offs % lut_size];
-        }
-        // Write the buffer to DAC.
-        dac0.write(buf);
+  
+}
 
 
-}
-}
 
 // ========== Input Handling Functions ========== 
 
