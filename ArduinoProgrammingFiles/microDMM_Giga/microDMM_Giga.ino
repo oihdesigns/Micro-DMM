@@ -90,6 +90,7 @@ const int logPin = A1; // take log pin
 //const int LowerButton = 10;   // 
 #define BUTTON_PIN 4         // For Mode
 const int cycleTrack = 52; // take log pin
+const int VbridgePin = 81; // Control Voltage Birdge MOSFET
 
 
 // ADS1115 gain factors (mV per bit) for each gain setting
@@ -346,6 +347,12 @@ float loggedCurrents[LOG_SIZE] = {0};
 float loggedVoltagesAtI[LOG_SIZE] = {0};
 float loggedTimeStamps[LOG_SIZE] = {0};
 
+//V Float Detect Related
+bool vFloating = false;
+float bridgeV = 0.0;
+bool Vzero = false;
+
+
 
 //Auto Log Related
 
@@ -432,6 +439,7 @@ void setup() {
   pinMode(OHMPWMPIN, OUTPUT);
   pinMode(logPin, INPUT_PULLUP);
   pinMode(cycleTrack, OUTPUT);
+  pinMode(VbridgePin, OUTPUT);
 
 
 /*
@@ -1486,6 +1494,9 @@ void measureVoltage() {
     newVoltageReading = (countV * GAIN_FACTOR_8 / 1000.0f) * VOLTAGE_SCALE;
   }
 
+
+
+
   // … (any subsequent filtering, scaling, display logic) …
 
   
@@ -1543,6 +1554,16 @@ void measureVoltage() {
   }else{
     VACPresense = false;
   }
+
+  if(fabs(averageVoltage) < 0.006 && !preciseMode){
+    Vzero = true;
+    ClosedOrFloat();
+  }else{
+    Vzero = false;
+  } 
+
+
+
 }
 
 void measureCurrent() {
@@ -1759,6 +1780,15 @@ void updateDisplay() {
   display.setTextSize(3);
   display.setCursor(PrimeX, PrimeY);
   if (voltageDisplay) {
+    if(Vzero){
+      if(vFloating){
+        display.print("V FLOATING");
+      }else{
+        display.print("V CLOSED");
+      }
+    }else{
+
+    
     // Voltage display mode
     if(currentMode == VACmanual){
       display.print("VAC:");
@@ -1779,6 +1809,7 @@ void updateDisplay() {
       display.print(roundedV, vDigits);    
       display.println(vSuffix);
       }
+    }
       
       if(deltaV != 0){
       display.setCursor(PrimeX, (PrimeY+ gfxLine*4));
@@ -1954,7 +1985,8 @@ void updateAlerts() {
   if (!flashlightMode) {
     // Continuity check (low resistance)
     continuity = (isBetween(currentResistance, -20.0, 1.0) ||
-                      (isBetween(currentResistance, -20.0, 20.0) && ohmsHighRange))
+                      (isBetween(currentResistance, -20.0, 20.0) && ohmsHighRange) || 
+                      (Vzero && !vFloating))
                       //|| (prevResistance > 2000000 && currentResistance < 1000000)
                       ;
 
@@ -2344,6 +2376,26 @@ void autologArraysToCSV() {
       "%.3f");        // two decimal places  
     fclose(f);
   
+}
+
+void ClosedOrFloat()
+{
+  digitalWrite(VbridgePin, HIGH);
+
+  ads.setGain(GAIN_ONE);
+  bridgeV = ads.readADC_SingleEnded(0);
+
+  //Serial.print("voltageRead:");
+  //Serial.println(bridgeV);
+  
+  if(bridgeV < 5000){
+      vFloating = true;
+    }else{
+      vFloating = false;
+    }
+  digitalWrite(VbridgePin, LOW);
+
+
 }
 
           
