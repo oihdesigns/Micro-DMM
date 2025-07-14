@@ -122,6 +122,9 @@ float ZENER_MAX_V          = 4.979f;       // V reference in high-range mode
 float EEPROM_MAXV = 4.979f;
 float EEPROM_SleepV = 0.6118;
 
+float VOLTAGE_SCALE = 67.43863; // Calibration scale factor for voltage input
+float giga_absfactor = 0.02; // Giga is high by this on battery power. 
+
 //Mode Rotate Related
 #define DEBOUNCE_DELAY 50    // debounce time in milliseconds
 enum Mode {
@@ -153,7 +156,7 @@ const float constantR = 330.0;//EEPROM2:240    // Internal resistor (Ω) in cons
 const float dividerR = 22000.0;   // Series resistor (Ω) for high resistance divider
 const float ZENER_MAX_V =5.0; //EEPROM2:4.353;  // Zener/reference voltage in high-range mode (V)
 */
-float VOLTAGE_SCALE = 46.44648; // Calibration scale factor for voltage input
+
 
 // Timing intervals (ms)
 const unsigned long ADC_INTERVAL    = 1;     // ADC sampling interval
@@ -350,7 +353,7 @@ float loggedTimeStamps[LOG_SIZE] = {0};
 //V Float Detect Related
 bool vFloating = false;
 float bridgeV = 0.0;
-bool Vzero = false;
+bool Vzero = true;
 
 
 
@@ -392,6 +395,33 @@ void setup() {
   delay(1000);
   //while (!Serial) { /* wait for USB-Serial */ }
   Serial.println("Setup Start");
+
+    // Initialize OLED display
+
+  display.begin();             // init hardware
+  display.setRotation(1);      // landscape mode
+  //touch.setRotation(1);
+
+
+  display.setTextSize(4);
+  display.setTextColor(WHITE);
+  // Splash screen
+
+  //display.setCursor(0, 0);  
+  //display.drawBitmap(0, 0, MICRO_5x7, 5, 7, SSD1306_WHITE);
+  display.fillScreen(BLUE);   // clear to black
+  display.setCursor(0, 0);
+  display.print("uMeter #GIGA");
+  //display.print(EEPROM.read(1));//Reads the EEPROM and determines the correct splash   
+  display.setCursor(0, 48);
+  display.println("GIGA METER");
+  delay(200);
+  
+  // initialize touch
+  if (!touch.begin()) {
+    // touch init failed — halt
+    while (1) {}
+  }
 
     //Related to USB stick usage
         // Enable the USB-A port
@@ -450,32 +480,7 @@ void setup() {
   VOLTAGE_SCALE= defaultCalib[18];
 */
 
-  // Initialize OLED display
 
-  display.begin();             // init hardware
-  display.setRotation(1);      // landscape mode
-  //touch.setRotation(1);
-
-
-  display.setTextSize(4);
-  display.setTextColor(WHITE);
-  // Splash screen
-
-  //display.setCursor(0, 0);  
-  //display.drawBitmap(0, 0, MICRO_5x7, 5, 7, SSD1306_WHITE);
-  display.fillScreen(BLUE);   // clear to black
-  display.setCursor(0, 0);
-  display.print("uMeter #GIGA");
-  //display.print(EEPROM.read(1));//Reads the EEPROM and determines the correct splash   
-  display.setCursor(0, 48);
-  display.println("GIGA METER");
-  delay(200);
-  
-  // initialize touch
-  if (!touch.begin()) {
-    // touch init failed — halt
-    while (1) {}
-  }
 
   // Initialize ADS1115 ADC
   if (!ads.begin()) {
@@ -768,7 +773,7 @@ if(takeLog == true){
   // Periodic ADC measurements
   if (currentMillis - previousAdcMillis >= ADC_INTERVAL) {
     previousAdcMillis = currentMillis;
-    if(!takeLog){ //Bypass Resistance if taking a log
+    if(!takeLog && currentMode != Voltmeter && currentMode != VACmanual){ //Bypass Resistance if taking a log or in voltmeter more
     measureResistance();
     }
     measureVoltage();
@@ -800,7 +805,7 @@ if(takeLog == true){
   
     // Determine which primary measurement to display automatically
     
-  if ( countV>500  || currentMode == Voltmeter) {
+  if ( fabs(countV)>500  || currentMode == Voltmeter) {
     voltageDisplay = true;
     if(preciseMode){
     ads.setDataRate(RATE_ADS1115_16SPS); //slow sampling if 0 is set  
@@ -1472,7 +1477,13 @@ void measureVoltage() {
     firstVoltRun  = false;
   }
 
-  if (!(VACPresense && altUnits)) {
+  if(VACPresense || currentMode == VACmanual){
+    // fixed mid‐range gain in VAC‑altUnits mode
+    ads.setGain(GAIN_ONE);
+    countV = ads.readADC_Differential_0_1();
+    newVoltageReading = ((countV * GAIN_FACTOR_1 / 1000.0f) * VOLTAGE_SCALE) - giga_absfactor;
+  }
+  else if (!altUnits) {
     // dynamic gain based on raw counts
     ads.setGain(kGainLevels[gainIndexVolt]);
     countV = ads.readADC_Differential_0_1();
@@ -1486,12 +1497,12 @@ void measureVoltage() {
       countV = ads.readADC_Differential_0_1();
     }
     // convert to voltage
-    newVoltageReading = (countV * kGainFactors[gainIndexVolt] / 1000.0f) * VOLTAGE_SCALE;
+    newVoltageReading = ((countV * kGainFactors[gainIndexVolt] / 1000.0f) * VOLTAGE_SCALE) - giga_absfactor;
   } else {
     // fixed mid‐range gain in VAC‑altUnits mode
     ads.setGain(GAIN_EIGHT);
     countV = ads.readADC_Differential_0_1();
-    newVoltageReading = (countV * GAIN_FACTOR_8 / 1000.0f) * VOLTAGE_SCALE;
+    newVoltageReading = ((countV * GAIN_FACTOR_8 / 1000.0f) * VOLTAGE_SCALE) - giga_absfactor;
   }
 
 
@@ -1555,7 +1566,7 @@ void measureVoltage() {
     VACPresense = false;
   }
 
-  if(fabs(averageVoltage) < 0.006 && !preciseMode){
+  if(fabs(averageVoltage) < 0.030 && !preciseMode && !VACPresense && voltageDisplay){
     Vzero = true;
     ClosedOrFloat();
   }else{
