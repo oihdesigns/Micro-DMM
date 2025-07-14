@@ -444,7 +444,7 @@
     "pinned_symbol_libs": []
   },
   "meta": {
-    "filename": "DMM_KiCAD_V3_next.kicad_pro",
+    "filename": "DMM_KiCAD_V3_next KiCAD9.kicad_pro",
     "version": 3
   },
   "net_settings": {
@@ -483,7 +483,7 @@
       "plot": "./",
       "pos_files": "",
       "specctra_dsn": "",
-      "step": "DMM_KiCAD_V3_next.step",
+      "step": "DMM_KiCAD_V3_next KiCAD9.step",
       "svg": "",
       "vrml": ""
     },
