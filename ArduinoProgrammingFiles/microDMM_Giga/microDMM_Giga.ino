@@ -1566,7 +1566,7 @@ void measureVoltage() {
     VACPresense = false;
   }
 
-  if(fabs(averageVoltage) < 0.030 && !preciseMode && !VACPresense && voltageDisplay){
+  if((fabs(averageVoltage) < 0.030 || VAC>5) && !preciseMode && voltageDisplay){
     Vzero = true;
     ClosedOrFloat();
   }else{
@@ -1669,7 +1669,7 @@ void measureCurrent() {
 void updateDisplay() {
   // Prepare values for display
   //display.fillScreen(BLACK);
-  display.fillRect(0, 0, 192, 72, BLACK);
+  display.fillRect(0, 0, 256, 72, BLACK);
   display.setTextColor(WHITE,BLACK);
 
   int gfxLine = 8;
@@ -1792,10 +1792,16 @@ void updateDisplay() {
   display.setCursor(PrimeX, PrimeY);
   if (voltageDisplay) {
     if(Vzero){
-      if(vFloating){
-        display.print("V FLOATING");
-      }else{
-        display.print("V CLOSED");
+      if(vFloating && bridgeV<5000){
+            display.print("V FLT:");
+            display.print(bridgeV,0);
+          }
+       else if(vFloating && bridgeV>5000){
+            display.print("V UNDF:");
+            display.print(bridgeV,0);
+          }else{
+        display.print("V CLD:");
+        display.print(bridgeV,0);
       }
     }else{
 
@@ -2393,13 +2399,13 @@ void ClosedOrFloat()
 {
   digitalWrite(VbridgePin, HIGH);
 
-  ads.setGain(GAIN_ONE);
+  ads.setGain(GAIN_TWO);
   bridgeV = ads.readADC_SingleEnded(0);
 
   //Serial.print("voltageRead:");
   //Serial.println(bridgeV);
   
-  if(bridgeV < 5000){
+  if(bridgeV < 20000){
       vFloating = true;
     }else{
       vFloating = false;

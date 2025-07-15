@@ -1,6 +1,6 @@
 LTspice 24.0.12 for Windows
 Circuit: * C:\Users\Nick\Documents\GitHub\Micro-DMM\LTSpice\Voltmeter W Continuity.asc
-Start Time: Sun Jul 13 21:10:48 2025
+Start Time: Mon Jul 14 16:10:22 2025
 solver = Normal
 Maximum thread count: 16
 tnom = 27
@@ -13,5 +13,5 @@ WARNING: Node N001 is floating.
 WARNING: Less than two connections to node n002.  This node is used by v2.
 WARNING: Less than two connections to node n001.  This node is used by v2.
 Direct Newton iteration for .op point succeeded.
-Total elapsed time: 0.128 seconds.
+Total elapsed time: 0.111 seconds.
 

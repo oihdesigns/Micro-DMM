@@ -20,9 +20,11 @@ R8 0 N005 10Meg
 .model PMOS PMOS
 .lib C:\Users\Nick\AppData\Local\LTspice\lib\cmp\standard.mos
 .tran 1
-* (This simulates a GPIO)
+* (This simulates a MOSFET driver\ncontrolled by an GPIO)
 * (This simulates ADC \nconnection 2/2)
 * (This simulates ADC \nconnection 1/2)
+* Probe 1
+* Probe 2
 .lib ADR5041.sub
 .backanno
 .end
