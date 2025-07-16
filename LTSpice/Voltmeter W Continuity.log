@@ -1,6 +1,6 @@
 LTspice 24.0.12 for Windows
 Circuit: * C:\Users\Nick\Documents\GitHub\Micro-DMM\LTSpice\Voltmeter W Continuity.asc
-Start Time: Mon Jul 14 16:10:22 2025
+Start Time: Tue Jul 15 19:49:44 2025
 solver = Normal
 Maximum thread count: 16
 tnom = 27
@@ -8,10 +8,15 @@ temp = 27
 method = modified trap
 Limiting rise time of source v3 to 0.05
 Limiting fall time of source v3 to 0.05
+WARNING: Node N003 is floating.
 WARNING: Node N001 is floating.
 
-WARNING: Less than two connections to node n002.  This node is used by v2.
-WARNING: Less than two connections to node n001.  This node is used by v2.
+WARNING: Less than two connections to node n005.  This node is used by r1.
+WARNING: Less than two connections to node n006.  This node is used by r2.
+WARNING: Less than two connections to node n004.  This node is used by v2.
+WARNING: Less than two connections to node n003.  This node is used by v2.
+WARNING: Less than two connections to node n002.  This node is used by r6.
+WARNING: Less than two connections to node n001.  This node is used by r6.
 Direct Newton iteration for .op point succeeded.
-Total elapsed time: 0.111 seconds.
+Total elapsed time: 0.125 seconds.
 

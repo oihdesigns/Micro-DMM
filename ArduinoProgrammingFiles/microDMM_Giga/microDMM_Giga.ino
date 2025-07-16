@@ -1566,7 +1566,7 @@ void measureVoltage() {
     VACPresense = false;
   }
 
-  if((fabs(averageVoltage) < 0.030 || VAC>5) && !preciseMode && voltageDisplay){
+  if((fabs(averageVoltage) < 0.030 || (currentMode == VACmanual && VAC<5)) && !preciseMode && voltageDisplay){
     Vzero = true;
     ClosedOrFloat();
   }else{
