@@ -122,14 +122,15 @@ float ZENER_MAX_V          = 4.979f;       // V reference in high-range mode
 float EEPROM_MAXV = 4.979f;
 float EEPROM_SleepV = 0.6118;
 
-float VOLTAGE_SCALE = 67.43863; // Calibration scale factor for voltage input
-float giga_absfactor = 0.02; // Giga is high by this on battery power. 
+float VOLTAGE_SCALE = 68.40528; // Calibration scale factor for voltage input
+float VOLTAGE_SCALE_Negative = 68.43541;
+float giga_absfactor = 0.012; // Giga is high by this on battery power. 
 
 //Mode Rotate Related
 #define DEBOUNCE_DELAY 50    // debounce time in milliseconds
 enum Mode {
-  Default,
   Voltmeter,
+  Default,
   VACmanual,
   Type,
   Low,
@@ -142,8 +143,8 @@ enum Mode {
   NUM_MODES
 };
 
-Mode currentMode = Default;
-Mode previousMode = Default;
+Mode currentMode = Voltmeter;
+Mode previousMode = Voltmeter;
 
 unsigned long lastDebounceTime = 0;
 bool lastButtonState = HIGH;
@@ -191,7 +192,7 @@ float meanY = 0.0;
 
 float rawResistance = 0.0;      // calculated resistance before calibration (Ω)
 float calibratedResistance = 0.0; // resistance after applying calibration factors (Ω)
-float currentResistance = 0.0;  // final resistance value used for display (before zero offset)
+float currentResistance = 12345.0;  // final resistance value used for display (before zero offset)
 float prevResistance = 0.0;
 float zeroOffsetRes = 0.0;      // user-set zero offset for resistance (to zero out test leads)
 float displayResistance = 0.0;  // resistance value after subtracting zero offset (displayed)
@@ -354,6 +355,8 @@ float loggedTimeStamps[LOG_SIZE] = {0};
 bool vFloating = false;
 float bridgeV = 0.0;
 bool Vzero = true;
+
+int blinkLimit = 0; //Limit how much the LED can blink between screen updates
 
 
 
@@ -1497,7 +1500,12 @@ void measureVoltage() {
       countV = ads.readADC_Differential_0_1();
     }
     // convert to voltage
-    newVoltageReading = ((countV * kGainFactors[gainIndexVolt] / 1000.0f) * VOLTAGE_SCALE) - giga_absfactor;
+    if(countV>0){
+      newVoltageReading = ((countV * kGainFactors[gainIndexVolt] / 1000.0f) * VOLTAGE_SCALE) - giga_absfactor;
+      }else{
+      newVoltageReading = ((countV * kGainFactors[gainIndexVolt] / 1000.0f) * VOLTAGE_SCALE_Negative) - giga_absfactor;  
+    }
+  
   } else {
     // fixed mid‐range gain in VAC‑altUnits mode
     ads.setGain(GAIN_EIGHT);
@@ -1669,6 +1677,8 @@ void measureCurrent() {
 void updateDisplay() {
   // Prepare values for display
   //display.fillScreen(BLACK);
+  
+  blinkLimit = 0; //Clear Blink Limit on Screen Update
   display.fillRect(0, 0, 256, 72, BLACK);
   display.setTextColor(WHITE,BLACK);
 
@@ -1792,11 +1802,11 @@ void updateDisplay() {
   display.setCursor(PrimeX, PrimeY);
   if (voltageDisplay) {
     if(Vzero){
-      if(vFloating && bridgeV<5000){
+      if(vFloating && bridgeV<-21000){
             display.print("V FLT:");
             display.print(bridgeV,0);
           }
-       else if(vFloating && bridgeV>5000){
+       else if(vFloating && bridgeV<-20000){
             display.print("V UNDF:");
             display.print(bridgeV,0);
           }else{
@@ -2003,17 +2013,20 @@ void updateAlerts() {
     // Continuity check (low resistance)
     continuity = (isBetween(currentResistance, -20.0, 1.0) ||
                       (isBetween(currentResistance, -20.0, 20.0) && ohmsHighRange) || 
-                      (Vzero && !vFloating))
+                      (Vzero && !vFloating) && blinkLimit<2)
                       //|| (prevResistance > 2000000 && currentResistance < 1000000)
                       ;
 
-    bool logicVoltage = ((!altUnits && (fabs(newVoltageReading) > 3.2 || (VACPresense && VAC > 1.0))) ||(altUnits && (fabs(newVoltageReading) > 30.2 || (VACPresense && VAC > 15.0))));
+    bool logicVoltage = ((!altUnits && (fabs(newVoltageReading) > 3.2 || (VACPresense && VAC > 1.0))) ||
+                         (altUnits && (fabs(newVoltageReading) > 30.2 || (VACPresense && VAC > 15.0)))&& 
+                         blinkLimit<2);
     if (continuity) {
       // If continuity detected, beep/flash the continuity pin
       if (!rFlag) {
         // Start of beep
         analogWrite(CONTINUITY_PIN, 200);
         rgb.on(255, 255, 255); //turn on blue pixel
+        blinkLimit++;
         rFlag = true;
       } else if ((now % 1000 <= 100 || isBetween(now % 1000, 300, 400)) && rFlag) {
         // Keep beeping in a pattern: on for 100ms, then off, with a double pulse
@@ -2023,11 +2036,12 @@ void updateAlerts() {
         analogWrite(CONTINUITY_PIN, 0);
         rgb.off(); //turn off all pixels
       }
-    } else if (logicVoltage) {
+    } else if (logicVoltage ) {
       // If significant voltage in resistance mode, warning flash
       if (!vFlag) {
         analogWrite(CONTINUITY_PIN, 200);
         rgb.on(255, 255, 255); //
+        blinkLimit++;
         vFlag = true;
       } else if ((now % 1000 <= 100) && vFlag && (!VACPresense)) {
         analogWrite(CONTINUITY_PIN, 50);
@@ -2399,13 +2413,13 @@ void ClosedOrFloat()
 {
   digitalWrite(VbridgePin, HIGH);
 
-  ads.setGain(GAIN_TWO);
-  bridgeV = ads.readADC_SingleEnded(0);
+  ads.setGain(GAIN_EIGHT);
+  bridgeV = ads.readADC_Differential_0_1();
 
   //Serial.print("voltageRead:");
   //Serial.println(bridgeV);
   
-  if(bridgeV < 20000){
+  if(bridgeV < -18000){
       vFloating = true;
     }else{
       vFloating = false;
