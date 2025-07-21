@@ -120,11 +120,11 @@ const float constantR            = 330.0f;     // Ω internal resistor in consta
 const float dividerR             = 22000.0f;   // Ω series resistor for high-resistance divider
 float ZENER_MAX_V          = 4.979f;       // V reference in high-range mode
 float EEPROM_MAXV = 4.979f;
-float EEPROM_SleepV = 0.6118;
+float EEPROM_SleepV = 0.6117;
 
-float VOLTAGE_SCALE = 68.40528; // Calibration scale factor for voltage input
-float VOLTAGE_SCALE_Negative = 68.43541;
-float giga_absfactor = 0.012; // Giga is high by this on battery power. 
+float VOLTAGE_SCALE = 68.47375; // Calibration scale factor for voltage input
+float VOLTAGE_SCALE_Negative = 68.51763;
+float giga_absfactor = 0.0;//12; // Giga is high by this on battery power. 
 
 //Mode Rotate Related
 #define DEBOUNCE_DELAY 50    // debounce time in milliseconds
@@ -395,7 +395,7 @@ void ReZero();
 void setup() {
 
   Serial.begin(115200);
-  delay(1000);
+  delay(100);
   //while (!Serial) { /* wait for USB-Serial */ }
   Serial.println("Setup Start");
 
@@ -414,11 +414,11 @@ void setup() {
   //display.drawBitmap(0, 0, MICRO_5x7, 5, 7, SSD1306_WHITE);
   display.fillScreen(BLUE);   // clear to black
   display.setCursor(0, 0);
-  display.print("uMeter #GIGA");
-  //display.print(EEPROM.read(1));//Reads the EEPROM and determines the correct splash   
-  display.setCursor(0, 48);
   display.println("GIGA METER");
-  delay(200);
+  //display.print(EEPROM.read(1));//Reads the EEPROM and determines the correct splash   
+  //display.setCursor(0, 48);
+  //display.println("GIGA METER");
+  
   
   // initialize touch
   if (!touch.begin()) {
@@ -430,37 +430,33 @@ void setup() {
         // Enable the USB-A port
       pinMode(PA_15, OUTPUT);
       digitalWrite(PA_15, HIGH);
-
-      // Some carriers require explicit VBUS enable
-      mbed::DigitalOut vbusEnable(PB_8, 1);
-
       
+      // Some carriers require explicit VBUS enable
+      mbed::DigitalOut vbusEnable(PB_8, 1);    
       // Wait for drive to appear
       Serial.print("Waiting for USB drive");
-      
-
+      display.setTextSize(2);
+      display.println("Waiting for USB drive");
       while (!msd.connect() && usbDelay<2){
         delay(500);
         usbDelay++;
         }
-
         if(msd.connect()){
-
         logMode = true;
         Serial.print('\nDrive connected.');
-
-
+        display.println("Drive connected");
         // Mount the FAT32 filesystem
       int err = usb.mount(&msd);
       if (err) {
         Serial.print("Mount failed: ");
-        Serial.println(err);
+        display.println(err);
         while (true);  // halt
       }
       Serial.println("Filesystem mounted.");      
       }else{
         logMode = false;
-        Serial.println("No USB Drive.");
+        display.println("No USB Drive.");
+        Serial.print("No Drive");
       }
 
 
@@ -487,8 +483,6 @@ void setup() {
 
   // Initialize ADS1115 ADC
   if (!ads.begin()) {
-    Serial.println("ADS1115 init failed!");
-
     display.setCursor(0, 0);
     display.setTextSize(1);
     Serial.println("ADS1115 not found");
@@ -496,24 +490,27 @@ void setup() {
     //display.display();
     while (1); // halt
   }
-  //
-  //Serial.println("ADS1115 good");
+  display.println("ADS1115 found");
+  Serial.println("ADS1115 good");
+
   ads.setDataRate(RATE_ADS1115_16SPS); // slow rate b/c default is resistance
-  delay(300);
+  // Initial current zero calibration
+  ads.setGain(GAIN_TWOTHIRDS);  // ±6.144V range to read baseline
+  delay(100);
 
   // Print available commands (for user reference)
   Serial.println(F("Commands: Q,q,Z,C,R,S,V,A,F,M,B,D,e,E,I,L,?"));
 
-  // Initial current zero calibration
-  ads.setGain(GAIN_TWOTHIRDS);  // ±6.144V range to read baseline
+  
   
   //Ammeter Auto Detect
-    adcReadingCurrent = ads.readADC_SingleEnded(3);
     delay(100);
+    adcReadingCurrent = ads.readADC_SingleEnded(3);
+    
     currentShuntVoltage = adcReadingCurrent * GAIN_FACTOR_TWOTHIRDS / 1000.0;
-    if (adcReadingCurrent < 300 || isBetween(currentShuntVoltage, 2.3, 2.7)) {
+    if (adcReadingCurrent < 300 || isBetween(currentShuntVoltage, 1.5, 3.5)) {
       // If no current (shunt pulled to ground) or baseline ~2.5V, current sensor is present
-      if (isBetween(currentShuntVoltage, 2.3, 2.7)) {
+      if (isBetween(currentShuntVoltage, 1.5, 3.5)) {
         Irange = true;         // high-range current mode
         Izero = currentShuntVoltage; // store baseline (~2.5V)
       } else {
@@ -521,15 +518,21 @@ void setup() {
         Izero = 0.0;
       }
       currentOnOff = true;
-      Serial.println("Ammeter Enabled");
+      Serial.print("Ammeter Enabled:");
+      Serial.println(currentShuntVoltage);
+      display.print("Ammeter Enabled:");
+      display.println(currentShuntVoltage);
     } else {
       // Current sensor not connected or reading abnormal -> disable current measurement
       currentOnOff = false;
-      Serial.println("Ammeter Disabled");
+      Serial.print("Ammeter Disabled:");
+      Serial.println(currentShuntVoltage);
+      display.print("Ammeter Disabled:");
+      display.println(currentShuntVoltage);
       Ireading = 0.0;
     }
   
-  
+  delay(1000);
   display.fillScreen(BLACK);
   
   // draw our four buttons
@@ -788,7 +791,7 @@ if(takeLog == true){
           timeHigh = millis();
           timeHighset = true;
         }
-        if (timeHighset && currentResistance < 2000){
+        if (timeHighset && currentResistance < 20000){
           timeHighset = false;
         }    
         if (timeHighset && timeHigh + 5000 < millis()){
@@ -1574,11 +1577,12 @@ void measureVoltage() {
     VACPresense = false;
   }
 
-  if((fabs(averageVoltage) < 0.030 || (currentMode == VACmanual && VAC<5)) && !preciseMode && voltageDisplay){
+  if(((fabs(averageVoltage) < 0.030 && currentMode != VACmanual && newVoltageReading<0.05) || (currentMode == VACmanual && VAC<5)) && !preciseMode && voltageDisplay){
     Vzero = true;
     ClosedOrFloat();
   }else{
     Vzero = false;
+    vFloating = false;
   } 
 
 
@@ -1606,7 +1610,7 @@ void measureCurrent() {
 
   int32_t countI;
 
-  if (Irange) {
+  if (IHigh) {
     // —— High-RANGE mode: fixed mid-gain for best noise performance ——
     ads.setGain(GAIN_ONE);
     countI = ads.readADC_SingleEnded(3);
@@ -1645,8 +1649,8 @@ void measureCurrent() {
   }
 
   // apply noise floor
-  if ((Irange && isBetween(Ireading, -0.01f,  0.1f)) ||
-      (!Irange && Ireading < 0.0005f)) {
+  if ((Irange  && isBetween(Ireading, -0.01f,  0.1f)) ||
+      (!Irange  && Ireading < 0.0005f)) {
     Ireading = 0.0f;
   } else {
     // update min/max and log extremes
@@ -1802,17 +1806,18 @@ void updateDisplay() {
   display.setCursor(PrimeX, PrimeY);
   if (voltageDisplay) {
     if(Vzero){
-      if(vFloating && bridgeV<-21000){
+      if(vFloating && bridgeV<-0.3281){
             display.print("V FLT:");
-            display.print(bridgeV,0);
+            display.print(bridgeV*1000,0);
           }
-       else if(vFloating && bridgeV<-20000){
+       else if(vFloating && bridgeV>-0.3281){
             display.print("V UNDF:");
-            display.print(bridgeV,0);
+            display.print(bridgeV*1000,0);
           }else{
         display.print("V CLD:");
-        display.print(bridgeV,0);
+        display.print(bridgeV*1000,0);
       }
+      display.print("m");
     }else{
 
     
@@ -1904,7 +1909,7 @@ void updateDisplay() {
     }
     
     
-    if((fabs(previousmeanY)>0.01 || fabs(newVoltageReading)>0.02)|| preciseMode){ //Only update the graph when voltage present 
+    if(!vFloating){ //Only update the graph when voltage present 
       display.setTextSize(2);
       drawPlot(voltageSamples, SAMPLE_COUNT_PLOT);
       }
@@ -2414,12 +2419,14 @@ void ClosedOrFloat()
   digitalWrite(VbridgePin, HIGH);
 
   ads.setGain(GAIN_EIGHT);
-  bridgeV = ads.readADC_Differential_0_1();
+  bridgeV = ads.readADC_Differential_0_1() * GAIN_FACTOR_8 / 1000.0;
+
+  currentShuntVoltage = adcReadingCurrent ;
 
   //Serial.print("voltageRead:");
   //Serial.println(bridgeV);
   
-  if(bridgeV < -18000){
+  if(bridgeV < -0.28125){
       vFloating = true;
     }else{
       vFloating = false;
