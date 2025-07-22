@@ -14,6 +14,8 @@ USBKeyboard Keyboard;
 
 GigaDisplayRGB rgb; //create rgb object
 
+#include "RPC.h"
+
 // ————— USB mass-storage objects —————
 USBHostMSD        msd;
 mbed::FATFileSystem usb("usb");
@@ -91,6 +93,8 @@ const int logPin = A1; // take log pin
 #define BUTTON_PIN 4         // For Mode
 const int cycleTrack = 52; // take log pin
 const int VbridgePin = 81; // Control Voltage Birdge MOSFET
+const int rpcPin0 = 55;
+const int rpcPin1 = 56;
 
 
 // ADS1115 gain factors (mV per bit) for each gain setting
@@ -469,6 +473,8 @@ void setup() {
   pinMode(logPin, INPUT_PULLUP);
   pinMode(cycleTrack, OUTPUT);
   pinMode(VbridgePin, OUTPUT);
+  pinMode(rpcPin0, OUTPUT);
+  pinMode(rpcPin1, OUTPUT);
 
 
 /*
@@ -532,6 +538,12 @@ void setup() {
       Ireading = 0.0;
     }
   
+
+    display.println("Booting Core 2");
+    RPC.begin();
+    display.println("Core 2 Booted");
+
+
   delay(1000);
   display.fillScreen(BLACK);
   
@@ -2030,34 +2042,42 @@ void updateAlerts() {
       if (!rFlag) {
         // Start of beep
         analogWrite(CONTINUITY_PIN, 200);
+        digitalWrite(rpcPin0, HIGH);
         rgb.on(255, 255, 255); //turn on blue pixel
         blinkLimit++;
         rFlag = true;
       } else if ((now % 1000 <= 100 || isBetween(now % 1000, 300, 400)) && rFlag) {
         // Keep beeping in a pattern: on for 100ms, then off, with a double pulse
         analogWrite(CONTINUITY_PIN, 50);
+        digitalWrite(rpcPin0, HIGH);
         rgb.on(0, 0, 255); //turn on blue pixel
       } else {
         analogWrite(CONTINUITY_PIN, 0);
+        digitalWrite(rpcPin0, LOW);
         rgb.off(); //turn off all pixels
       }
     } else if (logicVoltage ) {
       // If significant voltage in resistance mode, warning flash
       if (!vFlag) {
         analogWrite(CONTINUITY_PIN, 200);
+        digitalWrite(rpcPin1, HIGH);
         rgb.on(255, 255, 255); //
         blinkLimit++;
         vFlag = true;
       } else if ((now % 1000 <= 100) && vFlag && (!VACPresense)) {
         analogWrite(CONTINUITY_PIN, 50);
+        digitalWrite(rpcPin1, HIGH);
         rgb.on(255, 0, 0); //      
       } else {
         analogWrite(CONTINUITY_PIN, 0);
         rgb.off(); //turn off all pixels
+        digitalWrite(rpcPin1, LOW);
       }
     } else {
       // No alert condition
       analogWrite(CONTINUITY_PIN, 0);
+      digitalWrite(rpcPin0, LOW);
+      digitalWrite(rpcPin1, LOW);
       rgb.off(); //turn off all pixels
       vFlag = false;
       rFlag = false;
