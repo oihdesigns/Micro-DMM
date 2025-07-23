@@ -79,20 +79,22 @@ static const int PLOT_Y    = 80;
 
 
 // Pin definitions
+const int OHMPWMPIN = 2;
+const int TYPE_PIN      = 3;    // Mode button (also triggers flashlight mode if held at boot)
+#define BUTTON_PIN 4         // For Mode
 const int CONTINUITY_PIN = 6;   // Buzzer or LED for continuity/alerts
 const int SETRANGE_PIN = 7;   // Controls high/low resistance range
+const int kbButton = 8;   // Toggle: if LOW -> keyboard mode; if HIGH -> serial mode
+const int logButton = A1; // take log pin
+
 //#define IR_RECEIVE_PIN   8      // IR receiver input pin
-const int OHMPWMPIN = 2;
 //const int BATT_PIN      = A2;   // Battery voltage analog input
 //#define enablePin  BAT_READ_EN  // Pin for enabling battery voltage reading
 //#define BATT_PIN BAT_DET_PIN
-const int TYPE_PIN      = 3;    // Mode button (also triggers flashlight mode if held at boot)
-const int KBPin = 8;   // Toggle: if LOW -> keyboard mode; if HIGH -> serial mode
-const int logPin = A1; // take log pin
 //const int LowerButton = 10;   // 
-#define BUTTON_PIN 4         // For Mode
+
 const int cycleTrack = 52; // take log pin
-const int VbridgePin = 81; // Control Voltage Birdge MOSFET
+const int VbridgePin = 5; // Control Voltage Birdge MOSFET
 const int rpcPin0 = 55;
 const int rpcPin1 = 56;
 
@@ -470,7 +472,7 @@ void setup() {
   pinMode(SETRANGE_PIN, OUTPUT);
   pinMode(BUTTON_PIN, INPUT_PULLUP); // Assuming active-low button
   pinMode(OHMPWMPIN, OUTPUT);
-  pinMode(logPin, INPUT_PULLUP);
+  pinMode(logButton, INPUT_PULLUP);
   pinMode(cycleTrack, OUTPUT);
   pinMode(VbridgePin, OUTPUT);
   pinMode(rpcPin0, OUTPUT);
@@ -737,7 +739,7 @@ void loop() {
   }
 */
 
-if((digitalRead(logPin)==0) || greenPress) {
+if((digitalRead(logButton)==0) || greenPress) {
   takeLog = true;
   }
 
@@ -2439,6 +2441,8 @@ void ClosedOrFloat()
   digitalWrite(VbridgePin, HIGH);
 
   ads.setGain(GAIN_EIGHT);
+  //ads.setDataRate(RATE_ADS1115_64SPS);
+    //delay(1);
   bridgeV = ads.readADC_Differential_0_1() * GAIN_FACTOR_8 / 1000.0;
 
   currentShuntVoltage = adcReadingCurrent ;
@@ -2451,7 +2455,8 @@ void ClosedOrFloat()
     }else{
       vFloating = false;
     }
-  digitalWrite(VbridgePin, LOW);
+  digitalWrite(VbridgePin, 0);
+  //delay(2);
 
 
 }

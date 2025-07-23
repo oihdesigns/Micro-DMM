@@ -45,7 +45,7 @@ const int rpcPin1 = 56;
 static const uint32_t DAC_SAMPLE_RATE = 700UL * 64UL;   // 44,800 samples/sec
 
 // AdvancedDAC(args): pin
-AdvancedDAC dac2(A13);  // We'll actually output on A13; user sketch used dac2.
+AdvancedDAC dac1(A13);  // We'll actually output on A13; user sketch used dac1.
 
 // 12‑bit, one full cycle, 64‑point sine LUT centered at midscale (0x0800).
 // Copied verbatim from user's sketch.
@@ -87,7 +87,7 @@ void setup() {
 
   // Start DAC: 12‑bit resolution, DAC_SAMPLE_RATE, DMA buffers (nBuffers, bufSize)
   // Buffer counts chosen to balance latency and headroom; same as user's example.
-  if (!dac2.begin(AN_RESOLUTION_12, DAC_SAMPLE_RATE, 64, 128)) {
+  if (!dac1.begin(AN_RESOLUTION_12, DAC_SAMPLE_RATE, 64, 128)) {
     while (1) {
       // hang here if DAC init fails
     }
@@ -119,8 +119,8 @@ void loop() {
   }
 
   // --------------- DAC Buffer Service ---------------
-  if (dac2.available()) {
-    SampleBuffer buf = dac2.dequeue();
+  if (dac1.available()) {
+    SampleBuffer buf = dac1.dequeue();
 
     // Fill buffer using DDS.
     // NOTE: Because DAC_SAMPLE_RATE is constant, variable phase_inc controls freq.
@@ -131,7 +131,7 @@ void loop() {
       phase += phase_inc;
     }
 
-    dac2.write(buf);  // push to DMA
+    dac1.write(buf);  // push to DMA
   }
 
   // loop() otherwise returns quickly -> low jitter.
