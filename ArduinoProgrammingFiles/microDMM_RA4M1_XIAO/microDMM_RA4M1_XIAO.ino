@@ -2,7 +2,7 @@
 #include <Adafruit_ADS1X15.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <IRremote.h>
+//#include <IRremote.h>
 #include <Keyboard.h>
 #include <analogWave.h> // Include the library for analog waveform generation
 #include <EEPROM.h>
@@ -19,8 +19,9 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // Pin definitions
 const int CONTINUITY_PIN = 6;   // Buzzer or LED for continuity/alerts
+const int VbridgePin = 8; // Control Voltage Birdge MOSFET
 const int SETRANGE_PIN = 7;   // Controls high/low resistance range
-#define IR_RECEIVE_PIN   8      // IR receiver input pin
+//#define IR_RECEIVE_PIN   8      // IR receiver input pin
 const int OHMPWMPIN = 9;
 //const int BATT_PIN      = A2;   // Battery voltage analog input
 #define enablePin  BAT_READ_EN  // Pin for enabling battery voltage reading
@@ -244,6 +245,8 @@ bool deltaTrigger = false;
 float deltaV = 0.0;
 int deltaVdigits = 0;
 
+bool continuity = false;
+
 // Flags for transient states
 bool flashlightMode = false;  // flashlight mode active (button held at startup)
 bool flashlightChecked = false; // whether we have checked the button for flashlight mode at startup
@@ -264,8 +267,15 @@ float loggedCurrents[LOG_SIZE] = {0};
 float loggedVoltagesAtI[LOG_SIZE] = {0};
 float loggedTimeStamps[LOG_SIZE] = {0};
 
+//V Float Detect Related
+bool vFloating = false;
+float bridgeV = 0.0;
+bool Vzero = true;
+
+int blinkLimit = 0; //Limit how much the LED can blink between screen updates
+
 // ========== Function Prototypes ========== 
-void handleIRRemote();
+//void handleIRRemote();
 void handleSerialCommands(char command);
 void handleButtonInput();
 void measureVoltage();
@@ -304,7 +314,7 @@ void setup() {
   pinMode(MODE_BUTTON, INPUT_PULLUP); // Assuming active-low button
   pinMode(OHMPWMPIN, OUTPUT);
   pinMode(logPin, INPUT_PULLUP);
-
+  pinMode(VbridgePin, OUTPUT);
   pinMode(enablePin, OUTPUT);  // Set the enable pin as an output
   digitalWrite(enablePin, HIGH); // Set the pin high to enable battery voltage reading
 
@@ -383,7 +393,7 @@ void setup() {
  
   display.clearDisplay();
 
-    Serial.println("Setup End");
+  Serial.println("Setup End");
 
 
 }
@@ -445,7 +455,7 @@ if(takeLog == true){
 }
 
   // Handle user inputs
-  handleIRRemote();
+  //handleIRRemote();
   handleButtonInput();
 
   // Periodic battery voltage reading
@@ -668,7 +678,7 @@ if(powerSave || currentMode==Charging){
 }
 
 // ========== Input Handling Functions ========== 
-
+/*
 void handleIRRemote() {
   // Check IR receiver for a decoded command
   if (IrReceiver.decode()) {
@@ -759,6 +769,7 @@ void handleIRRemote() {
     IrReceiver.resume(); // ready to receive next IR signal
   }
 }
+*/
 
 void handleSerialCommands(char command) {
   // Handle a single-character command from Serial
@@ -1261,6 +1272,19 @@ void measureVoltage() {
   }else{
     VACPresense = false;
   }
+
+  if(EEPROM.read(1) == 5){
+    if(((fabs(averageVoltage) < 0.030 && currentMode != VACmanual && newVoltageReading<0.05) || (currentMode == VACmanual && VAC<5)) && !preciseMode && voltageDisplay){
+      Vzero = true;
+      ClosedOrFloat();
+    }else{
+      Vzero = false;
+      vFloating = false;
+    } 
+  }
+
+
+
 }
 
 void measureCurrent() {
@@ -1351,6 +1375,7 @@ void measureCurrent() {
 void updateDisplay() {
   // Prepare values for display
   display.clearDisplay();
+  blinkLimit = 0;
   if(!screenSleep && currentMode!=Charging){
 
   // Determine which voltage value to use for display (fast vs smoothed)
@@ -1422,6 +1447,20 @@ void updateDisplay() {
   display.setTextSize(2);
   display.setCursor(0, 0);
   if (voltageDisplay) {
+     if(Vzero){
+      if(vFloating && bridgeV<-0.3281){
+            display.print("V FLT:");
+            display.print(bridgeV*1000,0);
+          }
+       else if(vFloating && bridgeV>-0.3281){
+            display.print("V UNDF:");
+            display.print(bridgeV*1000,0);
+          }else{
+        display.print("V CLD:");
+        display.print(bridgeV*1000,0);
+      }
+      display.print("m");
+    }else{
     // Voltage display mode
     if(VACPresense){
       display.print("VAC:");
@@ -1460,6 +1499,7 @@ void updateDisplay() {
 
     
     
+    }
     }
     
     if (MinMaxDisplay) {
@@ -1622,17 +1662,21 @@ void updateAlerts() {
   unsigned long now = millis();
   if (!flashlightMode) {
     // Continuity check (low resistance)
-    bool continuity = (isBetween(currentResistance, -20.0, 1.0) ||
-                      (isBetween(currentResistance, -20.0, 20.0) && ohmsHighRange))
+      continuity = (isBetween(currentResistance, -20.0, 1.0) ||
+                      (isBetween(currentResistance, -20.0, 20.0) && ohmsHighRange) || 
+                      (Vzero && !vFloating) && blinkLimit<2)
                       //|| (prevResistance > 2000000 && currentResistance < 1000000)
                       ;
 
-    bool logicVoltage = ((!altUnits && (fabs(newVoltageReading) > 3.2 || (VACPresense && VAC > 1.0))) ||(altUnits && (fabs(newVoltageReading) > 30.2 || (VACPresense && VAC > 15.0))));
+    bool logicVoltage = ((!altUnits && (fabs(newVoltageReading) > 3.2 || (VACPresense && VAC > 1.0))) ||
+                         (altUnits && (fabs(newVoltageReading) > 30.2 || (VACPresense && VAC > 15.0)))&& 
+                         blinkLimit<2);
     if (continuity) {
       // If continuity detected, beep/flash the continuity pin
       if (!rFlag) {
         // Start of beep
         analogWrite(CONTINUITY_PIN, 200);
+        blinkLimit++;
         rFlag = true;
       } else if ((now % 1000 <= 100 || isBetween(now % 1000, 300, 400)) && rFlag) {
         // Keep beeping in a pattern: on for 100ms, then off, with a double pulse
@@ -1644,6 +1688,7 @@ void updateAlerts() {
       // If significant voltage in resistance mode, warning flash
       if (!vFlag) {
         analogWrite(CONTINUITY_PIN, 200);
+        blinkLimit++;
         vFlag = true;
       } else if ((now % 1000 <= 100) && vFlag && (!VACPresense)) {
         analogWrite(CONTINUITY_PIN, 50);
@@ -1795,3 +1840,30 @@ void checkModeButton() {
     buttonPreviouslyPressed = false;
   }
 }
+
+void ClosedOrFloat()
+{
+  digitalWrite(VbridgePin, HIGH);
+
+  ads.setGain(GAIN_EIGHT);
+  //ads.setDataRate(RATE_ADS1115_64SPS);
+    //delay(1);
+  bridgeV = ads.readADC_Differential_0_1() * GAIN_FACTOR_8 / 1000.0;
+
+  currentShuntVoltage = adcReadingCurrent ;
+
+  //Serial.print("voltageRead:");
+  //Serial.println(bridgeV);
+  
+  if(bridgeV < -0.28125){
+      vFloating = true;
+    }else{
+      vFloating = false;
+    }
+  digitalWrite(VbridgePin, 0);
+  //delay(2);
+
+
+}
+
+          

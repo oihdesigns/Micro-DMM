@@ -89,7 +89,7 @@ void eepromSetup(){
         CF_M = 1.0;
         CF_N = 1.0;
         CF_O = 1.0;
-        VOLTAGE_SCALE = 46.4815; // 
+        VOLTAGE_SCALE = 68.4264; // 
         constantI = 0.020024;
         EEPROM_SleepV = 0.606;
         EEPROM_MAXV = 4.998;
