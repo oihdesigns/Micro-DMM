@@ -36,6 +36,13 @@ static const uint8_t  PIN_TRIGGER = D6;        // Digital trigger input
 const int rpcPin0 = 55;
 const int rpcPin1 = 56;
 
+// Max “half‑amplitude” of your noise (0…2047). Lower = quieter.
+#define NOISE_AMPLITUDE   2047  
+
+// Smoothing alpha for a 1‑pole IIR low‑pass (0.0 = all raw noise, 1.0 = flat DC).
+// Try values in the 0.98–0.995 range for a deep rumble.
+#define NOISE_FILTER_ALPHA  0.97f
+
 // (You can tweak this if you want a different oversampling ratio.)
 // With 64‑sample LUT @ 700 Hz fundamental, the *minimum* sample rate
 // that reproduces each LUT point exactly once is 700 * 64 = 44,800 sps.
@@ -58,6 +65,8 @@ uint16_t lut[] = {
 
 static const size_t lut_size = sizeof(lut) / sizeof(lut[0]);  // should be 64
 
+
+
 // ---------------- DDS State ----------------
 // We use a 32‑bit phase accumulator.
 // index = (phase * lut_size) >> 32
@@ -77,6 +86,7 @@ enum ToneState : uint8_t {
 
 static ToneState tone_state = STATE_BASE;
 static uint32_t alert_start_ms = 0;  // millis() when alert started
+static float noise_val = 0;  // holds last filtered noise sample
 
 // Forward decl.
 void setToneFrequency(uint32_t freq_hz);
@@ -85,9 +95,12 @@ void setup() {
   RPC.begin();
   pinMode(PIN_TRIGGER, INPUT);  // change to INPUT_PULLDOWN / _PULLUP as needed for your circuit
 
+    randomSeed(analogRead(A0)); //For noise setup
+
+
   // Start DAC: 12‑bit resolution, DAC_SAMPLE_RATE, DMA buffers (nBuffers, bufSize)
   // Buffer counts chosen to balance latency and headroom; same as user's example.
-  if (!dac1.begin(AN_RESOLUTION_12, DAC_SAMPLE_RATE, 64, 128)) {
+  if (!dac1.begin(AN_RESOLUTION_12, DAC_SAMPLE_RATE, 4, 128)) {
     while (1) {
       // hang here if DAC init fails
     }
@@ -122,6 +135,26 @@ void loop() {
   if (dac1.available()) {
     SampleBuffer buf = dac1.dequeue();
 
+    for (size_t i = 0; i < buf.size(); i++) {
+      if (tone_state == STATE_BASE) {
+        // 1) raw random in ±NOISE_AMPLITUDE
+        int32_t raw = random(-NOISE_AMPLITUDE, +NOISE_AMPLITUDE);
+
+        // 2) 1‑pole low‑pass: keeps only the slow variations
+        noise_val = NOISE_FILTER_ALPHA * noise_val
+                  + (1.0f - NOISE_FILTER_ALPHA) * raw;
+
+        // 3) center on mid‑scale (0x0800) and cast
+        buf[i] = (uint16_t)(0x0800 + noise_val);
+      }
+      else {
+        // your existing sine DDS path
+        uint32_t idx = (uint64_t)phase * lut_size >> 32;
+        buf[i] = lut[idx];
+        phase += phase_inc;
+      }
+    
+        /* THis is the steady tone output
     // Fill buffer using DDS.
     // NOTE: Because DAC_SAMPLE_RATE is constant, variable phase_inc controls freq.
     for (size_t i = 0; i < buf.size(); i++) {
@@ -130,8 +163,15 @@ void loop() {
       buf[i] = lut[idx];
       phase += phase_inc;
     }
+    */
+    
+    
+    
+    
+    }
 
-    dac1.write(buf);  // push to DMA
+    dac1.write(buf);
+
   }
 
   // loop() otherwise returns quickly -> low jitter.
