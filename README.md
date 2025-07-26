@@ -15,6 +15,7 @@ I've had Deep-Wiki index my documentation. It did a mostly okay job. You can rea
 
 ## The main features are:
 
+- The most recent designs have **open-lead detection in voltmeter mode**. I believe this makes it the first voltmeter in exisitance that can automatically, safely, and positively tell the difference between "there is low impedance between these points" vs "current does not and can not flow between these two points." Please see the white paper for details. 
 - Using keyboard emulation to directly type values into a computer for me. (Extremely useful when troubleshooting a populated PCB - you can quickly ohm out both the problem board and a good one directly into Excel to look for different impedances between given contacts.)
 - Very sensitive low-resistance readings (accurate to better than 0.01 Ohms with proper lead zeroing).
 - LED blinks when I'm reading logic level voltage or higher.
