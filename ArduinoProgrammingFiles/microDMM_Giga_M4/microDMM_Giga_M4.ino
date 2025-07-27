@@ -33,8 +33,12 @@ static const uint32_t ALERT_DURATION_MS = 250; // Duration of alert tone
 
 static const uint8_t  PIN_TRIGGER = D6;        // Digital trigger input
 
-const int rpcPin0 = 55;
-const int rpcPin1 = 56;
+volatile bool rxFlag = false;   // latest received value (always "the truth")
+volatile bool humFlag = false;   // latest received value (always "the truth")
+
+
+static const uint8_t rpcPin0 = D54;
+static const uint8_t rpcPin1 = D55;
 
 // Max “half‑amplitude” of your noise (0…2047). Lower = quieter.
 #define NOISE_AMPLITUDE   2047  
@@ -94,6 +98,8 @@ void setToneFrequency(uint32_t freq_hz);
 void setup() {
   RPC.begin();
   pinMode(PIN_TRIGGER, INPUT);  // change to INPUT_PULLDOWN / _PULLUP as needed for your circuit
+  //pinMode(rpcPin0, INPUT);  // change to INPUT_PULLDOWN / _PULLUP as needed for your circuit
+  //pinMode(rpcPin1, INPUT);  // change to INPUT_PULLDOWN / _PULLUP as needed for your circuit
 
     randomSeed(analogRead(A0)); //For noise setup
 
@@ -113,16 +119,50 @@ void setup() {
 void loop() {
   // --------------- Trigger Edge Detect ---------------
   static int lastTrig = LOW;
+  //static int lasthighTrig = LOW;
+  //static int lastlowTrig = LOW;
   int curTrig = digitalRead(PIN_TRIGGER);
+  //int lowTrig = digitalRead(rpcPin0);
+  //int highTrig = digitalRead(rpcPin1);
+
+  while (RPC.available() > 0) {
+    int b = RPC.read();               // returns 0..255
+    if (b >= 0) rxFlag = (b != 0);    // update the shared state
+  }
+
 
   // Rising edge?
   if (curTrig == HIGH && lastTrig == LOW) {
+    
+    tone_state = STATE_ALERT;
+    alert_start_ms = millis();
+    if(rxFlag){
+      setToneFrequency(TONE_ALERT_HZ_HIGH);
+    }else{
+      setToneFrequency(TONE_ALERT_HZ_LOW);
+    }
+    
+  }
+  lastTrig = curTrig;
+
+/*
+  // Rising edge?
+  if (highTrig == HIGH && lasthighTrig == LOW) {
     tone_state = STATE_ALERT;
     alert_start_ms = millis();
     setToneFrequency(TONE_ALERT_HZ_HIGH);
   }
-  lastTrig = curTrig;
+  lasthighTrig = highTrig;
 
+  // Rising edge?
+  if (lowTrig == HIGH && lastlowTrig == LOW) {
+    tone_state = STATE_ALERT;
+    alert_start_ms = millis();
+    setToneFrequency(TONE_ALERT_HZ_LOW);
+  }
+  lastlowTrig = lowTrig;
+*/  
+  
   // Time out the alert state.
   if (tone_state == STATE_ALERT) {
     if ((millis() - alert_start_ms) >= ALERT_DURATION_MS) {
@@ -141,8 +181,14 @@ void loop() {
         int32_t raw = random(-NOISE_AMPLITUDE, +NOISE_AMPLITUDE);
 
         // 2) 1‑pole low‑pass: keeps only the slow variations
-        noise_val = NOISE_FILTER_ALPHA * noise_val
-                  + (1.0f - NOISE_FILTER_ALPHA) * raw;
+        if(!humFlag){
+          noise_val = NOISE_FILTER_ALPHA * noise_val
+          + (1.0f - NOISE_FILTER_ALPHA) * raw;
+        }else{
+          noise_val = NOISE_FILTER_ALPHA-0.2 * noise_val
+          + (1.0f - NOISE_FILTER_ALPHA-0.2) * raw;
+        }
+
 
         // 3) center on mid‑scale (0x0800) and cast
         buf[i] = (uint16_t)(0x0800 + noise_val);

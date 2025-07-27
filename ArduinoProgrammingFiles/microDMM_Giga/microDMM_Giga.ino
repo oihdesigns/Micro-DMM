@@ -86,6 +86,7 @@ const int CONTINUITY_PIN = 6;   // Buzzer or LED for continuity/alerts
 const int SETRANGE_PIN = 7;   // Controls high/low resistance range
 const int kbButton = 8;   // Toggle: if LOW -> keyboard mode; if HIGH -> serial mode
 const int logButton = A1; // take log pin
+const int micPin = A7; // Exposed Mic Pin
 
 //#define IR_RECEIVE_PIN   8      // IR receiver input pin
 //const int BATT_PIN      = A2;   // Battery voltage analog input
@@ -95,8 +96,13 @@ const int logButton = A1; // take log pin
 
 const int cycleTrack = 52; // take log pin
 const int VbridgePin = 5; // Control Voltage Birdge MOSFET
-const int rpcPin0 = 55;
-const int rpcPin1 = 56;
+//const int rpcPin0 = 22;
+//const int rpcPin1 = 23;
+static bool txFlag = false;        // what we want to share
+static bool lastSent = !txFlag;    // force an initial send
+static bool humFlag = false;        // what we want to share
+static bool humlastSent = !txFlag;    // force an initial send
+
 
 
 // ADS1115 gain factors (mV per bit) for each gain setting
@@ -133,7 +139,7 @@ float VOLTAGE_SCALE_Negative = 68.51763;
 float giga_absfactor = 0.0;//12; // Giga is high by this on battery power. 
 
 //Mode Rotate Related
-#define DEBOUNCE_DELAY 50    // debounce time in milliseconds
+#define DEBOUNCE_DELAY 200    // debounce time in milliseconds
 enum Mode {
   Voltmeter,
   Default,
@@ -475,8 +481,9 @@ void setup() {
   pinMode(logButton, INPUT_PULLUP);
   pinMode(cycleTrack, OUTPUT);
   pinMode(VbridgePin, OUTPUT);
-  pinMode(rpcPin0, OUTPUT);
-  pinMode(rpcPin1, OUTPUT);
+  pinMode(micPin, INPUT);
+  //pinMode(rpcPin0, OUTPUT);
+  //pinMode(rpcPin1, OUTPUT);
 
 
 /*
@@ -543,6 +550,8 @@ void setup() {
 
     display.println("Booting Core 2");
     RPC.begin();
+    RPC.write(txFlag ? 1 : 0);
+    lastSent = txFlag;
     display.println("Core 2 Booted");
 
 
@@ -656,12 +665,12 @@ void loop() {
 
   previousMode=currentMode;
 
-  if(bluePress){
+  if(bluePress|| isBetween(analogRead(micPin),100,275)){
     MinMaxDisplay = true;
     ReZero();
   }
 
-  if(yellowPress){
+  if(yellowPress || analogRead(micPin)<60 ){
           // Short press: type current reading via USB keyboard
       if(currentMode==Type){      
       if (voltageDisplay) {
@@ -1010,7 +1019,6 @@ if(takeLog == true){
 
   AutologTriggered=0;
   
-  
   // Update display at interval
     if ((currentMillis - previousLcdMillis >= LCD_INTERVAL)&&!takeLog) {
       previousLcdMillis = currentMillis;
@@ -1027,13 +1035,25 @@ if(takeLog == true){
         screenSleep = true;
       }
     }
+    }else{
+      screenSleep = false;
+      deepSleepTrigger = false;
+    }
+  } //close display update
+
+  if(!voltageDisplay && currentResistance <1000000){ //This is the RPC logic to indicate when to change the output tone
+          humFlag = 1; //RPC Comms; Low is continuity
+      if (humFlag != humlastSent) {
+        // RPC is a Stream; write a single byte (0 or 1)
+        RPC.write(humFlag ? 1 : 0);
+        humlastSent = humFlag;
+        }
   }else{
-    screenSleep = false;
-    deepSleepTrigger = false;
+    humFlag = 0;
   }
-}
-  
-}
+
+
+}//close loop
 
 
 
@@ -1228,7 +1248,7 @@ void handleSerialCommands(char command) {
 }
 
 void handleButtonInput() {
-  bool isPressed = (digitalRead(TYPE_PIN) == LOW ) ;
+  bool isPressed = (digitalRead(TYPE_PIN) == LOW) ;
   if (isPressed && !buttonPressed) {
     // Button was just pressed
     buttonPressed = true;
@@ -1696,6 +1716,10 @@ void updateDisplay() {
   // Prepare values for display
   //display.fillScreen(BLACK);
   
+  
+  //Serial.print("Mic Pin Int:");
+  //Serial.println(analogRead(micPin));
+  
   blinkLimit = 0; //Clear Blink Limit on Screen Update
   display.fillRect(0, 0, 256, 72, BLACK);
   display.setTextColor(WHITE,BLACK);
@@ -2041,45 +2065,59 @@ void updateAlerts() {
                          blinkLimit<2);
     if (continuity) {
       // If continuity detected, beep/flash the continuity pin
+      txFlag = 0; //RPC Comms; Low is continuity
+      if (txFlag != lastSent) {
+        // RPC is a Stream; write a single byte (0 or 1)
+        RPC.write(txFlag ? 1 : 0);
+        lastSent = txFlag;
+        }
+
       if (!rFlag) {
         // Start of beep
         analogWrite(CONTINUITY_PIN, 200);
-        digitalWrite(rpcPin0, HIGH);
+        //digitalWrite(rpcPin0, HIGH);
         rgb.on(255, 255, 255); //turn on blue pixel
         blinkLimit++;
         rFlag = true;
       } else if ((now % 1000 <= 100 || isBetween(now % 1000, 300, 400)) && rFlag) {
         // Keep beeping in a pattern: on for 100ms, then off, with a double pulse
         analogWrite(CONTINUITY_PIN, 50);
-        digitalWrite(rpcPin0, HIGH);
+        //digitalWrite(rpcPin0, HIGH);
         rgb.on(0, 0, 255); //turn on blue pixel
       } else {
         analogWrite(CONTINUITY_PIN, 0);
-        digitalWrite(rpcPin0, LOW);
+        //digitalWrite(rpcPin0, LOW);
         rgb.off(); //turn off all pixels
       }
+    
     } else if (logicVoltage ) {
+      txFlag = 1; //RPC Comms; Low is continuity
+      if (txFlag != lastSent) {
+        // RPC is a Stream; write a single byte (0 or 1)
+        RPC.write(txFlag ? 1 : 0);
+        lastSent = txFlag;
+        }
       // If significant voltage in resistance mode, warning flash
       if (!vFlag) {
         analogWrite(CONTINUITY_PIN, 200);
-        digitalWrite(rpcPin1, HIGH);
+        //digitalWrite(rpcPin1, HIGH);
         rgb.on(255, 255, 255); //
         blinkLimit++;
         vFlag = true;
       } else if ((now % 1000 <= 100) && vFlag && (!VACPresense)) {
         analogWrite(CONTINUITY_PIN, 50);
-        digitalWrite(rpcPin1, HIGH);
+        //digitalWrite(rpcPin1, HIGH);
         rgb.on(255, 0, 0); //      
       } else {
         analogWrite(CONTINUITY_PIN, 0);
         rgb.off(); //turn off all pixels
-        digitalWrite(rpcPin1, LOW);
+        //digitalWrite(rpcPin1, LOW);
       }
     } else {
       // No alert condition
       analogWrite(CONTINUITY_PIN, 0);
-      digitalWrite(rpcPin0, LOW);
-      digitalWrite(rpcPin1, LOW);
+      //digitalWrite(rpcPin0, LOW);
+      //digitalWrite(rpcPin1, LOW);
       rgb.off(); //turn off all pixels
       vFlag = false;
       rFlag = false;
@@ -2208,7 +2246,7 @@ void checkModeButton() {
   unsigned long currentTime = millis();
 
   // Detect new press only when button transitions from HIGH to LOW
-  if ((buttonState == LOW || redPress) && !buttonPreviouslyPressed && (currentTime - lastDebounceTime+100 > DEBOUNCE_DELAY)) {
+  if ((buttonState == LOW || redPress || isBetween(analogRead(micPin),300,450)) && !buttonPreviouslyPressed && (currentTime - lastDebounceTime+100 > DEBOUNCE_DELAY)) {
     lastDebounceTime = currentTime;
     buttonPreviouslyPressed = true;
 
