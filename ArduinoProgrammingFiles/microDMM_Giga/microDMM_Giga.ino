@@ -96,12 +96,11 @@ const int micPin = A7; // Exposed Mic Pin
 
 const int cycleTrack = 52; // take log pin
 const int VbridgePin = 5; // Control Voltage Birdge MOSFET
-//const int rpcPin0 = 22;
-//const int rpcPin1 = 23;
-static bool txFlag = false;        // what we want to share
-static bool lastSent = !txFlag;    // force an initial send
+
+//RPC Related
+static bool txFlag = false;        // what we want to share 
+static uint8_t lastSent = 0xFF;     // force initial send
 static bool humFlag = false;        // what we want to share
-static bool humlastSent = !txFlag;    // force an initial send
 
 
 
@@ -139,7 +138,7 @@ float VOLTAGE_SCALE_Negative = 68.51763;
 float giga_absfactor = 0.0;//12; // Giga is high by this on battery power. 
 
 //Mode Rotate Related
-#define DEBOUNCE_DELAY 200    // debounce time in milliseconds
+#define DEBOUNCE_DELAY 300    // debounce time in milliseconds
 enum Mode {
   Voltmeter,
   Default,
@@ -204,7 +203,7 @@ float meanY = 0.0;
 
 float rawResistance = 0.0;      // calculated resistance before calibration (Ω)
 float calibratedResistance = 0.0; // resistance after applying calibration factors (Ω)
-float currentResistance = 12345.0;  // final resistance value used for display (before zero offset)
+float currentResistance = 1000001.0;  // final resistance value used for display (before zero offset)
 float prevResistance = 0.0;
 float zeroOffsetRes = 0.0;      // user-set zero offset for resistance (to zero out test leads)
 float displayResistance = 0.0;  // resistance value after subtracting zero offset (displayed)
@@ -482,8 +481,7 @@ void setup() {
   pinMode(cycleTrack, OUTPUT);
   pinMode(VbridgePin, OUTPUT);
   pinMode(micPin, INPUT);
-  //pinMode(rpcPin0, OUTPUT);
-  //pinMode(rpcPin1, OUTPUT);
+
 
 
 /*
@@ -550,8 +548,9 @@ void setup() {
 
     display.println("Booting Core 2");
     RPC.begin();
-    RPC.write(txFlag ? 1 : 0);
-    lastSent = txFlag;
+    uint8_t pack = (txFlag?1:0) | (humFlag?2:0);
+    RPC.write(pack);
+    lastSent = pack;
     display.println("Core 2 Booted");
 
 
@@ -983,6 +982,21 @@ if(takeLog == true){
   // Update buzzer/LED alerts or flashlight LED brightness
   updateAlerts();
 
+  if(!voltageDisplay && isBetween(currentResistance,20,1000000)){ //This is the RPC logic to indicate when to change the output tone
+      humFlag = 1; //RPC Comms; Low is continuity
+      }else{
+      humFlag = 0;
+  }
+
+  //Update RPC Comms
+  uint8_t pack = (txFlag?1:0) | (humFlag?2:0);
+  if (pack != lastSent) {
+    RPC.write(pack);
+    lastSent = pack;
+    Serial.print("last sent RPC:");
+    Serial.println(lastSent);
+  }
+
   if(!AutologTriggered && writePrimed){    
     autologArraysToCSV();
 
@@ -1041,16 +1055,7 @@ if(takeLog == true){
     }
   } //close display update
 
-  if(!voltageDisplay && currentResistance <1000000){ //This is the RPC logic to indicate when to change the output tone
-          humFlag = 1; //RPC Comms; Low is continuity
-      if (humFlag != humlastSent) {
-        // RPC is a Stream; write a single byte (0 or 1)
-        RPC.write(humFlag ? 1 : 0);
-        humlastSent = humFlag;
-        }
-  }else{
-    humFlag = 0;
-  }
+
 
 
 }//close loop
@@ -2066,58 +2071,39 @@ void updateAlerts() {
     if (continuity) {
       // If continuity detected, beep/flash the continuity pin
       txFlag = 0; //RPC Comms; Low is continuity
-      if (txFlag != lastSent) {
-        // RPC is a Stream; write a single byte (0 or 1)
-        RPC.write(txFlag ? 1 : 0);
-        lastSent = txFlag;
-        }
-
       if (!rFlag) {
         // Start of beep
         analogWrite(CONTINUITY_PIN, 200);
-        //digitalWrite(rpcPin0, HIGH);
         rgb.on(255, 255, 255); //turn on blue pixel
         blinkLimit++;
         rFlag = true;
       } else if ((now % 1000 <= 100 || isBetween(now % 1000, 300, 400)) && rFlag) {
         // Keep beeping in a pattern: on for 100ms, then off, with a double pulse
         analogWrite(CONTINUITY_PIN, 50);
-        //digitalWrite(rpcPin0, HIGH);
         rgb.on(0, 0, 255); //turn on blue pixel
       } else {
         analogWrite(CONTINUITY_PIN, 0);
-        //digitalWrite(rpcPin0, LOW);
         rgb.off(); //turn off all pixels
       }
     
     } else if (logicVoltage ) {
       txFlag = 1; //RPC Comms; Low is continuity
-      if (txFlag != lastSent) {
-        // RPC is a Stream; write a single byte (0 or 1)
-        RPC.write(txFlag ? 1 : 0);
-        lastSent = txFlag;
-        }
       // If significant voltage in resistance mode, warning flash
       if (!vFlag) {
         analogWrite(CONTINUITY_PIN, 200);
-        //digitalWrite(rpcPin1, HIGH);
         rgb.on(255, 255, 255); //
         blinkLimit++;
         vFlag = true;
       } else if ((now % 1000 <= 100) && vFlag && (!VACPresense)) {
         analogWrite(CONTINUITY_PIN, 50);
-        //digitalWrite(rpcPin1, HIGH);
         rgb.on(255, 0, 0); //      
       } else {
         analogWrite(CONTINUITY_PIN, 0);
         rgb.off(); //turn off all pixels
-        //digitalWrite(rpcPin1, LOW);
       }
     } else {
       // No alert condition
       analogWrite(CONTINUITY_PIN, 0);
-      //digitalWrite(rpcPin0, LOW);
-      //digitalWrite(rpcPin1, LOW);
       rgb.off(); //turn off all pixels
       vFlag = false;
       rFlag = false;

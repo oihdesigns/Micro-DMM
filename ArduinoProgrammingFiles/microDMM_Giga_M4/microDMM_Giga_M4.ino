@@ -37,8 +37,6 @@ volatile bool rxFlag = false;   // latest received value (always "the truth")
 volatile bool humFlag = false;   // latest received value (always "the truth")
 
 
-static const uint8_t rpcPin0 = D54;
-static const uint8_t rpcPin1 = D55;
 
 // Max “half‑amplitude” of your noise (0…2047). Lower = quieter.
 #define NOISE_AMPLITUDE   2047  
@@ -56,7 +54,7 @@ static const uint8_t rpcPin1 = D55;
 static const uint32_t DAC_SAMPLE_RATE = 700UL * 64UL;   // 44,800 samples/sec
 
 // AdvancedDAC(args): pin
-AdvancedDAC dac1(A13);  // We'll actually output on A13; user sketch used dac1.
+AdvancedDAC dac1(A13);  // We'll  output on A13
 
 // 12‑bit, one full cycle, 64‑point sine LUT centered at midscale (0x0800).
 // Copied verbatim from user's sketch.
@@ -98,11 +96,8 @@ void setToneFrequency(uint32_t freq_hz);
 void setup() {
   RPC.begin();
   pinMode(PIN_TRIGGER, INPUT);  // change to INPUT_PULLDOWN / _PULLUP as needed for your circuit
-  //pinMode(rpcPin0, INPUT);  // change to INPUT_PULLDOWN / _PULLUP as needed for your circuit
-  //pinMode(rpcPin1, INPUT);  // change to INPUT_PULLDOWN / _PULLUP as needed for your circuit
 
     randomSeed(analogRead(A0)); //For noise setup
-
 
   // Start DAC: 12‑bit resolution, DAC_SAMPLE_RATE, DMA buffers (nBuffers, bufSize)
   // Buffer counts chosen to balance latency and headroom; same as user's example.
@@ -119,17 +114,15 @@ void setup() {
 void loop() {
   // --------------- Trigger Edge Detect ---------------
   static int lastTrig = LOW;
-  //static int lasthighTrig = LOW;
-  //static int lastlowTrig = LOW;
+  static int lasthumTrig = LOW;
   int curTrig = digitalRead(PIN_TRIGGER);
-  //int lowTrig = digitalRead(rpcPin0);
-  //int highTrig = digitalRead(rpcPin1);
 
-  while (RPC.available() > 0) {
-    int b = RPC.read();               // returns 0..255
-    if (b >= 0) rxFlag = (b != 0);    // update the shared state
+
+  while (RPC.available()) {
+    uint8_t b = RPC.read();
+    rxFlag = (b & 0x01) != 0;
+    humFlag = (b & 0x02) != 0;
   }
-
 
   // Rising edge?
   if (curTrig == HIGH && lastTrig == LOW) {
@@ -137,32 +130,18 @@ void loop() {
     tone_state = STATE_ALERT;
     alert_start_ms = millis();
     if(rxFlag){
+        setToneFrequency(TONE_ALERT_HZ_HIGH);
+      }else{
+        setToneFrequency(TONE_ALERT_HZ_LOW);
+      }   
+    }else if(humFlag  && tone_state != STATE_ALERT){
+      alert_start_ms = millis();
+      tone_state = STATE_ALERT;
       setToneFrequency(TONE_ALERT_HZ_HIGH);
-    }else{
-      setToneFrequency(TONE_ALERT_HZ_LOW);
     }
     
-  }
-  lastTrig = curTrig;
+    lastTrig = curTrig;
 
-/*
-  // Rising edge?
-  if (highTrig == HIGH && lasthighTrig == LOW) {
-    tone_state = STATE_ALERT;
-    alert_start_ms = millis();
-    setToneFrequency(TONE_ALERT_HZ_HIGH);
-  }
-  lasthighTrig = highTrig;
-
-  // Rising edge?
-  if (lowTrig == HIGH && lastlowTrig == LOW) {
-    tone_state = STATE_ALERT;
-    alert_start_ms = millis();
-    setToneFrequency(TONE_ALERT_HZ_LOW);
-  }
-  lastlowTrig = lowTrig;
-*/  
-  
   // Time out the alert state.
   if (tone_state == STATE_ALERT) {
     if ((millis() - alert_start_ms) >= ALERT_DURATION_MS) {
@@ -181,19 +160,12 @@ void loop() {
         int32_t raw = random(-NOISE_AMPLITUDE, +NOISE_AMPLITUDE);
 
         // 2) 1‑pole low‑pass: keeps only the slow variations
-        if(!humFlag){
           noise_val = NOISE_FILTER_ALPHA * noise_val
           + (1.0f - NOISE_FILTER_ALPHA) * raw;
-        }else{
-          noise_val = NOISE_FILTER_ALPHA-0.2 * noise_val
-          + (1.0f - NOISE_FILTER_ALPHA-0.2) * raw;
-        }
-
-
+        
         // 3) center on mid‑scale (0x0800) and cast
         buf[i] = (uint16_t)(0x0800 + noise_val);
-      }
-      else {
+      }else {
         // your existing sine DDS path
         uint32_t idx = (uint64_t)phase * lut_size >> 32;
         buf[i] = lut[idx];
@@ -210,10 +182,7 @@ void loop() {
       phase += phase_inc;
     }
     */
-    
-    
-    
-    
+
     }
 
     dac1.write(buf);
