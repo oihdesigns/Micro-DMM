@@ -133,8 +133,8 @@ float ZENER_MAX_V          = 4.979f;       // V reference in high-range mode
 float EEPROM_MAXV = 4.979f;
 float EEPROM_SleepV = 0.6117;
 
-float VOLTAGE_SCALE = 68.47375; // Calibration scale factor for voltage input
-float VOLTAGE_SCALE_Negative = 68.51763;
+float VOLTAGE_SCALE = 68.36437; // Calibration scale factor for voltage input
+float VOLTAGE_SCALE_Negative = 68.3536;
 float giga_absfactor = 0.0;//12; // Giga is high by this on battery power. 
 
 //Mode Rotate Related
@@ -993,8 +993,8 @@ if(takeLog == true){
   if (pack != lastSent) {
     RPC.write(pack);
     lastSent = pack;
-    Serial.print("last sent RPC:");
-    Serial.println(lastSent);
+    //Serial.print("last sent RPC:");
+    //Serial.println(lastSent);
   }
 
   if(!AutologTriggered && writePrimed){    
