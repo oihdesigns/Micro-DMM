@@ -7714,12 +7714,6 @@
 		(uuid "9d5f6319-b0b1-4028-a4c5-4cfa6990397b")
 	)
 	(junction
-		(at 133.35 189.23)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "a568c4da-aac0-46f7-bdc1-9dd146f88efa")
-	)
-	(junction
 		(at 167.64 97.79)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -7887,16 +7881,6 @@
 	)
 	(wire
 		(pts
-			(xy 109.22 195.58) (xy 125.73 195.58)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "0cd06e50-bc94-4c3b-8b09-04d439ea18eb")
-	)
-	(wire
-		(pts
 			(xy 46.99 96.52) (xy 50.8 96.52)
 		)
 		(stroke
@@ -7944,16 +7928,6 @@
 			(type default)
 		)
 		(uuid "157ffb49-90bb-4c0c-8924-3549ace9ef7b")
-	)
-	(wire
-		(pts
-			(xy 133.35 199.39) (xy 133.35 189.23)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "1593ef27-a05f-4d59-bce0-4a766da8188c")
 	)
 	(wire
 		(pts
@@ -8187,6 +8161,16 @@
 	)
 	(wire
 		(pts
+			(xy 130.81 176.53) (xy 130.81 191.77)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "345eb3cd-7c5d-4d43-8e74-8a35a69aa8c0")
+	)
+	(wire
+		(pts
 			(xy 120.65 19.05) (xy 130.81 19.05)
 		)
 		(stroke
@@ -8214,6 +8198,16 @@
 			(type default)
 		)
 		(uuid "35f6dbe9-f80a-48e4-8d1d-8c654de0bafe")
+	)
+	(wire
+		(pts
+			(xy 135.89 176.53) (xy 135.89 199.39)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "374d87fb-11e6-4ed0-a4da-3cb3a807d421")
 	)
 	(wire
 		(pts
@@ -8267,6 +8261,16 @@
 	)
 	(wire
 		(pts
+			(xy 135.89 199.39) (xy 132.08 199.39)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3d79eefa-62cf-41d0-a62c-63947467a230")
+	)
+	(wire
+		(pts
 			(xy 130.81 107.95) (xy 130.81 105.41)
 		)
 		(stroke
@@ -8304,16 +8308,6 @@
 			(type default)
 		)
 		(uuid "41125602-eeed-4b59-bc4c-7a9e158970c9")
-	)
-	(wire
-		(pts
-			(xy 123.19 199.39) (xy 123.19 176.53)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "427ed6b6-88da-4b71-9715-939df3de0823")
 	)
 	(wire
 		(pts
@@ -8364,16 +8358,6 @@
 			(type default)
 		)
 		(uuid "4c2eb2dd-3ebe-4089-86c1-453efebae6c1")
-	)
-	(wire
-		(pts
-			(xy 133.35 189.23) (xy 133.35 176.53)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "4cf571d4-e654-47b1-9739-4d85f775cd93")
 	)
 	(wire
 		(pts
@@ -8687,16 +8671,6 @@
 	)
 	(wire
 		(pts
-			(xy 109.22 199.39) (xy 123.19 199.39)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "744de915-4d68-439a-be18-ca72c6a2cd67")
-	)
-	(wire
-		(pts
 			(xy 250.19 69.85) (xy 250.19 73.66)
 		)
 		(stroke
@@ -8714,16 +8688,6 @@
 			(type default)
 		)
 		(uuid "76534611-17fe-4c81-9e23-bdc039ba6ce3")
-	)
-	(wire
-		(pts
-			(xy 132.08 199.39) (xy 133.35 199.39)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "765db653-d183-43da-8d28-0100fca59685")
 	)
 	(wire
 		(pts
@@ -8867,6 +8831,16 @@
 	)
 	(wire
 		(pts
+			(xy 125.73 176.53) (xy 125.73 195.58)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "86084456-7c13-4254-ac63-64849d78eeb0")
+	)
+	(wire
+		(pts
 			(xy 48.26 38.1) (xy 48.26 41.91)
 		)
 		(stroke
@@ -8977,6 +8951,16 @@
 	)
 	(wire
 		(pts
+			(xy 109.22 195.58) (xy 125.73 195.58)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "8e8933ad-30b2-4605-9c16-e48fa34a559a")
+	)
+	(wire
+		(pts
 			(xy 130.81 10.16) (xy 130.81 19.05)
 		)
 		(stroke
@@ -8994,16 +8978,6 @@
 			(type default)
 		)
 		(uuid "90c61fbe-b2d8-446c-a734-b04206f8032e")
-	)
-	(wire
-		(pts
-			(xy 130.81 191.77) (xy 130.81 176.53)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "918a41de-85b0-4ee5-ae67-f4ad57197bf4")
 	)
 	(wire
 		(pts
@@ -9267,6 +9241,16 @@
 	)
 	(wire
 		(pts
+			(xy 133.35 176.53) (xy 135.89 176.53)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ab168c76-b6ee-46c5-90dd-4dc1be782618")
+	)
+	(wire
+		(pts
 			(xy 134.62 125.73) (xy 147.32 125.73)
 		)
 		(stroke
@@ -9527,6 +9511,16 @@
 	)
 	(wire
 		(pts
+			(xy 109.22 189.23) (xy 109.22 195.58)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "cc5a95bd-20a6-40ca-9320-8c32f1ede677")
+	)
+	(wire
+		(pts
 			(xy 147.32 20.32) (xy 147.32 34.29)
 		)
 		(stroke
@@ -9567,6 +9561,16 @@
 	)
 	(wire
 		(pts
+			(xy 123.19 198.12) (xy 109.22 198.12)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "cee1d14a-bef0-4802-ba8a-ec53b5a689ad")
+	)
+	(wire
+		(pts
 			(xy 167.64 97.79) (xy 173.99 97.79)
 		)
 		(stroke
@@ -9597,6 +9601,16 @@
 	)
 	(wire
 		(pts
+			(xy 123.19 176.53) (xy 123.19 198.12)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d3148ee4-2783-4c3f-9175-d4c6a283d0ec")
+	)
+	(wire
+		(pts
 			(xy 146.05 68.58) (xy 146.05 72.39)
 		)
 		(stroke
@@ -9604,6 +9618,16 @@
 			(type default)
 		)
 		(uuid "d3c180fa-b2eb-405f-81f1-207425269b74")
+	)
+	(wire
+		(pts
+			(xy 130.81 191.77) (xy 132.08 191.77)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d413fcf2-ed4f-4de9-8bfb-d720c32a7bd5")
 	)
 	(wire
 		(pts
@@ -9707,16 +9731,6 @@
 	)
 	(wire
 		(pts
-			(xy 125.73 195.58) (xy 125.73 176.53)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "dfada807-93f1-45c3-8bf6-ec555125f081")
-	)
-	(wire
-		(pts
 			(xy 78.74 158.75) (xy 83.82 158.75)
 		)
 		(stroke
@@ -9744,16 +9758,6 @@
 			(type default)
 		)
 		(uuid "e2f68138-b8c1-43c1-99c6-54ad770f945e")
-	)
-	(wire
-		(pts
-			(xy 109.22 189.23) (xy 109.22 195.58)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "e73d7923-2a31-413a-86ad-92938c0ad4af")
 	)
 	(wire
 		(pts
@@ -9814,16 +9818,6 @@
 			(type default)
 		)
 		(uuid "ecd45237-ceb9-48c2-9841-732e7cd63cd5")
-	)
-	(wire
-		(pts
-			(xy 132.08 191.77) (xy 130.81 191.77)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "ef4de7aa-8c70-4cc2-a9b0-db306be41357")
 	)
 	(wire
 		(pts
@@ -9947,7 +9941,7 @@
 	)
 	(wire
 		(pts
-			(xy 109.22 199.39) (xy 109.22 200.66)
+			(xy 109.22 198.12) (xy 109.22 200.66)
 		)
 		(stroke
 			(width 0)
@@ -11876,6 +11870,111 @@
 			(project "DMM XIAO V2"
 				(path "/35d66a59-3ca7-406e-bad2-1c2903d980aa"
 					(reference "#PWR076")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R_US")
+		(at 172.72 234.95 180)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp yes)
+		(uuid "18ac0387-7ebe-4745-b985-22681e323e12")
+		(property "Reference" "R19"
+			(at 170.688 236.22 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "10K"
+			(at 170.942 233.934 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder"
+			(at 171.704 234.696 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 172.72 234.95 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Resistor, US symbol"
+			(at 172.72 234.95 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "ValueTemp" "5K"
+			(at 172.72 234.95 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Function" "Current Limit"
+			(at 172.72 234.95 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Sim.Device" ""
+			(at 172.72 234.95 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Sim.Pins" ""
+			(at 172.72 234.95 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "3aaa8915-342e-45fd-a1ff-79101c15e610")
+		)
+		(pin "2"
+			(uuid "2ad3c776-d445-45e6-b489-486ac6870a06")
+		)
+		(instances
+			(project "DMM_KiCAD_V3_next KiCAD9"
+				(path "/35d66a59-3ca7-406e-bad2-1c2903d980aa"
+					(reference "R19")
 					(unit 1)
 				)
 			)
@@ -15706,6 +15805,111 @@
 		)
 	)
 	(symbol
+		(lib_id "Device:R_US")
+		(at 172.72 223.52 180)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp yes)
+		(uuid "71cc6576-f95b-43ed-a842-eb90e47de872")
+		(property "Reference" "R20"
+			(at 170.688 224.79 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "10K"
+			(at 170.942 222.504 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder"
+			(at 171.704 223.266 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 172.72 223.52 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Resistor, US symbol"
+			(at 172.72 223.52 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "ValueTemp" "5K"
+			(at 172.72 223.52 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Function" "Current Limit"
+			(at 172.72 223.52 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Sim.Device" ""
+			(at 172.72 223.52 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Sim.Pins" ""
+			(at 172.72 223.52 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "fe077929-56a6-47d3-b836-d07dd7a33378")
+		)
+		(pin "2"
+			(uuid "7c5a9b06-c788-447d-95d1-41081139074c")
+		)
+		(instances
+			(project "DMM_KiCAD_V3_next KiCAD9"
+				(path "/35d66a59-3ca7-406e-bad2-1c2903d980aa"
+					(reference "R20")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Connector_Generic:Conn_01x03")
 		(at 212.09 48.26 0)
 		(unit 1)
@@ -18071,6 +18275,111 @@
 			(project ""
 				(path "/35d66a59-3ca7-406e-bad2-1c2903d980aa"
 					(reference "J16")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R_US")
+		(at 149.86 233.68 180)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp yes)
+		(uuid "a92da533-d12d-42c6-8d98-8596c3e6764e")
+		(property "Reference" "R11"
+			(at 147.828 234.95 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "10K"
+			(at 148.082 232.664 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder"
+			(at 148.844 233.426 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 149.86 233.68 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Resistor, US symbol"
+			(at 149.86 233.68 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "ValueTemp" "5K"
+			(at 149.86 233.68 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Function" "Current Limit"
+			(at 149.86 233.68 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Sim.Device" ""
+			(at 149.86 233.68 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Sim.Pins" ""
+			(at 149.86 233.68 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "0b95b25b-879c-4e52-b364-cf47d910df3b")
+		)
+		(pin "2"
+			(uuid "e2463746-142c-4865-8f10-a2834b09ab30")
+		)
+		(instances
+			(project "DMM_KiCAD_V3_next KiCAD9"
+				(path "/35d66a59-3ca7-406e-bad2-1c2903d980aa"
+					(reference "R11")
 					(unit 1)
 				)
 			)
@@ -20875,6 +21184,111 @@
 			(project "DMM XIAO V2"
 				(path "/35d66a59-3ca7-406e-bad2-1c2903d980aa"
 					(reference "#PWR062")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R_US")
+		(at 149.86 223.52 180)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp yes)
+		(uuid "e6373955-118e-48d7-a088-df6984530b6f")
+		(property "Reference" "R10"
+			(at 147.828 224.79 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "10K"
+			(at 148.082 222.504 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder"
+			(at 148.844 223.266 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 149.86 223.52 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Resistor, US symbol"
+			(at 149.86 223.52 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "ValueTemp" "5K"
+			(at 149.86 223.52 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Function" "Current Limit"
+			(at 149.86 223.52 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Sim.Device" ""
+			(at 149.86 223.52 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Sim.Pins" ""
+			(at 149.86 223.52 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "c3d601c2-ceb5-4d76-961c-756829bd999d")
+		)
+		(pin "2"
+			(uuid "b765ef31-23b1-42a1-ba22-b05f2d91e2cf")
+		)
+		(instances
+			(project "DMM_KiCAD_V3_next KiCAD9"
+				(path "/35d66a59-3ca7-406e-bad2-1c2903d980aa"
+					(reference "R10")
 					(unit 1)
 				)
 			)
