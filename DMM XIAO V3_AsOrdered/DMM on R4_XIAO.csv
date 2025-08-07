@@ -1,0 +1,52 @@
+Reference,Value,Datasheet,Footprint,Qty,DNP,Description,Function
+C3,2.2uF,~,Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder,1,,Unpolarized capacitor,R ADS Input Filter
+"C4,C17",0.1uF,~,Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder,2,,Unpolarized capacitor,"ADS Vdd Input Filter,Voltage Ref Smoothing"
+"C9,C10,C15",4.7uF,~,Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder,3,,Unpolarized capacitor,"Boost Circuit Input,Charge Pump"
+"C16,C19",22uF,~,Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder,2,,Unpolarized capacitor,Boost Output Smoothing
+C18,1uF,~,Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder,1,,Unpolarized capacitor,R Circuit Smoothing
+D1,LED,~,LED_SMD:LED_Luminus_MP-3030-1100_3.0x3.0mm,1,,Light emitting diode,LED SMD Option
+"D4,D5",D_Schottky,~,Diode_SMD:D_SOD-123,2,,Schottky diode,Overvoltage Proection
+F1,Fuse,~,Fuse:Fuse_1206_3216Metric_Pad1.42x1.75mm_HandSolder,1,,Fuse,Dead Short Protection
+"J1,J3",Conn_01x07_Pin,~,Connector_PinSocket_2.54mm:PinSocket_1x07_P2.54mm_Vertical,2,DNP,"Generic connector, single row, 01x07, script generated",
+J2,MicoSD,~,Connector_PinSocket_2.54mm:PinSocket_1x06_P2.54mm_Vertical,1,DNP,,
+J5,POWER2,~,Library:PinHeader_1x03_P2.54mm_Vertical_NoBox,1,DNP,,
+J6,POWER1,~,Library:PinHeader_1x08_P2.54mm_Vertical_NoBox,1,DNP,,
+"J7,J12",Conn_01x02_Pin,~,Connector_PinSocket_2.54mm:PinSocket_1x02_P2.54mm_Vertical,2,,"Generic connector, single row, 01x02, script generated",
+J8,DIGITAL2,~,Library:PinHeader_1x10_P2.54mm_Vertical_NoBox,1,DNP,,
+J9,Out to Screen,~,Connector_PinSocket_2.54mm:PinSocket_1x04_P2.54mm_Vertical,1,,"Generic connector, single row, 01x04, script generated",
+J10,ANALOG,~,Library:PinHeader_1x06_P2.54mm_Vertical_NoBox,1,DNP,,
+J11,I_Input,~,Connector_PinSocket_2.54mm:PinSocket_1x03_P2.54mm_Vertical,1,,"Generic connector, single row, 01x03, script generated (kicad-library-utils/schlib/autogen/connector/)",
+J13,DIGITAL1,~,Library:PinHeader_1x08_P2.54mm_Vertical_NoBox,1,DNP,,
+"J14,J15",Barrel_Jack,~,Connector_BarrelJack:BarrelJack_Horizontal,2,,DC Barrel Jack,
+"J16,J17",Conn_01x01_Socket,~,Connector_PinSocket_2.54mm:PinSocket_1x01_P2.54mm_Vertical,2,DNP,"Generic connector, single row, 01x01, script generated",
+JP6,Jumper_2_Bridged,~,Jumper:SolderJumper-2_P1.3mm_Bridged_Pad1.0x1.5mm,1,,"Jumper, 2-pole, closed/bridged",
+L1,2.2uH,~,Inductor_SMD:L_Murata_DFE201610P,1,,Inductor,
+Q1,MMBT3904,https://www.onsemi.com/pdf/datasheet/pzt3904-d.pdf,Package_TO_SOT_SMD:SOT-23,1,,"0.2A Ic, 40V Vce, Small Signal NPN Transistor, SOT-23",LED Control
+"Q2,Q8",SI2302 MOSFET,http://www.diodes.com/assets/Datasheets/DMG2302U.pdf,Package_TO_SOT_SMD:SOT-23,2,,"4.2A Id, 20V Vds, N-Channel MOSFET, SOT-23",R Circuit Range Switch
+"Q6,Q7",BSS138,https://www.onsemi.com/pub/Collateral/BSS138-D.PDF,Package_TO_SOT_SMD:SOT-23,2,,"50V Vds, 0.22A Id, N-Channel MOSFET, SOT-23",
+R1,500,~,Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,1,,"Resistor, US symbol",I Limit LED
+R2,1K,~,Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,1,,"Resistor, US symbol",I limit for Q1
+R3,22K,~,Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,1,DNP,"Resistor, US symbol",Uno VIN2
+R4,100K,~,Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,1,DNP,"Resistor, US symbol",
+R5,62,~,Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,1,,"Resistor, US symbol",R Circuit I Set
+R6,330,~,Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,1,,"Resistor, US symbol",330 R Circuit I Bleeder
+"R7,R21",0,~,Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,2,,"Resistor, US symbol",BJTCurrentLimit1
+"R9,R14",22.0K,~,Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,2,,"Resistor, US symbol","R Circuit Divider,V Bridge"
+"R10,R11,R19,R20",10K,~,Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,4,DNP,"Resistor, US symbol",Current Limit
+"R17,R18",499.0K,~,Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,2,,"Resistor, US symbol","V REF Divider,V Signal Divider"
+"R22,R23",0,~,Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,2,DNP,"Resistor, US symbol",BJTCurrentLimit1
+R24,1.0M,~,Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,1,,"Resistor, US symbol",V REF Divider
+R27,4.7K,~,Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,1,,"Resistor, US symbol",Current Limit
+RN1,1K x4,http://www.vishay.com/docs/31509/csc.pdf,Resistor_SMD:R_Array_Convex_4x1206,1,,"4 resistor network, parallel topology, SIP package",
+RN2,10k x4,http://www.vishay.com/docs/31509/csc.pdf,Resistor_SMD:R_Array_Convex_4x1206,1,,"4 resistor network, parallel topology, SIP package",
+"SW1,SW2,SW4",SW_Push,~,Button_Switch_SMD:SW_SPST_CK_RS282G05A3,3,,"Push button switch, generic, two pins",
+SW3,SW_SPDT,~,Button_Switch_THT:SW_Slide_SPDT_Angled_CK_OS102011MA1Q,1,,"Switch, single pole double throw",On / Off
+U1,LM317_TO-220,http://www.ti.com/lit/ds/symlink/lm317.pdf,Package_TO_SOT_SMD:SOT-223-3_TabPin2,1,,"1.5A 35V Adjustable Linear Regulator, TO-220",
+"U2,U4",IX4426N,,Package_SO:SOIC-8_3.9x4.9mm_P1.27mm,2,,,
+U3,ADS1115IDGS,http://www.ti.com/lit/ds/symlink/ads1113.pdf,Package_SO:TSSOP-10_3x3mm_P0.5mm,1,,"Ultra-Small, Low-Power, I2C-Compatible, 860-SPS, 16-Bit ADCs With Internal Reference, Oscillator, and Programmable Comparator, VSSOP-10",
+"U5,U8",Opamp_Dual,~,Package_SO:SOIC-8_3.9x4.9mm_P1.27mm,2,DNP,Dual operational amplifier,
+U6,XIAO Board,,,1,DNP,,
+U7,MAX1683,https://www.analog.com/media/en/technical-documentation/data-sheets/MAX1682-MAX1683.pdf,Package_TO_SOT_SMD:SOT-23-5_HandSoldering,1,,IC REG CHARGE PUMP 2VIN SOT23-5,Voltage Doubler
+U9,TPS613222ADBV,http://www.ti.com/lit/ds/symlink/tps61322.pdf,Package_TO_SOT_SMD:SOT-23-5,1,,"1.8A Step-Up Converter, 5V Output Voltage, 0.9-5.5V Input Voltage, SOT-23-5",
+U10,LM4040DBZ-2.5,http://www.ti.com/lit/ds/symlink/lm4040-n.pdf,Package_TO_SOT_SMD:SOT-23,1,,"2.500V Precision Micropower Shunt Voltage Reference, SOT-23",V Reference Control
+U11,LM4040DBZ-5,http://www.ti.com/lit/ds/symlink/lm4040-n.pdf,Package_TO_SOT_SMD:SOT-23,1,,"5.000V Precision Micropower Shunt Voltage Reference, SOT-23",R Circuit Reference
