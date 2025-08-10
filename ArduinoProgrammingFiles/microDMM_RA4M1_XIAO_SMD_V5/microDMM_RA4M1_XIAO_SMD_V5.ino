@@ -1068,10 +1068,10 @@ void measureResistance() {
       // Manual mode: force based on user setting
       if (ohmsHighRange && !currentRangeHigh) {
         currentRangeHigh = true;
-        digitalWrite(SETRANGE_PIN, LOW);
+        digitalWrite(SETRANGE_PIN, HIGH);
       } else if (!ohmsHighRange && currentRangeHigh) {
         currentRangeHigh = false;
-        digitalWrite(SETRANGE_PIN, HIGH);
+        digitalWrite(SETRANGE_PIN, LOW);
       }
     }
 
@@ -1385,6 +1385,8 @@ void updateDisplay() {
     //Serial.print("V Bridge:");
     //Serial.println(bridgeV);
 
+    /*
+    //This block used for Resistance mode debugging
     Serial.print("RangePin:");
     Serial.print(digitalRead(SETRANGE_PIN));
     Serial.print(" V:");
@@ -1393,6 +1395,7 @@ void updateDisplay() {
     Serial.print(adcCount);
     Serial.print(" range:");
     Serial.println(gainIndex);
+    */
 
   // Determine which voltage value to use for display (fast vs smoothed)
   float voltageToDisplay;
@@ -1464,11 +1467,11 @@ void updateDisplay() {
   display.setCursor(0, 0);
   if (voltageDisplay) {
      if(Vzero){
-      if(vFloating && bridgeV<-0.13){
+      if(vFloating && bridgeV<-0.25){
             display.print("Vflt:");
             display.print(bridgeV*1000,0);
           }
-       else if(vFloating && bridgeV>-0.13){
+       else if(vFloating && bridgeV>-0.25){
             display.print("V ?:");
             display.print(bridgeV*1000,0);
           }else{
@@ -1871,7 +1874,7 @@ void ClosedOrFloat()
   //Serial.print("voltageRead:");
   //Serial.println(bridgeV);
   
-  if(bridgeV < -0.080){
+  if(bridgeV < -0.220){
       vFloating = true;
     }else{
       vFloating = false;
