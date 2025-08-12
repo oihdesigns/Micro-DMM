@@ -13,6 +13,7 @@ USBKeyboard Keyboard;
 #include <FATFileSystem.h>
 
 GigaDisplayRGB rgb; //create rgb object
+GigaDisplayBacklight backlight; // This is for the backlight
 
 #include "RPC.h"
 
@@ -78,7 +79,7 @@ static const int PLOT_Y    = 80;
 #define COLOR_MAX    0xF800  // red
 
 
-// Pin definitions
+// Digital Pin definitions
 const int OHMPWMPIN = 2;
 const int TYPE_PIN      = 3;    // Mode button (also triggers flashlight mode if held at boot)
 #define BUTTON_PIN 4         // For Mode
@@ -86,8 +87,17 @@ const int VbridgePin = 5; // Control Voltage Bridge MOSFET
 const int CONTINUITY_PIN = 6;   // Buzzer or LED for continuity/alerts
 const int SETRANGE_PIN = 7;   // Controls high/low resistance range
 const int kbButton = 8;   // Toggle: if LOW -> keyboard mode; if HIGH -> serial mode
+const int cycleTrack = 52; // take log pin
+const int backlightRef =  64; //Ref for backlight toggle
+const int backlightControlHigh =  65; //Makes Backlight Full On
+const int backlightControlLow =  63; //Turn Backlight Low
+
+
+
+//Analog Pins
 const int logButton = A1; // take log pin
 const int micPin = A7; // Exposed Mic Pin
+
 
 //#define IR_RECEIVE_PIN   8      // IR receiver input pin
 //const int BATT_PIN      = A2;   // Battery voltage analog input
@@ -95,7 +105,7 @@ const int micPin = A7; // Exposed Mic Pin
 //#define BATT_PIN BAT_DET_PIN
 //const int LowerButton = 10;   // 
 
-const int cycleTrack = 52; // take log pin
+
 
 //RPC Related
 static bool txFlag = false;        // what we want to share 
@@ -141,13 +151,13 @@ float giga_absfactor = 0.0;//12; // Giga is high by this on battery power.
 #define DEBOUNCE_DELAY 300    // debounce time in milliseconds
 enum Mode {
   Voltmeter,
+  HighRMode,
   Default,
   VACmanual,
   Type,
   Low,
   AltUnitsMode,
   rPlotMode,
-  HighRMode,
   //Impedance,
   //RelayControl,
   Charging,
@@ -368,6 +378,8 @@ float loggedTimeStamps[LOG_SIZE] = {0};
 bool vFloating = false;
 float bridgeV = 0.0;
 bool Vzero = true;
+bool vClosed = false;
+bool vUndefined = true;
 
 int blinkLimit = 0; //Limit how much the LED can blink between screen updates
 
@@ -425,6 +437,7 @@ void setup() {
   display.begin();             // init hardware
   display.setRotation(1);      // landscape mode
   //touch.setRotation(1);
+
 
 
   display.setTextSize(4);
@@ -491,6 +504,9 @@ void setup() {
   pinMode(cycleTrack, OUTPUT);
   pinMode(VbridgePin, OUTPUT);
   pinMode(micPin, INPUT);
+  pinMode(backlightRef, OUTPUT);
+  pinMode(backlightControlHigh, INPUT_PULLUP);
+  pinMode(backlightControlLow, INPUT_PULLUP);
 
 
 
@@ -556,6 +572,8 @@ void setup() {
     }
   
 
+
+    
     display.println("Booting Core 2");
     RPC.begin();
     uint8_t pack = (txFlag?1:0) | (humFlag?2:0);
@@ -587,14 +605,19 @@ void setup() {
     display.setCursor(tx, ty);
     display.print(btnLabel[i]);
   }
- 
-    
-    rgb.begin(); //init the library
-    
-    Serial.println("Setup End");
+   
+  rgb.begin(); //init the library
+
+  /*
+
+  digitalWrite(backlightRef,LOW);
+  backlight.begin();
+  backlight.set(50);
+  */
 
 
 
+  Serial.println("Setup End");
 
 }
 
@@ -603,6 +626,17 @@ void loop() {
     //  Serial.println("Loop Start");
   unsigned long currentMillis = millis();
 
+  /*
+  //Backlight Control
+  if(digitalRead(backlightControlHigh)==LOW){
+    backlight.set(100);
+  }else if(digitalRead(backlightControlLow)==LOW){
+    backlight.set(10);
+  }else{
+    backlight.set(50);
+  }
+  */
+  
   cycleTracking = !cycleTracking;
   if(cycleTracking){
     digitalWrite(cycleTrack, HIGH);
@@ -683,12 +717,12 @@ void loop() {
           // Short press: type current reading via USB keyboard
       if(currentMode==Type){      
       if (voltageDisplay) {
-        Keyboard.printf("%.*f\n",vDigits,newVoltageReading);
+        Keyboard.printf("%.*f",vDigits,newVoltageReading);
       } else {
         if(displayResistance<1){
-        Keyboard.printf("%.*f\n", rDigits+2, displayResistance);
+        Keyboard.printf("%.*f", rDigits+2, displayResistance);
         }else{
-        Keyboard.printf("%.*f\n", rDigits, displayResistance);  
+        Keyboard.printf("%.*f", rDigits, displayResistance);  
         }
       }
       // Press Right Arrow after typing (to move cursor, e.g., to next cell)
@@ -1736,6 +1770,7 @@ void updateDisplay() {
   //Serial.println(analogRead(micPin));
 
     
+    /*
     //This block used for Resistance mode debugging
     Serial.print("RangePin:");
     Serial.print(digitalRead(SETRANGE_PIN));
@@ -1745,6 +1780,7 @@ void updateDisplay() {
     Serial.print(adcCount);
     Serial.print(" range:");
     Serial.println(gainIndex);
+    */
   
 
 
@@ -1873,14 +1909,14 @@ void updateDisplay() {
   display.setCursor(PrimeX, PrimeY);
   if (voltageDisplay) {
     if(Vzero){
-      if(vFloating && bridgeV<-0.3281){
+      if(vFloating){
             display.print("V FLT:");
             display.print(bridgeV*1000,0);
           }
-       else if(vFloating && bridgeV>-0.3281){
+       if(vUndefined){
             display.print("V UNDF:");
             display.print(bridgeV*1000,0);
-          }else{
+          }if(vClosed){
         display.print("V CLD:");
         display.print(bridgeV*1000,0);
       }
@@ -2085,7 +2121,7 @@ void updateAlerts() {
     // Continuity check (low resistance)
     continuity = (isBetween(currentResistance, -20.0, 1.0) ||
                       (isBetween(currentResistance, -20.0, 20.0) && ohmsHighRange) || 
-                      (Vzero && !vFloating) && blinkLimit<2)
+                      (Vzero && vClosed) && blinkLimit<2)
                       //|| (prevResistance > 2000000 && currentResistance < 1000000)
                       ;
 
@@ -2490,18 +2526,23 @@ void ClosedOrFloat()
 
   ads.setGain(GAIN_EIGHT);
   //ads.setDataRate(RATE_ADS1115_64SPS);
-    //delay(1);
+  delay(2);
   bridgeV = (ads.readADC_Differential_0_1() * GAIN_FACTOR_8 / 1000.0)*-1.0;
 
-  currentShuntVoltage = adcReadingCurrent ;
+  //currentShuntVoltage = adcReadingCurrent; //I have no recollection of why this is here. Looks like an accidental 
 
   //Serial.print("voltageRead:");
   //Serial.println(bridgeV);
-  
-  if(bridgeV < -0.28125){
-      vFloating = true;
-    }else{
-      vFloating = false;
+  vClosed = false;
+  vFloating = false;
+  vUndefined = false;
+
+  if(fabs(bridgeV)<0.02){
+    vClosed = true;
+  }else if(fabs(bridgeV)> 0.05){
+    vFloating = true;
+  }else{
+      vUndefined = true;
     }
   digitalWrite(VbridgePin, 0);
   //delay(2);

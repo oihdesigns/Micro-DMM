@@ -3615,6 +3615,632 @@
 			)
 			(embedded_fonts no)
 		)
+		(symbol "MCU_Module:Arduino_Nano_ESP32"
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "A"
+				(at -14.986 23.622 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left bottom)
+				)
+			)
+			(property "Value" "Arduino_Nano_ESP32"
+				(at 3.81 -25.654 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left top)
+				)
+			)
+			(property "Footprint" "Module:Arduino_Nano"
+				(at 13.716 -34.036 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+						(italic yes)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "https://docs.arduino.cc/resources/datasheets/ABX00083-datasheet.pdf"
+				(at 39.116 -31.496 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "Arduino Nano board based on the ESP32-S3 with a dual-core 240 MHz processor, 384 kB ROM, 512 kB SRAM. Operates at 3.3V, with 5V USB-C® input and 6-21V VIN. Features Wi-Fi®, Bluetooth® LE, digital and analog pins, and supports SPI, I2C, UART, I2S, and CAN."
+				(at 138.43 -28.956 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_keywords" "Arduino Nano ESP32"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_fp_filters" "Arduino*Nano*"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "Arduino_Nano_ESP32_0_1"
+				(rectangle
+					(start -15.24 22.86)
+					(end 15.24 -22.86)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+			)
+			(symbol "Arduino_Nano_ESP32_1_1"
+				(pin power_in line
+					(at -17.78 20.32 0)
+					(length 2.54)
+					(name "VIN"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "30"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at -17.78 15.24 0)
+					(length 2.54)
+					(name "D0/RX"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at -17.78 12.7 0)
+					(length 2.54)
+					(name "D1/TX"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at -17.78 10.16 0)
+					(length 2.54)
+					(name "D2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "5"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at -17.78 7.62 0)
+					(length 2.54)
+					(name "D3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "6"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at -17.78 5.08 0)
+					(length 2.54)
+					(name "D4"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "7"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at -17.78 2.54 0)
+					(length 2.54)
+					(name "D5"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "8"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at -17.78 0 0)
+					(length 2.54)
+					(name "D6"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "9"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at -17.78 -2.54 0)
+					(length 2.54)
+					(name "D7"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "10"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at -17.78 -5.08 0)
+					(length 2.54)
+					(name "D8"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "11"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at -17.78 -7.62 0)
+					(length 2.54)
+					(name "D9"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "12"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at -17.78 -10.16 0)
+					(length 2.54)
+					(name "D10/CS"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "13"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at -17.78 -12.7 0)
+					(length 2.54)
+					(name "D11/COPI"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "14"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at -17.78 -15.24 0)
+					(length 2.54)
+					(name "D12/CIPO"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "15"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at -17.78 -17.78 0)
+					(length 2.54)
+					(name "D13/SCK"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "16"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 0 -25.4 90)
+					(length 2.54)
+					(hide yes)
+					(name "GND"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "29"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 0 -25.4 90)
+					(length 2.54)
+					(name "GND"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "4"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin power_out line
+					(at 17.78 20.32 180)
+					(length 2.54)
+					(name "3V3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "17"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin power_out line
+					(at 17.78 17.78 180)
+					(length 2.54)
+					(name "VUSB/5V"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "27"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin input line
+					(at 17.78 12.7 180)
+					(length 2.54)
+					(name "~{RESET}"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at 17.78 7.62 180)
+					(length 2.54)
+					(name "B0"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "18"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at 17.78 5.08 180)
+					(length 2.54)
+					(name "B1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "28"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at 17.78 0 180)
+					(length 2.54)
+					(name "A0"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "19"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at 17.78 -2.54 180)
+					(length 2.54)
+					(name "A1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "20"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at 17.78 -5.08 180)
+					(length 2.54)
+					(name "A2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "21"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at 17.78 -7.62 180)
+					(length 2.54)
+					(name "A3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "22"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at 17.78 -10.16 180)
+					(length 2.54)
+					(name "SDA/A4"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "23"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at 17.78 -12.7 180)
+					(length 2.54)
+					(name "SCL/A5"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "24"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at 17.78 -15.24 180)
+					(length 2.54)
+					(name "A6"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "25"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at 17.78 -17.78 180)
+					(length 2.54)
+					(name "A7"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "26"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
 		(symbol "MIC4801:MAX1683"
 			(exclude_from_sim no)
 			(in_bom yes)
@@ -12762,7 +13388,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_Array_Convex_4x1206"
+		(property "Footprint" "Resistor_SMD:R_Array_Convex_4x0612"
 			(at 274.955 57.15 90)
 			(effects
 				(font
@@ -17306,7 +17932,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_Array_Convex_4x1206"
+		(property "Footprint" "Resistor_SMD:R_Array_Convex_4x0612"
 			(at 116.205 135.89 90)
 			(effects
 				(font
@@ -18549,6 +19175,159 @@
 			(project "NametagVoltmeter"
 				(path "/39d8d4e4-ad86-4016-bf5f-66e0716621ab"
 					(reference "R21")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "MCU_Module:Arduino_Nano_ESP32")
+		(at 77.47 69.85 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "f021ed6c-e4f7-4702-9877-71f89890ea79")
+		(property "Reference" "A1"
+			(at 77.47 41.91 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "Arduino_Nano_ESP32"
+			(at 77.47 44.45 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Module:Arduino_Nano"
+			(at 91.186 103.886 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+					(italic yes)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://docs.arduino.cc/resources/datasheets/ABX00083-datasheet.pdf"
+			(at 116.586 101.346 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Arduino Nano board based on the ESP32-S3 with a dual-core 240 MHz processor, 384 kB ROM, 512 kB SRAM. Operates at 3.3V, with 5V USB-C® input and 6-21V VIN. Features Wi-Fi®, Bluetooth® LE, digital and analog pins, and supports SPI, I2C, UART, I2S, and CAN."
+			(at 215.9 98.806 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "16"
+			(uuid "2df8e396-249e-4779-96c8-49558f06344f")
+		)
+		(pin "27"
+			(uuid "f1fa45d1-144e-4a57-b1f0-833c9b2a2a61")
+		)
+		(pin "7"
+			(uuid "aa226c64-7269-4be9-8598-7ba0d5965874")
+		)
+		(pin "12"
+			(uuid "88dfe43b-27b0-4d94-99a3-00a9439a1201")
+		)
+		(pin "13"
+			(uuid "d6dc09bd-bfea-4ea8-b0f9-1114880cf32b")
+		)
+		(pin "19"
+			(uuid "567b2a8d-7df7-4c26-8a64-0617bce10ac7")
+		)
+		(pin "8"
+			(uuid "8f045c92-4720-48f8-8a54-3d9256e5b8c5")
+		)
+		(pin "30"
+			(uuid "ce9288dd-4229-400e-b5ec-4f9f06dea6e2")
+		)
+		(pin "18"
+			(uuid "fd00aa73-abf2-4d01-943b-643d38f31a33")
+		)
+		(pin "11"
+			(uuid "168f2382-a4ee-4c76-b249-edc10cc577e7")
+		)
+		(pin "4"
+			(uuid "185efd21-e9cd-49ef-96da-7b607bc4689e")
+		)
+		(pin "14"
+			(uuid "8128538c-6e9a-4052-8a76-7077eaaca289")
+		)
+		(pin "22"
+			(uuid "03dd8b6b-36bb-4b6c-8a03-f551d0b05150")
+		)
+		(pin "17"
+			(uuid "1dd74312-1f13-4199-bf8d-f513f695dbf1")
+		)
+		(pin "3"
+			(uuid "9dd5426d-3c77-4d67-8948-d59d4066cb63")
+		)
+		(pin "24"
+			(uuid "0f6586aa-5ec0-4135-ae63-9609fe613c5c")
+		)
+		(pin "2"
+			(uuid "3e163f37-9843-48fd-8bd2-29135a6fa282")
+		)
+		(pin "9"
+			(uuid "61fd01a7-e2dc-4fc2-ac9a-bc89c408d8f0")
+		)
+		(pin "1"
+			(uuid "e6ac8c7b-3e59-4966-ae39-bbf8d2648044")
+		)
+		(pin "5"
+			(uuid "faed998d-09b0-4a93-8d83-14f8fbf20cfc")
+		)
+		(pin "10"
+			(uuid "f409a617-613d-4274-8a27-ef630ca69e71")
+		)
+		(pin "15"
+			(uuid "e1250040-b5be-4730-80d4-de9dbea21a40")
+		)
+		(pin "29"
+			(uuid "e577351d-b673-42a5-9e36-33504d0485d0")
+		)
+		(pin "6"
+			(uuid "c5d09552-e210-4c8e-9402-2f8a76882faf")
+		)
+		(pin "26"
+			(uuid "35212cd7-9224-4b42-8569-c21dff86aaba")
+		)
+		(pin "28"
+			(uuid "b69c3185-9d71-431a-b908-cf3e0a35b346")
+		)
+		(pin "20"
+			(uuid "c23e6400-f3f6-4cd8-82eb-5c1de3d9932c")
+		)
+		(pin "23"
+			(uuid "9c3a1791-5774-4ce9-bd43-3cd513162fa1")
+		)
+		(pin "25"
+			(uuid "a98dd753-3661-4d9b-91d1-b2e7fd72c77d")
+		)
+		(pin "21"
+			(uuid "e079226c-0e1e-4ce5-b805-856a50cc995b")
+		)
+		(instances
+			(project ""
+				(path "/39d8d4e4-ad86-4016-bf5f-66e0716621ab"
+					(reference "A1")
 					(unit 1)
 				)
 			)
