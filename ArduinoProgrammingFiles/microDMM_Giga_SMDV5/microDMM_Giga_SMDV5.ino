@@ -136,12 +136,12 @@ static const adsGain_t kGainLevels[] = {
 
 
 // Measurement constants (calibration values)
-float constantI            = 0.02016f;   // A for low-resistance constant-current source
+float constantI            = 0.02012f;   // A for low-resistance constant-current source  *as of 25/08/13
 const float constantR            = 330.0f;     // Ω internal resistor in constant-current circuit
 const float dividerR             = 22000.0f;   // Ω series resistor for high-resistance divider
-float ZENER_MAX_V          = 4.979f;       // V reference in high-range mode
-float EEPROM_MAXV = 4.979f;
-float EEPROM_SleepV = 0.6117;
+float ZENER_MAX_V          = 4.9854f;       // this changes in the program and the value here doesn't / shouldn't matter
+float EEPROM_MAXV = 4.9854f; //this is constant. as of 25/08/13
+float EEPROM_SleepV = 0.6117; //this is constant.
 
 float VOLTAGE_SCALE = -68.57008; // Calibration scale factor for voltage input
 float VOLTAGE_SCALE_Negative = -68.55928;
@@ -203,6 +203,7 @@ float batteryVoltage = 0.0;     // measured battery voltage (V)
 int16_t countV;
 int16_t adcCount;
 static uint8_t gainIndex;
+int32_t countI;
 
 float newVoltageReading = 0.0;  // latest measured voltage (V)
 float averageVoltage = 0.0;     // moving average (DC) of voltage
@@ -362,6 +363,8 @@ bool vFlag = false;           // indicates voltage alert is active (to manage fl
 bool rFlag = false;           // indicates resistance continuity alert is active
 bool VACPresense = false;       // indicates VAC presence
 bool cycleTracking = false;
+bool vClosedflag = false;
+bool vClosedflagPrevious = false;
 
 // Logging buffers for current vs time (for 'L' command)
 const int LOG_SIZE = 100;
@@ -470,9 +473,9 @@ void setup() {
       // Wait for drive to appear
       Serial.print("Waiting for USB drive");
       display.setTextSize(2);
-      display.println("Waiting for USB drive");
+      display.println("Waiting 400ms for USB drive");
       while (!msd.connect() && usbDelay<2){
-        delay(500);
+        delay(200);
         usbDelay++;
         }
         if(msd.connect()){
@@ -849,7 +852,9 @@ if(takeLog == true){
     measureResistance();
     }
     measureVoltage();
+    if(currentOnOff){
     measureCurrent();
+    }
     
   //PowerSave Related
     if(!powerSave){
@@ -1660,7 +1665,7 @@ void measureVoltage() {
     VACPresense = false;
   }
 
-  if(((fabs(averageVoltage) < 0.030 && currentMode != VACmanual && newVoltageReading<0.05) || (currentMode == VACmanual && VAC<5)) && !preciseMode && voltageDisplay){
+  if(((fabs(averageVoltage) < 0.030 && currentMode != VACmanual && fabs(newVoltageReading)<0.05) || (currentMode == VACmanual && VAC<5)) && !preciseMode && voltageDisplay){
     Vzero = true;
     ClosedOrFloat();
   }else{
@@ -1686,19 +1691,31 @@ void measureCurrent() {
     firstCurrentRun   = false;
   }
 
-  if (!currentOnOff && !ampsMode) {
+  /*
+
+  if (!currentOnOff) {
     // skip entirely if user/system doesn’t need current
     return;
   }
 
-  int32_t countI;
+  */ 
 
   if (IHigh) {
     // —— High-RANGE mode: fixed mid-gain for best noise performance ——
-    ads.setGain(GAIN_ONE);
+    ads.setGain(GAIN_TWOTHIRDS);
     countI = ads.readADC_SingleEnded(3);
     // convert to shunt voltage (mV)
-    currentShuntVoltage = (countI * GAIN_FACTOR_1 / 1000.0f)/ 0.185f;
+    currentShuntVoltage = (countI * GAIN_FACTOR_TWOTHIRDS / 1000.0f);// ;
+    Ireading = (currentShuntVoltage - Izero)/0.185f ; //conversion to Amps
+    
+    /*
+    Serial.print("I Read:"); //this block used for debugging
+    Serial.print(countI);
+    Serial.print(" I Shunt:");
+    Serial.print(currentShuntVoltage);
+    Serial.print(" I reading:");
+    Serial.println(Ireading);
+    */
 
 
   } else {
@@ -1725,18 +1742,18 @@ void measureCurrent() {
     Ireading = currentShuntVoltage / 1.0f;
 
     // convert to shunt voltage (mV), then subtract zero‐offset Izero (also in mV)
-    currentShuntVoltage = (countI * kGainFactors[gainIndexCurrent] / 1000.0f)
-                          - Izero;
+    currentShuntVoltage = (countI * kGainFactors[gainIndexCurrent] / 1000.0f);
     // convert to amps (your high-range calibration)
     Ireading = currentShuntVoltage/1 ; //Value of the sense resistor
   }
 
   // apply noise floor
-  if ((Irange  && isBetween(Ireading, -0.01f,  0.1f)) ||
+  if ((Irange  && isBetween(Ireading, -0.01f,  0.01f)) ||
       (!Irange  && Ireading < 0.0005f)) {
     Ireading = 0.0f;
   } else {
     // update min/max and log extremes
+    
     if (Ireading > IHigh || Ireading < ILow) {
       float nowSec = millis() / 1000.0f;
       logCurrentData(newVoltageReading, nowSec, Ireading);
@@ -1751,6 +1768,8 @@ void measureCurrent() {
         timeAtMinI     = formatTime(millis());
       }
     }
+  
+  
   }
 
     currentSamples[currentSampleIndex] = Ireading;
@@ -1911,15 +1930,13 @@ void updateDisplay() {
     if(Vzero){
       if(vFloating){
             display.print("V FLT:");
-            display.print(bridgeV*1000,0);
           }
-       if(vUndefined){
+       else if(vUndefined){
             display.print("V UNDF:");
-            display.print(bridgeV*1000,0);
-          }if(vClosed){
+        }else if(vClosed){
         display.print("V CLD:");
-        display.print(bridgeV*1000,0);
       }
+      display.print(bridgeV*1000,0);
       display.print("m");
     }else{
 
@@ -2135,11 +2152,21 @@ void updateAlerts() {
         // Start of beep
         analogWrite(CONTINUITY_PIN, 200);
         rgb.on(255, 255, 255); //turn on blue pixel
+          /*
+          Serial.print("triggered white, bridge:"); //This section used for noise trigger debugging.
+          Serial.print(bridgeV,4);
+          Serial.print(" avg:");
+          Serial.print(averageVoltage,4);
+          Serial.print(" new:");
+          Serial.println(newVoltageReading,4);
+          */
         blinkLimit++;
         rFlag = true;
       } else if ((now % 1000 <= 100 || isBetween(now % 1000, 300, 400)) && rFlag) {
         // Keep beeping in a pattern: on for 100ms, then off, with a double pulse
         analogWrite(CONTINUITY_PIN, 50);
+          //Serial.print("triggered blue:"); //noise trigger debugging.
+          //Serial.println(bridgeV);
         rgb.on(0, 0, 255); //turn on blue pixel
       } else {
         analogWrite(CONTINUITY_PIN, 0);
@@ -2522,28 +2549,36 @@ void autologArraysToCSV() {
 
 void ClosedOrFloat()
 {
-  digitalWrite(VbridgePin, HIGH);
+  vClosedflagPrevious = vClosedflag;
 
-  ads.setGain(GAIN_EIGHT);
-  //ads.setDataRate(RATE_ADS1115_64SPS);
+  digitalWrite(VbridgePin, HIGH);
   delay(2);
-  bridgeV = (ads.readADC_Differential_0_1() * GAIN_FACTOR_8 / 1000.0)*-1.0;
+
+  //ads.setDataRate(RATE_ADS1115_64SPS);
+  ads.setGain(GAIN_SIXTEEN);
+  bridgeV = (ads.readADC_Differential_0_1() * GAIN_FACTOR_16 / 1000.0)*-1.0;
 
   //currentShuntVoltage = adcReadingCurrent; //I have no recollection of why this is here. Looks like an accidental 
 
   //Serial.print("voltageRead:");
-  //Serial.println(bridgeV);
-  vClosed = false;
+  //Serial.println(bridgeV,4);
+  vClosedflag = false;
   vFloating = false;
   vUndefined = false;
 
-  if(fabs(bridgeV)<0.02){
-    vClosed = true;
+  if(fabs(bridgeV)<0.03){
+    vClosedflag = true;
   }else if(fabs(bridgeV)> 0.05){
     vFloating = true;
   }else{
       vUndefined = true;
     }
+  if(vClosedflag && vClosedflagPrevious){
+    vClosed = true;
+  }else{
+    vClosed = false;
+  }
+  
   digitalWrite(VbridgePin, 0);
   //delay(2);
 
