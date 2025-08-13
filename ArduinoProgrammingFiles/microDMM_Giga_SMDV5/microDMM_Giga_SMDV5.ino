@@ -865,10 +865,10 @@ if(takeLog == true){
         }
     }
 
-    if(powerSave || currentMode==Charging){
+    if(powerSave || currentMode==Charging || currentMode == Voltmeter){
       analogWrite(OHMPWMPIN, 254);
         
-      if(ohmsVoltage < EEPROM_SleepV-0.01){
+      if(ohmsVoltage < EEPROM_SleepV-0.01 && currentMode != Voltmeter){
           powerSave = false;
           timeHighset = false;
           analogWrite(OHMPWMPIN, 0);
