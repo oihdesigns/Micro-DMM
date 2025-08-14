@@ -119,6 +119,7 @@ float batteryVoltage = 0.0;     // measured battery voltage (V)
 int16_t countV;
 int16_t adcCount;
 static uint8_t gainIndex;
+int32_t countI;
 
 float newVoltageReading = 0.0;  // latest measured voltage (V)
 float averageVoltage = 0.0;     // moving average (DC) of voltage
@@ -152,6 +153,16 @@ float voltageSquaredSamples[NUM_VOLTAGE_SAMPLES] = {0.0};
 int voltageSampleIndex = 0;
 float voltageSum = 0.0;
 float squaredVoltageSum = 0.0;
+
+//Rolling Buffer for Resistance Samples
+const int NUM_RESISTANCE_SAMPLES = 100;
+float resistanceSamples[NUM_VOLTAGE_SAMPLES] = {0.0};
+int resistanceSampleIndex = 0;
+
+//Rolling Buffer for Current Samples
+const int NUM_CURRENT_SAMPLES = 100;
+float currentSamples[NUM_VOLTAGE_SAMPLES] = {0.0};
+int currentSampleIndex = 0;
 
 // Min/Max tracking for voltage and resistance
 float highV = -100.0, lowV = 100.0;
@@ -307,7 +318,7 @@ void ReZero();
 void setup() {
 
   Serial.begin(115200);
-  delay(100);
+  delay(1000);
   Serial.println("Setup Start");
   Keyboard.begin();
   
@@ -374,25 +385,30 @@ void setup() {
 
   // Initial current zero calibration
   ads.setGain(GAIN_TWOTHIRDS);  // ±6.144V range to read baseline
-  Serial.print("ADS gain set");
+  //Serial.print("ADS gain set");
   adcReadingCurrent = ads.readADC_SingleEnded(3);
   delay(100);
-  Serial.print("ADS3Read");
+  Serial.print("ADS3Reading (int): ");
   currentShuntVoltage = adcReadingCurrent * GAIN_FACTOR_TWOTHIRDS / 1000.0;
+  Serial.println(adcReadingCurrent);
+  Serial.print("determination:");
   if (adcReadingCurrent < 300 || isBetween(currentShuntVoltage, 2.3, 2.7)) {
     // If no current (shunt pulled to ground) or baseline ~2.5V, current sensor is present
     if (isBetween(currentShuntVoltage, 2.3, 2.7)) {
       Irange = true;         // high-range current mode
       Izero = currentShuntVoltage; // store baseline (~2.5V)
+      Serial.println("High Range");
     } else {
       Irange = false;        // low-range current mode
       Izero = 0.0;
+      Serial.println("Low Range");
     }
     currentOnOff = true;
   } else {
     // Current sensor not connected or reading abnormal -> disable current measurement
     currentOnOff = false;
     Ireading = 0.0;
+    Serial.println("Amps Off");
   }
   
  
@@ -510,7 +526,7 @@ if(powerSave || currentMode==Charging){
     
     // Determine which primary measurement to display automatically
     
-    if (countV>fabs(500)  || currentMode == Voltmeter) {
+    if (fabs(countV)>500  || currentMode == Voltmeter) {
       voltageDisplay = true;
       if(preciseMode){
       ads.setDataRate(RATE_ADS1115_16SPS); //slow sampling if 0 is set  
@@ -1305,19 +1321,31 @@ void measureCurrent() {
     firstCurrentRun   = false;
   }
 
-  if (!currentOnOff && !ampsMode) {
+  /*
+
+  if (!currentOnOff) {
     // skip entirely if user/system doesn’t need current
     return;
   }
 
-  int32_t countI;
+  */ 
 
-  if (Irange) {
+  if (IHigh) {
     // —— High-RANGE mode: fixed mid-gain for best noise performance ——
-    ads.setGain(GAIN_ONE);
+    ads.setGain(GAIN_TWOTHIRDS);
     countI = ads.readADC_SingleEnded(3);
     // convert to shunt voltage (mV)
-    currentShuntVoltage = (countI * GAIN_FACTOR_1 / 1000.0f)/ 0.185f;
+    currentShuntVoltage = (countI * GAIN_FACTOR_TWOTHIRDS / 1000.0f);// ;
+    Ireading = (currentShuntVoltage - Izero)/0.185f ; //conversion to Amps
+    
+    /*
+    Serial.print("I Read:"); //this block used for debugging
+    Serial.print(countI);
+    Serial.print(" I Shunt:");
+    Serial.print(currentShuntVoltage);
+    Serial.print(" I reading:");
+    Serial.println(Ireading);
+    */
 
 
   } else {
@@ -1344,18 +1372,18 @@ void measureCurrent() {
     Ireading = currentShuntVoltage / 1.0f;
 
     // convert to shunt voltage (mV), then subtract zero‐offset Izero (also in mV)
-    currentShuntVoltage = (countI * kGainFactors[gainIndexCurrent] / 1000.0f)
-                          - Izero;
+    currentShuntVoltage = (countI * kGainFactors[gainIndexCurrent] / 1000.0f);
     // convert to amps (your high-range calibration)
     Ireading = currentShuntVoltage/1 ; //Value of the sense resistor
   }
 
   // apply noise floor
-  if ((Irange && isBetween(Ireading, -0.01f,  0.1f)) ||
-      (!Irange && Ireading < 0.0005f)) {
+  if ((Irange  && isBetween(Ireading, -0.01f,  0.01f)) ||
+      (!Irange  && Ireading < 0.0005f)) {
     Ireading = 0.0f;
   } else {
     // update min/max and log extremes
+    
     if (Ireading > IHigh || Ireading < ILow) {
       float nowSec = millis() / 1000.0f;
       logCurrentData(newVoltageReading, nowSec, Ireading);
@@ -1370,7 +1398,13 @@ void measureCurrent() {
         timeAtMinI     = formatTime(millis());
       }
     }
+  
+  
   }
+
+    currentSamples[currentSampleIndex] = Ireading;
+    currentSampleIndex = (currentSampleIndex + 1) % NUM_CURRENT_SAMPLES;
+
 }
 
 
@@ -1448,7 +1482,7 @@ void updateDisplay() {
     }
   }
   // If any current has been recorded (min/max), display them in small text
-  if (IHigh != -6.0) {
+  if (IHigh != -6.0 && currentOnOff) {
     display.setTextSize(1);
     display.setCursor(0, 32);
     display.print("Ilow:");

@@ -14590,7 +14590,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_Array_Convex_4x0612"
+		(property "Footprint" "Library:RESCAXS127P508X320X70-8N"
 			(at 274.955 57.15 90)
 			(effects
 				(font
@@ -19925,7 +19925,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_Array_Convex_4x0612"
+		(property "Footprint" "Library:RESCAXS127P508X320X70-8N"
 			(at 107.315 109.22 90)
 			(effects
 				(font

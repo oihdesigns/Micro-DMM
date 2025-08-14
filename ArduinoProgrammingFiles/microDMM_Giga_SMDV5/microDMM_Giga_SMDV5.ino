@@ -2581,8 +2581,6 @@ void ClosedOrFloat()
   
   digitalWrite(VbridgePin, 0);
   //delay(2);
-
-
 }
 
           
