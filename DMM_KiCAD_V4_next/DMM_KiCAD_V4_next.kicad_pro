@@ -454,7 +454,7 @@
     "pinned_symbol_libs": []
   },
   "meta": {
-    "filename": "DMM XIAO V3_AsOrdered.kicad_pro",
+    "filename": "DMM_KiCAD_V4_next.kicad_pro",
     "version": 3
   },
   "net_settings": {
@@ -493,7 +493,7 @@
       "plot": "./",
       "pos_files": "",
       "specctra_dsn": "",
-      "step": "DMM XIAO V3_AsOrdered.step",
+      "step": "DMM_KiCAD_V4_next.step",
       "svg": "",
       "vrml": ""
     },

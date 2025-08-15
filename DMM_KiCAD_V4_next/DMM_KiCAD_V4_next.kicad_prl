@@ -1,6 +1,6 @@
 {
   "board": {
-    "active_layer": 0,
+    "active_layer": 4,
     "active_layer_preset": "",
     "auto_track_width": true,
     "hidden_netclasses": [],
@@ -45,21 +45,21 @@
       "pads",
       "zones",
       "drc_warnings",
-      "drc_exclusions",
       "locked_item_shadows",
       "conflict_shadows",
       "shapes"
     ],
-    "visible_layers": "ffffffff_ffffffff_fffffff7_ffffff3f",
-    "zone_display_mode": 0
+    "visible_layers": "00000000_00000000_0ffdfff7_ffffffff",
+    "zone_display_mode": 1
   },
   "git": {
+    "repo_password": "",
     "repo_type": "",
     "repo_username": "",
     "ssh_key": ""
   },
   "meta": {
-    "filename": "NametagVoltmeter.kicad_prl",
+    "filename": "DMM_KiCAD_V4_next.kicad_prl",
     "version": 5
   },
   "net_inspector_panel": {
