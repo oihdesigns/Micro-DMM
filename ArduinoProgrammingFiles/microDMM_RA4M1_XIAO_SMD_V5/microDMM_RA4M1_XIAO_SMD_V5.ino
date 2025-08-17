@@ -28,8 +28,8 @@ const int OHMPWMPIN = 9;
 #define MODE_BUTTON 10         // Set your button input pin
 
 //const int BATT_PIN      = A2;   // Battery voltage analog input
-#define enablePin  BAT_READ_EN  // Pin for enabling battery voltage reading
-#define BATT_PIN BAT_DET_PIN
+//#define enablePin  BAT_READ_EN  // Pin for enabling battery voltage reading
+//#define BATT_PIN BAT_DET_PIN
 
 
 
@@ -357,6 +357,10 @@ void setup() {
   display.print(EEPROM.read(1));//Reads the EEPROM and determines the correct splash   
   display.setCursor(0, 48);
   display.println("XIAO RA4M1");
+
+  Serial.print("uMeter #");
+  Serial.print(EEPROM.read(1));
+  Serial.print(" XIAO RA4M1");
   
   display.display();
   delay(200);
