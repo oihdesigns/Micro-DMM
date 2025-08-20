@@ -109,7 +109,8 @@ void eepromSetup(){
       CF_M = 1.0;
       CF_N = 1.0;
       CF_O = 1.0;
-      VOLTAGE_SCALE = 46.41618; // 
+      VOLTAGE_SCALE = -68.4264;
+      //VOLTAGE_SCALE = 46.41618; // Previous PCB for #6
       constantI = 0.020062;
       EEPROM_SleepV = 0.627;
       EEPROM_MAXV = 5.006;

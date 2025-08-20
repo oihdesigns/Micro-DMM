@@ -86,7 +86,9 @@ const int TYPE_PIN      = 3;    // Mode button (also triggers flashlight mode if
 const int VbridgePin = 5; // Control Voltage Bridge MOSFET
 const int CONTINUITY_PIN = 6;   // Buzzer or LED for continuity/alerts
 const int SETRANGE_PIN = 7;   // Controls high/low resistance range
-const int kbButton = 8;   // Toggle: if LOW -> keyboard mode; if HIGH -> serial mode
+//const int kbButton = 8;   // Toggle: if LOW -> keyboard mode; if HIGH -> serial mode
+
+
 const int cycleTrack = 52; // take log pin
 const int backlightRef =  64; //Ref for backlight toggle
 const int backlightControlHigh =  65; //Makes Backlight Full On

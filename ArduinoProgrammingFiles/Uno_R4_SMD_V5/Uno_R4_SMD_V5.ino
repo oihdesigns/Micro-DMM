@@ -17,15 +17,17 @@ Adafruit_ADS1115 ads;
 #define SCREEN_ADDRESS 0x3C
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-// Pin definitions
-const int logPin = A1; // take log pin
+// Digital Pin definitions
+const int OHMPWMPIN = 2;
 const int TYPE_PIN      = 3;    // Mode button (also triggers flashlight mode if held at boot)
+#define MODE_BUTTON 4         // Set your button input pin
+const int VbridgePin = 5; // Control Voltage Bridge MOSFET
 const int CONTINUITY_PIN = 6;   // Buzzer or LED for continuity/alerts
 const int SETRANGE_PIN = 7;   // Controls high/low resistance range
-const int VbridgePin = 8; // Control Voltage Bridge MOSFET
 //const int KBPin = 8;   // Toggle: if LOW -> keyboard mode; if HIGH -> serial mode
-const int OHMPWMPIN = 9;
-#define MODE_BUTTON 4         // Set your button input pin
+
+
+const int logPin = A1; // take log pin
 
 //const int BATT_PIN      = A2;   // Battery voltage analog input
 //#define enablePin  BAT_READ_EN  // Pin for enabling battery voltage reading
@@ -326,13 +328,13 @@ void setup() {
   pinMode(TYPE_PIN, INPUT_PULLUP);
   pinMode(CONTINUITY_PIN, OUTPUT);
   pinMode(SETRANGE_PIN, OUTPUT);
-  pinMode(BATT_PIN, INPUT);
+  //pinMode(BATT_PIN, INPUT);
   pinMode(MODE_BUTTON, INPUT_PULLUP); // Assuming active-low button
   pinMode(OHMPWMPIN, OUTPUT);
   pinMode(logPin, INPUT_PULLUP);
   pinMode(VbridgePin, OUTPUT);
-  pinMode(enablePin, OUTPUT);  // Set the enable pin as an output
-  digitalWrite(enablePin, HIGH); // Set the pin high to enable battery voltage reading
+  //pinMode(enablePin, OUTPUT);  // Set the enable pin as an output
+  //digitalWrite(enablePin, HIGH); // Set the pin high to enable battery voltage reading
 
 
   eepromSetup(); //This reads the EEPROM and sets the analog corrective factors
@@ -483,6 +485,7 @@ if(takeLog == true){
   //handleIRRemote();
   handleButtonInput();
 
+/* //Not used on Uno R4
   // Periodic battery voltage reading
   if (currentMillis - previousBattMillis >= BATT_INTERVAL) {
     previousBattMillis = currentMillis;
@@ -491,6 +494,7 @@ if(takeLog == true){
     batteryVoltage = raw * (3.3 / 1023.0)*2; // assuming a divider that scales VIN to <5V
     // (This factor 4.545 is derived from the original code comment "0.0048*4.545")
   }
+  */
 
   // Periodic ADC measurements
   if (currentMillis - previousAdcMillis >= ADC_INTERVAL) {

@@ -27,9 +27,9 @@ const int VbridgePin = 8; // Control Voltage Bridge MOSFET
 const int OHMPWMPIN = 9;
 #define MODE_BUTTON 10         // Set your button input pin
 
-//const int BATT_PIN      = A2;   // Battery voltage analog input
-//#define enablePin  BAT_READ_EN  // Pin for enabling battery voltage reading
-//#define BATT_PIN BAT_DET_PIN
+const int BATT_PIN      = A2;   // Battery voltage analog input
+#define enablePin  BAT_READ_EN  // Pin for enabling battery voltage reading
+#define BATT_PIN BAT_DET_PIN
 
 
 
@@ -1297,7 +1297,7 @@ void measureVoltage() {
     VACPresense = false;
   }
 
-  if(EEPROM.read(1) == 5){
+  if(EEPROM.read(1) == 5 || EEPROM.read(1) == 6){
     if(((fabs(averageVoltage) < 0.030 && currentMode != VACmanual && newVoltageReading<0.05) || (currentMode == VACmanual && VAC<5)) && !preciseMode && voltageDisplay){
       Vzero = true;
       ClosedOrFloat();
@@ -1733,6 +1733,14 @@ void updateAlerts() {
       if (!rFlag) {
         // Start of beep
         analogWrite(CONTINUITY_PIN, 200);
+          
+          Serial.print("triggered white, bridge:"); //This section used for noise trigger debugging.
+          Serial.print(bridgeV,4);
+          Serial.print(" avg:");
+          Serial.print(averageVoltage,4);
+          Serial.print(" new:");
+          Serial.println(newVoltageReading,4);
+        
         blinkLimit++;
         rFlag = true;
       } else if ((now % 1000 <= 100 || isBetween(now % 1000, 300, 400)) && rFlag) {
@@ -1904,7 +1912,7 @@ void ClosedOrFloat()
 
   ads.setGain(GAIN_EIGHT);
   //ads.setDataRate(RATE_ADS1115_64SPS);
-    //delay(1);
+  delay(2);
   bridgeV = (ads.readADC_Differential_0_1() * GAIN_FACTOR_8 / 1000.0) * -1.0;
 
   currentShuntVoltage = adcReadingCurrent ;
