@@ -34,7 +34,7 @@ static const uint8_t PIN_AI[] = {A0, A1, A2, A3, A4, A5, A6, A7}; // Analog inpu
 static const bool USE_PULLUPS = false;
 
 // ---------- Display ----------
-Arduino_GigaDisplay_GFX gfx;           // 800×480 canvas
+GigaDisplay_GFX gfx;           // 800×480 canvas
 Arduino_GigaDisplayTouch touch;        // multi‑touch controller
 
 static const int16_t SCREEN_W = 800;
@@ -71,13 +71,13 @@ static uint32_t g_debounceMs = 500; // default 500 ms
 void setDebounceMs(uint32_t ms) { g_debounceMs = ms; }
 
 // ---------- Mini scheduler ----------
-typedef void (*TaskFn)();
-struct Task { TaskFn fn; uint32_t interval; uint32_t last; bool enabled; };
+// NOTE: Avoid typedef in function prototypes to keep Arduino's auto-prototype happy
+struct Task { void (*fn)(); uint32_t interval; uint32_t last; bool enabled; };
 static const uint8_t MAX_TASKS = 8;
 static Task g_tasks[MAX_TASKS];
 static uint8_t g_taskCount = 0;
 
-void addTask(TaskFn fn, uint32_t intervalMs) {
+void addTask(void (*fn)(), uint32_t intervalMs) {
   if (g_taskCount < MAX_TASKS) {
     g_tasks[g_taskCount++] = {fn, intervalMs, 0, true};
   }
