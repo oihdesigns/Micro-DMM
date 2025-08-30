@@ -501,18 +501,30 @@ if(takeLog == true){
       measureCurrent();
       }
     
+bool psDebug = true; //Enable for easy power save mode debugging
 
 if(!powerSave){
     if(ohmsVoltage>EEPROM_MAXV-0.002 && !timeHighset && currentMode != HighRMode){
       timeHigh = millis();
       timeHighset = true;
+      if(psDebug){
+        Serial.println("PowerSave Time High Set True");
+      }
     }
     if (timeHighset && currentResistance < 2000){
       timeHighset = false;
+      if(psDebug){
+        Serial.println("PowerSave Cancel");
+      }
+
     }    
     if (timeHighset && timeHigh + 5000 < millis()){
       powerSave = true;
+       if(psDebug){
+        Serial.println("PowerSave Start");
+      }
     }
+   
 }
 
 
@@ -523,6 +535,12 @@ if(powerSave || currentMode==Charging){
   if(ohmsVoltage < EEPROM_SleepV-0.05){
       powerSave = false;
       timeHighset = false;
+      if(psDebug){
+        Serial.print("Sleep V Trigger Level: ");
+        Serial.println(EEPROM_SleepV);
+        Serial.print("PowerSave End, ohmsV: ");
+        Serial.println(ohmsVoltage, 3);
+      }
       analogWrite(OHMPWMPIN, 0);
     }
   }
@@ -1125,7 +1143,7 @@ void measureResistance() {
 
 
 
-  if(powerSave){
+  if(powerSave || ){
     ZENER_MAX_V = EEPROM_SleepV;
   }else{
     if(ohmsVoltage>ZENER_MAX_V){
