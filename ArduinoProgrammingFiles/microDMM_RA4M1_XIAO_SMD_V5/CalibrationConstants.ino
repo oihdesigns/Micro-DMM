@@ -92,7 +92,7 @@ void eepromSetup(){
         VOLTAGE_SCALE = -68.4264; // 
         constantI = 0.020024;
         EEPROM_SleepV = 0.922;
-        EEPROM_MAXV = 4.998;
+        EEPROM_MAXV = 4.995;
   } else if(EEPROM.read(1) == 6){
       CF_A = 1.0;
       CF_B = 1.0;

@@ -75,9 +75,7 @@ enum Mode {
   Low, //4
   AltUnitsMode, //5
   HighRMode, //6
-  //Impedance,
-  //RelayControl,
-  Charging, //6
+  Charging, //7
   NUM_MODES
 };
 
@@ -498,8 +496,10 @@ if(takeLog == true){
     if(!takeLog){ //Bypass Resistance if taking a log
     measureResistance();
     }
-    measureVoltage();
-    measureCurrent();
+    if(currentMode != HighRMode){
+      measureVoltage();
+      measureCurrent();
+      }
     
 
 if(!powerSave){
@@ -520,7 +520,7 @@ if(!powerSave){
 if(powerSave || currentMode==Charging){
   analogWrite(OHMPWMPIN, 254);
     
-  if(ohmsVoltage < EEPROM_SleepV-0.01){
+  if(ohmsVoltage < EEPROM_SleepV-0.05){
       powerSave = false;
       timeHighset = false;
       analogWrite(OHMPWMPIN, 0);
@@ -530,7 +530,7 @@ if(powerSave || currentMode==Charging){
     
     // Determine which primary measurement to display automatically
     
-    if (fabs(countV)>500  || currentMode == Voltmeter) {
+    if ((fabs(countV)>500  || currentMode == Voltmeter) && currentMode != HighRMode) {
       voltageDisplay = true;
       if(preciseMode){
       ads.setDataRate(RATE_ADS1115_16SPS); //slow sampling if 0 is set  
@@ -539,7 +539,7 @@ if(powerSave || currentMode==Charging){
       }
     
     }
-    if (isBetween(currentResistance, -10.0, 100.0)&& currentMode != Voltmeter) {
+    if (isBetween(currentResistance, -10.0, 100.0)&& currentMode != Voltmeter || currentMode == HighRMode) {
       voltageDisplay = false;
       ads.setDataRate(RATE_ADS1115_32SPS); // Slow sampling in resistance mode
     }
@@ -1297,19 +1297,21 @@ void measureVoltage() {
     VACPresense = false;
   }
 
-  if(EEPROM.read(1) == 5 || EEPROM.read(1) == 6){
-    if(((fabs(averageVoltage) < 0.030 && currentMode != VACmanual && newVoltageReading<0.05) || (currentMode == VACmanual && VAC<5)) && !preciseMode && voltageDisplay){
+  if((EEPROM.read(1) == 5 || EEPROM.read(1) == 6) //Only the PCBs I've implemented this circuitry
+      && 
+      (currentMode == Voltmeter || currentMode == VACmanual || currentMode == AltUnitsMode) // Only the modes I want it active in
+      && 
+      voltageDisplay
+      &&
+    ((fabs(averageVoltage) < 0.030 && currentMode != VACmanual && newVoltageReading<0.05) || (currentMode == VACmanual && VAC<5))) //Trigger thresholds
+    {
       Vzero = true;
       ClosedOrFloat();
     }else{
       Vzero = false;
       vFloating = false;
-    } 
-  }
-
-
-
-}
+    }
+    }
 
 void measureCurrent() {
   static float prevCurrent        = 0.0f;
@@ -1920,7 +1922,7 @@ void ClosedOrFloat()
   //Serial.print("voltageRead:");
   //Serial.println(bridgeV);
   
-  if(bridgeV < -0.220){
+  if(bridgeV < -0.080){
       vFloating = true;
     }else{
       vFloating = false;
