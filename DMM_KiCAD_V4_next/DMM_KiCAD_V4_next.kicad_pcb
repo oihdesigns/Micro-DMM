@@ -3794,7 +3794,7 @@
 	(footprint "Connector_PinSocket_2.54mm:PinSocket_1x02_P2.54mm_Vertical"
 		(layer "F.Cu")
 		(uuid "35419239-b954-44a4-a8d2-5cd3cf30a3c1")
-		(at 149.4 100.1 90)
+		(at 144.377549 99.070425 90)
 		(descr "Through hole straight socket strip, 1x02, 2.54mm pitch, single row (from Kicad 4.0.7), script generated")
 		(tags "Through hole socket strip THT 1x02 2.54mm single row")
 		(property "Reference" "J19"
@@ -10694,7 +10694,7 @@
 	(footprint "Connector_PinHeader_2.54mm:PinHeader_1x08_P2.54mm_Vertical"
 		(layer "F.Cu")
 		(uuid "6da1cfc0-1ee2-4e7a-8e72-ad720bf727d2")
-		(at 156.7 99.6 90)
+		(at 152 99.1 90)
 		(descr "Through hole straight pin header, 1x08, 2.54mm pitch, single row")
 		(tags "Through hole pin header THT 1x08 2.54mm single row")
 		(property "Reference" "J4"
@@ -12738,7 +12738,7 @@
 	(footprint "Connector_PinHeader_2.54mm:PinHeader_1x08_P2.54mm_Vertical"
 		(layer "F.Cu")
 		(uuid "7c26fce8-799e-43f7-9675-ffcc9548b43d")
-		(at 161 59.5 90)
+		(at 142.58 106.5 90)
 		(descr "Through hole straight pin header, 1x08, 2.54mm pitch, single row")
 		(tags "Through hole pin header THT 1x08 2.54mm single row")
 		(property "Reference" "J18"
