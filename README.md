@@ -1,6 +1,9 @@
 ![20250623_204616_470_1DXII copy](https://github.com/user-attachments/assets/606b6dc2-5ae6-4be6-a74b-a8d9c2276296)
 
 
+# Update Late August '25: 
+I've recently started a new job. It's great, but has longer hours than my previous job. This will negatively affect the amount of time I put into this project...
+
 # Micro-DMM
 
 This is the PCB design and code for a 4.5 digit DMM/ instrumentation module. It is designed and written primairly for Arduino-style development boards.
@@ -80,7 +83,7 @@ If you're interested in helping develop this please feel free to reach out.
 
 # FAQ:
 - Q: What is the logic voltage?
-  - A:  The current PCB is 5V specific, except for a couple I've modified with level shifter modules on the SDA/SCL lines. The next version will have the level shifters integrated that allow use with either a 5V or 3.3V logic level board. 
+  - A:  The current PCB works for either 3.3 or 5vdc. 
 
 - Q: Is there voltage isolation on the USB?
   - A: There is enough isolation (500K Ohms) that you will not hurt anything by measuring voltage (in either polarity) on something connected to the wall while the meter is also connected to the wall, but not enough to prevent ground loops from interfering with measurements. See the longer, full write up on my website, and then buy the Adafruit USB voltage isolation board.
