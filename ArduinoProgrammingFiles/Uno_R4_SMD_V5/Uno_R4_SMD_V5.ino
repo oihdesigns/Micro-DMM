@@ -309,10 +309,6 @@ String formatTime(unsigned long milliseconds);
 void ReZero();
 
 
-//DAC Output
-
-//analogWave wave(DAC);   // Create an instance of the analogWave class, using the DAC pin
-//int freq = 10;  // in hertz, change accordingly
 
 
 
@@ -1301,19 +1297,21 @@ void measureVoltage() {
     VACPresense = false;
   }
 
-  if(EEPROM.read(1) == 5){
-    if(((fabs(averageVoltage) < 0.030 && currentMode != VACmanual && newVoltageReading<0.05) || (currentMode == VACmanual && VAC<5)) && !preciseMode && voltageDisplay){
+  if((EEPROM.read(1) == 5 || EEPROM.read(1) == 6) //Only the PCBs I've implemented this circuitry
+      && 
+      (currentMode == Voltmeter || currentMode == VACmanual || currentMode == AltUnitsMode) // Only the modes I want it active in
+      && 
+      voltageDisplay
+      &&
+    ((fabs(averageVoltage) < 0.030 && currentMode != VACmanual && newVoltageReading<0.05) || (currentMode == VACmanual && VAC<5))) //Trigger thresholds
+    {
       Vzero = true;
       ClosedOrFloat();
     }else{
       Vzero = false;
       vFloating = false;
-    } 
-  }
-
-
-
-}
+    }
+    }
 
 void measureCurrent() {
   static float prevCurrent        = 0.0f;
@@ -1908,7 +1906,7 @@ void ClosedOrFloat()
 
   ads.setGain(GAIN_EIGHT);
   //ads.setDataRate(RATE_ADS1115_64SPS);
-    //delay(1);
+  delay(2);
   bridgeV = (ads.readADC_Differential_0_1() * GAIN_FACTOR_8 / 1000.0) * -1.0;
 
   currentShuntVoltage = adcReadingCurrent ;
@@ -1916,7 +1914,7 @@ void ClosedOrFloat()
   //Serial.print("voltageRead:");
   //Serial.println(bridgeV);
   
-  if(bridgeV < -0.220){
+  if(bridgeV < -0.040){
       vFloating = true;
     }else{
       vFloating = false;

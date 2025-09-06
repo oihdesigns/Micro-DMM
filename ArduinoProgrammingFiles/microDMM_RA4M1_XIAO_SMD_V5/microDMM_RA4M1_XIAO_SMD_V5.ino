@@ -1143,7 +1143,7 @@ void measureResistance() {
 
 
 
-  if(powerSave || ){
+  if(powerSave){
     ZENER_MAX_V = EEPROM_SleepV;
   }else{
     if(ohmsVoltage>ZENER_MAX_V){
