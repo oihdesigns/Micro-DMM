@@ -25,6 +25,28 @@ I've had Deep-Wiki index my documentation. It did a mostly okay job. You can rea
 - Simultaneous current and voltage measurement abilities (requires a Hall sensor-based ammeter module). 
 - Data logging for current and voltage, with customizable triggers to autolog both.
 
+## Raspberry Pi user interface
+
+The repository now includes a Raspberry Pi-friendly interface that mirrors the firmware display and logging features. The UI is written in Python using Tkinter so it ships with Raspberry Pi OS and can run directly on the framebuffer or under X11. To start the dashboard with the built-in demo generator run:
+
+```
+python3 -m raspi_port.app
+```
+
+In deployment the measurement host should feed real readings to the `MicroDmmApp` class instead of the demo thread. The window presents the same information rendered by `updateDisplay()`—live voltage or resistance with min/max tracking, current when enabled, the active mode, timestamps, delta/null information, and log counters. Interaction hotkeys replace the touch panel:
+
+| Function | Touch color | Hotkey | Description |
+| --- | --- | --- | --- |
+| Mode cycle | Red | `M` | Advances through the measurement modes. |
+| Manual log | Green | `L` | Appends the most recent sample buffer to `~/micro_dmm_logs/data.csv`. |
+| Auto log export | – | `A` | Writes the auto-log buffer to `~/micro_dmm_logs/data_autologged.csv`. |
+| Min/Max reset | Blue | `Z` | Clears the stored extrema, just like tapping “Min/Max”. |
+| Type/Δ | Yellow | `T` | In *Type* mode it writes the displayed value to `typed_entries.txt`; otherwise it arms the delta/null workflow. |
+
+On a Raspberry Pi you can optionally map these controls to hardware buttons by defining a `MICRO_DMM_GPIO` environment variable before launching the program. The value is a comma-separated list such as `mode=5,manual_log=6,auto_log=13,minmax=19,type=26`. Each entry binds a GPIO pin (using `gpiozero.Button`) to the corresponding action.
+
+All log exports stay on the Pi’s filesystem under `~/micro_dmm_logs/`. The CSV layouts match the firmware’s `logCurrentData()` and `autologArraysToCSV()` routines so downstream tooling continues to work. The `typed_entries.txt` file replaces the USB keyboard emulator and captures the same formatted text that would have been “typed” into a host PC, while also echoing it to stdout for quick clipboard-style use.
+
 I have a long and detailed write-up of the circuitry design on my personal website: https://www.oihdesigns.com/arduino-multimeter-project
 
 There are a couple videos here:
