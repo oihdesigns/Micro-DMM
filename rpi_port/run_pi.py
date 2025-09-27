@@ -194,6 +194,7 @@ class MeasurementService:
             resistance=resistance.value,
             current=current.value,
             timestamp_ms=timestamp_ms,
+            ohms_voltage=resistance.ohms_voltage,
         )
 
 

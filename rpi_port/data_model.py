@@ -108,6 +108,7 @@ class MeasurementState:
     time_at_min_voltage: str = "00:00"
     time_at_max_voltage: str = "00:00"
     display_resistance: float = 0.0
+    ohms_voltage: float = 0.0
     low_resistance: float = float("inf")
     high_resistance: float = float("-inf")
     time_at_min_resistance: str = "00:00"
@@ -125,7 +126,7 @@ class MeasurementState:
     zero_offset_res: float = 0.0
     min_max_display: bool = False
 
-    current_mode: str = "Default"
+    current_mode: str = "Debug"
     voltage_display: bool = True
     log_mode_enabled: bool = False
     manual_log_count: int = 0
