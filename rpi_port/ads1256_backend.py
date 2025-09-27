@@ -172,6 +172,9 @@ class ADS1256Backend:
         drdy_reader: Optional[Callable[[], bool]] = None,
         range_switch: Optional[Callable[[bool], None]] = None,
         resistance_calibration: Optional[List[Tuple[float, float]]] = None,
+        voltage_channels: Tuple[int, int] = (0, 1),
+        resistance_channel: int = 2,
+        current_channel: int = 3,
     ) -> None:
         if spidev is None and spi is None:
             raise RuntimeError(
@@ -242,6 +245,12 @@ class ADS1256Backend:
         self._current_gain_index_hw: Optional[int] = None
         self._current_mux_hw: Optional[int] = None
 
+        self._voltage_channels: Tuple[int, int] = self._validate_differential_channels(
+            voltage_channels
+        )
+        self._resistance_channel: int = self._validate_channel(resistance_channel)
+        self._current_channel: int = self._validate_channel(current_channel)
+
         self._initialise_hardware()
 
     # ------------------------------------------------------------------
@@ -279,7 +288,9 @@ class ADS1256Backend:
             requested_gain_index = self._gain_index_for_value(8)
             auto_gain = False
 
-        raw_code = self._read_differential(0, 1, requested_gain_index)
+        raw_code = self._read_differential(
+            self._voltage_channels[0], self._voltage_channels[1], requested_gain_index
+        )
 
         if auto_gain:
             if (
@@ -287,13 +298,21 @@ class ADS1256Backend:
                 and requested_gain_index > 0
             ):
                 requested_gain_index -= 1
-                raw_code = self._read_differential(0, 1, requested_gain_index)
+                raw_code = self._read_differential(
+                    self._voltage_channels[0],
+                    self._voltage_channels[1],
+                    requested_gain_index,
+                )
             elif (
                 abs(raw_code) < self.ADC_COUNT_LOW_THRESHOLD
                 and requested_gain_index < self._max_gain_index
             ):
                 requested_gain_index += 1
-                raw_code = self._read_differential(0, 1, requested_gain_index)
+                raw_code = self._read_differential(
+                    self._voltage_channels[0],
+                    self._voltage_channels[1],
+                    requested_gain_index,
+                )
             self._voltage_gain_index = requested_gain_index
 
         gain = self.gains[requested_gain_index]
@@ -360,17 +379,17 @@ class ADS1256Backend:
             zener_v = self.zener_max_v
 
         gain_index = self._resistance_gain_index
-        raw_code = self._read_single_ended(2, gain_index)
+        raw_code = self._read_single_ended(self._resistance_channel, gain_index)
 
         if abs(raw_code) > self.ADC_COUNT_HIGH_THRESHOLD and gain_index > 0:
             gain_index -= 1
-            raw_code = self._read_single_ended(2, gain_index)
+            raw_code = self._read_single_ended(self._resistance_channel, gain_index)
         elif (
             abs(raw_code) < self.ADC_COUNT_LOW_THRESHOLD
             and gain_index < self._max_gain_index
         ):
             gain_index += 1
-            raw_code = self._read_single_ended(2, gain_index)
+            raw_code = self._read_single_ended(self._resistance_channel, gain_index)
         self._resistance_gain_index = gain_index
 
         gain = self.gains[gain_index]
@@ -447,18 +466,18 @@ class ADS1256Backend:
         else:
             gain_index = self._current_gain_index
 
-        raw_code = self._read_single_ended(3, gain_index)
+        raw_code = self._read_single_ended(self._current_channel, gain_index)
 
         if auto_gain:
             if abs(raw_code) > self.ADC_COUNT_HIGH_THRESHOLD and gain_index > 0:
                 gain_index -= 1
-                raw_code = self._read_single_ended(3, gain_index)
+                raw_code = self._read_single_ended(self._current_channel, gain_index)
             elif (
                 abs(raw_code) < self.ADC_COUNT_LOW_THRESHOLD
                 and gain_index < self._max_gain_index
             ):
                 gain_index += 1
-                raw_code = self._read_single_ended(3, gain_index)
+                raw_code = self._read_single_ended(self._current_channel, gain_index)
             self._current_gain_index = gain_index
 
         gain = self.gains[gain_index]
@@ -511,6 +530,35 @@ class ADS1256Backend:
     def set_current_zero_offset(self, value: float) -> None:
         self.current_zero_offset = value
 
+    def configure_channels(
+        self,
+        *,
+        voltage: Optional[Tuple[int, int]] = None,
+        resistance: Optional[int] = None,
+        current: Optional[int] = None,
+    ) -> None:
+        """Update the ADS1256 channel assignments used for each measurement."""
+
+        if voltage is not None:
+            self._voltage_channels = self._validate_differential_channels(voltage)
+        if resistance is not None:
+            self._resistance_channel = self._validate_channel(resistance)
+        if current is not None:
+            self._current_channel = self._validate_channel(current)
+
+        # Force the next conversion to refresh the MUX and gain settings so the
+        # hardware picks up the new assignments immediately.
+        self._current_mux_hw = None
+
+    def channel_map(self) -> Dict[str, Tuple[int, ...]]:
+        """Return the configured channel assignments."""
+
+        return {
+            "voltage": self._voltage_channels,
+            "resistance": (self._resistance_channel,),
+            "current": (self._current_channel,),
+        }
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
@@ -521,9 +569,24 @@ class ADS1256Backend:
         self._write_register(REG_STATUS, 0x00)
         self.set_gain(self._voltage_gain_index)
         self.set_data_rate(self.data_rate)
-        self._write_register(REG_MUX, (0 << 4) | 1)
+        self._write_register(
+            REG_MUX,
+            (self._voltage_channels[0] << 4) | self._voltage_channels[1],
+        )
         self._send_command(CMD_SELFCAL)
         time.sleep(0.1)
+
+    @staticmethod
+    def _validate_channel(channel: int) -> int:
+        if not 0 <= channel <= 7:
+            raise ValueError("ADS1256 channels must be between 0 and 7")
+        return channel
+
+    def _validate_differential_channels(
+        self, channels: Tuple[int, int]
+    ) -> Tuple[int, int]:
+        pos, neg = channels
+        return self._validate_channel(pos), self._validate_channel(neg)
 
     def _gain_index_for_value(self, value: int) -> int:
         for idx, gain in enumerate(self.gains):

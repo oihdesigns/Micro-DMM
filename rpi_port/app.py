@@ -55,8 +55,10 @@ class MicroDmmApp:
         state: Optional[MeasurementState] = None,
         logger: Optional[PiLogger] = None,
         gpio_pins: Optional[Dict[str, int]] = None,
+        container: Optional[tk.Widget] = None,
     ) -> None:
         self.root = root
+        self.container = container or root
         self.state = state or MeasurementState()
         self.logger = logger or PiLogger()
         self.mode_cycle = list(MODES)
@@ -75,41 +77,50 @@ class MicroDmmApp:
     # ------------------------------------------------------------------
     # UI construction
     def _build_ui(self) -> None:
-        self.root.title("Micro-DMM (Raspberry Pi)")
-        self.root.configure(padx=16, pady=16)
+        if self.container is self.root:
+            self.root.title("Micro-DMM (Raspberry Pi)")
+            self.root.configure(padx=16, pady=16)
+            parent = self.root
+        else:
+            parent = self.container
+            if hasattr(parent, "configure"):
+                try:
+                    parent.configure(padding=16)
+                except tk.TclError:
+                    parent.configure(padx=16, pady=16)
 
-        header = ttk.Label(self.root, text="Measurement", font=("TkDefaultFont", 24, "bold"))
+        header = ttk.Label(parent, text="Measurement", font=("TkDefaultFont", 24, "bold"))
         header.grid(row=0, column=0, columnspan=2, sticky="w")
 
-        self.primary_value = ttk.Label(self.root, font=("TkDefaultFont", 32, "bold"))
+        self.primary_value = ttk.Label(parent, font=("TkDefaultFont", 32, "bold"))
         self.primary_value.grid(row=1, column=0, sticky="w")
 
-        self.primary_suffix = ttk.Label(self.root, font=("TkDefaultFont", 16))
+        self.primary_suffix = ttk.Label(parent, font=("TkDefaultFont", 16))
         self.primary_suffix.grid(row=1, column=1, sticky="w")
 
-        self.secondary_info = ttk.Label(self.root, font=("TkDefaultFont", 14))
+        self.secondary_info = ttk.Label(parent, font=("TkDefaultFont", 14))
         self.secondary_info.grid(row=2, column=0, columnspan=2, sticky="w")
 
-        ttk.Separator(self.root, orient="horizontal").grid(row=3, column=0, columnspan=2, sticky="ew", pady=12)
+        ttk.Separator(parent, orient="horizontal").grid(row=3, column=0, columnspan=2, sticky="ew", pady=12)
 
-        self.mode_label = ttk.Label(self.root, font=("TkDefaultFont", 14))
+        self.mode_label = ttk.Label(parent, font=("TkDefaultFont", 14))
         self.mode_label.grid(row=4, column=0, sticky="w")
 
-        self.time_label = ttk.Label(self.root, font=("TkDefaultFont", 14))
+        self.time_label = ttk.Label(parent, font=("TkDefaultFont", 14))
         self.time_label.grid(row=4, column=1, sticky="w")
 
-        self.current_label = ttk.Label(self.root, font=("TkDefaultFont", 14))
+        self.current_label = ttk.Label(parent, font=("TkDefaultFont", 14))
         self.current_label.grid(row=5, column=0, columnspan=2, sticky="w")
 
-        self.minmax_label = ttk.Label(self.root, font=("TkDefaultFont", 12))
+        self.minmax_label = ttk.Label(parent, font=("TkDefaultFont", 12))
         self.minmax_label.grid(row=6, column=0, columnspan=2, sticky="w")
 
-        self.logging_label = ttk.Label(self.root, font=("TkDefaultFont", 12))
+        self.logging_label = ttk.Label(parent, font=("TkDefaultFont", 12))
         self.logging_label.grid(row=7, column=0, columnspan=2, sticky="w")
 
-        ttk.Separator(self.root, orient="horizontal").grid(row=8, column=0, columnspan=2, sticky="ew", pady=12)
+        ttk.Separator(parent, orient="horizontal").grid(row=8, column=0, columnspan=2, sticky="ew", pady=12)
 
-        self.button_frame = ttk.Frame(self.root)
+        self.button_frame = ttk.Frame(parent)
         self.button_frame.grid(row=9, column=0, columnspan=2, sticky="ew")
 
         self.button_mappings: Dict[str, ButtonMapping] = {
