@@ -4,7 +4,21 @@ from __future__ import annotations
 import argparse
 import signal
 import sys
+from pathlib import Path
 from typing import Dict, Optional, Tuple
+
+# ---------------------------------------------------------------------------
+# Stand-alone execution support
+# ---------------------------------------------------------------------------
+if __package__ in (None, ""):
+    # Allow ``python rpi_port/run_pi_debug.py`` to work by emulating package imports.
+    package_root = Path(__file__).resolve().parent
+    parent_dir = str(package_root.parent)
+    package_dir = str(package_root)
+    sys.path.insert(0, parent_dir)
+    if package_dir in sys.path:
+        sys.path.remove(package_dir)
+    __package__ = package_root.name
 
 try:  # pragma: no cover - optional hardware dependencies on the Pi
     from gpiozero import LED
