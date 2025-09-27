@@ -246,6 +246,7 @@ class MicroDmmApp:
         timestamp_ms = timestamp_ms if timestamp_ms is not None else time.time() * 1000.0
         seconds = timestamp_ms / 1000.0
         self.state.new_voltage = voltage
+        self.state.median_voltage = voltage
         self.state.display_resistance = resistance
         if ohms_voltage is not None:
             self.state.ohms_voltage = ohms_voltage
