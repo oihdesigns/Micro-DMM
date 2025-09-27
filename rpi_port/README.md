@@ -42,6 +42,16 @@ python3 -m rpi_port.run_pi \
     --gpio-button mode=5 --gpio-button manual_log=6
 ```
 
+If you prefer a single-file style invocation, the launcher now also works when
+executed directly:
+
+```bash
+python3 rpi_port/run_pi.py --drdy-pin 22 --range-pin 23
+```
+
+Both commands expect the `rpi_port` folder to stay intact, since the Tk UI,
+ADS1256 backend, and logging helpers live alongside `run_pi.py`.
+
 The options are all optional:
 
 * `--drdy-pin` hooks the ADS1256 **DRDY** line so conversions are synchronised.【F:rpi_port/run_pi.py†L107-L133】

@@ -2,13 +2,27 @@
 from __future__ import annotations
 
 import argparse
-import logging
 import signal
 import sys
 import threading
 import time
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional
+
+# ---------------------------------------------------------------------------
+# Stand-alone execution support
+# ---------------------------------------------------------------------------
+if __package__ in (None, ""):
+    # Allow ``python rpi_port/run_pi.py`` to work by emulating package imports.
+    package_root = Path(__file__).resolve().parent
+    parent_dir = str(package_root.parent)
+    package_dir = str(package_root)
+    sys.path.insert(0, parent_dir)
+    if package_dir in sys.path:
+        sys.path.remove(package_dir)
+    __package__ = package_root.name
+
+import logging
 
 try:  # pragma: no cover - optional hardware dependencies
     from gpiozero import DigitalInputDevice, LED
