@@ -1,0 +1,4 @@
+gpiozero>=1.6.2
+spidev>=3.6
+adafruit-circuitpython-busdevice>=5.0.6
+adafruit-circuitpython-ads1x15>=2.4.6
