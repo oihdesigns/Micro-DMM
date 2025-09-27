@@ -34,6 +34,7 @@ class ButtonMapping:
 
 
 MODES: Iterable[str] = (
+    "Debug",
     "Default",
     "Voltmeter",
     "VAC",
@@ -63,6 +64,9 @@ class MicroDmmApp:
         self.logger = logger or PiLogger()
         self.mode_cycle = list(MODES)
         self.mode_index = self.mode_cycle.index(self.state.current_mode) if self.state.current_mode in self.mode_cycle else 0
+        self.start_time = time.monotonic()
+        self._runtime_job: Optional[str] = None
+        self._debug_visible = False
 
         self._build_ui()
         if gpio_pins:
@@ -71,6 +75,9 @@ class MicroDmmApp:
                     self.button_mappings[key].gpio_pin = pin
         self._install_keyboard_shortcuts()
         self._install_gpio_buttons()
+
+        self._update_runtime_label()
+        self._schedule_runtime_refresh()
 
         self.update_display()
 
@@ -92,11 +99,61 @@ class MicroDmmApp:
         header = ttk.Label(parent, text="Measurement", font=("TkDefaultFont", 24, "bold"))
         header.grid(row=0, column=0, columnspan=2, sticky="w")
 
-        self.primary_value = ttk.Label(parent, font=("TkDefaultFont", 32, "bold"))
-        self.primary_value.grid(row=1, column=0, sticky="w")
+        self.standard_display_frame = ttk.Frame(parent)
+        self.standard_display_frame.grid(row=1, column=0, columnspan=2, sticky="w")
+        self.primary_value = ttk.Label(self.standard_display_frame, font=("TkDefaultFont", 32, "bold"))
+        self.primary_value.grid(row=0, column=0, sticky="w")
+        self.primary_suffix = ttk.Label(self.standard_display_frame, font=("TkDefaultFont", 16))
+        self.primary_suffix.grid(row=0, column=1, sticky="w")
 
-        self.primary_suffix = ttk.Label(parent, font=("TkDefaultFont", 16))
-        self.primary_suffix.grid(row=1, column=1, sticky="w")
+        self.debug_display_frame = ttk.Frame(parent)
+        self.debug_display_frame.grid(row=1, column=0, columnspan=2, sticky="ew")
+        self.debug_display_frame.columnconfigure(0, weight=1)
+        self.debug_display_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(
+            self.debug_display_frame,
+            text="Voltage",
+            font=("TkDefaultFont", 16, "bold"),
+        ).grid(row=0, column=0, sticky="w")
+        ttk.Label(
+            self.debug_display_frame,
+            text="Resistance",
+            font=("TkDefaultFont", 16, "bold"),
+        ).grid(row=0, column=1, sticky="w")
+
+        voltage_value_frame = ttk.Frame(self.debug_display_frame)
+        voltage_value_frame.grid(row=1, column=0, sticky="w")
+        self.debug_voltage_value = ttk.Label(
+            voltage_value_frame, font=("TkDefaultFont", 28, "bold")
+        )
+        self.debug_voltage_value.grid(row=0, column=0, sticky="w")
+        self.debug_voltage_suffix = ttk.Label(
+            voltage_value_frame, font=("TkDefaultFont", 18)
+        )
+        self.debug_voltage_suffix.grid(row=0, column=1, sticky="w", padx=(8, 0))
+
+        resistance_value_frame = ttk.Frame(self.debug_display_frame)
+        resistance_value_frame.grid(row=1, column=1, sticky="w")
+        self.debug_resistance_value = ttk.Label(
+            resistance_value_frame, font=("TkDefaultFont", 28, "bold")
+        )
+        self.debug_resistance_value.grid(row=0, column=0, sticky="w")
+        self.debug_resistance_suffix = ttk.Label(
+            resistance_value_frame, font=("TkDefaultFont", 18)
+        )
+        self.debug_resistance_suffix.grid(row=0, column=1, sticky="w", padx=(8, 0))
+
+        self.debug_voltage_extra = ttk.Label(
+            self.debug_display_frame, font=("TkDefaultFont", 14)
+        )
+        self.debug_voltage_extra.grid(row=2, column=0, sticky="w")
+        self.debug_resistance_voltage = ttk.Label(
+            self.debug_display_frame, font=("TkDefaultFont", 14)
+        )
+        self.debug_resistance_voltage.grid(row=2, column=1, sticky="w")
+
+        self.debug_display_frame.grid_remove()
 
         self.secondary_info = ttk.Label(parent, font=("TkDefaultFont", 14))
         self.secondary_info.grid(row=2, column=0, columnspan=2, sticky="w")
@@ -150,6 +207,26 @@ class MicroDmmApp:
             button = Button(mapping.gpio_pin)
             button.when_pressed = mapping.callback
 
+    def _toggle_debug_display(self, enabled: bool) -> None:
+        if enabled and not self._debug_visible:
+            self.standard_display_frame.grid_remove()
+            self.debug_display_frame.grid()
+            self._debug_visible = True
+        elif not enabled and self._debug_visible:
+            self.debug_display_frame.grid_remove()
+            self.standard_display_frame.grid()
+            self._debug_visible = False
+
+    def _update_runtime_label(self) -> None:
+        elapsed = max(0, int(time.monotonic() - self.start_time))
+        hours, remainder = divmod(elapsed, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        self.time_label.configure(text=f"Runtime: {hours:02d}:{minutes:02d}:{seconds:02d}")
+
+    def _schedule_runtime_refresh(self) -> None:
+        self._update_runtime_label()
+        self._runtime_job = self.root.after(1000, self._schedule_runtime_refresh)
+
     # ------------------------------------------------------------------
     # State update API
     def update_state(self, **kwargs: float | str | bool) -> None:
@@ -158,11 +235,20 @@ class MicroDmmApp:
                 setattr(self.state, key, value)
         self.update_display()
 
-    def ingest_measurement(self, voltage: float, resistance: float, current: float, timestamp_ms: Optional[float] = None) -> None:
+    def ingest_measurement(
+        self,
+        voltage: float,
+        resistance: float,
+        current: float,
+        timestamp_ms: Optional[float] = None,
+        ohms_voltage: Optional[float] = None,
+    ) -> None:
         timestamp_ms = timestamp_ms if timestamp_ms is not None else time.time() * 1000.0
         seconds = timestamp_ms / 1000.0
         self.state.new_voltage = voltage
         self.state.display_resistance = resistance
+        if ohms_voltage is not None:
+            self.state.ohms_voltage = ohms_voltage
         self.state.current_reading = current
         self.state.record_current_sample(voltage, seconds, current)
         self.state.update_timestamps(timestamp_ms)
@@ -216,37 +302,99 @@ class MicroDmmApp:
 
     # ------------------------------------------------------------------
     def update_display(self) -> None:
+        debug_mode = self.state.current_mode == "Debug"
+        self._toggle_debug_display(debug_mode)
+
         if self.state.last_update_ms == 0:
-            self.primary_value.configure(text="--")
-            self.primary_suffix.configure(text="")
+            if debug_mode:
+                self.debug_voltage_value.configure(text="--")
+                self.debug_voltage_suffix.configure(text="")
+                self.debug_resistance_value.configure(text="--")
+                self.debug_resistance_suffix.configure(text="")
+                self.debug_voltage_extra.configure(text="")
+                self.debug_resistance_voltage.configure(text="Sense V: --")
+            else:
+                self.primary_value.configure(text="--")
+                self.primary_suffix.configure(text="")
             self.secondary_info.configure(text="Waiting for data…")
         else:
-            primary_value, suffix, digits = (
-                format_voltage_value(self.state.select_voltage_for_display())
-                if self.state.voltage_display
-                else format_resistance_value(self.state.display_resistance)
+            voltage_value, voltage_suffix, voltage_digits = format_voltage_value(
+                self.state.select_voltage_for_display()
             )
-            primary_text = f"{primary_value:.{digits}f}"
-            self.primary_value.configure(text=primary_text)
-            unit = "V" if self.state.voltage_display else "Ω"
-            self.primary_suffix.configure(text=f" {suffix}{unit}")
+            resistance_value, resistance_suffix, resistance_digits = format_resistance_value(
+                self.state.display_resistance
+            )
 
-            if self.state.voltage_display and not math.isinf(self.state.low_voltage):
-                low_val, low_suffix, low_digits = format_voltage_value(self.state.low_voltage)
-                high_val, high_suffix, high_digits = format_voltage_value(self.state.high_voltage)
-                secondary = (
-                    f"Min {low_val:.{low_digits}f}{low_suffix}  ({self.state.time_at_min_voltage})\n"
-                    f"Max {high_val:.{high_digits}f}{high_suffix}  ({self.state.time_at_max_voltage})"
-                )
-            elif not self.state.voltage_display and not math.isinf(self.state.low_resistance):
-                low_val, low_suffix, low_digits = format_resistance_value(self.state.low_resistance)
-                high_val, high_suffix, high_digits = format_resistance_value(self.state.high_resistance)
-                secondary = (
-                    f"Min {low_val:.{low_digits}f}{low_suffix}Ω  ({self.state.time_at_min_resistance})\n"
-                    f"Max {high_val:.{high_digits}f}{high_suffix}Ω  ({self.state.time_at_max_resistance})"
-                )
+            if debug_mode:
+                self.debug_voltage_value.configure(text=f"{voltage_value:.{voltage_digits}f}")
+                self.debug_voltage_suffix.configure(text=f"{voltage_suffix}V")
+                self.debug_resistance_value.configure(text=f"{resistance_value:.{resistance_digits}f}")
+                self.debug_resistance_suffix.configure(text=f"{resistance_suffix}Ω")
+                self.debug_voltage_extra.configure(text="")
+                if math.isfinite(self.state.ohms_voltage):
+                    sense_value, sense_suffix, sense_digits = format_voltage_value(self.state.ohms_voltage)
+                    sense_text = f"Sense V: {sense_value:.{sense_digits}f} {sense_suffix}V"
+                else:
+                    sense_text = "Sense V: --"
+                self.debug_resistance_voltage.configure(text=sense_text)
             else:
-                secondary = "Gathering min/max data…"
+                if self.state.voltage_display:
+                    primary_value = voltage_value
+                    primary_suffix = voltage_suffix
+                    primary_digits = voltage_digits
+                    unit = "V"
+                else:
+                    primary_value = resistance_value
+                    primary_suffix = resistance_suffix
+                    primary_digits = resistance_digits
+                    unit = "Ω"
+                primary_text = f"{primary_value:.{primary_digits}f}"
+                self.primary_value.configure(text=primary_text)
+                self.primary_suffix.configure(text=f" {primary_suffix}{unit}")
+
+            if debug_mode:
+                lines = []
+                if not math.isinf(self.state.low_voltage):
+                    low_val, low_suffix, low_digits = format_voltage_value(self.state.low_voltage)
+                    high_val, high_suffix, high_digits = format_voltage_value(self.state.high_voltage)
+                    lines.append(
+                        f"Voltage min {low_val:.{low_digits}f}{low_suffix}V ({self.state.time_at_min_voltage})"
+                    )
+                    lines.append(
+                        f"Voltage max {high_val:.{high_digits}f}{high_suffix}V ({self.state.time_at_max_voltage})"
+                    )
+                else:
+                    lines.append("Gathering voltage min/max…")
+
+                if not math.isinf(self.state.low_resistance):
+                    low_val, low_suffix, low_digits = format_resistance_value(self.state.low_resistance)
+                    high_val, high_suffix, high_digits = format_resistance_value(self.state.high_resistance)
+                    lines.append(
+                        f"Resistance min {low_val:.{low_digits}f}{low_suffix}Ω ({self.state.time_at_min_resistance})"
+                    )
+                    lines.append(
+                        f"Resistance max {high_val:.{high_digits}f}{high_suffix}Ω ({self.state.time_at_max_resistance})"
+                    )
+                else:
+                    lines.append("Gathering resistance min/max…")
+                secondary = "\n".join(lines)
+            else:
+                if self.state.voltage_display and not math.isinf(self.state.low_voltage):
+                    low_val, low_suffix, low_digits = format_voltage_value(self.state.low_voltage)
+                    high_val, high_suffix, high_digits = format_voltage_value(self.state.high_voltage)
+                    secondary = (
+                        f"Min {low_val:.{low_digits}f}{low_suffix}  ({self.state.time_at_min_voltage})\n"
+                        f"Max {high_val:.{high_digits}f}{high_suffix}  ({self.state.time_at_max_voltage})"
+                    )
+                elif not self.state.voltage_display and not math.isinf(self.state.low_resistance):
+                    low_val, low_suffix, low_digits = format_resistance_value(self.state.low_resistance)
+                    high_val, high_suffix, high_digits = format_resistance_value(self.state.high_resistance)
+                    secondary = (
+                        f"Min {low_val:.{low_digits}f}{low_suffix}Ω  ({self.state.time_at_min_resistance})\n"
+                        f"Max {high_val:.{high_digits}f}{high_suffix}Ω  ({self.state.time_at_max_resistance})"
+                    )
+                else:
+                    secondary = "Gathering min/max data…"
             self.secondary_info.configure(text=secondary)
 
         current_text = "Current disabled"
@@ -262,7 +410,6 @@ class MicroDmmApp:
         self.current_label.configure(text=current_text)
 
         self.mode_label.configure(text=f"Mode: {self.state.current_mode}")
-        self.time_label.configure(text=f"Clock: {self.state.formatted_time()}")
 
         logging = f"Logging: {'USB' if self.state.log_mode_enabled else 'Off'} | Manual {self.state.manual_log_count} | Auto {self.state.auto_log_count}"
         self.logging_label.configure(text=logging)
@@ -287,9 +434,16 @@ def _demo_data(app: MicroDmmApp) -> None:
         voltage = math.sin(elapsed / 3.0) * 2.0 + 5.0
         resistance = 1000.0 + math.sin(elapsed / 5.0) * 50
         current = 0.01 + math.cos(elapsed / 4.0) * 0.002
+        ohms_voltage = min(resistance * 0.001, 3.0)
         timestamp_ms = time.time() * 1000.0
         app.state.queue_auto_sample(voltage, elapsed, current)
-        app.ingest_measurement(voltage, resistance, current, timestamp_ms=timestamp_ms)
+        app.ingest_measurement(
+            voltage,
+            resistance,
+            current,
+            timestamp_ms=timestamp_ms,
+            ohms_voltage=ohms_voltage,
+        )
         time.sleep(1.0)
 
 
