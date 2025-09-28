@@ -6,7 +6,7 @@ import threading
 import time
 import os
 from dataclasses import dataclass
-from typing import Callable, Dict, Iterable, Optional
+from typing import TYPE_CHECKING, Callable, Dict, Iterable, Optional
 
 import tkinter as tk
 from tkinter import ttk
@@ -18,6 +18,9 @@ from .data_model import (
     format_voltage_value,
 )
 from .logging import PiLogger
+
+if TYPE_CHECKING:  # pragma: no cover - for type checking only
+    from .run_pi import MeasurementService
 
 try:
     from gpiozero import Button  # type: ignore
@@ -67,6 +70,13 @@ class MicroDmmApp:
         self.start_time = time.monotonic()
         self._runtime_job: Optional[str] = None
         self._debug_visible = False
+        self._service: Optional["MeasurementService"] = None
+        self._display_interval = 0.5
+        self._last_display_update = 0.0
+        self._display_job: Optional[str] = None
+        self._updating_backend_controls = False
+        self._gain_options: list[str] = []
+        self._data_rate_options: list[int] = []
 
         self._build_ui()
         if gpio_pins:
@@ -86,24 +96,24 @@ class MicroDmmApp:
     def _build_ui(self) -> None:
         if self.container is self.root:
             self.root.title("Micro-DMM (Raspberry Pi)")
-            self.root.configure(padx=16, pady=16)
+            self.root.configure(padx=12, pady=12)
             parent = self.root
         else:
             parent = self.container
             if hasattr(parent, "configure"):
                 try:
-                    parent.configure(padding=16)
+                    parent.configure(padding=12)
                 except tk.TclError:
                     parent.configure(padx=16, pady=16)
 
-        header = ttk.Label(parent, text="Measurement", font=("TkDefaultFont", 24, "bold"))
+        header = ttk.Label(parent, text="Measurement", font=("TkDefaultFont", 20, "bold"))
         header.grid(row=0, column=0, columnspan=2, sticky="w")
 
         self.standard_display_frame = ttk.Frame(parent)
         self.standard_display_frame.grid(row=1, column=0, columnspan=2, sticky="w")
-        self.primary_value = ttk.Label(self.standard_display_frame, font=("TkDefaultFont", 32, "bold"))
+        self.primary_value = ttk.Label(self.standard_display_frame, font=("TkDefaultFont", 26, "bold"))
         self.primary_value.grid(row=0, column=0, sticky="w")
-        self.primary_suffix = ttk.Label(self.standard_display_frame, font=("TkDefaultFont", 16))
+        self.primary_suffix = ttk.Label(self.standard_display_frame, font=("TkDefaultFont", 14))
         self.primary_suffix.grid(row=0, column=1, sticky="w")
 
         self.debug_display_frame = ttk.Frame(parent)
@@ -114,68 +124,83 @@ class MicroDmmApp:
         ttk.Label(
             self.debug_display_frame,
             text="Voltage",
-            font=("TkDefaultFont", 16, "bold"),
+
+            font=("TkDefaultFont", 14, "bold"),
+
         ).grid(row=0, column=0, sticky="w")
         ttk.Label(
             self.debug_display_frame,
             text="Resistance",
-            font=("TkDefaultFont", 16, "bold"),
+            font=("TkDefaultFont", 14, "bold"),
+
         ).grid(row=0, column=1, sticky="w")
 
         voltage_value_frame = ttk.Frame(self.debug_display_frame)
         voltage_value_frame.grid(row=1, column=0, sticky="w")
         self.debug_voltage_value = ttk.Label(
-            voltage_value_frame, font=("TkDefaultFont", 28, "bold")
+            voltage_value_frame, font=("TkDefaultFont", 24, "bold")
         )
         self.debug_voltage_value.grid(row=0, column=0, sticky="w")
         self.debug_voltage_suffix = ttk.Label(
-            voltage_value_frame, font=("TkDefaultFont", 18)
+            voltage_value_frame, font=("TkDefaultFont", 14)
+
         )
         self.debug_voltage_suffix.grid(row=0, column=1, sticky="w", padx=(8, 0))
 
         resistance_value_frame = ttk.Frame(self.debug_display_frame)
         resistance_value_frame.grid(row=1, column=1, sticky="w")
         self.debug_resistance_value = ttk.Label(
-            resistance_value_frame, font=("TkDefaultFont", 28, "bold")
+            resistance_value_frame, font=("TkDefaultFont", 24, "bold")
         )
         self.debug_resistance_value.grid(row=0, column=0, sticky="w")
         self.debug_resistance_suffix = ttk.Label(
-            resistance_value_frame, font=("TkDefaultFont", 18)
+            resistance_value_frame, font=("TkDefaultFont", 14)
+
         )
         self.debug_resistance_suffix.grid(row=0, column=1, sticky="w", padx=(8, 0))
 
         self.debug_voltage_extra = ttk.Label(
-            self.debug_display_frame, font=("TkDefaultFont", 14)
+            self.debug_display_frame, font=("TkDefaultFont", 12)
         )
         self.debug_voltage_extra.grid(row=2, column=0, sticky="w")
         self.debug_resistance_voltage = ttk.Label(
-            self.debug_display_frame, font=("TkDefaultFont", 14)
+            self.debug_display_frame, font=("TkDefaultFont", 12)
         )
         self.debug_resistance_voltage.grid(row=2, column=1, sticky="w")
 
+        self.debug_gain_label = ttk.Label(
+            self.debug_display_frame, font=("TkDefaultFont", 11)
+        )
+        self.debug_gain_label.grid(row=3, column=0, columnspan=2, sticky="w")
+
+        self.debug_backend_label = ttk.Label(
+            self.debug_display_frame, font=("TkDefaultFont", 11)
+        )
+        self.debug_backend_label.grid(row=4, column=0, columnspan=2, sticky="w")
+
         self.debug_display_frame.grid_remove()
 
-        self.secondary_info = ttk.Label(parent, font=("TkDefaultFont", 14))
+        self.secondary_info = ttk.Label(parent, font=("TkDefaultFont", 12))
         self.secondary_info.grid(row=2, column=0, columnspan=2, sticky="w")
 
-        ttk.Separator(parent, orient="horizontal").grid(row=3, column=0, columnspan=2, sticky="ew", pady=12)
+        ttk.Separator(parent, orient="horizontal").grid(row=3, column=0, columnspan=2, sticky="ew", pady=8)
 
-        self.mode_label = ttk.Label(parent, font=("TkDefaultFont", 14))
+        self.mode_label = ttk.Label(parent, font=("TkDefaultFont", 12))
         self.mode_label.grid(row=4, column=0, sticky="w")
 
-        self.time_label = ttk.Label(parent, font=("TkDefaultFont", 14))
-        self.time_label.grid(row=4, column=1, sticky="w")
+        self.time_label = ttk.Label(parent, font=("TkDefaultFont", 12))
+        self.time_label.grid(row=4, column=1, sticky="e")
 
-        self.current_label = ttk.Label(parent, font=("TkDefaultFont", 14))
+        self.current_label = ttk.Label(parent, font=("TkDefaultFont", 12))
         self.current_label.grid(row=5, column=0, columnspan=2, sticky="w")
 
-        self.minmax_label = ttk.Label(parent, font=("TkDefaultFont", 12))
+        self.minmax_label = ttk.Label(parent, font=("TkDefaultFont", 11))
         self.minmax_label.grid(row=6, column=0, columnspan=2, sticky="w")
 
-        self.logging_label = ttk.Label(parent, font=("TkDefaultFont", 12))
+        self.logging_label = ttk.Label(parent, font=("TkDefaultFont", 11))
         self.logging_label.grid(row=7, column=0, columnspan=2, sticky="w")
 
-        ttk.Separator(parent, orient="horizontal").grid(row=8, column=0, columnspan=2, sticky="ew", pady=12)
+        ttk.Separator(parent, orient="horizontal").grid(row=8, column=0, columnspan=2, sticky="ew", pady=8)
 
         self.button_frame = ttk.Frame(parent)
         self.button_frame.grid(row=9, column=0, columnspan=2, sticky="ew")
@@ -193,6 +218,109 @@ class MicroDmmApp:
             btn.grid(row=0, column=column, padx=4, pady=4, sticky="ew")
             self.button_frame.columnconfigure(column, weight=1)
 
+        self.debug_controls_frame = ttk.LabelFrame(parent, text="Debug tools", padding=4)
+        self.debug_controls_frame.grid(row=10, column=0, columnspan=2, sticky="nsew", pady=(8, 0))
+        if hasattr(parent, "rowconfigure"):
+            try:
+                parent.rowconfigure(10, weight=1)
+            except tk.TclError:
+                pass
+        self.debug_controls_frame.grid_remove()
+
+        self.debug_notebook = ttk.Notebook(self.debug_controls_frame)
+        self.debug_notebook.pack(fill="both", expand=True)
+        try:
+            self.debug_notebook.enable_traversal()
+        except tk.TclError:
+            pass
+
+        controls_tab = ttk.Frame(self.debug_notebook, padding=6)
+        controls_tab.columnconfigure(0, weight=1)
+        calibration_tab = ttk.Frame(self.debug_notebook, padding=6)
+        calibration_tab.columnconfigure(0, weight=1)
+        calibration_tab.columnconfigure(1, weight=1)
+        self.debug_notebook.add(controls_tab, text="Controls")
+        self.debug_notebook.add(calibration_tab, text="Calibration")
+
+        gain_frame = ttk.LabelFrame(controls_tab, text="Gain", padding=4)
+        gain_frame.grid(row=0, column=0, sticky="ew")
+        gain_frame.columnconfigure(1, weight=1)
+
+        self.gain_mode_var = tk.StringVar(value="auto")
+        ttk.Radiobutton(
+            gain_frame,
+            text="Automatic",
+            value="auto",
+            variable=self.gain_mode_var,
+            command=self._on_gain_mode_changed,
+        ).grid(row=0, column=0, sticky="w")
+        ttk.Radiobutton(
+            gain_frame,
+            text="Manual",
+            value="manual",
+            variable=self.gain_mode_var,
+            command=self._on_gain_mode_changed,
+        ).grid(row=0, column=1, sticky="w")
+        ttk.Label(gain_frame, text="Gain:").grid(row=1, column=0, sticky="w", pady=(4, 0))
+        self.manual_gain_var = tk.StringVar()
+        self.manual_gain_combo = ttk.Combobox(
+            gain_frame,
+            textvariable=self.manual_gain_var,
+            state="disabled",
+            width=10,
+        )
+        self.manual_gain_combo.grid(row=1, column=1, sticky="ew", padx=(4, 0), pady=(4, 0))
+        self.manual_gain_combo.bind("<<ComboboxSelected>>", self._on_manual_gain_selected)
+
+        sampling_frame = ttk.LabelFrame(controls_tab, text="Sampling", padding=4)
+        sampling_frame.grid(row=1, column=0, sticky="ew", pady=(6, 0))
+        sampling_frame.columnconfigure(1, weight=1)
+        ttk.Label(sampling_frame, text="Rate:").grid(row=0, column=0, sticky="w")
+        self.sample_rate_var = tk.StringVar()
+        self.sample_rate_combo = ttk.Combobox(
+            sampling_frame,
+            textvariable=self.sample_rate_var,
+            state="readonly",
+            width=10,
+        )
+        self.sample_rate_combo.grid(row=0, column=1, sticky="ew", padx=(4, 0))
+        self.sample_rate_combo.bind("<<ComboboxSelected>>", self._on_sample_rate_selected)
+        self.buffer_var = tk.BooleanVar(value=False)
+        self.buffer_toggle = ttk.Checkbutton(
+            sampling_frame,
+            text="Input buffer enabled",
+            variable=self.buffer_var,
+            command=self._on_buffer_toggled,
+        )
+        self.buffer_toggle.grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
+
+        ttk.Label(calibration_tab, text="Offset:").grid(row=0, column=0, sticky="w")
+        self.voltage_offset_label = ttk.Label(calibration_tab, text="0.000 V")
+        self.voltage_offset_label.grid(row=0, column=1, sticky="e")
+        self.zero_button = ttk.Button(
+            calibration_tab,
+            text="Set zero",
+            command=self._on_voltage_zero,
+        )
+        self.zero_button.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+
+        ttk.Label(calibration_tab, text="Scale factor:").grid(row=2, column=0, sticky="w", pady=(8, 0))
+        self.voltage_scale_label = ttk.Label(calibration_tab, text="1.0000")
+        self.voltage_scale_label.grid(row=2, column=1, sticky="e", pady=(8, 0))
+        ttk.Label(calibration_tab, text="Target voltage (V):").grid(row=3, column=0, sticky="w")
+        self.scale_input_var = tk.StringVar()
+        self.scale_entry = ttk.Entry(calibration_tab, textvariable=self.scale_input_var, width=10)
+        self.scale_entry.grid(row=3, column=1, sticky="ew", padx=(4, 0))
+        self.apply_scale_button = ttk.Button(
+            calibration_tab,
+            text="Apply scale",
+            command=self._on_apply_scale,
+        )
+        self.apply_scale_button.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+
+        # Ensure the debug layout starts in the correct state before the first update.
+        self._toggle_debug_display(self.state.current_mode == "Debug")
+
     def _install_keyboard_shortcuts(self) -> None:
         for mapping in self.button_mappings.values():
             self.root.bind(f"<{mapping.hotkey}>", lambda event, cb=mapping.callback: cb())
@@ -207,14 +335,158 @@ class MicroDmmApp:
             button = Button(mapping.gpio_pin)
             button.when_pressed = mapping.callback
 
+    def attach_service(self, service: "MeasurementService") -> None:
+        self._service = service
+        self._gain_options = service.gain_options()
+        if self._gain_options:
+            self.manual_gain_combo.configure(values=self._gain_options)
+            self.manual_gain_var.set(self._gain_options[0])
+        rate_options = service.data_rate_options()
+        self._data_rate_options = rate_options
+        if rate_options:
+            display_values = [f"{rate} Hz" for rate in rate_options]
+            self.sample_rate_combo.configure(values=display_values)
+        self.update_backend_controls(service.get_backend_status())
+
+    def update_backend_controls(self, status: Dict[str, object]) -> None:
+        self._updating_backend_controls = True
+        try:
+            auto_gain = bool(status.get("auto_gain", True))
+            mode = "auto" if auto_gain else "manual"
+            self.gain_mode_var.set(mode)
+            self.manual_gain_combo.configure(state="readonly" if mode == "manual" else "disabled")
+            manual_gain = status.get("manual_gain")
+            if isinstance(manual_gain, str) and manual_gain in self._gain_options:
+                self.manual_gain_var.set(manual_gain)
+            sample_rate = status.get("sample_rate")
+            if isinstance(sample_rate, (int, float)) and sample_rate > 0:
+                self.sample_rate_var.set(f"{int(round(sample_rate))} Hz")
+            buffer_enabled = bool(status.get("buffer_enabled", False))
+            self.buffer_var.set(buffer_enabled)
+            voltage_scale = status.get("voltage_scale")
+            if isinstance(voltage_scale, (int, float)):
+                self.voltage_scale_label.configure(text=f"{voltage_scale:.4f}")
+            voltage_offset = status.get("voltage_offset")
+            if isinstance(voltage_offset, (int, float)):
+                self.voltage_offset_label.configure(text=f"{voltage_offset:.3f} V")
+        finally:
+            self._updating_backend_controls = False
+
+    def _on_gain_mode_changed(self) -> None:
+        if self._updating_backend_controls:
+            return
+        mode = self.gain_mode_var.get()
+        self.manual_gain_combo.configure(state="readonly" if mode == "manual" else "disabled")
+        if self._service is None:
+            return
+        if mode == "auto":
+            self._service.configure_gain_mode(auto=True)
+        else:
+            gain_name = self.manual_gain_var.get()
+            if not gain_name and self._gain_options:
+                gain_name = self._gain_options[0]
+            self._service.configure_gain_mode(auto=False, gain_name=gain_name or None)
+        self.update_backend_controls(self._service.get_backend_status())
+
+    def _on_manual_gain_selected(self, _event: object) -> None:
+        if self._updating_backend_controls or self._service is None:
+            return
+        gain_name = self.manual_gain_var.get()
+        if not gain_name:
+            return
+        self._service.set_manual_gain(gain_name)
+        if self.gain_mode_var.get() == "manual":
+            self._service.configure_gain_mode(auto=False, gain_name=gain_name)
+        self.update_backend_controls(self._service.get_backend_status())
+
+    def _on_sample_rate_selected(self, _event: object) -> None:
+        if self._updating_backend_controls or self._service is None:
+            return
+        value = self.sample_rate_var.get().split()[0]
+        try:
+            rate = float(value)
+        except ValueError:
+            self.logger.emit_keyboard_line(f"Invalid sample rate '{self.sample_rate_var.get()}'")
+            return
+        try:
+            self._service.set_sample_rate(rate)
+        except Exception as exc:  # pragma: no cover - hardware error path
+            self.logger.emit_keyboard_line(f"Sample rate update failed: {exc}")
+        self.update_backend_controls(self._service.get_backend_status())
+
+    def _on_buffer_toggled(self) -> None:
+        if self._updating_backend_controls or self._service is None:
+            return
+        try:
+            self._service.set_buffer_enabled(bool(self.buffer_var.get()))
+        except Exception as exc:  # pragma: no cover - hardware error path
+            self.logger.emit_keyboard_line(f"Buffer toggle failed: {exc}")
+        self.update_backend_controls(self._service.get_backend_status())
+
+    def _on_voltage_zero(self) -> None:
+        if self._service is None:
+            return
+        try:
+            self._service.calibrate_voltage_zero()
+            self.logger.emit_keyboard_line("Voltage zero calibration applied")
+        except Exception as exc:  # pragma: no cover - hardware error path
+            self.logger.emit_keyboard_line(f"Zero calibration failed: {exc}")
+        self.update_backend_controls(self._service.get_backend_status())
+
+    def _on_apply_scale(self) -> None:
+        if self._service is None:
+            return
+        try:
+            target = float(self.scale_input_var.get())
+        except ValueError:
+            self.logger.emit_keyboard_line("Enter a valid voltage for scale calibration")
+            return
+        try:
+            self._service.calibrate_voltage_scale(target)
+            self.logger.emit_keyboard_line(f"Voltage scale calibrated to {target:.4f} V")
+        except Exception as exc:  # pragma: no cover - hardware error path
+            self.logger.emit_keyboard_line(f"Scale calibration failed: {exc}")
+        else:
+            self.scale_input_var.set("")
+        self.update_backend_controls(self._service.get_backend_status())
+
+    def _cancel_pending_display(self) -> None:
+        if self._display_job is not None:
+            try:
+                self.root.after_cancel(self._display_job)
+            except tk.TclError:
+                pass
+            self._display_job = None
+
+    def _queue_display_refresh(self) -> None:
+        now = time.monotonic()
+        elapsed = now - self._last_display_update
+        if elapsed >= self._display_interval:
+            self._last_display_update = now
+            self.update_display()
+        elif self._display_job is None:
+            delay_ms = max(1, int((self._display_interval - elapsed) * 1000))
+            self._display_job = self.root.after(delay_ms, self._delayed_display_update)
+
+    def _delayed_display_update(self) -> None:
+        self._display_job = None
+        self._last_display_update = time.monotonic()
+        self.update_display()
+
+
     def _toggle_debug_display(self, enabled: bool) -> None:
         if enabled and not self._debug_visible:
             self.standard_display_frame.grid_remove()
             self.debug_display_frame.grid()
+            self.debug_controls_frame.grid()
+
+
             self._debug_visible = True
         elif not enabled and self._debug_visible:
             self.debug_display_frame.grid_remove()
             self.standard_display_frame.grid()
+            self.debug_controls_frame.grid_remove()
+
             self._debug_visible = False
 
     def _update_runtime_label(self) -> None:
@@ -242,6 +514,17 @@ class MicroDmmApp:
         current: float,
         timestamp_ms: Optional[float] = None,
         ohms_voltage: Optional[float] = None,
+        *,
+        voltage_gain: Optional[str] = None,
+        resistance_gain: Optional[str] = None,
+        current_gain: Optional[str] = None,
+        voltage_raw: Optional[int] = None,
+        voltage_lsb: Optional[float] = None,
+        sample_rate: Optional[float] = None,
+        buffer_enabled: Optional[bool] = None,
+        voltage_scale: Optional[float] = None,
+        voltage_offset: Optional[float] = None,
+
     ) -> None:
         timestamp_ms = timestamp_ms if timestamp_ms is not None else time.time() * 1000.0
         seconds = timestamp_ms / 1000.0
@@ -251,10 +534,28 @@ class MicroDmmApp:
         if ohms_voltage is not None:
             self.state.ohms_voltage = ohms_voltage
         self.state.current_reading = current
+        if voltage_gain is not None:
+            self.state.voltage_gain = voltage_gain
+        if resistance_gain is not None:
+            self.state.resistance_gain = resistance_gain
+        if current_gain is not None:
+            self.state.current_gain = current_gain
+        if voltage_raw is not None:
+            self.state.voltage_raw_code = voltage_raw
+        if voltage_lsb is not None:
+            self.state.voltage_lsb = voltage_lsb
+        if sample_rate is not None:
+            self.state.sample_rate_hz = sample_rate
+        if buffer_enabled is not None:
+            self.state.buffer_enabled = buffer_enabled
+        if voltage_scale is not None:
+            self.state.voltage_scale = voltage_scale
+        if voltage_offset is not None:
+            self.state.voltage_offset = voltage_offset
         self.state.record_current_sample(voltage, seconds, current)
         self.state.update_timestamps(timestamp_ms)
         self.state.update_extrema(timestamp_ms)
-        self.update_display()
+        self._queue_display_refresh()
 
     # ------------------------------------------------------------------
     # Action handlers
@@ -303,6 +604,9 @@ class MicroDmmApp:
 
     # ------------------------------------------------------------------
     def update_display(self) -> None:
+        self._cancel_pending_display()
+        self._last_display_update = time.monotonic()
+
         debug_mode = self.state.current_mode == "Debug"
         self._toggle_debug_display(debug_mode)
 
@@ -314,9 +618,27 @@ class MicroDmmApp:
                 self.debug_resistance_suffix.configure(text="")
                 self.debug_voltage_extra.configure(text="")
                 self.debug_resistance_voltage.configure(text="Sense V: --")
+                self.debug_gain_label.configure(text="Gains: --")
+                backend_parts = []
+                sample_rate_hz = getattr(self.state, "sample_rate_hz", 0.0)
+                if sample_rate_hz:
+                    backend_parts.append(f"Sample: {int(sample_rate_hz)} Hz")
+                backend_parts.append(f"Buffer: {'On' if self.state.buffer_enabled else 'Off'}")
+                scale_text = "--" if not math.isfinite(self.state.voltage_scale) else f"{self.state.voltage_scale:.4f}"
+                offset_text = (
+                    "--"
+                    if not math.isfinite(self.state.voltage_offset)
+                    else f"{self.state.voltage_offset:.3f} V"
+                )
+                backend_parts.append(f"Scale: {scale_text}")
+                backend_parts.append(f"Offset: {offset_text}")
+                self.debug_backend_label.configure(text=" | ".join(backend_parts))
             else:
                 self.primary_value.configure(text="--")
                 self.primary_suffix.configure(text="")
+                self.debug_gain_label.configure(text="")
+                self.debug_backend_label.configure(text="")
+
             self.secondary_info.configure(text="Waiting for data…")
         else:
             voltage_value, voltage_suffix, voltage_digits = format_voltage_value(
@@ -325,6 +647,7 @@ class MicroDmmApp:
             resistance_value, resistance_suffix, resistance_digits = format_resistance_value(
                 self.state.display_resistance
             )
+
 
             if debug_mode:
                 self.debug_voltage_value.configure(text=f"{voltage_value:.{voltage_digits}f}")
@@ -338,6 +661,30 @@ class MicroDmmApp:
                 else:
                     sense_text = "Sense V: --"
                 self.debug_resistance_voltage.configure(text=sense_text)
+                gain_parts = []
+                if self.state.voltage_gain:
+                    gain_parts.append(f"V: {self.state.voltage_gain}")
+                if self.state.resistance_gain:
+                    gain_parts.append(f"R: {self.state.resistance_gain}")
+                if self.state.current_gain:
+                    gain_parts.append(f"I: {self.state.current_gain}")
+                gain_text = "Gains: " + " | ".join(gain_parts) if gain_parts else "Gains: --"
+                self.debug_gain_label.configure(text=gain_text)
+                backend_parts = []
+                sample_rate_hz = getattr(self.state, "sample_rate_hz", 0.0)
+                if sample_rate_hz:
+                    backend_parts.append(f"Sample: {int(sample_rate_hz)} Hz")
+                backend_parts.append(f"Buffer: {'On' if self.state.buffer_enabled else 'Off'}")
+                scale_text = "--" if not math.isfinite(self.state.voltage_scale) else f"{self.state.voltage_scale:.4f}"
+                offset_text = (
+                    "--"
+                    if not math.isfinite(self.state.voltage_offset)
+                    else f"{self.state.voltage_offset:.3f} V"
+                )
+                backend_parts.append(f"Scale: {scale_text}")
+                backend_parts.append(f"Offset: {offset_text}")
+                self.debug_backend_label.configure(text=" | ".join(backend_parts))
+
             else:
                 if self.state.voltage_display:
                     primary_value = voltage_value
@@ -352,6 +699,9 @@ class MicroDmmApp:
                 primary_text = f"{primary_value:.{primary_digits}f}"
                 self.primary_value.configure(text=primary_text)
                 self.primary_suffix.configure(text=f" {primary_suffix}{unit}")
+                self.debug_gain_label.configure(text="")
+                self.debug_backend_label.configure(text="")
+
 
             if debug_mode:
                 lines = []

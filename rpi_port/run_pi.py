@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import argparse
+import math
 import signal
 import sys
 import threading
 import time
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
 # ---------------------------------------------------------------------------
 # Stand-alone execution support
@@ -134,9 +135,17 @@ class MeasurementService:
         self._backend = backend
         self._app = app
         self._cycle = cycle_tracker
+        self._lock = threading.Lock()
+        self._gain_options = [gain.name for gain in self._backend.gains]
+        self._manual_gain_index = len(self._backend.gains) - 1
+        self._auto_gain = True
+        self._sample_rate_hz = sample_rate_hz
         self._interval = 1.0 / sample_rate_hz
+        self._buffer_enabled = self._backend.buffer_enabled
+        self._last_voltage_result: Optional[VoltageResult] = None
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
+        self._push_backend_status()
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -158,13 +167,24 @@ class MeasurementService:
         state.current_enabled = True
         next_deadline = time.monotonic()
         while not self._stop.is_set():
-            start = time.monotonic()
+            with self._lock:
+                interval = self._interval
+                auto_gain = self._auto_gain
+                manual_gain_index = None if self._auto_gain else self._manual_gain_index
             try:
-                voltage = self._backend.read_voltage()
-                resistance = self._backend.read_resistance()
+                voltage = self._backend.read_voltage(
+                    auto_gain=auto_gain,
+                    manual_gain_index=manual_gain_index,
+                )
+                resistance = self._backend.read_resistance(
+                    auto_range=auto_gain,
+                    manual_gain_index=manual_gain_index,
+                )
                 current = self._backend.read_current(
                     current_enabled=state.current_enabled,
                     high_range=state.current_range_high,
+                    auto_gain=auto_gain,
+                    manual_gain_index=manual_gain_index,
                 )
             except Exception:
                 _LOG.exception("Measurement step failed; retrying after delay")
@@ -176,7 +196,7 @@ class MeasurementService:
             if self._cycle is not None:
                 self._cycle.pulse()
 
-            next_deadline += self._interval
+            next_deadline += interval
             delay = max(0.0, next_deadline - time.monotonic())
             self._stop.wait(delay)
 
@@ -188,6 +208,7 @@ class MeasurementService:
     ) -> None:
         state = self._app.state
         state.current_range_high = current.range_high
+        self._last_voltage_result = voltage
         timestamp_ms = time.time() * 1000.0
         self._app.ingest_measurement(
             voltage=voltage.value,
@@ -195,7 +216,106 @@ class MeasurementService:
             current=current.value,
             timestamp_ms=timestamp_ms,
             ohms_voltage=resistance.ohms_voltage,
+            voltage_gain=voltage.gain.name,
+            resistance_gain=resistance.gain.name,
+            current_gain=current.gain.name,
+            voltage_raw=voltage.raw_code,
+            voltage_lsb=voltage.lsb,
+            sample_rate=self._sample_rate_hz,
+            buffer_enabled=self._buffer_enabled,
+            voltage_scale=self._backend.voltage_scale_pos,
+            voltage_offset=self._backend.giga_abs_factor,
         )
+
+    # ------------------------------------------------------------------
+    # UI helpers
+    def gain_options(self) -> List[str]:
+        return list(self._gain_options)
+
+    def data_rate_options(self) -> List[int]:
+        return sorted(self._backend.DATA_RATES.keys())
+
+    def get_backend_status(self) -> Dict[str, Any]:
+        with self._lock:
+            auto_gain = self._auto_gain
+            manual_index = self._manual_gain_index
+            sample_rate = self._sample_rate_hz
+            buffer_enabled = self._buffer_enabled
+        manual_name = self._gain_options[manual_index]
+        return {
+            "auto_gain": auto_gain,
+            "manual_gain": manual_name,
+            "sample_rate": sample_rate,
+            "buffer_enabled": buffer_enabled,
+            "voltage_scale": self._backend.voltage_scale_pos,
+            "voltage_offset": self._backend.giga_abs_factor,
+        }
+
+    def configure_gain_mode(self, *, auto: bool, gain_name: Optional[str] = None) -> None:
+        with self._lock:
+            self._auto_gain = auto
+            if not auto and gain_name is not None:
+                self._manual_gain_index = self._gain_index_from_name(gain_name)
+        self._push_backend_status()
+
+    def set_manual_gain(self, gain_name: str) -> None:
+        with self._lock:
+            self._manual_gain_index = self._gain_index_from_name(gain_name)
+        self._push_backend_status()
+
+    def set_sample_rate(self, rate_hz: float) -> None:
+        if rate_hz <= 0:
+            raise ValueError("Sample rate must be positive")
+        selected = int(round(rate_hz))
+        options = self.data_rate_options()
+        nearest = min(options, key=lambda value: (abs(value - selected), -value))
+        with self._lock:
+            self._sample_rate_hz = float(nearest)
+            self._interval = 1.0 / self._sample_rate_hz
+        self._backend.set_data_rate(nearest)
+        self._push_backend_status()
+
+    def set_buffer_enabled(self, enabled: bool) -> None:
+        with self._lock:
+            self._buffer_enabled = enabled
+        self._backend.set_buffer_enabled(enabled)
+        self._push_backend_status()
+
+    def calibrate_voltage_zero(self) -> None:
+        with self._lock:
+            result = self._last_voltage_result
+        if result is None:
+            raise RuntimeError("No voltage measurement available for calibration")
+        self._backend.apply_voltage_offset(result.value)
+        self._push_backend_status()
+
+    def calibrate_voltage_scale(self, expected_voltage: float) -> None:
+        with self._lock:
+            result = self._last_voltage_result
+        if result is None:
+            raise RuntimeError("No voltage measurement available for calibration")
+        measured = result.value
+        if math.isclose(measured, 0.0, abs_tol=1e-9):
+            raise ValueError("Cannot calibrate scale when measured voltage is zero")
+        scale_factor = expected_voltage / measured
+        self._backend.adjust_voltage_scale(scale_factor)
+        self._push_backend_status()
+
+    def _gain_index_from_name(self, name: str) -> int:
+        try:
+            return self._gain_options.index(name)
+        except ValueError:
+            return self._manual_gain_index
+
+    def _push_backend_status(self) -> None:
+        self._app.update_state(
+            sample_rate_hz=self._sample_rate_hz,
+            buffer_enabled=self._buffer_enabled,
+            voltage_scale=self._backend.voltage_scale_pos,
+            voltage_offset=self._backend.giga_abs_factor,
+
+        )
+        self._app.update_backend_controls(self.get_backend_status())
 
 
 # ==============================================================================
@@ -314,6 +434,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         sample_rate_hz=args.sample_rate,
         cycle_tracker=cycle_tracker,
     )
+    app.attach_service(service)
     cleanup.add(service.close)
 
     def _shutdown() -> None:
