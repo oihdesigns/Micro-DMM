@@ -213,12 +213,21 @@ class MicroDmmApp:
             btn.grid(row=0, column=column, padx=4, pady=4, sticky="ew")
             self.button_frame.columnconfigure(column, weight=1)
 
-        self.debug_controls_frame = ttk.Frame(parent)
-        self.debug_controls_frame.grid(row=10, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        self.debug_controls_frame = ttk.LabelFrame(parent, text="Debug tools", padding=4)
+        self.debug_controls_frame.grid(row=10, column=0, columnspan=2, sticky="nsew", pady=(8, 0))
+        if hasattr(parent, "rowconfigure"):
+            try:
+                parent.rowconfigure(10, weight=1)
+            except tk.TclError:
+                pass
         self.debug_controls_frame.grid_remove()
 
         self.debug_notebook = ttk.Notebook(self.debug_controls_frame)
         self.debug_notebook.pack(fill="both", expand=True)
+        try:
+            self.debug_notebook.enable_traversal()
+        except tk.TclError:
+            pass
 
         controls_tab = ttk.Frame(self.debug_notebook, padding=6)
         controls_tab.columnconfigure(0, weight=1)
@@ -303,6 +312,9 @@ class MicroDmmApp:
             command=self._on_apply_scale,
         )
         self.apply_scale_button.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+
+        # Ensure the debug layout starts in the correct state before the first update.
+        self._toggle_debug_display(self.state.current_mode == "Debug")
 
     def _install_keyboard_shortcuts(self) -> None:
         for mapping in self.button_mappings.values():
