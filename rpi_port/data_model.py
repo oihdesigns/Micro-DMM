@@ -51,8 +51,9 @@ def format_resistance_value(value: float) -> Tuple[float, str, int]:
 
 def format_time(milliseconds: float) -> str:
     total_seconds = int(milliseconds // 1000)
-    minutes, seconds = divmod(total_seconds, 60)
-    return f"{minutes:02d}:{seconds:02d}"
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 
 @dataclass
@@ -105,27 +106,28 @@ class MeasurementState:
     median_voltage_step: float = 0.0
     low_voltage: float = float("inf")
     high_voltage: float = float("-inf")
-    time_at_min_voltage: str = "00:00"
-    time_at_max_voltage: str = "00:00"
+    time_at_min_voltage: str = "00:00:00"
+    time_at_max_voltage: str = "00:00:00"
     display_resistance: float = 0.0
+    ohms_voltage: float = 0.0
     low_resistance: float = float("inf")
     high_resistance: float = float("-inf")
-    time_at_min_resistance: str = "00:00"
-    time_at_max_resistance: str = "00:00"
+    time_at_min_resistance: str = "00:00:00"
+    time_at_max_resistance: str = "00:00:00"
     current_reading: float = 0.0
     current_enabled: bool = False
     current_range_high: bool = False
     current_low: float = float("inf")
     current_high: float = float("-inf")
-    time_at_min_current: str = "00:00"
-    time_at_max_current: str = "00:00"
+    time_at_min_current: str = "00:00:00"
+    time_at_max_current: str = "00:00:00"
     precise_mode: bool = False
     delta_mode: bool = False
     delta_voltage: float = 0.0
     zero_offset_res: float = 0.0
     min_max_display: bool = False
 
-    current_mode: str = "Default"
+    current_mode: str = "Debug"
     voltage_display: bool = True
     log_mode_enabled: bool = False
     manual_log_count: int = 0
@@ -139,6 +141,15 @@ class MeasurementState:
 
     manual_log: ManualLog = field(default_factory=ManualLog)
     auto_log: AutoLog = field(default_factory=AutoLog)
+    voltage_gain: str = ""
+    resistance_gain: str = ""
+    current_gain: str = ""
+    voltage_raw_code: int = 0
+    voltage_lsb: float = 0.0
+    sample_rate_hz: float = 0.0
+    buffer_enabled: bool = False
+    voltage_scale: float = 1.0
+    voltage_offset: float = 0.0
 
     def select_voltage_for_display(self) -> float:
         if not self.precise_mode:
