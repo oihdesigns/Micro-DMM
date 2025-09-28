@@ -218,18 +218,17 @@ class MicroDmmApp:
             self.button_frame.columnconfigure(column, weight=1)
 
 
-        self.debug_controls_frame = ttk.LabelFrame(parent, text="Debug tools", padding=4)
-        self.debug_controls_frame.grid(row=10, column=0, columnspan=2, sticky="nsew", pady=(8, 0))
+        self.backend_controls_frame = ttk.LabelFrame(parent, text="ADC controls", padding=4)
+        self.backend_controls_frame.grid(row=10, column=0, columnspan=2, sticky="nsew", pady=(8, 0))
         if hasattr(parent, "rowconfigure"):
             try:
                 parent.rowconfigure(10, weight=1)
             except tk.TclError:
                 pass
-        self.debug_controls_frame.grid_remove()
 
-        controls_container = ttk.Frame(self.debug_controls_frame)
+        controls_container = ttk.Frame(self.backend_controls_frame)
         controls_container.grid(row=0, column=0, sticky="nsew")
-        self.debug_controls_frame.columnconfigure(0, weight=1)
+        self.backend_controls_frame.columnconfigure(0, weight=1)
         controls_container.columnconfigure(0, weight=1)
 
         gain_frame = ttk.LabelFrame(controls_container, text="Gain", padding=4)
@@ -478,13 +477,11 @@ class MicroDmmApp:
         if enabled and not self._debug_visible:
             self.standard_display_frame.grid_remove()
             self.debug_display_frame.grid()
-            self.debug_controls_frame.grid()
 
             self._debug_visible = True
         elif not enabled and self._debug_visible:
             self.debug_display_frame.grid_remove()
             self.standard_display_frame.grid()
-            self.debug_controls_frame.grid_remove()
 
             self._debug_visible = False
 
