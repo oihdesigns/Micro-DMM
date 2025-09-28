@@ -242,6 +242,8 @@ class ADS1256Backend:
         self.data_rate = 1000
         self._conversion_delay = 1.0 / self.data_rate
         self._adcon_base = 0x20  # clock out disabled, sensor detect off
+        self._status_base = 0x00
+        self._buffer_enabled = False
         self._current_gain_index_hw: Optional[int] = None
         self._current_mux_hw: Optional[int] = None
 
@@ -268,6 +270,7 @@ class ADS1256Backend:
         vac_present: bool = False,
         vac_manual: bool = False,
         alt_units: bool = False,
+        manual_gain_index: Optional[int] = None,
     ) -> VoltageResult:
         """Measure the differential voltage between channels 0 and 1.
 
@@ -279,7 +282,11 @@ class ADS1256Backend:
             self._voltage_gain_index = self._max_gain_index
             self._voltage_first_run = False
 
-        requested_gain_index = self._voltage_gain_index
+        if manual_gain_index is not None:
+            requested_gain_index = max(0, min(self._max_gain_index, manual_gain_index))
+            auto_gain = False
+        else:
+            requested_gain_index = self._voltage_gain_index
 
         if vac_present or vac_manual:
             requested_gain_index = self._gain_index_for_value(1)
@@ -314,6 +321,8 @@ class ADS1256Backend:
                     requested_gain_index,
                 )
             self._voltage_gain_index = requested_gain_index
+        elif manual_gain_index is not None:
+            self._voltage_gain_index = requested_gain_index
 
         gain = self.gains[requested_gain_index]
         volts = raw_code * gain.lsb
@@ -343,6 +352,7 @@ class ADS1256Backend:
         force_high_range: Optional[bool] = None,
         power_save: bool = False,
         alt_units: bool = False,
+        manual_gain_index: Optional[int] = None,
     ) -> ResistanceResult:
         """Measure resistance using channel 2 and replicate auto-ranging."""
 
@@ -378,19 +388,25 @@ class ADS1256Backend:
         else:
             zener_v = self.zener_max_v
 
-        gain_index = self._resistance_gain_index
+        if manual_gain_index is not None:
+            gain_index = max(0, min(self._max_gain_index, manual_gain_index))
+        else:
+            gain_index = self._resistance_gain_index
         raw_code = self._read_single_ended(self._resistance_channel, gain_index)
 
-        if abs(raw_code) > self.ADC_COUNT_HIGH_THRESHOLD and gain_index > 0:
-            gain_index -= 1
-            raw_code = self._read_single_ended(self._resistance_channel, gain_index)
-        elif (
-            abs(raw_code) < self.ADC_COUNT_LOW_THRESHOLD
-            and gain_index < self._max_gain_index
-        ):
-            gain_index += 1
-            raw_code = self._read_single_ended(self._resistance_channel, gain_index)
-        self._resistance_gain_index = gain_index
+        if manual_gain_index is None:
+            if abs(raw_code) > self.ADC_COUNT_HIGH_THRESHOLD and gain_index > 0:
+                gain_index -= 1
+                raw_code = self._read_single_ended(self._resistance_channel, gain_index)
+            elif (
+                abs(raw_code) < self.ADC_COUNT_LOW_THRESHOLD
+                and gain_index < self._max_gain_index
+            ):
+                gain_index += 1
+                raw_code = self._read_single_ended(self._resistance_channel, gain_index)
+            self._resistance_gain_index = gain_index
+        else:
+            self._resistance_gain_index = gain_index
 
         gain = self.gains[gain_index]
         ohms_voltage = raw_code * gain.lsb
@@ -444,6 +460,7 @@ class ADS1256Backend:
         current_enabled: bool = True,
         high_range: bool = False,
         auto_gain: bool = True,
+        manual_gain_index: Optional[int] = None,
     ) -> CurrentResult:
         """Measure current from channel 3."""
 
@@ -460,7 +477,10 @@ class ADS1256Backend:
             self._current_gain_index = self._max_gain_index
             self._current_first_run = False
 
-        if high_range:
+        if manual_gain_index is not None:
+            gain_index = max(0, min(self._max_gain_index, manual_gain_index))
+            auto_gain = False
+        elif high_range:
             gain_index = self._gain_index_for_value(1)
             auto_gain = False
         else:
@@ -478,6 +498,8 @@ class ADS1256Backend:
             ):
                 gain_index += 1
                 raw_code = self._read_single_ended(self._current_channel, gain_index)
+            self._current_gain_index = gain_index
+        else:
             self._current_gain_index = gain_index
 
         gain = self.gains[gain_index]
@@ -514,11 +536,28 @@ class ADS1256Backend:
         self.data_rate = samples_per_second
         self._conversion_delay = 1.5 / samples_per_second
 
+    def set_buffer_enabled(self, enabled: bool) -> None:
+        self._buffer_enabled = enabled
+        self._write_status_register()
+
+    @property
+    def buffer_enabled(self) -> bool:
+        return self._buffer_enabled
+
     def set_gain(self, gain_index: int) -> None:
         if not 0 <= gain_index <= self._max_gain_index:
             raise ValueError("Invalid gain index")
         self._write_register(REG_ADCON, self._adcon_base | self.gains[gain_index].code)
         self._current_gain_index_hw = gain_index
+
+    def apply_voltage_offset(self, measured_value: float) -> None:
+        self.giga_abs_factor = measured_value
+
+    def adjust_voltage_scale(self, scale_factor: float) -> None:
+        if not math.isfinite(scale_factor) or scale_factor == 0:
+            raise ValueError("Scale factor must be finite and non-zero")
+        self.voltage_scale_pos *= scale_factor
+        self.voltage_scale_neg *= scale_factor
 
     def set_ohms_range_threshold(self, value: float) -> None:
         self.ohms_range_threshold = value
@@ -566,7 +605,7 @@ class ADS1256Backend:
         self._send_command(CMD_RESET)
         time.sleep(0.05)
         self._send_command(CMD_SDATAC)
-        self._write_register(REG_STATUS, 0x00)
+        self._write_status_register()
         self.set_gain(self._voltage_gain_index)
         self.set_data_rate(self.data_rate)
         self._write_register(
@@ -603,6 +642,15 @@ class ADS1256Backend:
             if raw < limit:
                 return raw * scale
         return raw
+
+    def _status_register_value(self) -> int:
+        value = self._status_base
+        if self._buffer_enabled:
+            value |= 0x02
+        return value
+
+    def _write_status_register(self) -> None:
+        self._write_register(REG_STATUS, self._status_register_value())
 
     def _wait_for_data_ready(self) -> None:
         if self.drdy_reader is None:
