@@ -63,6 +63,8 @@ The options are all optional:
 
 The script spawns a background thread that continuously polls the ADS1256 backend and feeds the Tk UI with calibrated voltage, resistance, and current readings.【F:rpi_port/run_pi.py†L90-L170】  Logging controls mirror the original firmware: pressing the UI buttons (or their GPIO equivalents) writes CSV files under `~/micro_dmm_logs` unless you override the directory via `--log-dir`.【F:rpi_port/logging.py†L1-L33】【F:rpi_port/app.py†L129-L188】
 
+The **ADC Controls** tab in the notebook along the top of the UI exposes the configuration and calibration tools that used to live in the hidden debug layout. You can switch the gain between automatic and manual (and pick a specific PGA gain when manual is enabled), change the ADS1256 sample rate, toggle the input buffer, and perform offset/scale calibration of the voltage channel without digging through debug-only widgets.【F:rpi_port/app.py†L114-L335】
+
 ## 4. Shutting down
 
 The program installs SIGINT/SIGTERM handlers so `Ctrl+C` or a systemd stop cleanly closes the ADS1256 SPI device, releases GPIO resources, and exits the Tk main loop.【F:rpi_port/run_pi.py†L190-L238】

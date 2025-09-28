@@ -97,14 +97,34 @@ class MicroDmmApp:
         if self.container is self.root:
             self.root.title("Micro-DMM (Raspberry Pi)")
             self.root.configure(padx=12, pady=12)
-            parent = self.root
+            container_parent: tk.Widget = self.root
         else:
-            parent = self.container
-            if hasattr(parent, "configure"):
+            container_parent = self.container
+            if hasattr(container_parent, "configure"):
                 try:
-                    parent.configure(padding=12)
+                    container_parent.configure(padding=12)
                 except tk.TclError:
-                    parent.configure(padx=16, pady=16)
+                    container_parent.configure(padx=16, pady=16)
+
+        if hasattr(container_parent, "grid_columnconfigure"):
+            container_parent.grid_columnconfigure(0, weight=1)
+        if hasattr(container_parent, "grid_rowconfigure"):
+            container_parent.grid_rowconfigure(0, weight=1)
+
+        self.main_notebook = ttk.Notebook(container_parent)
+        self.main_notebook.grid(row=0, column=0, sticky="nsew")
+
+        display_tab = ttk.Frame(self.main_notebook, padding=12)
+        display_tab.grid_columnconfigure(0, weight=1)
+        display_tab.grid_columnconfigure(1, weight=1)
+        self.main_notebook.add(display_tab, text="Measurements")
+
+        controls_tab = ttk.Frame(self.main_notebook, padding=12)
+        controls_tab.grid_columnconfigure(0, weight=1)
+        controls_tab.rowconfigure(0, weight=1)
+        self.main_notebook.add(controls_tab, text="ADC Controls")
+
+        parent = display_tab
 
         header = ttk.Label(parent, text="Measurement", font=("TkDefaultFont", 20, "bold"))
         header.grid(row=0, column=0, columnspan=2, sticky="w")
@@ -218,18 +238,16 @@ class MicroDmmApp:
             self.button_frame.columnconfigure(column, weight=1)
 
 
-        self.debug_controls_frame = ttk.LabelFrame(parent, text="Debug tools", padding=4)
-        self.debug_controls_frame.grid(row=10, column=0, columnspan=2, sticky="nsew", pady=(8, 0))
-        if hasattr(parent, "rowconfigure"):
-            try:
-                parent.rowconfigure(10, weight=1)
-            except tk.TclError:
-                pass
-        self.debug_controls_frame.grid_remove()
+        controls_parent = controls_tab
 
-        controls_container = ttk.Frame(self.debug_controls_frame)
+        self.backend_controls_frame = ttk.LabelFrame(controls_parent, text="ADC controls", padding=4)
+        self.backend_controls_frame.grid(row=0, column=0, sticky="nsew")
+        controls_parent.columnconfigure(0, weight=1)
+        controls_parent.rowconfigure(0, weight=1)
+
+        controls_container = ttk.Frame(self.backend_controls_frame)
         controls_container.grid(row=0, column=0, sticky="nsew")
-        self.debug_controls_frame.columnconfigure(0, weight=1)
+        self.backend_controls_frame.columnconfigure(0, weight=1)
         controls_container.columnconfigure(0, weight=1)
 
         gain_frame = ttk.LabelFrame(controls_container, text="Gain", padding=4)
@@ -478,13 +496,11 @@ class MicroDmmApp:
         if enabled and not self._debug_visible:
             self.standard_display_frame.grid_remove()
             self.debug_display_frame.grid()
-            self.debug_controls_frame.grid()
 
             self._debug_visible = True
         elif not enabled and self._debug_visible:
             self.debug_display_frame.grid_remove()
             self.standard_display_frame.grid()
-            self.debug_controls_frame.grid_remove()
 
             self._debug_visible = False
 
