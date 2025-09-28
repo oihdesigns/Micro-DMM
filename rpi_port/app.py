@@ -124,9 +124,8 @@ class MicroDmmApp:
         ttk.Label(
             self.debug_display_frame,
             text="Voltage",
-
             font=("TkDefaultFont", 14, "bold"),
-
+          
         ).grid(row=0, column=0, sticky="w")
         ttk.Label(
             self.debug_display_frame,
@@ -218,6 +217,7 @@ class MicroDmmApp:
             btn.grid(row=0, column=column, padx=4, pady=4, sticky="ew")
             self.button_frame.columnconfigure(column, weight=1)
 
+
         self.debug_controls_frame = ttk.LabelFrame(parent, text="Debug tools", padding=4)
         self.debug_controls_frame.grid(row=10, column=0, columnspan=2, sticky="nsew", pady=(8, 0))
         if hasattr(parent, "rowconfigure"):
@@ -227,22 +227,13 @@ class MicroDmmApp:
                 pass
         self.debug_controls_frame.grid_remove()
 
-        self.debug_notebook = ttk.Notebook(self.debug_controls_frame)
-        self.debug_notebook.pack(fill="both", expand=True)
-        try:
-            self.debug_notebook.enable_traversal()
-        except tk.TclError:
-            pass
+        controls_container = ttk.Frame(self.debug_controls_frame)
+        controls_container.grid(row=0, column=0, sticky="nsew")
+        self.debug_controls_frame.columnconfigure(0, weight=1)
+        controls_container.columnconfigure(0, weight=1)
 
-        controls_tab = ttk.Frame(self.debug_notebook, padding=6)
-        controls_tab.columnconfigure(0, weight=1)
-        calibration_tab = ttk.Frame(self.debug_notebook, padding=6)
-        calibration_tab.columnconfigure(0, weight=1)
-        calibration_tab.columnconfigure(1, weight=1)
-        self.debug_notebook.add(controls_tab, text="Controls")
-        self.debug_notebook.add(calibration_tab, text="Calibration")
+        gain_frame = ttk.LabelFrame(controls_container, text="Gain", padding=4)
 
-        gain_frame = ttk.LabelFrame(controls_tab, text="Gain", padding=4)
         gain_frame.grid(row=0, column=0, sticky="ew")
         gain_frame.columnconfigure(1, weight=1)
 
@@ -272,7 +263,8 @@ class MicroDmmApp:
         self.manual_gain_combo.grid(row=1, column=1, sticky="ew", padx=(4, 0), pady=(4, 0))
         self.manual_gain_combo.bind("<<ComboboxSelected>>", self._on_manual_gain_selected)
 
-        sampling_frame = ttk.LabelFrame(controls_tab, text="Sampling", padding=4)
+        sampling_frame = ttk.LabelFrame(controls_container, text="Sampling", padding=4)
+
         sampling_frame.grid(row=1, column=0, sticky="ew", pady=(6, 0))
         sampling_frame.columnconfigure(1, weight=1)
         ttk.Label(sampling_frame, text="Rate:").grid(row=0, column=0, sticky="w")
@@ -294,29 +286,37 @@ class MicroDmmApp:
         )
         self.buffer_toggle.grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
-        ttk.Label(calibration_tab, text="Offset:").grid(row=0, column=0, sticky="w")
-        self.voltage_offset_label = ttk.Label(calibration_tab, text="0.000 V")
+        calibration_frame = ttk.LabelFrame(controls_container, text="Voltage calibration", padding=4)
+        calibration_frame.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+        calibration_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(calibration_frame, text="Offset:").grid(row=0, column=0, sticky="w")
+        self.voltage_offset_label = ttk.Label(calibration_frame, text="0.000 V")
         self.voltage_offset_label.grid(row=0, column=1, sticky="e")
         self.zero_button = ttk.Button(
-            calibration_tab,
+            calibration_frame,
+
             text="Set zero",
             command=self._on_voltage_zero,
         )
         self.zero_button.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(4, 0))
 
-        ttk.Label(calibration_tab, text="Scale factor:").grid(row=2, column=0, sticky="w", pady=(8, 0))
-        self.voltage_scale_label = ttk.Label(calibration_tab, text="1.0000")
+        ttk.Label(calibration_frame, text="Scale factor:").grid(row=2, column=0, sticky="w", pady=(8, 0))
+        self.voltage_scale_label = ttk.Label(calibration_frame, text="1.0000")
         self.voltage_scale_label.grid(row=2, column=1, sticky="e", pady=(8, 0))
-        ttk.Label(calibration_tab, text="Target voltage (V):").grid(row=3, column=0, sticky="w")
+        ttk.Label(calibration_frame, text="Target voltage (V):").grid(row=3, column=0, sticky="w")
         self.scale_input_var = tk.StringVar()
-        self.scale_entry = ttk.Entry(calibration_tab, textvariable=self.scale_input_var, width=10)
+        self.scale_entry = ttk.Entry(calibration_frame, textvariable=self.scale_input_var, width=10)
         self.scale_entry.grid(row=3, column=1, sticky="ew", padx=(4, 0))
         self.apply_scale_button = ttk.Button(
-            calibration_tab,
+            calibration_frame,
+
             text="Apply scale",
             command=self._on_apply_scale,
         )
         self.apply_scale_button.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+
+        controls_container.rowconfigure(2, weight=1)
 
         # Ensure the debug layout starts in the correct state before the first update.
         self._toggle_debug_display(self.state.current_mode == "Debug")
@@ -479,7 +479,6 @@ class MicroDmmApp:
             self.standard_display_frame.grid_remove()
             self.debug_display_frame.grid()
             self.debug_controls_frame.grid()
-
 
             self._debug_visible = True
         elif not enabled and self._debug_visible:
