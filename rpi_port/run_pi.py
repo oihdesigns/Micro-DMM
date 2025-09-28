@@ -313,6 +313,7 @@ class MeasurementService:
             buffer_enabled=self._buffer_enabled,
             voltage_scale=self._backend.voltage_scale_pos,
             voltage_offset=self._backend.giga_abs_factor,
+
         )
         self._app.update_backend_controls(self.get_backend_status())
 

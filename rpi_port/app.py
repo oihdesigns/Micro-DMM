@@ -124,12 +124,15 @@ class MicroDmmApp:
         ttk.Label(
             self.debug_display_frame,
             text="Voltage",
+
             font=("TkDefaultFont", 14, "bold"),
+
         ).grid(row=0, column=0, sticky="w")
         ttk.Label(
             self.debug_display_frame,
             text="Resistance",
             font=("TkDefaultFont", 14, "bold"),
+
         ).grid(row=0, column=1, sticky="w")
 
         voltage_value_frame = ttk.Frame(self.debug_display_frame)
@@ -140,6 +143,7 @@ class MicroDmmApp:
         self.debug_voltage_value.grid(row=0, column=0, sticky="w")
         self.debug_voltage_suffix = ttk.Label(
             voltage_value_frame, font=("TkDefaultFont", 14)
+
         )
         self.debug_voltage_suffix.grid(row=0, column=1, sticky="w", padx=(8, 0))
 
@@ -151,6 +155,7 @@ class MicroDmmApp:
         self.debug_resistance_value.grid(row=0, column=0, sticky="w")
         self.debug_resistance_suffix = ttk.Label(
             resistance_value_frame, font=("TkDefaultFont", 14)
+
         )
         self.debug_resistance_suffix.grid(row=0, column=1, sticky="w", padx=(8, 0))
 
@@ -468,16 +473,20 @@ class MicroDmmApp:
         self._last_display_update = time.monotonic()
         self.update_display()
 
+
     def _toggle_debug_display(self, enabled: bool) -> None:
         if enabled and not self._debug_visible:
             self.standard_display_frame.grid_remove()
             self.debug_display_frame.grid()
             self.debug_controls_frame.grid()
+
+
             self._debug_visible = True
         elif not enabled and self._debug_visible:
             self.debug_display_frame.grid_remove()
             self.standard_display_frame.grid()
             self.debug_controls_frame.grid_remove()
+
             self._debug_visible = False
 
     def _update_runtime_label(self) -> None:
@@ -515,6 +524,7 @@ class MicroDmmApp:
         buffer_enabled: Optional[bool] = None,
         voltage_scale: Optional[float] = None,
         voltage_offset: Optional[float] = None,
+
     ) -> None:
         timestamp_ms = timestamp_ms if timestamp_ms is not None else time.time() * 1000.0
         seconds = timestamp_ms / 1000.0
@@ -596,6 +606,7 @@ class MicroDmmApp:
     def update_display(self) -> None:
         self._cancel_pending_display()
         self._last_display_update = time.monotonic()
+
         debug_mode = self.state.current_mode == "Debug"
         self._toggle_debug_display(debug_mode)
 
@@ -627,6 +638,7 @@ class MicroDmmApp:
                 self.primary_suffix.configure(text="")
                 self.debug_gain_label.configure(text="")
                 self.debug_backend_label.configure(text="")
+
             self.secondary_info.configure(text="Waiting for data…")
         else:
             voltage_value, voltage_suffix, voltage_digits = format_voltage_value(
@@ -635,6 +647,7 @@ class MicroDmmApp:
             resistance_value, resistance_suffix, resistance_digits = format_resistance_value(
                 self.state.display_resistance
             )
+
 
             if debug_mode:
                 self.debug_voltage_value.configure(text=f"{voltage_value:.{voltage_digits}f}")
@@ -671,6 +684,7 @@ class MicroDmmApp:
                 backend_parts.append(f"Scale: {scale_text}")
                 backend_parts.append(f"Offset: {offset_text}")
                 self.debug_backend_label.configure(text=" | ".join(backend_parts))
+
             else:
                 if self.state.voltage_display:
                     primary_value = voltage_value
@@ -687,6 +701,7 @@ class MicroDmmApp:
                 self.primary_suffix.configure(text=f" {primary_suffix}{unit}")
                 self.debug_gain_label.configure(text="")
                 self.debug_backend_label.configure(text="")
+
 
             if debug_mode:
                 lines = []
