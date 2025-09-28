@@ -597,8 +597,9 @@ class MicroDmmApp:
                 self.debug_resistance_voltage.configure(text="Sense V: --")
                 self.debug_gain_label.configure(text="Gains: --")
                 backend_parts = []
-                if self.state.sample_rate_hz:
-                    backend_parts.append(f"Sample: {int(self.state.sample_rate_hz)} Hz")
+                sample_rate_hz = getattr(self.state, "sample_rate_hz", 0.0)
+                if sample_rate_hz:
+                    backend_parts.append(f"Sample: {int(sample_rate_hz)} Hz")
                 backend_parts.append(f"Buffer: {'On' if self.state.buffer_enabled else 'Off'}")
                 scale_text = "--" if not math.isfinite(self.state.voltage_scale) else f"{self.state.voltage_scale:.4f}"
                 offset_text = (
@@ -645,8 +646,9 @@ class MicroDmmApp:
                 gain_text = "Gains: " + " | ".join(gain_parts) if gain_parts else "Gains: --"
                 self.debug_gain_label.configure(text=gain_text)
                 backend_parts = []
-                if self.state.sample_rate_hz:
-                    backend_parts.append(f"Sample: {int(self.state.sample_rate_hz)} Hz")
+                sample_rate_hz = getattr(self.state, "sample_rate_hz", 0.0)
+                if sample_rate_hz:
+                    backend_parts.append(f"Sample: {int(sample_rate_hz)} Hz")
                 backend_parts.append(f"Buffer: {'On' if self.state.buffer_enabled else 'Off'}")
                 scale_text = "--" if not math.isfinite(self.state.voltage_scale) else f"{self.state.voltage_scale:.4f}"
                 offset_text = (
