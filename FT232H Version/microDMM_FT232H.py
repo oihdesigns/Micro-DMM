@@ -496,8 +496,14 @@ class MicroDMM:
 
     def _set_output(self, name: str, value: bool) -> None:
         pin = self._outputs.get(name)
-        if pin is not None:
-            pin.set(value)
+        if pin is None:
+            return
+
+        if name == "OHMPWMPIN":
+            value = value or self.power_save or self.mode == Mode.CHARGING
+
+        pin.set(value)
+
 
     def _update_constant_current_output(self) -> None:
         state = self.power_save or self.mode == Mode.CHARGING
@@ -524,11 +530,7 @@ class MicroDMM:
 
         pin.set(continuity or logic_voltage)
 
-        if name == "OHMPWMPIN":
-            # Ensure power-save logic keeps the constant-current source aligned
-            pin_state = value or self.power_save or self.mode == Mode.CHARGING
-            if pin is not None:
-                pin.set(pin_state)
+
 
 
 # ---------------------------------------------------------------------------
