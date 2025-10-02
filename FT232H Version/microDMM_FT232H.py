@@ -504,6 +504,7 @@ class MicroDMM:
 
         pin.set(value)
 
+
     def _update_constant_current_output(self) -> None:
         state = self.power_save or self.mode == Mode.CHARGING
         pin = self._outputs.get("OHMPWMPIN")
@@ -528,6 +529,8 @@ class MicroDMM:
             )
 
         pin.set(continuity or logic_voltage)
+
+
 
 
 # ---------------------------------------------------------------------------
