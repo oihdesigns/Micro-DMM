@@ -44,6 +44,18 @@ sample rate or gain.  Leaving either dropdown on *Automatic* preserves the
 original firmware's adaptive behaviour; selecting a specific value locks the
 converter to that setting for all measurements.
 
+The advanced panel also exposes an optional *Manual Pin Control* mode so you can
+force the FT232H outputs without modifying the firmware logic.  Enable the
+checkbox to unlock toggles for:
+
+* **R circuit (C2)** – the constant-current source drive (Arduino D2)
+* **V Bridge (C5)** – the bridge MOSFET gate (Arduino D5)
+* **R Range (6)** – the range-select relay (Arduino D7)
+
+When the manual mode is disabled the firmware takes over again immediately and
+re-applies its preferred states to the pins.  Adjust the labels in
+``MANUAL_PIN_LABELS`` if your FT232H wiring calls for different names.
+
 When the ADS1115 or FT232H hardware is not present the GUI still opens and
 shows an error banner so you can diagnose connection problems without the
 application crashing.

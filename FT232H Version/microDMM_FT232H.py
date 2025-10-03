@@ -171,7 +171,7 @@ class MicroDMM:
     VOLTAGE_SCALE_NEG = 68.3536
 
     # Windows GUI polling rate (ms)
-    UPDATE_INTERVAL_MS = 200
+    UPDATE_INTERVAL_MS = 100
 
     # Mapping Arduino pins to FT232H "C" pins.  The entries are strings that
     # match attributes under ``board``.
@@ -181,6 +181,13 @@ class MicroDMM:
         "CONTINUITY_PIN": "C6",  # Arduino D6
         "SETRANGE_PIN": "C3",  # Arduino D7 (adjust if wired elsewhere)
         "cycleTrack": "C7",  # Arduino D52
+    }
+
+    MANUAL_OUTPUTS = ("OHMPWMPIN", "VbridgePin", "SETRANGE_PIN")
+    MANUAL_PIN_LABELS = {
+        "OHMPWMPIN": "R circuit (C2)",
+        "VbridgePin": "V Bridge (C5)",
+        "SETRANGE_PIN": "R Range (6)",
     }
 
     def __init__(self) -> None:
@@ -220,6 +227,14 @@ class MicroDMM:
         self._continuity_active = False
         self._logic_voltage_active = False
 
+        self._manual_outputs_enabled = False
+        self._manual_output_states: Dict[str, bool] = {
+            name: False for name in self.MANUAL_OUTPUTS
+        }
+        self._auto_output_cache: Dict[str, bool] = {
+            name: False for name in self.OUTPUT_MAPPING
+        }
+
         self._i2c = None
         self._ads: Optional[ADS1115] = None
         self._chan_voltage: Optional[AnalogIn] = None
@@ -245,6 +260,13 @@ class MicroDMM:
     def hardware_error(self) -> Optional[str]:
         return self._hardware_error
 
+    @property
+    def manual_outputs_enabled(self) -> bool:
+        return self._manual_outputs_enabled
+
+    def get_manual_output_state(self, name: str) -> bool:
+        return self._manual_output_states.get(name, False)
+
     def toggle_cycle_track(self) -> None:
         pin = self._outputs.get("cycleTrack")
         if pin:
@@ -269,6 +291,26 @@ class MicroDMM:
         if gain is not None and gain not in self.GAIN_LEVELS:
             raise ValueError("Unsupported ADS1115 gain")
         self.manual_gain = gain
+
+    def set_manual_outputs_enabled(self, enabled: bool) -> None:
+        self._manual_outputs_enabled = enabled
+        if enabled:
+            for name, state in self._manual_output_states.items():
+                self._write_output(name, state)
+        else:
+            for name, state in self._auto_output_cache.items():
+                self._write_output(name, state)
+
+    def set_manual_output_state(self, name: str, state: bool) -> None:
+        if name not in self.MANUAL_OUTPUTS:
+            raise ValueError(f"Unknown manual output: {name}")
+        self._manual_output_states[name] = state
+        if self._manual_outputs_enabled:
+            self._write_output(name, state)
+        else:
+            auto_state = self._auto_output_cache.get(name)
+            if auto_state is not None:
+                self._write_output(name, auto_state)
 
     def measure(self) -> MeasurementResult:
         """Poll all sensors and update the cached measurement."""
@@ -554,21 +596,26 @@ class MicroDMM:
                 return resistance * factor
         return resistance
 
-    def _set_output(self, name: str, value: bool) -> None:
+    def _write_output(self, name: str, value: bool) -> None:
         pin = self._outputs.get(name)
         if pin is None:
             return
+        pin.set(value)
 
+    def _set_output(self, name: str, value: bool) -> None:
         if name == "OHMPWMPIN":
             value = value or self.power_save or self.mode == Mode.CHARGING
 
-        pin.set(value)
+        self._auto_output_cache[name] = value
+
+        if self._manual_outputs_enabled and name in self._manual_output_states:
+            self._write_output(name, self._manual_output_states[name])
+        else:
+            self._write_output(name, value)
 
     def _update_constant_current_output(self) -> None:
         state = self.power_save or self.mode == Mode.CHARGING
-        pin = self._outputs.get("OHMPWMPIN")
-        if pin is not None:
-            pin.set(state)
+        self._set_output("OHMPWMPIN", state)
 
     def _update_continuity_output(self, measurement: MeasurementResult) -> None:
         pin = self._outputs.get("CONTINUITY_PIN")
@@ -596,7 +643,8 @@ class MicroDMM:
                 self._continuity_pattern_start = now
             cycle = (now - self._continuity_pattern_start) % 1.0
             state = cycle < 0.1 or 0.3 <= cycle < 0.4
-            pin.set(state)
+            self._auto_output_cache["CONTINUITY_PIN"] = state
+            self._write_output("CONTINUITY_PIN", state)
         elif logic_voltage:
             if not self._logic_voltage_active:
                 self._logic_voltage_active = True
@@ -604,13 +652,18 @@ class MicroDMM:
                 self._continuity_pattern_start = now
             cycle = (now - self._continuity_pattern_start) % 1.0
             state = cycle < 0.1
-            pin.set(state)
+            self._auto_output_cache["CONTINUITY_PIN"] = state
+            self._write_output("CONTINUITY_PIN", state)
         else:
             if self._continuity_active or self._logic_voltage_active:
                 self._continuity_pattern_start = now
             self._continuity_active = False
             self._logic_voltage_active = False
-            pin.set(False)
+            self._auto_output_cache["CONTINUITY_PIN"] = False
+            self._write_output("CONTINUITY_PIN", False)
+
+    def refresh_outputs(self) -> None:
+        self._update_continuity_output(self._last_measurement)
 
 
 # ---------------------------------------------------------------------------
@@ -626,6 +679,7 @@ class MicroDMMApp:
 
         self._build_gui()
         self._schedule_update()
+        self._schedule_output_refresh()
 
     # GUI -----------------------------------------------------------------
 
@@ -749,6 +803,31 @@ class MicroDMMApp:
         gain_combo.grid(row=1, column=1, sticky="w", padx=4, pady=4)
         gain_combo.bind("<<ComboboxSelected>>", self._on_gain_changed)
 
+        self.manual_outputs_var = tk.BooleanVar(value=self.dmm.manual_outputs_enabled)
+        ttk.Checkbutton(
+            self.advanced_frame,
+            text="Enable Manual Pin Control",
+            variable=self.manual_outputs_var,
+            command=self._on_manual_outputs_toggle,
+        ).grid(row=2, column=0, sticky="w", padx=4, pady=(8, 4), columnspan=2)
+
+        self.manual_pin_frame = ttk.Frame(self.advanced_frame)
+        self.manual_pin_frame.grid(row=3, column=0, columnspan=2, sticky="w", padx=4, pady=(0, 4))
+
+        self.manual_pin_controls: Dict[str, tuple[tk.BooleanVar, ttk.Checkbutton]] = {}
+        for idx, (name, label) in enumerate(MicroDMM.MANUAL_PIN_LABELS.items()):
+            var = tk.BooleanVar(value=self.dmm.get_manual_output_state(name))
+            chk = ttk.Checkbutton(
+                self.manual_pin_frame,
+                text=label,
+                variable=var,
+                command=lambda n=name, v=var: self._on_manual_output_toggled(n, v),
+            )
+            chk.grid(row=0, column=idx, sticky="w", padx=4, pady=2)
+            self.manual_pin_controls[name] = (var, chk)
+
+        self._update_manual_pin_controls()
+
         # Action buttons
         self.btn_frame = ttk.Frame(main)
         self.btn_frame.pack(fill="x", padx=5, pady=5)
@@ -843,10 +922,35 @@ class MicroDMMApp:
             self.gain_var.set("Automatic")
             self.dmm.set_manual_gain(None)
 
+    def _on_manual_outputs_toggle(self) -> None:
+        enabled = self.manual_outputs_var.get()
+        self.dmm.set_manual_outputs_enabled(enabled)
+        self._update_manual_pin_controls()
+
+    def _on_manual_output_toggled(self, name: str, var: tk.BooleanVar) -> None:
+        try:
+            self.dmm.set_manual_output_state(name, var.get())
+        except ValueError:
+            pass
+
+    def _update_manual_pin_controls(self) -> None:
+        enabled = self.manual_outputs_var.get()
+        for name, (var, chk) in self.manual_pin_controls.items():
+            current = self.dmm.get_manual_output_state(name)
+            if var.get() != current:
+                var.set(current)
+            if enabled:
+                chk.state(["!disabled"])
+            else:
+                chk.state(["disabled"])
+
     # Scheduler ----------------------------------------------------------
 
     def _schedule_update(self) -> None:
         self.root.after(MicroDMM.UPDATE_INTERVAL_MS, self._update)
+
+    def _schedule_output_refresh(self) -> None:
+        self.root.after(40, self._refresh_outputs)
 
     def _update(self) -> None:
         try:
@@ -878,6 +982,12 @@ class MicroDMMApp:
             self.status_label.configure(foreground="red")
 
         self._schedule_update()
+
+    def _refresh_outputs(self) -> None:
+        try:
+            self.dmm.refresh_outputs()
+        finally:
+            self._schedule_output_refresh()
 
 
 def main() -> None:
