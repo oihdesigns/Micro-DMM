@@ -107,6 +107,16 @@ class MicroDMM:
         8: 0.015625,
         16: 0.0078125,
     }
+    GAIN_RANGES = {
+        2 / 3: 6.144,
+        1: 4.096,
+        2: 2.048,
+        4: 1.024,
+        8: 0.512,
+        16: 0.256,
+    }
+
+    ADS_DATA_RATES = [8, 16, 32, 64, 128, 250, 475, 860]
 
     # Thresholds replicate the firmware behaviour
     ADC_COUNT_LOW_THRESHOLD = 10000
@@ -182,6 +192,9 @@ class MicroDMM:
         self.current_enabled: bool = True
         self.power_save: bool = False
 
+        self.manual_sample_rate: Optional[int] = None
+        self.manual_gain: Optional[float] = None
+
         # Measurement state
         self._voltage_gain_index = len(self.GAIN_LEVELS) - 1
         self._res_gain_index = 0
@@ -202,6 +215,10 @@ class MicroDMM:
 
         self._last_measurement: MeasurementResult = MeasurementResult()
         self._hardware_error: Optional[str] = None
+
+        self._continuity_pattern_start = time.monotonic()
+        self._continuity_active = False
+        self._logic_voltage_active = False
 
         self._i2c = None
         self._ads: Optional[ADS1115] = None
@@ -242,6 +259,16 @@ class MicroDMM:
 
     def clear_voltage_reference(self) -> None:
         self._voltage_reference = 0.0
+
+    def set_manual_sample_rate(self, rate: Optional[int]) -> None:
+        if rate is not None and rate not in self.ADS_DATA_RATES:
+            raise ValueError("Unsupported ADS1115 sample rate")
+        self.manual_sample_rate = rate
+
+    def set_manual_gain(self, gain: Optional[float]) -> None:
+        if gain is not None and gain not in self.GAIN_LEVELS:
+            raise ValueError("Unsupported ADS1115 gain")
+        self.manual_gain = gain
 
     def measure(self) -> MeasurementResult:
         """Poll all sensors and update the cached measurement."""
@@ -319,32 +346,41 @@ class MicroDMM:
     def _measure_voltage(self) -> float:
         assert self._ads is not None and self._chan_voltage is not None
 
-        if self.precise_mode:
-            self._ads.data_rate = 16
-        else:
-            self._ads.data_rate = 860 if self.mode in {Mode.VOLTMETER, Mode.DEFAULT} else 128
+        manual_rate = self.manual_sample_rate
+        if manual_rate is None:
+            if self.precise_mode:
+                manual_rate = 16
+            else:
+                manual_rate = 860 if self.mode in {Mode.VOLTMETER, Mode.DEFAULT} else 128
+        self._ads.data_rate = manual_rate
 
-        if self.mode == Mode.VAC_MANUAL:
+        manual_gain = self.manual_gain
+
+        if self.mode == Mode.VAC_MANUAL and manual_gain is None:
             gain = 1
             scale = self.VOLTAGE_SCALE_POS
             self._ads.gain = gain
             raw = self._chan_voltage.value
             voltage = raw * self.GAIN_FACTORS[gain] / 1000.0 * scale
         else:
-            gain = self.GAIN_LEVELS[self._voltage_gain_index]
+            gain = manual_gain if manual_gain is not None else self.GAIN_LEVELS[self._voltage_gain_index]
             self._ads.gain = gain
             raw = self._chan_voltage.value
 
-            if abs(raw) > self.ADC_COUNT_HIGH_THRESHOLD and self._voltage_gain_index > 0:
-                self._voltage_gain_index -= 1
-                gain = self.GAIN_LEVELS[self._voltage_gain_index]
-                self._ads.gain = gain
-                raw = self._chan_voltage.value
-            elif abs(raw) < self.ADC_COUNT_LOW_THRESHOLD and self._voltage_gain_index < len(self.GAIN_LEVELS) - 1:
-                self._voltage_gain_index += 1
-                gain = self.GAIN_LEVELS[self._voltage_gain_index]
-                self._ads.gain = gain
-                raw = self._chan_voltage.value
+            if manual_gain is None:
+                if abs(raw) > self.ADC_COUNT_HIGH_THRESHOLD and self._voltage_gain_index > 0:
+                    self._voltage_gain_index -= 1
+                    gain = self.GAIN_LEVELS[self._voltage_gain_index]
+                    self._ads.gain = gain
+                    raw = self._chan_voltage.value
+                elif (
+                    abs(raw) < self.ADC_COUNT_LOW_THRESHOLD
+                    and self._voltage_gain_index < len(self.GAIN_LEVELS) - 1
+                ):
+                    self._voltage_gain_index += 1
+                    gain = self.GAIN_LEVELS[self._voltage_gain_index]
+                    self._ads.gain = gain
+                    raw = self._chan_voltage.value
 
             scale = self.VOLTAGE_SCALE_POS if raw >= 0 else self.VOLTAGE_SCALE_NEG
             voltage = raw * self.GAIN_FACTORS[gain] / 1000.0 * scale
@@ -362,7 +398,10 @@ class MicroDMM:
     def _measure_resistance(self) -> float:
         assert self._ads is not None and self._chan_res is not None
 
-        self._ads.data_rate = 128 if not self.precise_mode else 16
+        manual_rate = self.manual_sample_rate
+        if manual_rate is None:
+            manual_rate = 16 if self.precise_mode else 128
+        self._ads.data_rate = manual_rate
 
         range_threshold = 40.0 if self.mode in {Mode.R_PLOT, Mode.HIGH_R} else 400.0
         low_threshold = range_threshold * (1.0 - self.OHMS_RANGE_DEADBAND)
@@ -371,8 +410,13 @@ class MicroDMM:
         if self._res_gain_index >= len(self.GAIN_LEVELS):
             self._res_gain_index = len(self.GAIN_LEVELS) - 1
 
-        gain = self.GAIN_LEVELS[self._res_gain_index]
-        self._ads.gain = gain
+        manual_gain = self.manual_gain
+        if manual_gain is None:
+            gain = self.GAIN_LEVELS[self._res_gain_index]
+            self._ads.gain = gain
+        else:
+            gain = manual_gain
+            self._ads.gain = gain
 
         if self.ohms_auto_range and not self.power_save:
             if not self._res_range_high and self._last_res_value > high_threshold:
@@ -391,16 +435,20 @@ class MicroDMM:
                 self._set_output("SETRANGE_PIN", desired)
 
         raw = self._chan_res.value
-        if raw > self.ADC_COUNT_HIGH_THRESHOLD and self._res_gain_index > 0:
-            self._res_gain_index -= 1
-            gain = self.GAIN_LEVELS[self._res_gain_index]
-            self._ads.gain = gain
-            raw = self._chan_res.value
-        elif raw < self.ADC_COUNT_LOW_THRESHOLD and self._res_gain_index < len(self.GAIN_LEVELS) - 1:
-            self._res_gain_index += 1
-            gain = self.GAIN_LEVELS[self._res_gain_index]
-            self._ads.gain = gain
-            raw = self._chan_res.value
+        if manual_gain is None:
+            if raw > self.ADC_COUNT_HIGH_THRESHOLD and self._res_gain_index > 0:
+                self._res_gain_index -= 1
+                gain = self.GAIN_LEVELS[self._res_gain_index]
+                self._ads.gain = gain
+                raw = self._chan_res.value
+            elif (
+                raw < self.ADC_COUNT_LOW_THRESHOLD
+                and self._res_gain_index < len(self.GAIN_LEVELS) - 1
+            ):
+                self._res_gain_index += 1
+                gain = self.GAIN_LEVELS[self._res_gain_index]
+                self._ads.gain = gain
+                raw = self._chan_res.value
 
         ohms_voltage = raw * self.GAIN_FACTORS[gain] / 1000.0
 
@@ -441,22 +489,34 @@ class MicroDMM:
         if not self.current_enabled:
             return 0.0
 
-        self._ads.data_rate = 860 if not self.precise_mode else 128
+        manual_rate = self.manual_sample_rate
+        if manual_rate is None:
+            manual_rate = 128 if self.precise_mode else 860
+        self._ads.data_rate = manual_rate
 
-        gain = self.GAIN_LEVELS[self._current_gain_index]
-        self._ads.gain = gain
+        manual_gain = self.manual_gain
+        if manual_gain is None:
+            gain = self.GAIN_LEVELS[self._current_gain_index]
+            self._ads.gain = gain
+        else:
+            gain = manual_gain
+            self._ads.gain = gain
         raw = self._chan_current.value
 
-        if abs(raw) > self.ADC_COUNT_HIGH_THRESHOLD and self._current_gain_index > 0:
-            self._current_gain_index -= 1
-            gain = self.GAIN_LEVELS[self._current_gain_index]
-            self._ads.gain = gain
-            raw = self._chan_current.value
-        elif abs(raw) < self.ADC_COUNT_LOW_THRESHOLD and self._current_gain_index < len(self.GAIN_LEVELS) - 1:
-            self._current_gain_index += 1
-            gain = self.GAIN_LEVELS[self._current_gain_index]
-            self._ads.gain = gain
-            raw = self._chan_current.value
+        if manual_gain is None:
+            if abs(raw) > self.ADC_COUNT_HIGH_THRESHOLD and self._current_gain_index > 0:
+                self._current_gain_index -= 1
+                gain = self.GAIN_LEVELS[self._current_gain_index]
+                self._ads.gain = gain
+                raw = self._chan_current.value
+            elif (
+                abs(raw) < self.ADC_COUNT_LOW_THRESHOLD
+                and self._current_gain_index < len(self.GAIN_LEVELS) - 1
+            ):
+                self._current_gain_index += 1
+                gain = self.GAIN_LEVELS[self._current_gain_index]
+                self._ads.gain = gain
+                raw = self._chan_current.value
 
         shunt_voltage = raw * self.GAIN_FACTORS[gain] / 1000.0
         return shunt_voltage  # 1 ohm shunt
@@ -504,7 +564,6 @@ class MicroDMM:
 
         pin.set(value)
 
-
     def _update_constant_current_output(self) -> None:
         state = self.power_save or self.mode == Mode.CHARGING
         pin = self._outputs.get("OHMPWMPIN")
@@ -528,9 +587,30 @@ class MicroDMM:
                 measurement.vac_present and measurement.voltage_rms > 1.0
             )
 
-        pin.set(continuity or logic_voltage)
+        now = time.monotonic()
 
-
+        if continuity:
+            if not self._continuity_active:
+                self._continuity_active = True
+                self._logic_voltage_active = False
+                self._continuity_pattern_start = now
+            cycle = (now - self._continuity_pattern_start) % 1.0
+            state = cycle < 0.1 or 0.3 <= cycle < 0.4
+            pin.set(state)
+        elif logic_voltage:
+            if not self._logic_voltage_active:
+                self._logic_voltage_active = True
+                self._continuity_active = False
+                self._continuity_pattern_start = now
+            cycle = (now - self._continuity_pattern_start) % 1.0
+            state = cycle < 0.1
+            pin.set(state)
+        else:
+            if self._continuity_active or self._logic_voltage_active:
+                self._continuity_pattern_start = now
+            self._continuity_active = False
+            self._logic_voltage_active = False
+            pin.set(False)
 
 
 # ---------------------------------------------------------------------------
@@ -604,22 +684,89 @@ class MicroDMMApp:
         self._add_check(ctrl, 3, "Current Enabled", self.current_var_enabled, self._on_current)
         self._add_check(ctrl, 3, "Power Save", self.power_save_var, self._on_power_save, column=2)
 
-        # Action buttons
-        btn_frame = ttk.Frame(main)
-        btn_frame.pack(fill="x", padx=5, pady=5)
+        self.advanced_visible = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            ctrl,
+            text="Show Advanced Controls",
+            variable=self.advanced_visible,
+            command=self._refresh_advanced_visibility,
+        ).grid(row=4, column=0, sticky="w", padx=4, pady=6, columnspan=3)
 
-        ttk.Button(btn_frame, text="Zero Ohms", command=self.dmm.zero_resistance).pack(
+        self.advanced_frame = ttk.LabelFrame(main, text="Advanced Controls")
+
+        self._sample_rate_options = [
+            ("Automatic", None),
+            *[(f"{rate} SPS", rate) for rate in MicroDMM.ADS_DATA_RATES],
+        ]
+        self._sample_rate_lookup = {label: value for label, value in self._sample_rate_options}
+        sample_label = next(
+            (label for label, value in self._sample_rate_options if value == self.dmm.manual_sample_rate),
+            "Automatic",
+        )
+        self.sample_rate_var = tk.StringVar(value=sample_label)
+
+        self._gain_options = [
+            ("Automatic", None),
+        ]
+        for gain in MicroDMM.GAIN_LEVELS:
+            if math.isclose(gain, 2 / 3, rel_tol=1e-6):
+                gain_label = "2/3"
+            else:
+                gain_label = f"{gain:g}"
+            range_label = MicroDMM.GAIN_RANGES[gain]
+            label = f"±{range_label:.3f} V (gain {gain_label})"
+            self._gain_options.append((label, gain))
+        self._gain_lookup = {label: value for label, value in self._gain_options}
+        gain_label = next(
+            (label for label, value in self._gain_options if value == self.dmm.manual_gain),
+            "Automatic",
+        )
+        self.gain_var = tk.StringVar(value=gain_label)
+
+        ttk.Label(self.advanced_frame, text="ADS1115 Sample Rate:").grid(
+            row=0, column=0, sticky="w", padx=4, pady=4
+        )
+        sample_combo = ttk.Combobox(
+            self.advanced_frame,
+            textvariable=self.sample_rate_var,
+            values=[label for label, _ in self._sample_rate_options],
+            state="readonly",
+            width=20,
+        )
+        sample_combo.grid(row=0, column=1, sticky="w", padx=4, pady=4)
+        sample_combo.bind("<<ComboboxSelected>>", self._on_sample_rate_changed)
+
+        ttk.Label(self.advanced_frame, text="ADS1115 Gain:").grid(
+            row=1, column=0, sticky="w", padx=4, pady=4
+        )
+        gain_combo = ttk.Combobox(
+            self.advanced_frame,
+            textvariable=self.gain_var,
+            values=[label for label, _ in self._gain_options],
+            state="readonly",
+            width=26,
+        )
+        gain_combo.grid(row=1, column=1, sticky="w", padx=4, pady=4)
+        gain_combo.bind("<<ComboboxSelected>>", self._on_gain_changed)
+
+        # Action buttons
+        self.btn_frame = ttk.Frame(main)
+        self.btn_frame.pack(fill="x", padx=5, pady=5)
+
+        ttk.Button(self.btn_frame, text="Zero Ohms", command=self.dmm.zero_resistance).pack(
             side="left", padx=2
         )
-        ttk.Button(btn_frame, text="Set V Ref", command=self.dmm.set_voltage_reference).pack(
+        ttk.Button(self.btn_frame, text="Set V Ref", command=self.dmm.set_voltage_reference).pack(
             side="left", padx=2
         )
-        ttk.Button(btn_frame, text="Clear V Ref", command=self.dmm.clear_voltage_reference).pack(
+        ttk.Button(self.btn_frame, text="Clear V Ref", command=self.dmm.clear_voltage_reference).pack(
             side="left", padx=2
         )
-        ttk.Button(btn_frame, text="Toggle Cycle Track", command=self.dmm.toggle_cycle_track).pack(
+        ttk.Button(self.btn_frame, text="Toggle Cycle Track", command=self.dmm.toggle_cycle_track).pack(
             side="left", padx=2
         )
+
+        self._refresh_advanced_visibility()
 
     def _add_row(self, frame: ttk.Frame, row: int, label: str, var: tk.StringVar) -> None:
         ttk.Label(frame, text=label).grid(row=row, column=0, sticky="w", padx=4, pady=2)
@@ -637,6 +784,19 @@ class MicroDMMApp:
         ttk.Checkbutton(frame, text=text, variable=var, command=command).grid(
             row=row, column=column, sticky="w", padx=4, pady=2
         )
+
+    def _refresh_advanced_visibility(self) -> None:
+        if getattr(self, "advanced_frame", None) is None:
+            return
+        if self.advanced_visible.get():
+            if not self.advanced_frame.winfo_ismapped():
+                pack_kwargs = {"fill": "x", "padx": 5, "pady": 5}
+                if hasattr(self, "btn_frame"):
+                    pack_kwargs["before"] = self.btn_frame
+                self.advanced_frame.pack(**pack_kwargs)
+        else:
+            if self.advanced_frame.winfo_ismapped():
+                self.advanced_frame.pack_forget()
 
     # Handlers -----------------------------------------------------------
 
@@ -664,6 +824,24 @@ class MicroDMMApp:
     def _on_power_save(self) -> None:
         self.dmm.power_save = self.power_save_var.get()
         self.dmm._update_constant_current_output()
+
+    def _on_sample_rate_changed(self, _event=None) -> None:
+        label = self.sample_rate_var.get()
+        rate = self._sample_rate_lookup.get(label)
+        try:
+            self.dmm.set_manual_sample_rate(rate)
+        except ValueError:
+            self.sample_rate_var.set("Automatic")
+            self.dmm.set_manual_sample_rate(None)
+
+    def _on_gain_changed(self, _event=None) -> None:
+        label = self.gain_var.get()
+        gain = self._gain_lookup.get(label)
+        try:
+            self.dmm.set_manual_gain(gain)
+        except ValueError:
+            self.gain_var.set("Automatic")
+            self.dmm.set_manual_gain(None)
 
     # Scheduler ----------------------------------------------------------
 

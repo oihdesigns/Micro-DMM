@@ -39,6 +39,11 @@ The program maps the original Arduino pins to the FT232H ``C`` pins as follows:
 If your wiring differs, edit the ``OUTPUT_MAPPING`` dictionary in
 ``microDMM_FT232H.py``.
 
+Toggle **Show Advanced Controls** in the GUI to manually pick the ADS1115
+sample rate or gain.  Leaving either dropdown on *Automatic* preserves the
+original firmware's adaptive behaviour; selecting a specific value locks the
+converter to that setting for all measurements.
+
 When the ADS1115 or FT232H hardware is not present the GUI still opens and
 shows an error banner so you can diagnose connection problems without the
 application crashing.
