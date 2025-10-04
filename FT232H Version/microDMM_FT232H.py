@@ -773,10 +773,16 @@ class MicroDMMApp:
         self.figure: Optional[Figure] = None
         self.ax = None  # type: ignore[assignment]
         self.log_count_var = tk.StringVar(value="Samples logged: 0")
+        self.burst_count_var = tk.StringVar(value="256")
         self.bridge_widgets: tuple[tk.Widget, ...] = ()
         self.stat_widgets: Dict[str, tuple[tk.Widget, ...]] = {}
         self.bridge_channel_check: Optional[ttk.Checkbutton] = None
         self.bridge_channel_var: Optional[tk.BooleanVar] = None
+        self._update_job: Optional[str] = None
+        self._output_job: Optional[str] = None
+        self._updates_paused = False
+        self._outputs_paused = False
+        self._burst_active = False
 
         self._build_gui()
         self._schedule_update()
@@ -788,17 +794,18 @@ class MicroDMMApp:
         main = ttk.Frame(self.root, padding=10)
         main.pack(fill="both", expand=True)
 
-        self.notebook = ttk.Notebook(main)
-        self.notebook.pack(fill="both", expand=True)
+        main.columnconfigure(0, weight=1)
+        main.columnconfigure(1, weight=1)
+        main.rowconfigure(0, weight=1)
 
-        self.meter_tab = ttk.Frame(self.notebook)
-        self.logging_tab = ttk.Frame(self.notebook)
+        self.meter_panel = ttk.Frame(main)
+        self.meter_panel.grid(row=0, column=0, sticky="nsew")
 
-        self.notebook.add(self.meter_tab, text="Meter")
-        self.notebook.add(self.logging_tab, text="Logging")
+        self.logging_panel = ttk.Frame(main)
+        self.logging_panel.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
 
-        self._build_meter_tab(self.meter_tab)
-        self._build_logging_tab(self.logging_tab)
+        self._build_meter_tab(self.meter_panel)
+        self._build_logging_tab(self.logging_panel)
 
     def _build_meter_tab(self, parent: ttk.Frame) -> None:
         # Measurement display
@@ -1038,6 +1045,11 @@ class MicroDMMApp:
         ttk.Button(controls, text="Clear Log", command=self._on_clear_log).pack(side="left", padx=2)
         ttk.Button(controls, text="Export CSV", command=self._on_export_csv).pack(side="left", padx=2)
 
+        ttk.Frame(controls, width=12).pack(side="left")
+        ttk.Label(controls, text="Burst samples:").pack(side="left", padx=2)
+        ttk.Entry(controls, textvariable=self.burst_count_var, width=8).pack(side="left", padx=2)
+        ttk.Button(controls, text="Start Burst", command=self._on_burst_capture).pack(side="left", padx=2)
+
         ttk.Label(container, textvariable=self.log_count_var).pack(fill="x", padx=5, pady=(0, 5))
 
         if self._plot_available:
@@ -1234,21 +1246,57 @@ class MicroDMMApp:
             return f"{value:.3f} {unit}"
         return f"{value:.6f} {unit}"
 
-    def _on_logging_toggle(self) -> None:
-        if self.logging_active.get():
-            now = time.time()
+    def _ensure_log_start_time(self, reference_time: Optional[float] = None) -> float:
+        now = reference_time if reference_time is not None else time.time()
+        if self._log_start_time is None:
             if self._log_records:
                 last_elapsed = float(self._log_records[-1]["elapsed"])
                 self._log_start_time = now - last_elapsed
             else:
                 self._log_start_time = now
+        return self._log_start_time
+
+    def _build_log_record(
+        self, result: MeasurementResult, timestamp: Optional[float] = None
+    ) -> dict[str, object]:
+        ts = timestamp if timestamp is not None else time.time()
+        start_time = self._ensure_log_start_time(ts)
+        elapsed = ts - start_time
+        record: dict[str, object] = {
+            "timestamp": datetime.fromtimestamp(ts),
+            "elapsed": elapsed,
+        }
+        for label, (field, _unit) in self.LOG_CHANNELS.items():
+            record[field] = getattr(result, field)
+        return record
+
+    def _append_log_record(self, record: dict[str, object]) -> None:
+        elapsed = float(record["elapsed"])
+        self._log_records.append(record)
+        for label, (field, _unit) in self.LOG_CHANNELS.items():
+            value = float(record[field]) if isinstance(record[field], (int, float)) else record[field]
+            series = self._plot_data[label]
+            series["x"].append(elapsed)
+            series["y"].append(value)
+
+    def _get_active_log_channel(self) -> tuple[str, tuple[str, str]]:
+        for label, var in self.channel_vars.items():
+            if var.get():
+                return label, self.LOG_CHANNELS[label]
+        return next(iter(self.LOG_CHANNELS.items()))
+
+    def _on_logging_toggle(self) -> None:
+        if self.logging_active.get():
+            self._ensure_log_start_time()
         else:
             self._log_start_time = None
         self._update_log_count()
 
     def _on_clear_log(self) -> None:
         self._log_records.clear()
-        self._log_start_time = time.time() if self.logging_active.get() else None
+        self._log_start_time = None
+        if self.logging_active.get():
+            self._ensure_log_start_time()
         for series in self._plot_data.values():
             series["x"].clear()
             series["y"].clear()
@@ -1300,28 +1348,8 @@ class MicroDMMApp:
         if not self.logging_active.get():
             return
 
-        now = time.time()
-        if self._log_start_time is None:
-            if self._log_records:
-                last_elapsed = float(self._log_records[-1]["elapsed"])
-                self._log_start_time = now - last_elapsed
-            else:
-                self._log_start_time = now
-
-        elapsed = now - (self._log_start_time or now)
-        record: Dict[str, object] = {
-            "timestamp": datetime.now(),
-            "elapsed": elapsed,
-        }
-
-        for label, (field, _unit) in self.LOG_CHANNELS.items():
-            value = getattr(result, field)
-            record[field] = value
-            series = self._plot_data[label]
-            series["x"].append(elapsed)
-            series["y"].append(value)
-
-        self._log_records.append(record)
+        record = self._build_log_record(result)
+        self._append_log_record(record)
         self._update_log_count()
         self._refresh_plot()
 
@@ -1381,46 +1409,130 @@ class MicroDMMApp:
 
     # Scheduler ----------------------------------------------------------
 
-    def _schedule_update(self) -> None:
-        self.root.after(MicroDMM.UPDATE_INTERVAL_MS, self._update)
-
-    def _schedule_output_refresh(self) -> None:
-        self.root.after(40, self._refresh_outputs)
-
-    def _update(self) -> None:
-        try:
-            result = self.dmm.measure()
-            hardware_ok = self.dmm.hardware_ok
-            self.status_var.set("Hardware OK" if hardware_ok else "Hardware not ready")
-            self.status_label.configure(foreground="green" if hardware_ok else "red")
-            self.voltage_var.set(f"{result.voltage_dc: .6f} V")
-            self.vac_var.set(f"{result.voltage_rms: .6f} V")
-            if self.dmm.alt_units:
-                self.res_var.set(f"{result.resistance: .2f} °F")
+    def _render_measurement(self, result: MeasurementResult) -> None:
+        hardware_ok = self.dmm.hardware_ok
+        self.status_var.set("Hardware OK" if hardware_ok else "Hardware not ready")
+        self.status_label.configure(foreground="green" if hardware_ok else "red")
+        self.voltage_var.set(f"{result.voltage_dc: .6f} V")
+        self.vac_var.set(f"{result.voltage_rms: .6f} V")
+        if self.dmm.alt_units:
+            self.res_var.set(f"{result.resistance: .2f} °F")
+        else:
+            if result.resistance >= 1_000_000:
+                self.res_var.set(f"{result.resistance / 1_000_000: .3f} MΩ")
+            elif result.resistance >= 1_000:
+                self.res_var.set(f"{result.resistance / 1_000: .3f} kΩ")
             else:
-                if result.resistance >= 1_000_000:
-                    self.res_var.set(f"{result.resistance / 1_000_000: .3f} MΩ")
-                elif result.resistance >= 1_000:
-                    self.res_var.set(f"{result.resistance / 1_000: .3f} kΩ")
-                else:
-                    self.res_var.set(f"{result.resistance: .3f} Ω")
-            self.current_var.set(f"{result.current: .6f} A")
-            self.bridge_var.set(
-                f"{result.bridge_voltage: .6f} V ({'FLOAT' if result.v_floating else 'CLOSED'})"
-            )
-            self._update_stat_labels()
-            self._update_logging(result)
+                self.res_var.set(f"{result.resistance: .3f} Ω")
+        self.current_var.set(f"{result.current: .6f} A")
+        self.bridge_var.set(
+            f"{result.bridge_voltage: .6f} V ({'FLOAT' if result.v_floating else 'CLOSED'})"
+        )
+        self._update_stat_labels()
+
+    def _render_error(self, message: str) -> None:
+        self.status_var.set(message)
+        self.status_label.configure(foreground="red")
+
+    def _pause_updates(self) -> None:
+        self._updates_paused = True
+        if self._update_job is not None:
+            self.root.after_cancel(self._update_job)
+            self._update_job = None
+        self._outputs_paused = True
+        if self._output_job is not None:
+            self.root.after_cancel(self._output_job)
+            self._output_job = None
+
+    def _resume_updates(self) -> None:
+        self._updates_paused = False
+        self._outputs_paused = False
+        self._schedule_update()
+        self._schedule_output_refresh()
+
+    def _on_burst_capture(self) -> None:
+        if self._burst_active:
+            return
+        try:
+            count = int(self.burst_count_var.get())
+        except ValueError:
+            messagebox.showerror("Burst capture", "Enter a positive integer sample count.")
+            return
+        if count <= 0:
+            messagebox.showerror("Burst capture", "Sample count must be greater than zero.")
+            return
+
+        channel_label, _ = self._get_active_log_channel()
+
+        self._burst_active = True
+        self._pause_updates()
+        self.status_var.set(f"Capturing {count} samples ({channel_label})…")
+        self.status_label.configure(foreground="blue")
+        self.root.update_idletasks()
+
+        records: list[dict[str, object]] = []
+        last_result: Optional[MeasurementResult] = None
+
+        reference_time = time.time()
+        self._ensure_log_start_time(reference_time)
+
+        try:
+            for _ in range(count):
+                result = self.dmm.measure()
+                last_result = result
+                record = self._build_log_record(result, time.time())
+                records.append(record)
+
+            for record in records:
+                self._append_log_record(record)
+
+            if last_result is not None:
+                self._render_measurement(last_result)
+
+            self._update_log_count()
+            self._refresh_plot()
         except MeasurementError as exc:
-            self.status_var.set(str(exc))
-            self.status_label.configure(foreground="red")
+            self._render_error(str(exc))
+            messagebox.showerror("Burst capture failed", str(exc))
         except Exception as exc:  # pragma: no cover - GUI safety net
             traceback.print_exc()
-            self.status_var.set(f"Unexpected error: {exc}")
-            self.status_label.configure(foreground="red")
+            message = f"Unexpected error: {exc}"
+            self._render_error(message)
+            messagebox.showerror("Burst capture failed", message)
+        finally:
+            self._burst_active = False
+            self._resume_updates()
+
+    def _schedule_update(self) -> None:
+        if self._updates_paused or self._update_job is not None:
+            return
+        self._update_job = self.root.after(MicroDMM.UPDATE_INTERVAL_MS, self._update)
+
+    def _schedule_output_refresh(self) -> None:
+        if self._outputs_paused or self._output_job is not None:
+            return
+        self._output_job = self.root.after(40, self._refresh_outputs)
+
+    def _update(self) -> None:
+        self._update_job = None
+        if self._updates_paused:
+            return
+        try:
+            result = self.dmm.measure()
+            self._render_measurement(result)
+            self._update_logging(result)
+        except MeasurementError as exc:
+            self._render_error(str(exc))
+        except Exception as exc:  # pragma: no cover - GUI safety net
+            traceback.print_exc()
+            self._render_error(f"Unexpected error: {exc}")
 
         self._schedule_update()
 
     def _refresh_outputs(self) -> None:
+        self._output_job = None
+        if self._outputs_paused:
+            return
         try:
             self.dmm.refresh_outputs()
         finally:

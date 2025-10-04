@@ -66,20 +66,24 @@ re-applies its preferred states to the pins.  Adjust the labels in
 ``MANUAL_PIN_LABELS`` if your FT232H wiring calls for different names.
 
 Use the **Show Bridge Voltage Readout** checkbox (also in the advanced panel) to
-reveal the bridge voltage field and its min/max entry on the meter tab, together
-with the corresponding logging channel toggle.  Leaving the option off keeps the
-main readouts focused on voltage, VAC, resistance and current only.
+reveal the bridge voltage field and its min/max entry on the meter panel,
+together with the corresponding logging channel toggle.  Leaving the option off
+keeps the main readouts focused on voltage, VAC, resistance and current only.
+
+The window keeps the live meter and controls on the left while the plotting and
+logging workspace sits on the right, so you can watch the measurements while
+recording them.
 
 ### Min/max tracking and logging
 
-The main *Meter* tab now keeps running minimum and maximum values for the DC
-voltage, RMS voltage, resistance/temperature, current and bridge voltage.  Use
-the **Reset Min/Max** button to clear the statistics at any time – the next
-reading seeds a fresh set of extrema.  The **Clear VAC** control instantly wipes
-the rolling RMS accumulator so you can capture a new AC reading without waiting
-for the previous samples to age out.
+The meter panel keeps running minimum and maximum values for the DC voltage, RMS
+voltage, resistance/temperature, current and bridge voltage.  Use the
+**Reset Min/Max** button to clear the statistics at any time – the next reading
+seeds a fresh set of extrema.  The **Clear VAC** control instantly wipes the
+rolling RMS accumulator so you can capture a new AC reading without waiting for
+the previous samples to age out.
 
-Switch to the *Logging* tab to record and visualise incoming data:
+The logging workspace records and visualises incoming data:
 
 * Enable **Record measurements** to start accumulating samples.  Logging uses
   the same units that are shown in the meter (for example, resistance switches
@@ -90,6 +94,10 @@ Switch to the *Logging* tab to record and visualise incoming data:
 * Click **Clear Log** to discard the captured samples and reset the plot.
 * Click **Export CSV** to save the log (timestamp, elapsed time and all channel
   values) for offline analysis.
+* Use the **Burst samples** entry and **Start Burst** button to suspend the GUI
+  and capture a fixed block of samples as fast as the ADS1115 allows.  The burst
+  uses the first enabled logging channel (or DC voltage by default) and appends
+  the readings directly to the log and chart when it completes.
 
 When the ADS1115 or FT232H hardware is not present the GUI still opens and
 shows an error banner so you can diagnose connection problems without the
