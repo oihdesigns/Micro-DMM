@@ -19,6 +19,12 @@ The FT232H must be configured with Blinka.  Follow Adafruit's
 [`FT232H` guide](https://learn.adafruit.com/circuitpython-on-any-computer-with-ft232h)
 if you have not already done so.
 
+For the optional plotting and CSV logging tools install Matplotlib:
+
+```bash
+pip install matplotlib
+```
+
 ## Running the application
 
 Simply double-click or execute ``microDMM_FT232H.py``.  No command-line
@@ -55,6 +61,25 @@ checkbox to unlock toggles for:
 When the manual mode is disabled the firmware takes over again immediately and
 re-applies its preferred states to the pins.  Adjust the labels in
 ``MANUAL_PIN_LABELS`` if your FT232H wiring calls for different names.
+
+### Min/max tracking and logging
+
+The main *Meter* tab now keeps running minimum and maximum values for the DC
+voltage, RMS voltage, resistance/temperature, current and bridge voltage.  Use
+the **Reset Min/Max** button to clear the statistics at any time – the next
+reading seeds a fresh set of extrema.
+
+Switch to the *Logging* tab to record and visualise incoming data:
+
+* Enable **Record measurements** to start accumulating samples.  Logging uses
+  the same units that are shown in the meter (for example, resistance switches
+  to °F when the alternate units toggle is active).
+* The Matplotlib chart updates live and lets you toggle individual channels to
+  focus on specific signals.  The Y axis rescales automatically to the visible
+  traces.
+* Click **Clear Log** to discard the captured samples and reset the plot.
+* Click **Export CSV** to save the log (timestamp, elapsed time and all channel
+  values) for offline analysis.
 
 When the ADS1115 or FT232H hardware is not present the GUI still opens and
 shows an error banner so you can diagnose connection problems without the

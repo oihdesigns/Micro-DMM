@@ -17,13 +17,15 @@ application.  No command line arguments are required.
 
 from __future__ import annotations
 
+import csv
 import math
 import sys
 import time
 import traceback
+from datetime import datetime
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 try:  # Import Blinka hardware libraries lazily so the UI can still launch
     import board
@@ -39,7 +41,14 @@ except Exception:  # pragma: no cover - executed only when hardware libs absent
     AnalogIn = None  # type: ignore
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import filedialog, messagebox, ttk
+
+try:
+    from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+    from matplotlib.figure import Figure
+except Exception:  # pragma: no cover - optional dependency
+    FigureCanvasTkAgg = None  # type: ignore
+    Figure = None  # type: ignore
 
 
 # ---------------------------------------------------------------------------
@@ -167,8 +176,8 @@ class MicroDMM:
     EEPROM_SLEEP_V = 0.6119
     EEPROM_MAX_V = 4.979
 
-    VOLTAGE_SCALE_POS = 68.36437
-    VOLTAGE_SCALE_NEG = 68.3536
+    VOLTAGE_SCALE_POS = -68.36437
+    VOLTAGE_SCALE_NEG = -68.3536
 
     # Windows GUI polling rate (ms)
     UPDATE_INTERVAL_MS = 100
@@ -189,6 +198,14 @@ class MicroDMM:
         "VbridgePin": "V Bridge (C5)",
         "SETRANGE_PIN": "R Range (6)",
     }
+
+    STATS_FIELDS = (
+        "voltage_dc",
+        "voltage_rms",
+        "resistance",
+        "current",
+        "bridge_voltage",
+    )
 
     def __init__(self) -> None:
         self.mode: Mode = Mode.VOLTMETER
@@ -233,6 +250,10 @@ class MicroDMM:
         }
         self._auto_output_cache: Dict[str, bool] = {
             name: False for name in self.OUTPUT_MAPPING
+        }
+
+        self._stats: Dict[str, Dict[str, Optional[float]]] = {
+            field: {"min": None, "max": None} for field in self.STATS_FIELDS
         }
 
         self._i2c = None
@@ -312,6 +333,17 @@ class MicroDMM:
             if auto_state is not None:
                 self._write_output(name, auto_state)
 
+    def get_statistics(self) -> Dict[str, Tuple[Optional[float], Optional[float]]]:
+        return {
+            field: (values["min"], values["max"])
+            for field, values in self._stats.items()
+        }
+
+    def reset_statistics(self) -> None:
+        for field in self._stats.values():
+            field["min"] = None
+            field["max"] = None
+
     def measure(self) -> MeasurementResult:
         """Poll all sensors and update the cached measurement."""
 
@@ -337,6 +369,7 @@ class MicroDMM:
             self._update_constant_current_output()
             self._update_continuity_output(result)
             self._hardware_error = None
+            self._update_statistics(result)
             self._last_measurement = result
             return result
         except Exception as exc:  # pragma: no cover - hardware dependent
@@ -596,6 +629,19 @@ class MicroDMM:
                 return resistance * factor
         return resistance
 
+    def _update_statistics(self, result: MeasurementResult) -> None:
+        for field in self.STATS_FIELDS:
+            value = getattr(result, field, None)
+            if not isinstance(value, (int, float)):
+                continue
+            if math.isnan(value) or math.isinf(value):
+                continue
+            stats = self._stats[field]
+            current_min = stats["min"]
+            current_max = stats["max"]
+            stats["min"] = value if current_min is None else min(current_min, value)
+            stats["max"] = value if current_max is None else max(current_max, value)
+
     def _write_output(self, name: str, value: bool) -> None:
         pin = self._outputs.get(name)
         if pin is None:
@@ -672,10 +718,40 @@ class MicroDMM:
 
 
 class MicroDMMApp:
+    LOG_CHANNELS = {
+        "Voltage (DC)": ("voltage_dc", "V"),
+        "Voltage (RMS)": ("voltage_rms", "V"),
+        "Resistance": ("resistance", "Ω"),
+        "Current": ("current", "A"),
+        "Bridge Voltage": ("bridge_voltage", "V"),
+    }
+
+    STAT_LABELS = {
+        "voltage_dc": ("Voltage (DC)", "V"),
+        "voltage_rms": ("Voltage (RMS)", "V"),
+        "resistance": ("Resistance", "Ω"),
+        "current": ("Current", "A"),
+        "bridge_voltage": ("Bridge Voltage", "V"),
+    }
+
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.dmm = MicroDMM()
         self.root.title("Micro-DMM FT232H")
+
+        self.logging_active = tk.BooleanVar(value=False)
+        self._log_records: list[dict[str, object]] = []
+        self._log_start_time: Optional[float] = None
+        self._plot_data: Dict[str, Dict[str, list[float]]] = {
+            label: {"x": [], "y": []} for label in self.LOG_CHANNELS
+        }
+        self.channel_vars: Dict[str, tk.BooleanVar] = {}
+        self._plot_lines: Dict[str, object] = {}
+        self.plot_canvas: Optional[FigureCanvasTkAgg] = None
+        self._plot_available = Figure is not None and FigureCanvasTkAgg is not None
+        self.figure: Optional[Figure] = None
+        self.ax = None  # type: ignore[assignment]
+        self.log_count_var = tk.StringVar(value="Samples logged: 0")
 
         self._build_gui()
         self._schedule_update()
@@ -687,16 +763,29 @@ class MicroDMMApp:
         main = ttk.Frame(self.root, padding=10)
         main.pack(fill="both", expand=True)
 
+        self.notebook = ttk.Notebook(main)
+        self.notebook.pack(fill="both", expand=True)
+
+        self.meter_tab = ttk.Frame(self.notebook)
+        self.logging_tab = ttk.Frame(self.notebook)
+
+        self.notebook.add(self.meter_tab, text="Meter")
+        self.notebook.add(self.logging_tab, text="Logging")
+
+        self._build_meter_tab(self.meter_tab)
+        self._build_logging_tab(self.logging_tab)
+
+    def _build_meter_tab(self, parent: ttk.Frame) -> None:
         # Measurement display
-        meas_frame = ttk.LabelFrame(main, text="Measurements")
+        meas_frame = ttk.LabelFrame(parent, text="Measurements")
         meas_frame.pack(fill="x", padx=5, pady=5)
 
-        self.voltage_var = tk.StringVar()
-        self.vac_var = tk.StringVar()
-        self.res_var = tk.StringVar()
-        self.current_var = tk.StringVar()
-        self.status_var = tk.StringVar()
-        self.bridge_var = tk.StringVar()
+        self.voltage_var = tk.StringVar(value="—")
+        self.vac_var = tk.StringVar(value="—")
+        self.res_var = tk.StringVar(value="—")
+        self.current_var = tk.StringVar(value="—")
+        self.status_var = tk.StringVar(value="—")
+        self.bridge_var = tk.StringVar(value="—")
 
         self._add_row(meas_frame, 0, "Voltage (DC):", self.voltage_var)
         self._add_row(meas_frame, 1, "Voltage (RMS):", self.vac_var)
@@ -704,11 +793,32 @@ class MicroDMMApp:
         self._add_row(meas_frame, 3, "Current:", self.current_var)
         self._add_row(meas_frame, 4, "Bridge Voltage:", self.bridge_var)
 
-        self.status_label = ttk.Label(main, textvariable=self.status_var)
+        extremes = ttk.LabelFrame(parent, text="Min / Max")
+        extremes.pack(fill="x", padx=5, pady=5)
+
+        ttk.Label(extremes, text="Measurement").grid(row=0, column=0, padx=4, pady=2, sticky="w")
+        ttk.Label(extremes, text="Min").grid(row=0, column=1, padx=4, pady=2)
+        ttk.Label(extremes, text="Max").grid(row=0, column=2, padx=4, pady=2)
+
+        self.stat_min_vars: Dict[str, tk.StringVar] = {}
+        self.stat_max_vars: Dict[str, tk.StringVar] = {}
+
+        for row, field in enumerate(MicroDMM.STATS_FIELDS, start=1):
+            label_text, _ = self.STAT_LABELS[field]
+            ttk.Label(extremes, text=label_text + ":").grid(
+                row=row, column=0, padx=4, pady=2, sticky="w"
+            )
+            min_var = tk.StringVar(value="—")
+            max_var = tk.StringVar(value="—")
+            ttk.Label(extremes, textvariable=min_var).grid(row=row, column=1, padx=4, pady=2)
+            ttk.Label(extremes, textvariable=max_var).grid(row=row, column=2, padx=4, pady=2)
+            self.stat_min_vars[field] = min_var
+            self.stat_max_vars[field] = max_var
+
+        self.status_label = ttk.Label(parent, textvariable=self.status_var)
         self.status_label.pack(fill="x", padx=5, pady=5)
 
-        # Mode selection and options
-        ctrl = ttk.LabelFrame(main, text="Controls")
+        ctrl = ttk.LabelFrame(parent, text="Controls")
         ctrl.pack(fill="x", padx=5, pady=5)
 
         ttk.Label(ctrl, text="Mode:").grid(row=0, column=0, sticky="w")
@@ -723,7 +833,6 @@ class MicroDMMApp:
         mode_combo.grid(row=0, column=1, padx=5, pady=2, sticky="w")
         mode_combo.bind("<<ComboboxSelected>>", self._on_mode_changed)
 
-        # Toggle buttons
         self.auto_var = tk.BooleanVar(value=self.dmm.ohms_auto_range)
         self.high_range_var = tk.BooleanVar(value=self.dmm.ohms_high_range)
         self.precise_var = tk.BooleanVar(value=self.dmm.precise_mode)
@@ -746,7 +855,7 @@ class MicroDMMApp:
             command=self._refresh_advanced_visibility,
         ).grid(row=4, column=0, sticky="w", padx=4, pady=6, columnspan=3)
 
-        self.advanced_frame = ttk.LabelFrame(main, text="Advanced Controls")
+        self.advanced_frame = ttk.LabelFrame(parent, text="Advanced Controls")
 
         self._sample_rate_options = [
             ("Automatic", None),
@@ -828,8 +937,7 @@ class MicroDMMApp:
 
         self._update_manual_pin_controls()
 
-        # Action buttons
-        self.btn_frame = ttk.Frame(main)
+        self.btn_frame = ttk.Frame(parent)
         self.btn_frame.pack(fill="x", padx=5, pady=5)
 
         ttk.Button(self.btn_frame, text="Zero Ohms", command=self.dmm.zero_resistance).pack(
@@ -844,8 +952,68 @@ class MicroDMMApp:
         ttk.Button(self.btn_frame, text="Toggle Cycle Track", command=self.dmm.toggle_cycle_track).pack(
             side="left", padx=2
         )
+        ttk.Button(self.btn_frame, text="Reset Min/Max", command=self._on_reset_stats).pack(
+            side="left", padx=2
+        )
 
         self._refresh_advanced_visibility()
+        self._update_stat_labels()
+
+    def _build_logging_tab(self, parent: ttk.Frame) -> None:
+        container = ttk.Frame(parent)
+        container.pack(fill="both", expand=True)
+
+        if self._plot_available:
+            self.figure = Figure(figsize=(7, 4), dpi=100)
+            self.ax = self.figure.add_subplot(111)
+            self.ax.set_title("Measurement Log")
+            self.ax.set_xlabel("Time (s)")
+            self.ax.set_ylabel("Value")
+
+            for label, (field, unit) in self.LOG_CHANNELS.items():
+                (line,) = self.ax.plot([], [], label=f"{label} [{unit}]")
+                self._plot_lines[label] = line
+
+            self.ax.legend(loc="upper right")
+            self.plot_canvas = FigureCanvasTkAgg(self.figure, master=container)
+            self.plot_canvas.draw_idle()
+            self.plot_canvas.get_tk_widget().pack(fill="both", expand=True, padx=5, pady=5)
+        else:
+            ttk.Label(
+                container,
+                text="Matplotlib is required for plotting. Install matplotlib to enable charts.",
+                wraplength=400,
+                justify="center",
+            ).pack(fill="both", expand=True, padx=10, pady=10)
+
+        controls = ttk.Frame(container)
+        controls.pack(fill="x", padx=5, pady=5)
+
+        ttk.Checkbutton(
+            controls,
+            text="Record measurements",
+            variable=self.logging_active,
+            command=self._on_logging_toggle,
+        ).pack(side="left", padx=2)
+
+        ttk.Button(controls, text="Clear Log", command=self._on_clear_log).pack(side="left", padx=2)
+        ttk.Button(controls, text="Export CSV", command=self._on_export_csv).pack(side="left", padx=2)
+
+        ttk.Label(container, textvariable=self.log_count_var).pack(fill="x", padx=5, pady=(0, 5))
+
+        if self._plot_available:
+            channel_box = ttk.LabelFrame(container, text="Channels")
+            channel_box.pack(fill="x", padx=5, pady=5)
+            for idx, label in enumerate(self.LOG_CHANNELS.keys()):
+                var = tk.BooleanVar(value=True)
+                self.channel_vars[label] = var
+                chk = ttk.Checkbutton(
+                    channel_box,
+                    text=label,
+                    variable=var,
+                    command=self._refresh_plot,
+                )
+                chk.grid(row=idx // 3, column=idx % 3, sticky="w", padx=4, pady=2)
 
     def _add_row(self, frame: ttk.Frame, row: int, label: str, var: tk.StringVar) -> None:
         ttk.Label(frame, text=label).grid(row=row, column=0, sticky="w", padx=4, pady=2)
@@ -896,6 +1064,7 @@ class MicroDMMApp:
 
     def _on_alt_units(self) -> None:
         self.dmm.alt_units = self.alt_units_var.get()
+        self._update_stat_labels()
 
     def _on_current(self) -> None:
         self.dmm.current_enabled = self.current_var_enabled.get()
@@ -944,6 +1113,185 @@ class MicroDMMApp:
             else:
                 chk.state(["disabled"])
 
+    def _on_reset_stats(self) -> None:
+        self.dmm.reset_statistics()
+        self._update_stat_labels()
+
+    def _update_stat_labels(self) -> None:
+        if not hasattr(self, "stat_min_vars"):
+            return
+        stats = self.dmm.get_statistics()
+        for field, (min_val, max_val) in stats.items():
+            min_var = self.stat_min_vars.get(field)
+            max_var = self.stat_max_vars.get(field)
+            if min_var is not None:
+                min_var.set(self._format_stat_value(field, min_val))
+            if max_var is not None:
+                max_var.set(self._format_stat_value(field, max_val))
+
+    def _format_stat_value(self, field: str, value: Optional[float]) -> str:
+        if value is None:
+            return "—"
+        _label, unit = self.STAT_LABELS[field]
+        if field in {"voltage_dc", "voltage_rms", "bridge_voltage"}:
+            return f"{value:.6f} {unit}"
+        if field == "current":
+            return f"{value:.6f} {unit}"
+        if field == "resistance":
+            if self.dmm.alt_units:
+                return f"{value:.2f} °F"
+            if value >= 1_000_000:
+                return f"{value / 1_000_000:.3f} MΩ"
+            if value >= 1_000:
+                return f"{value / 1_000:.3f} kΩ"
+            return f"{value:.3f} {unit}"
+        return f"{value:.6f} {unit}"
+
+    def _on_logging_toggle(self) -> None:
+        if self.logging_active.get():
+            now = time.time()
+            if self._log_records:
+                last_elapsed = float(self._log_records[-1]["elapsed"])
+                self._log_start_time = now - last_elapsed
+            else:
+                self._log_start_time = now
+        else:
+            self._log_start_time = None
+        self._update_log_count()
+
+    def _on_clear_log(self) -> None:
+        self._log_records.clear()
+        self._log_start_time = time.time() if self.logging_active.get() else None
+        for series in self._plot_data.values():
+            series["x"].clear()
+            series["y"].clear()
+        self._update_log_count()
+        self._refresh_plot()
+
+    def _on_export_csv(self) -> None:
+        if not self._log_records:
+            messagebox.showinfo("Export", "No samples have been recorded yet.")
+            return
+        file_path = filedialog.asksaveasfilename(
+            title="Export measurements",
+            defaultextension=".csv",
+            filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")],
+        )
+        if not file_path:
+            return
+
+        fieldnames = ["timestamp", "elapsed"] + [field for field, _ in self.LOG_CHANNELS.values()]
+        try:
+            with open(file_path, "w", newline="", encoding="utf-8") as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writeheader()
+                for record in self._log_records:
+                    row = {
+                        "timestamp": record["timestamp"].isoformat(),
+                        "elapsed": f"{float(record['elapsed']):.6f}",
+                    }
+                    for field, _ in self.LOG_CHANNELS.values():
+                        value = record.get(field)
+                        if isinstance(value, float):
+                            row[field] = f"{value:.12g}"
+                        else:
+                            row[field] = value
+                    writer.writerow(row)
+        except Exception as exc:
+            messagebox.showerror("Export failed", f"Could not write CSV: {exc}")
+            return
+
+        messagebox.showinfo(
+            "Export complete",
+            f"Saved {len(self._log_records)} samples to {file_path}",
+        )
+
+    def _update_log_count(self) -> None:
+        self.log_count_var.set(f"Samples logged: {len(self._log_records)}")
+
+    def _update_logging(self, result: MeasurementResult) -> None:
+        if not self.logging_active.get():
+            return
+
+        now = time.time()
+        if self._log_start_time is None:
+            if self._log_records:
+                last_elapsed = float(self._log_records[-1]["elapsed"])
+                self._log_start_time = now - last_elapsed
+            else:
+                self._log_start_time = now
+
+        elapsed = now - (self._log_start_time or now)
+        record: Dict[str, object] = {
+            "timestamp": datetime.now(),
+            "elapsed": elapsed,
+        }
+
+        for label, (field, _unit) in self.LOG_CHANNELS.items():
+            value = getattr(result, field)
+            record[field] = value
+            series = self._plot_data[label]
+            series["x"].append(elapsed)
+            series["y"].append(value)
+
+        self._log_records.append(record)
+        self._update_log_count()
+        self._refresh_plot()
+
+    def _refresh_plot(self) -> None:
+        if not self._plot_available or self.plot_canvas is None or self.ax is None:
+            return
+
+        visible_y: list[float] = []
+        visible_x: list[float] = []
+        handles = []
+        labels = []
+
+        for label, line in self._plot_lines.items():
+            series = self._plot_data[label]
+            enabled = self.channel_vars.get(label)
+            if enabled is not None and enabled.get() and series["x"]:
+                line.set_data(series["x"], series["y"])
+                visible_y.extend(series["y"])
+                visible_x.extend(series["x"])
+                handles.append(line)
+                labels.append(line.get_label())
+            else:
+                line.set_data([], [])
+
+        if visible_x:
+            x_min = min(visible_x)
+            x_max = max(visible_x)
+            if math.isclose(x_min, x_max, rel_tol=1e-9, abs_tol=1e-9):
+                x_max = x_min + 1.0
+            self.ax.set_xlim(x_min, x_max)
+        else:
+            self.ax.set_xlim(0.0, 1.0)
+
+        if visible_y:
+            y_min = min(visible_y)
+            y_max = max(visible_y)
+            if math.isclose(y_min, y_max, rel_tol=1e-9, abs_tol=1e-9):
+                margin = abs(y_min) * 0.1 if y_min else 0.1
+                y_min -= margin
+                y_max += margin
+            else:
+                span = y_max - y_min
+                margin = span * 0.1
+                y_min -= margin
+                y_max += margin
+            self.ax.set_ylim(y_min, y_max)
+        else:
+            self.ax.set_ylim(-1.0, 1.0)
+
+        legend = self.ax.get_legend()
+        if handles:
+            self.ax.legend(handles=handles, labels=labels, loc="upper right")
+        elif legend is not None:
+            legend.remove()
+
+        self.plot_canvas.draw_idle()
+
     # Scheduler ----------------------------------------------------------
 
     def _schedule_update(self) -> None:
@@ -973,6 +1321,8 @@ class MicroDMMApp:
             self.bridge_var.set(
                 f"{result.bridge_voltage: .6f} V ({'FLOAT' if result.v_floating else 'CLOSED'})"
             )
+            self._update_stat_labels()
+            self._update_logging(result)
         except MeasurementError as exc:
             self.status_var.set(str(exc))
             self.status_label.configure(foreground="red")
