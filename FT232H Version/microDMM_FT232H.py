@@ -622,8 +622,7 @@ class MicroDMM:
         self._voltage_sq_sum -= old_sq
 
         self._voltage_buffer[idx] = voltage
-        diff = voltage - self._voltage_avg
-        squared = diff * diff
+        squared = voltage * voltage
         self._voltage_sq_buffer[idx] = squared
 
         self._voltage_sum += voltage
