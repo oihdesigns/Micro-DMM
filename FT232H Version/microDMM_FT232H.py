@@ -234,12 +234,12 @@ class MicroDMM:
         self._vac_present = False
         self._voltage_reference = 0.0
 
-        self._voltage_sum = 0.0
-        self._voltage_sq_sum = 0.0
         self._voltage_buffer: list[float] = [0.0] * self.VOLTAGE_HISTORY_SIZE
         self._voltage_sq_buffer: list[float] = [0.0] * self.VOLTAGE_HISTORY_SIZE
         self._voltage_index = 0
         self._voltage_avg = 0.0
+        self._voltage_sum = 0.0
+        self._voltage_sq_sum = 0.0
 
         self._last_measurement: MeasurementResult = MeasurementResult()
         self._hardware_error: Optional[str] = None
@@ -306,6 +306,15 @@ class MicroDMM:
 
     def clear_voltage_reference(self) -> None:
         self._voltage_reference = 0.0
+
+    def clear_vac_history(self) -> None:
+        self._voltage_buffer = [0.0] * self.VOLTAGE_HISTORY_SIZE
+        self._voltage_sq_buffer = [0.0] * self.VOLTAGE_HISTORY_SIZE
+        self._voltage_sum = 0.0
+        self._voltage_sq_sum = 0.0
+        self._voltage_index = 0
+        self._voltage_avg = 0.0
+        self._vac_present = False
 
     def set_manual_sample_rate(self, rate: Optional[int]) -> None:
         if rate is not None and rate not in self.ADS_DATA_RATES:
@@ -975,6 +984,9 @@ class MicroDMMApp:
         ttk.Button(self.btn_frame, text="Clear V Ref", command=self.dmm.clear_voltage_reference).pack(
             side="left", padx=2
         )
+        ttk.Button(self.btn_frame, text="Clear VAC", command=self._on_clear_vac).pack(
+            side="left", padx=2
+        )
         ttk.Button(self.btn_frame, text="Toggle Cycle Track", command=self.dmm.toggle_cycle_track).pack(
             side="left", padx=2
         )
@@ -1157,6 +1169,10 @@ class MicroDMMApp:
     def _on_reset_stats(self) -> None:
         self.dmm.reset_statistics()
         self._update_stat_labels()
+
+    def _on_clear_vac(self) -> None:
+        self.dmm.clear_vac_history()
+        self.vac_var.set("—")
 
     def _update_bridge_visibility(self) -> None:
         show = self.show_bridge_var.get() if hasattr(self, "show_bridge_var") else False

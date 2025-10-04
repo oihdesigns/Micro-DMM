@@ -75,7 +75,9 @@ main readouts focused on voltage, VAC, resistance and current only.
 The main *Meter* tab now keeps running minimum and maximum values for the DC
 voltage, RMS voltage, resistance/temperature, current and bridge voltage.  Use
 the **Reset Min/Max** button to clear the statistics at any time – the next
-reading seeds a fresh set of extrema.
+reading seeds a fresh set of extrema.  The **Clear VAC** control instantly wipes
+the rolling RMS accumulator so you can capture a new AC reading without waiting
+for the previous samples to age out.
 
 Switch to the *Logging* tab to record and visualise incoming data:
 
