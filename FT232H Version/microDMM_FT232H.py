@@ -182,6 +182,8 @@ class MicroDMM:
     # Windows GUI polling rate (ms)
     UPDATE_INTERVAL_MS = 100
 
+    VOLTAGE_HISTORY_SIZE = 128
+
     # Mapping Arduino pins to FT232H "C" pins.  The entries are strings that
     # match attributes under ``board``.
     OUTPUT_MAPPING = {
@@ -213,7 +215,7 @@ class MicroDMM:
         self.ohms_high_range: bool = True
         self.precise_mode: bool = False
         self.alt_units: bool = False
-        self.current_enabled: bool = True
+        self.current_enabled: bool = False
         self.power_save: bool = False
 
         self.manual_sample_rate: Optional[int] = None
@@ -234,8 +236,10 @@ class MicroDMM:
 
         self._voltage_sum = 0.0
         self._voltage_sq_sum = 0.0
-        self._voltage_buffer: list[float] = [0.0] * 128
+        self._voltage_buffer: list[float] = [0.0] * self.VOLTAGE_HISTORY_SIZE
+        self._voltage_sq_buffer: list[float] = [0.0] * self.VOLTAGE_HISTORY_SIZE
         self._voltage_index = 0
+        self._voltage_avg = 0.0
 
         self._last_measurement: MeasurementResult = MeasurementResult()
         self._hardware_error: Optional[str] = None
@@ -354,11 +358,11 @@ class MicroDMM:
             voltage = self._measure_voltage()
             resistance = self._measure_resistance()
             current = self._measure_current()
+            rms = math.sqrt(max(self._voltage_sq_sum / len(self._voltage_sq_buffer), 0.0))
             result = MeasurementResult(
                 voltage_dc=voltage,
-                voltage_rms=math.sqrt(max(self._voltage_sq_sum / len(self._voltage_buffer)
-                                          - (self._voltage_sum / len(self._voltage_buffer)) ** 2, 0.0)),
-                voltage_avg=self._voltage_sum / len(self._voltage_buffer),
+                voltage_rms=rms,
+                voltage_avg=self._voltage_avg,
                 voltage_reference=self._voltage_reference,
                 resistance=resistance,
                 current=current,
@@ -601,15 +605,23 @@ class MicroDMM:
     # ------------------------------------------------------------------
 
     def _update_voltage_history(self, voltage: float) -> None:
-        old = self._voltage_buffer[self._voltage_index]
+        idx = self._voltage_index
+
+        old = self._voltage_buffer[idx]
+        old_sq = self._voltage_sq_buffer[idx]
         self._voltage_sum -= old
-        self._voltage_sq_sum -= old * old
+        self._voltage_sq_sum -= old_sq
 
-        self._voltage_buffer[self._voltage_index] = voltage
+        self._voltage_buffer[idx] = voltage
+        diff = voltage - self._voltage_avg
+        squared = diff * diff
+        self._voltage_sq_buffer[idx] = squared
+
         self._voltage_sum += voltage
-        self._voltage_sq_sum += voltage * voltage
+        self._voltage_sq_sum += squared
 
-        self._voltage_index = (self._voltage_index + 1) % len(self._voltage_buffer)
+        self._voltage_index = (idx + 1) % len(self._voltage_buffer)
+        self._voltage_avg = self._voltage_sum / len(self._voltage_buffer)
 
     def _check_floating_voltage(self) -> None:
         assert self._ads is not None and self._chan_voltage is not None
@@ -752,6 +764,10 @@ class MicroDMMApp:
         self.figure: Optional[Figure] = None
         self.ax = None  # type: ignore[assignment]
         self.log_count_var = tk.StringVar(value="Samples logged: 0")
+        self.bridge_widgets: tuple[tk.Widget, ...] = ()
+        self.stat_widgets: Dict[str, tuple[tk.Widget, ...]] = {}
+        self.bridge_channel_check: Optional[ttk.Checkbutton] = None
+        self.bridge_channel_var: Optional[tk.BooleanVar] = None
 
         self._build_gui()
         self._schedule_update()
@@ -791,7 +807,7 @@ class MicroDMMApp:
         self._add_row(meas_frame, 1, "Voltage (RMS):", self.vac_var)
         self._add_row(meas_frame, 2, "Resistance:", self.res_var)
         self._add_row(meas_frame, 3, "Current:", self.current_var)
-        self._add_row(meas_frame, 4, "Bridge Voltage:", self.bridge_var)
+        self.bridge_widgets = self._add_row(meas_frame, 4, "Bridge Voltage:", self.bridge_var)
 
         extremes = ttk.LabelFrame(parent, text="Min / Max")
         extremes.pack(fill="x", padx=5, pady=5)
@@ -805,15 +821,17 @@ class MicroDMMApp:
 
         for row, field in enumerate(MicroDMM.STATS_FIELDS, start=1):
             label_text, _ = self.STAT_LABELS[field]
-            ttk.Label(extremes, text=label_text + ":").grid(
-                row=row, column=0, padx=4, pady=2, sticky="w"
-            )
+            label_widget = ttk.Label(extremes, text=label_text + ":")
+            label_widget.grid(row=row, column=0, padx=4, pady=2, sticky="w")
             min_var = tk.StringVar(value="—")
             max_var = tk.StringVar(value="—")
-            ttk.Label(extremes, textvariable=min_var).grid(row=row, column=1, padx=4, pady=2)
-            ttk.Label(extremes, textvariable=max_var).grid(row=row, column=2, padx=4, pady=2)
+            min_widget = ttk.Label(extremes, textvariable=min_var)
+            max_widget = ttk.Label(extremes, textvariable=max_var)
+            min_widget.grid(row=row, column=1, padx=4, pady=2)
+            max_widget.grid(row=row, column=2, padx=4, pady=2)
             self.stat_min_vars[field] = min_var
             self.stat_max_vars[field] = max_var
+            self.stat_widgets[field] = (label_widget, min_widget, max_widget)
 
         self.status_label = ttk.Label(parent, textvariable=self.status_var)
         self.status_label.pack(fill="x", padx=5, pady=5)
@@ -847,7 +865,7 @@ class MicroDMMApp:
         self._add_check(ctrl, 3, "Current Enabled", self.current_var_enabled, self._on_current)
         self._add_check(ctrl, 3, "Power Save", self.power_save_var, self._on_power_save, column=2)
 
-        self.advanced_visible = tk.BooleanVar(value=False)
+        self.advanced_visible = tk.BooleanVar(value=True)
         ttk.Checkbutton(
             ctrl,
             text="Show Advanced Controls",
@@ -937,6 +955,14 @@ class MicroDMMApp:
 
         self._update_manual_pin_controls()
 
+        self.show_bridge_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            self.advanced_frame,
+            text="Show Bridge Voltage Readout",
+            variable=self.show_bridge_var,
+            command=self._on_show_bridge_changed,
+        ).grid(row=4, column=0, sticky="w", padx=4, pady=(8, 4), columnspan=2)
+
         self.btn_frame = ttk.Frame(parent)
         self.btn_frame.pack(fill="x", padx=5, pady=5)
 
@@ -957,6 +983,7 @@ class MicroDMMApp:
         )
 
         self._refresh_advanced_visibility()
+        self._update_bridge_visibility()
         self._update_stat_labels()
 
     def _build_logging_tab(self, parent: ttk.Frame) -> None:
@@ -1005,7 +1032,8 @@ class MicroDMMApp:
             channel_box = ttk.LabelFrame(container, text="Channels")
             channel_box.pack(fill="x", padx=5, pady=5)
             for idx, label in enumerate(self.LOG_CHANNELS.keys()):
-                var = tk.BooleanVar(value=True)
+                default_enabled = label != "Bridge Voltage"
+                var = tk.BooleanVar(value=default_enabled)
                 self.channel_vars[label] = var
                 chk = ttk.Checkbutton(
                     channel_box,
@@ -1014,10 +1042,20 @@ class MicroDMMApp:
                     command=self._refresh_plot,
                 )
                 chk.grid(row=idx // 3, column=idx % 3, sticky="w", padx=4, pady=2)
+                if label == "Bridge Voltage":
+                    self.bridge_channel_check = chk
+                    self.bridge_channel_var = var
 
-    def _add_row(self, frame: ttk.Frame, row: int, label: str, var: tk.StringVar) -> None:
-        ttk.Label(frame, text=label).grid(row=row, column=0, sticky="w", padx=4, pady=2)
-        ttk.Label(frame, textvariable=var).grid(row=row, column=1, sticky="w", padx=4, pady=2)
+        self._update_bridge_visibility()
+
+    def _add_row(
+        self, frame: ttk.Frame, row: int, label: str, var: tk.StringVar
+    ) -> tuple[ttk.Label, ttk.Label]:
+        label_widget = ttk.Label(frame, text=label)
+        value_widget = ttk.Label(frame, textvariable=var)
+        label_widget.grid(row=row, column=0, sticky="w", padx=4, pady=2)
+        value_widget.grid(row=row, column=1, sticky="w", padx=4, pady=2)
+        return (label_widget, value_widget)
 
     def _add_check(
         self,
@@ -1102,6 +1140,9 @@ class MicroDMMApp:
         except ValueError:
             pass
 
+    def _on_show_bridge_changed(self) -> None:
+        self._update_bridge_visibility()
+
     def _update_manual_pin_controls(self) -> None:
         enabled = self.manual_outputs_var.get()
         for name, (var, chk) in self.manual_pin_controls.items():
@@ -1116,6 +1157,36 @@ class MicroDMMApp:
     def _on_reset_stats(self) -> None:
         self.dmm.reset_statistics()
         self._update_stat_labels()
+
+    def _update_bridge_visibility(self) -> None:
+        show = self.show_bridge_var.get() if hasattr(self, "show_bridge_var") else False
+
+        for widget in self.bridge_widgets:
+            if show:
+                widget.grid()
+            else:
+                widget.grid_remove()
+
+        stat_widgets = self.stat_widgets.get("bridge_voltage")
+        if stat_widgets:
+            for widget in stat_widgets:
+                if show:
+                    widget.grid()
+                else:
+                    widget.grid_remove()
+
+        if self.bridge_channel_var is not None:
+            if show:
+                self.bridge_channel_var.set(True)
+                if self.bridge_channel_check is not None:
+                    self.bridge_channel_check.grid()
+                    self.bridge_channel_check.state(["!disabled"])
+            else:
+                self.bridge_channel_var.set(False)
+                if self.bridge_channel_check is not None:
+                    self.bridge_channel_check.grid_remove()
+
+        self._refresh_plot()
 
     def _update_stat_labels(self) -> None:
         if not hasattr(self, "stat_min_vars"):

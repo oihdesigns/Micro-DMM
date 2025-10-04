@@ -29,8 +29,10 @@ pip install matplotlib
 
 Simply double-click or execute ``microDMM_FT232H.py``.  No command-line
 arguments are needed; the GUI starts immediately and shows live voltage,
-resistance and current readings.  The buttons in the interface replace the
-hardware buttons and touch targets from the Arduino build.
+resistance and (optionally) current readings.  The buttons in the interface
+replace the hardware buttons and touch targets from the Arduino build.  Current
+measurement is disabled at startup to keep the shunt powered down unless you
+explicitly enable it from the controls.
 
 The program maps the original Arduino pins to the FT232H ``C`` pins as follows:
 
@@ -45,10 +47,11 @@ The program maps the original Arduino pins to the FT232H ``C`` pins as follows:
 If your wiring differs, edit the ``OUTPUT_MAPPING`` dictionary in
 ``microDMM_FT232H.py``.
 
-Toggle **Show Advanced Controls** in the GUI to manually pick the ADS1115
-sample rate or gain.  Leaving either dropdown on *Automatic* preserves the
-original firmware's adaptive behaviour; selecting a specific value locks the
-converter to that setting for all measurements.
+The **Advanced Controls** panel (visible by default, or hidden via the *Show
+Advanced Controls* checkbox) lets you manually pick the ADS1115 sample rate or
+gain.  Leaving either dropdown on *Automatic* preserves the original firmware's
+adaptive behaviour; selecting a specific value locks the converter to that
+setting for all measurements.
 
 The advanced panel also exposes an optional *Manual Pin Control* mode so you can
 force the FT232H outputs without modifying the firmware logic.  Enable the
@@ -61,6 +64,11 @@ checkbox to unlock toggles for:
 When the manual mode is disabled the firmware takes over again immediately and
 re-applies its preferred states to the pins.  Adjust the labels in
 ``MANUAL_PIN_LABELS`` if your FT232H wiring calls for different names.
+
+Use the **Show Bridge Voltage Readout** checkbox (also in the advanced panel) to
+reveal the bridge voltage field and its min/max entry on the meter tab, together
+with the corresponding logging channel toggle.  Leaving the option off keeps the
+main readouts focused on voltage, VAC, resistance and current only.
 
 ### Min/max tracking and logging
 
