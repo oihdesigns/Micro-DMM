@@ -27,13 +27,17 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Dict, Optional, Tuple
 
+
+BLINKA_IMPORT_ERROR: Optional[BaseException] = None
+
 try:  # Import Blinka hardware libraries lazily so the UI can still launch
     import board
     import busio
     import digitalio
     from adafruit_ads1x15.ads1115 import ADS1115
     from adafruit_ads1x15.analog_in import AnalogIn
-except Exception:  # pragma: no cover - executed only when hardware libs absent
+except Exception as exc:  # pragma: no cover - executed only when hardware libs absent
+    BLINKA_IMPORT_ERROR = exc
     board = None  # type: ignore
     busio = None  # type: ignore
     digitalio = None  # type: ignore
@@ -367,7 +371,14 @@ class MicroDMM:
             voltage = self._measure_voltage()
             resistance = self._measure_resistance()
             current = self._measure_current()
-            rms = math.sqrt(max(self._voltage_sq_sum / len(self._voltage_sq_buffer), 0.0))
+            sample_count = len(self._voltage_sq_buffer)
+            if sample_count:
+                mean_square = self._voltage_sq_sum / sample_count
+                mean = self._voltage_sum / sample_count
+                variance = max(mean_square - mean * mean, 0.0)
+                rms = math.sqrt(variance)
+            else:  # pragma: no cover - buffer is always initialised
+                rms = 0.0
             result = MeasurementResult(
                 voltage_dc=voltage,
                 voltage_rms=rms,
@@ -395,10 +406,13 @@ class MicroDMM:
 
     def _initialise_hardware(self) -> None:
         if ADS1115 is None or AnalogIn is None or busio is None or board is None:
-            self._hardware_error = (
+            message = (
                 "Required Blinka libraries not available. Install adafruit-blinka "
                 "and adafruit-circuitpython-ads1x15."
             )
+            if BLINKA_IMPORT_ERROR is not None:
+                message += f" (import error: {BLINKA_IMPORT_ERROR})"
+            self._hardware_error = message
             return
 
         try:
