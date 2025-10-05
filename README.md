@@ -64,7 +64,7 @@ Here are more photos:
 This meter is designed to complement and support the more expensive equimpent generally found in a lab, rather than replace it. With that in mide, I've made the following design decisions on my priorites:
 
 ### Minimal Protections
-- The voltmeter circuitry is not designed to measure amplitudes higher than is dangerous to humans. By not designing a tool that is supposed to keep people safe I can dramatically simplify and shrink the design. (The said, I've nailed the voltmeter circuit with a 1000V megaohmmeter. No problem)
+- The voltmeter circuitry is not designed to measure amplitudes higher than is dangerous to humans. By not designing a tool that is supposed to keep people safe I can dramatically simplify and shrink the design. (The said, I've nailed the voltmeter circuit with a 1000V megaohmmeter. No problem.)
 - Likewise, the resistance circuit can be damaged if you accidentally measure too much /unregulated voltage. This is a tradeoff for a very fast and accurate autoranging ohmmeter circuit that can accurately read from less than 0.01 to more than 5,000,000 Ohms. 
 
 ### Streamlined Functions
@@ -75,7 +75,9 @@ As of writing I have functional versions (I confirmed the core functions work) t
 - Arduino Uno R4
 - Arduino Giga (with or without the display shield)
 - Arduino ESP32 Nano (via jumpers)
-- Seeed Studio XIAO RA4M1 (same processer as the Uno R4) 
+- Seeed Studio XIAO RA4M1 (same processer as the Uno R4)
+- I have partial function on a direct computer (Windows 11) interface with a FT232H breakout board (AdaFruit makes a nice one). I can see the data lines and it looks like most of the logic works, more or less. It's a proof of concept port and a test for "can I tell the AI to take an Arduino sketch and port it to Python" (the answer is far more yes than it use to be).
+  -  That said, it's very slow (reading in at 2-3sps). I'm not sure how to optimize this, and speeding it up is not an immediate priority. 
 
 ![2025-06-30 15 28 38-1](https://github.com/user-attachments/assets/d1df3a64-35a9-4641-99ba-be2e2ba61623)
 ![2025-06-25 20 25 30](https://github.com/user-attachments/assets/2e6708fb-ebba-4c70-9a25-8d26cee135b0)
@@ -95,7 +97,7 @@ As of writing I have functional versions (I confirmed the core functions work) t
 - There is always room for cleanup in the code to make it more elegant. 
 
 ## Ideas for Expanding on the Current Function / :
-- Make a version that uses an ADS1256 instead of the ADS1115 to support measurements speeds up to 30,000 samples/second and resolutions of up to 24bits.
+- Make a version that uses an ADS1256 instead of the ADS1115 to support measurements speeds up to 30,000 samples/second and resolutions of up to 24bits. (I have had proof-of-concept success with this using a Raspberry PI ADS1256 hat.)
 - Make a version that runs off a Raspberry Pi.
 - Implement WiFi/Bluetooth features on the boards that support it.
 - Implement DAC output as a simple function generator for the boards that support it.
