@@ -71,7 +71,9 @@ TRIGGER_MODES = ("Benchmark", "Multi")
 TRIGGER_SLOPES = ("Rising", "Falling")
 
 ALL_GPIO_PINS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 16, 19, 20, 21, 24, 25, 26, 27]
-RESERVED_PINS = {DRDY_PIN, CS_PIN, RST_PIN, RANGE_PIN}
+SPI_PINS = {8, 9, 10, 11}
+RESERVED_PINS = {DRDY_PIN, CS_PIN, RST_PIN, RANGE_PIN} | SPI_PINS
+USER_GPIO_PINS = [pin for pin in ALL_GPIO_PINS if pin not in RESERVED_PINS]
 
 spi = spidev.SpiDev()
 spi.open(0, 0)
@@ -155,6 +157,7 @@ def ads1256_init() -> None:
     send_cmd(CMD_RESET)
     time.sleep(0.1)
     wait_drdy()
+    send_cmd(CMD_SDATAC)
     set_buffer(False)
     set_drate("30k SPS")
     set_gain("1x")
@@ -405,7 +408,7 @@ def on_gpio_mode_change(pin: int, *_: object) -> None:
             gpio_mode_vars[pin].set(previous)
 
 
-for idx, pin in enumerate(ALL_GPIO_PINS, start=1):
+for idx, pin in enumerate(USER_GPIO_PINS, start=1):
     ttk.Label(gpio_frame, text=f"GPIO {pin}", font=CHANNEL_FONT).grid(
         row=idx, column=0, sticky="w", padx=4, pady=2
     )
@@ -432,35 +435,58 @@ for idx, pin in enumerate(ALL_GPIO_PINS, start=1):
 live_frame = ttk.LabelFrame(right_panel, text="Live Graphs")
 live_frame.grid(row=0, column=0, sticky="nsew", pady=(0, 12))
 live_frame.columnconfigure(0, weight=1)
+live_frame.columnconfigure(1, weight=1)
 live_frame.rowconfigure(1, weight=1)
 
-live_view_var = tk.BooleanVar(value=True)
+live_values_var = tk.BooleanVar(value=True)
+live_graph_var = tk.BooleanVar(value=True)
 
 
-def on_live_view_toggle() -> None:
-    if not live_view_var.get():
-        if not is_capturing:
-            status_var.set("Live view paused")
+def on_live_values_toggle() -> None:
+    if live_values_var.get():
+        status_var.set("Live readings resumed")
         for idx, lbl in enumerate(value_labels):
-            lbl.config(text="PAUSED" if channel_vars[idx].get() else "OFF")
-        return
-    for idx, lbl in enumerate(value_labels):
-        if channel_vars[idx].get():
-            lbl.config(text="---")
+            if channel_vars[idx].get():
+                lbl.config(text="---")
+        update_values()
+    else:
+        if not is_capturing:
+            status_var.set("Channel readings paused")
+        for idx, lbl in enumerate(value_labels):
+            if channel_vars[idx].get():
+                lbl.config(text="PAUSED")
 
+
+def on_live_graph_toggle() -> None:
+    if live_graph_var.get():
+        status_var.set("Live graph enabled")
+        update_graph()
+    else:
+        if not is_capturing:
+            status_var.set("Live graph paused")
+
+
+values_toggle = tk.Checkbutton(
+    live_frame,
+    text="Update Channel Readings",
+    font=CHANNEL_FONT,
+    variable=live_values_var,
+    command=on_live_values_toggle,
+)
+values_toggle.grid(row=0, column=0, sticky="w", padx=4, pady=(4, 0))
 
 live_toggle = tk.Checkbutton(
     live_frame,
-    text="Live View Enabled",
+    text="Live Graph Enabled",
     font=CHANNEL_FONT,
-    variable=live_view_var,
-    command=on_live_view_toggle,
+    variable=live_graph_var,
+    command=on_live_graph_toggle,
 )
-live_toggle.grid(row=0, column=0, sticky="w", padx=4, pady=(4, 0))
+live_toggle.grid(row=0, column=1, sticky="w", padx=4, pady=(4, 0))
 
 fig, ax = plt.subplots(figsize=(9, 4), dpi=100)
 canvas = FigureCanvasTkAgg(fig, master=live_frame)
-canvas.get_tk_widget().grid(row=1, column=0, sticky="nsew")
+canvas.get_tk_widget().grid(row=1, column=0, columnspan=2, sticky="nsew")
 
 max_points = 300
 data_buffers = [deque(maxlen=max_points) for _ in CHANNEL_MAP]
@@ -631,6 +657,8 @@ def compute_trigger_value(ch_index: int, raw_value: int) -> float | None:
 
 
 def update_graph() -> None:
+    if not live_graph_var.get():
+        return
     ax.clear()
     ax.set_title("Live Channel Data", fontsize=16)
     ax.set_xlabel("Samples")
@@ -667,27 +695,31 @@ def update_values() -> None:
         update_job = root.after(500, update_values)
         return
 
-    if not live_view_var.get():
-        update_job = root.after(500, update_values)
-        return
+    readings_enabled = live_values_var.get()
+    graph_enabled = live_graph_var.get()
 
     for i in range(len(CHANNEL_MAP)):
         if channel_vars[i].get():
-            raw_value = read_channel_raw(i)
-            value, text, units, _ = compute_sample_value(i, raw_value)
-            value_labels[i].config(text=text)
-            unit_labels[i].config(text=units)
-            channel_units[i] = units
-            if value is None:
-                data_buffers[i].append(float("nan"))
+            if readings_enabled:
+                raw_value = read_channel_raw(i)
+                value, text, units, _ = compute_sample_value(i, raw_value)
+                value_labels[i].config(text=text)
+                unit_labels[i].config(text=units)
+                channel_units[i] = units
+                buffer_value = float('nan') if value is None else value
             else:
-                data_buffers[i].append(value)
+                if value_labels[i].cget('text') != 'PAUSED':
+                    value_labels[i].config(text='PAUSED')
+                buffer_value = float('nan')
+            data_buffers[i].append(buffer_value)
         else:
-            value_labels[i].config(text="OFF")
-            unit_labels[i].config(text="")
-            data_buffers[i].append(float("nan"))
+            value_labels[i].config(text='OFF')
+            unit_labels[i].config(text='')
+            data_buffers[i].append(float('nan'))
 
-    update_graph()
+    if graph_enabled:
+        update_graph()
+
     update_job = root.after(500, update_values)
 
 
