@@ -83,6 +83,7 @@ lgpio.gpio_claim_output(h, CS_PIN)
 lgpio.gpio_claim_output(h, RST_PIN)
 lgpio.gpio_claim_input(h, DRDY_PIN)
 lgpio.gpio_claim_output(h, RANGE_PIN)
+lgpio.gpio_write(h, CS_PIN, 1)
 
 
 def cs_low() -> None:
@@ -127,7 +128,9 @@ def read_data() -> int:
 
 
 def read_data_raw_fast() -> int:
+    cs_low()
     raw = spi.xfer2([0xFF, 0xFF, 0xFF])
+    cs_high()
     value = (raw[0] << 16) | (raw[1] << 8) | raw[2]
     if value & 0x800000:
         value -= 1 << 24
@@ -369,9 +372,11 @@ ttk.Label(
 ).grid(row=0, column=0, columnspan=2, sticky="w", padx=4, pady=(4, 8))
 
 gpio_mode_vars: dict[int, tk.StringVar] = {}
+gpio_mode_last: dict[int, str] = {}
+gpio_unavailable: set[int] = set()
 
 
-def set_gpio_mode(pin: int, mode: str) -> None:
+def set_gpio_mode(pin: int, mode: str, update_status: bool = True) -> bool:
     try:
         try:
             lgpio.gpio_free(h, pin)
@@ -382,13 +387,22 @@ def set_gpio_mode(pin: int, mode: str) -> None:
         else:
             lgpio.gpio_claim_output(h, pin)
             lgpio.gpio_write(h, pin, 1 if mode == "Output High" else 0)
-    except Exception:
-        status_var.set(f"Failed to set GPIO {pin} {mode}")
+        gpio_mode_last[pin] = mode
+        return True
+    except Exception as exc:
+        if update_status:
+            status_var.set(f"Failed to configure GPIO {pin} as {mode}: {exc}")
+        return False
 
 
 def on_gpio_mode_change(pin: int, *_: object) -> None:
+    if pin in gpio_unavailable:
+        return
     mode = gpio_mode_vars[pin].get()
-    set_gpio_mode(pin, mode)
+    if not set_gpio_mode(pin, mode):
+        previous = gpio_mode_last.get(pin, "Input")
+        if previous != mode:
+            gpio_mode_vars[pin].set(previous)
 
 
 for idx, pin in enumerate(ALL_GPIO_PINS, start=1):
@@ -404,20 +418,49 @@ for idx, pin in enumerate(ALL_GPIO_PINS, start=1):
         width=14,
     )
     combo.grid(row=idx, column=1, sticky="ew", padx=4, pady=2)
-    combo.bind("<<ComboboxSelected>>", lambda _e, p=pin: on_gpio_mode_change(p))
     gpio_mode_vars[pin] = var
-    set_gpio_mode(pin, "Input")
+    if set_gpio_mode(pin, "Input", update_status=False):
+        combo.bind("<<ComboboxSelected>>", lambda _e, p=pin: on_gpio_mode_change(p))
+    else:
+        gpio_unavailable.add(pin)
+        combo.configure(state="disabled", values=("Unavailable",))
+        var.set("Unavailable")
+        status_var.set(f"GPIO {pin} unavailable; control disabled")
 
 # Right panel content
 
 live_frame = ttk.LabelFrame(right_panel, text="Live Graphs")
 live_frame.grid(row=0, column=0, sticky="nsew", pady=(0, 12))
 live_frame.columnconfigure(0, weight=1)
-live_frame.rowconfigure(0, weight=1)
+live_frame.rowconfigure(1, weight=1)
+
+live_view_var = tk.BooleanVar(value=True)
+
+
+def on_live_view_toggle() -> None:
+    if not live_view_var.get():
+        if not is_capturing:
+            status_var.set("Live view paused")
+        for idx, lbl in enumerate(value_labels):
+            lbl.config(text="PAUSED" if channel_vars[idx].get() else "OFF")
+        return
+    for idx, lbl in enumerate(value_labels):
+        if channel_vars[idx].get():
+            lbl.config(text="---")
+
+
+live_toggle = tk.Checkbutton(
+    live_frame,
+    text="Live View Enabled",
+    font=CHANNEL_FONT,
+    variable=live_view_var,
+    command=on_live_view_toggle,
+)
+live_toggle.grid(row=0, column=0, sticky="w", padx=4, pady=(4, 0))
 
 fig, ax = plt.subplots(figsize=(9, 4), dpi=100)
 canvas = FigureCanvasTkAgg(fig, master=live_frame)
-canvas.get_tk_widget().grid(row=0, column=0, sticky="nsew")
+canvas.get_tk_widget().grid(row=1, column=0, sticky="nsew")
 
 max_points = 300
 data_buffers = [deque(maxlen=max_points) for _ in CHANNEL_MAP]
@@ -507,10 +550,12 @@ timestamps: list[float] | None = None
 is_capturing = False
 update_job: str | None = None
 
-start_button = tk.Button(button_frame, text="Start Capture", font=BUTTON_FONT)
-start_button.grid(row=0, column=0, padx=4)
+arm_button = tk.Button(button_frame, text="Arm Trigger", font=BUTTON_FONT)
+arm_button.grid(row=0, column=0, padx=4)
+capture_button = tk.Button(button_frame, text="Capture Now", font=BUTTON_FONT)
+capture_button.grid(row=0, column=1, padx=4)
 export_button = tk.Button(button_frame, text="Export CSV", font=BUTTON_FONT)
-export_button.grid(row=0, column=1, padx=4)
+export_button.grid(row=0, column=2, padx=4)
 
 log_fig, log_ax = plt.subplots(figsize=(9, 3), dpi=100)
 log_canvas = FigureCanvasTkAgg(log_fig, master=logger_frame)
@@ -622,6 +667,10 @@ def update_values() -> None:
         update_job = root.after(500, update_values)
         return
 
+    if not live_view_var.get():
+        update_job = root.after(500, update_values)
+        return
+
     for i in range(len(CHANNEL_MAP)):
         if channel_vars[i].get():
             raw_value = read_channel_raw(i)
@@ -667,14 +716,18 @@ def wait_for_trigger(ch_index: int, threshold: float, slope: str) -> None:
         prev_value = current_value
 
 
-def benchmark_trigger_capture(
+def run_benchmark_capture(
     n_points: int,
     ch_index: int,
     threshold: float,
     slope: str,
+    armed: bool,
 ) -> tuple[dict[int, list[float]], list[float]]:
-    wait_for_trigger(ch_index, threshold, slope)
-    status_var.set("Trigger detected - benchmarking...")
+    if armed:
+        wait_for_trigger(ch_index, threshold, slope)
+        status_var.set("Trigger detected - benchmarking...")
+    else:
+        status_var.set("Benchmark capture in progress...")
 
     set_channel(*CHANNEL_MAP[ch_index][1])
     send_cmd(CMD_RDATAC)
@@ -708,15 +761,19 @@ def benchmark_trigger_capture(
     return captured, times
 
 
-def multi_channel_capture(
+def run_multi_capture(
     n_points: int,
     active_channels: list[int],
     trigger_index: int,
     threshold: float,
     slope: str,
+    armed: bool,
 ) -> tuple[dict[int, list[float]], list[float]]:
-    wait_for_trigger(trigger_index, threshold, slope)
-    status_var.set("Trigger detected - capturing multi-channel data...")
+    if armed:
+        wait_for_trigger(trigger_index, threshold, slope)
+        status_var.set("Trigger detected - capturing multi-channel data...")
+    else:
+        status_var.set("Capturing multi-channel data...")
 
     captured = {idx: [] for idx in active_channels}
     times: list[float] = []
@@ -828,7 +885,7 @@ def export_csv() -> None:
 
     status_var.set(f"Exported {num_samples} samples to CSV")
 
-def start_capture() -> None:
+def perform_capture(armed: bool) -> None:
     global captured_data, timestamps, is_capturing
     if is_capturing:
         return
@@ -844,8 +901,10 @@ def start_capture() -> None:
     try:
         threshold = float(trigger_level_var.get())
     except ValueError:
-        status_var.set("Invalid trigger level")
-        return
+        if armed:
+            status_var.set("Invalid trigger level")
+            return
+        threshold = 0.0
 
     trigger_label = trigger_channel_var.get()
     trigger_index = CHANNEL_LOOKUP.get(trigger_label, 0)
@@ -863,27 +922,36 @@ def start_capture() -> None:
         active_channels.insert(0, trigger_index)
 
     is_capturing = True
-    start_button.config(state="disabled")
-    status_var.set("Awaiting trigger...")
+    arm_button.config(state="disabled")
+    capture_button.config(state="disabled")
+    export_button.config(state="disabled")
+    status_var.set("Awaiting trigger..." if armed else "Capturing now...")
     root.update_idletasks()
 
     try:
         if mode == "Benchmark":
-            capture, times = benchmark_trigger_capture(n_points, trigger_index, threshold, slope)
+            capture, times = run_benchmark_capture(
+                n_points, trigger_index, threshold, slope, armed
+            )
         else:
-            capture, times = multi_channel_capture(n_points, active_channels, trigger_index, threshold, slope)
+            capture, times = run_multi_capture(
+                n_points, active_channels, trigger_index, threshold, slope, armed
+            )
         captured_data = capture
         timestamps = times
         update_logger_plot()
         update_stats()
-        status_var.set(f"Capture complete ({len(next(iter(captured_data.values()), []))} samples)")
+        sample_count = len(next(iter(captured_data.values()), []))
+        status_var.set(f"Capture complete ({sample_count} samples)")
     except Exception as exc:
         captured_data = None
         timestamps = None
         status_var.set(f"Capture failed: {exc}")
     finally:
         is_capturing = False
-        start_button.config(state="normal")
+        arm_button.config(state="normal")
+        capture_button.config(state="normal")
+        export_button.config(state="normal")
 
 
 def on_close() -> None:
@@ -897,7 +965,8 @@ def on_close() -> None:
     root.destroy()
 
 
-start_button.config(command=start_capture)
+arm_button.config(command=lambda: perform_capture(True))
+capture_button.config(command=lambda: perform_capture(False))
 export_button.config(command=export_csv)
 trigger_channel_var.trace_add("write", update_trigger_units)
 
