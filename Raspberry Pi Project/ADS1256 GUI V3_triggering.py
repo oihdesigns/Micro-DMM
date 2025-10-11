@@ -27,6 +27,7 @@ CMD_SDATAC = 0x0F
 CMD_WREG = 0x50
 CMD_SYNC = 0xFC
 CMD_RESET = 0xFE
+CMD_SELFCAL = 0xF0
 
 DRATE_TABLE = {
     "30k SPS": 0xF0,
@@ -119,6 +120,27 @@ def write_reg(reg: int, data: int) -> None:
     cs_high()
 
 
+def perform_self_calibration() -> None:
+    send_cmd(CMD_SDATAC)
+    send_cmd(CMD_SELFCAL)
+    wait_drdy()
+
+
+def request_calibration() -> None:
+    global pending_calibration
+    pending_calibration = True
+    if not is_capturing:
+        perform_self_calibration()
+        pending_calibration = False
+
+
+def run_pending_calibration() -> None:
+    global pending_calibration
+    if pending_calibration and not is_capturing:
+        perform_self_calibration()
+        pending_calibration = False
+
+
 def read_data() -> int:
     cs_low()
     spi.xfer2([CMD_RDATA])
@@ -148,6 +170,8 @@ def set_channel(p: int, n: int) -> None:
 # ---------------- ADC config ----------------
 
 current_gain = 1
+is_capturing = False
+pending_calibration = False
 
 
 def ads1256_init() -> None:
@@ -162,6 +186,7 @@ def ads1256_init() -> None:
     set_buffer(False)
     set_drate("30k SPS")
     set_gain("1x")
+    run_pending_calibration()
 
 
 def set_buffer(enable: bool) -> None:
@@ -172,6 +197,7 @@ def set_buffer(enable: bool) -> None:
 def set_drate(name: str) -> None:
     code = DRATE_TABLE.get(name, 0xF0)
     write_reg(0x03, code)
+    request_calibration()
 
 
 def set_gain(name: str) -> None:
@@ -179,6 +205,7 @@ def set_gain(name: str) -> None:
     gain_code = GAIN_TABLE.get(name, 0)
     current_gain = (1 << gain_code) if gain_code > 0 else 1
     write_reg(0x02, gain_code & 0x07)
+    request_calibration()
 
 
 def read_channel_raw(ch_index: int, *, fast: bool = False) -> int:
@@ -593,7 +620,6 @@ button_frame.grid(row=row_counter, column=0, columnspan=3, sticky="w", padx=4, p
 
 captured_data: dict[int, list[float]] | None = None
 timestamps: list[float] | None = None
-is_capturing = False
 update_job: str | None = None
 
 arm_button = tk.Button(button_frame, text="Arm Trigger", font=BUTTON_FONT)
@@ -1246,6 +1272,7 @@ def perform_capture(armed: bool) -> None:
         arm_button.config(state="normal")
         capture_button.config(state="normal")
         export_button.config(state="normal")
+        run_pending_calibration()
 
 
 def on_close() -> None:
