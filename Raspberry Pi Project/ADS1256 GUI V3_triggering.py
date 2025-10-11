@@ -181,11 +181,14 @@ def set_gain(name: str) -> None:
     write_reg(0x02, gain_code & 0x07)
 
 
-def read_channel_raw(ch_index: int) -> int:
+def read_channel_raw(ch_index: int, *, fast: bool = False) -> int:
     set_channel(*CHANNEL_MAP[ch_index][1])
     send_cmd(CMD_SYNC)
     send_cmd(CMD_WAKEUP)
-    wait_drdy()
+    if fast:
+        wait_drdy_fast()
+    else:
+        wait_drdy()
     return read_data()
 
 
@@ -916,13 +919,49 @@ def run_benchmark_capture(
 
 def run_multi_capture(
     n_points: int,
-    active_channels: list[int],
+    capture_channels: list[int],
     trigger_index: int,
     threshold: float,
     slope: str,
     armed: bool,
     position: str,
 ) -> tuple[dict[int, list[float]], list[float]]:
+    capture_channels = list(capture_channels)
+    capture_set = set(capture_channels)
+    if not capture_channels:
+        return {}, []
+
+    scan_channels = capture_channels.copy()
+    if trigger_index in scan_channels:
+        scan_channels.remove(trigger_index)
+    scan_channels.insert(0, trigger_index)
+
+    pump_counter = 0
+
+    def pump_events() -> None:
+        nonlocal pump_counter
+        pump_counter += 1
+        if pump_counter >= 50:
+            pump_counter = 0
+            try:
+                root.update_idletasks()
+                root.update()
+            except tk.TclError as exc:
+                raise RuntimeError("Capture interrupted") from exc
+
+    def read_frame() -> tuple[dict[int, float], float | None, float]:
+        sample_timestamp = time.time()
+        frame: dict[int, float] = {}
+        trigger_value: float | None = None
+        for idx in scan_channels:
+            raw_val = read_channel_raw(idx, fast=True)
+            sample_value, trig_value = compute_capture_values(idx, raw_val)
+            if idx in capture_set:
+                frame[idx] = sample_value
+            if idx == trigger_index:
+                trigger_value = trig_value
+        return frame, trigger_value, sample_timestamp
+
     if not armed or position == "Start":
         if armed:
             wait_for_trigger(trigger_index, threshold, slope)
@@ -930,19 +969,25 @@ def run_multi_capture(
         else:
             status_var.set("Capturing multi-channel data...")
 
-        captured = {idx: [] for idx in active_channels}
+        captured = {idx: [] for idx in capture_channels}
         times: list[float] = []
         start_time: float | None = None
 
-        for _sample_idx in range(n_points):
-            sample_timestamp = time.time()
-            for idx in active_channels:
-                raw = read_channel_raw(idx)
-                sample_value, _ = compute_capture_values(idx, raw)
-                captured[idx].append(sample_value)
-            if start_time is None:
-                start_time = sample_timestamp
-            times.append((sample_timestamp - start_time) * 1000.0)
+        gc_was_enabled = gc.isenabled()
+        if gc_was_enabled:
+            gc.disable()
+        try:
+            for _sample_idx in range(n_points):
+                frame, _, sample_timestamp = read_frame()
+                for idx in capture_channels:
+                    captured[idx].append(frame.get(idx, float("nan")))
+                if start_time is None:
+                    start_time = sample_timestamp
+                times.append((sample_timestamp - start_time) * 1000.0)
+                pump_events()
+        finally:
+            if gc_was_enabled:
+                gc.enable()
 
         return captured, times
 
@@ -950,89 +995,87 @@ def run_multi_capture(
         f"Buffering for {position.lower()} trigger on {CHANNEL_MAP[trigger_index][0]}"
     )
 
-    def read_frame() -> tuple[dict[int, float], float | None, float]:
-        sample_timestamp = time.time()
-        frame: dict[int, float] = {}
-        trigger_value: float | None = None
-        for idx in active_channels:
-            raw_val = read_channel_raw(idx)
-            sample_value, trig_value = compute_capture_values(idx, raw_val)
-            frame[idx] = sample_value
-            if idx == trigger_index:
-                trigger_value = trig_value
-        return frame, trigger_value, sample_timestamp
-
-    if position == "End":
-        buffer: deque[tuple[dict[int, float], float]] = deque(maxlen=n_points)
-        prev_value: float | None = None
-        while True:
-            frame, trig_value, ts = read_frame()
-            buffer.append((frame, ts))
-            if trig_value is None:
+    gc_was_enabled = gc.isenabled()
+    if gc_was_enabled:
+        gc.disable()
+    try:
+        if position == "End":
+            buffer: deque[tuple[dict[int, float], float]] = deque(maxlen=n_points)
+            prev_value: float | None = None
+            while True:
+                frame, trig_value, ts = read_frame()
+                buffer.append((frame, ts))
+                pump_events()
+                if trig_value is None:
+                    prev_value = trig_value
+                    continue
+                if prev_value is None:
+                    prev_value = trig_value
+                    continue
+                if len(buffer) >= n_points:
+                    if slope == "Rising":
+                        triggered = prev_value < threshold <= trig_value
+                    else:
+                        triggered = prev_value > threshold >= trig_value
+                    if triggered:
+                        break
                 prev_value = trig_value
-                continue
-            if prev_value is None:
-                prev_value = trig_value
-                continue
-            if len(buffer) >= n_points:
-                if slope == "Rising":
-                    triggered = prev_value < threshold <= trig_value
-                else:
-                    triggered = prev_value > threshold >= trig_value
-                if triggered:
-                    break
-            prev_value = trig_value
-        frames = list(buffer)
-        status_var.set("Trigger detected - finalizing multi-channel capture...")
-    else:
-        pre_count = n_points // 2
-        if pre_count > 0:
-            pre_buffer: deque[tuple[dict[int, float], float]] = deque(maxlen=pre_count)
+            frames = list(buffer)
+            status_var.set("Trigger detected - finalizing multi-channel capture...")
         else:
-            pre_buffer = deque()
-        prev_value: float | None = None
-        trigger_frame: tuple[dict[int, float], float] | None = None
-        while True:
-            frame, trig_value, ts = read_frame()
-            can_trigger = pre_count == 0 or len(pre_buffer) >= pre_count
-            triggered = False
-            if (
-                trig_value is not None
-                and prev_value is not None
-                and can_trigger
-            ):
-                if slope == "Rising":
-                    triggered = prev_value < threshold <= trig_value
-                else:
-                    triggered = prev_value > threshold >= trig_value
-            if triggered:
-                trigger_frame = (frame, ts)
-                break
+            pre_count = n_points // 2
             if pre_count > 0:
-                pre_buffer.append((frame, ts))
-            prev_value = trig_value
+                pre_buffer: deque[tuple[dict[int, float], float]] = deque(maxlen=pre_count)
+            else:
+                pre_buffer = deque()
+            prev_value: float | None = None
+            trigger_frame: tuple[dict[int, float], float] | None = None
+            while True:
+                frame, trig_value, ts = read_frame()
+                pump_events()
+                can_trigger = pre_count == 0 or len(pre_buffer) >= pre_count
+                triggered = False
+                if (
+                    trig_value is not None
+                    and prev_value is not None
+                    and can_trigger
+                ):
+                    if slope == "Rising":
+                        triggered = prev_value < threshold <= trig_value
+                    else:
+                        triggered = prev_value > threshold >= trig_value
+                if triggered:
+                    trigger_frame = (frame, ts)
+                    break
+                if pre_count > 0:
+                    pre_buffer.append((frame, ts))
+                prev_value = trig_value
 
-        status_var.set(
-            "Trigger detected - capturing remaining multi-channel samples..."
-        )
-        post_count = n_points - (len(pre_buffer) if pre_count > 0 else 0)
-        frames = list(pre_buffer)
-        post_frames: list[tuple[dict[int, float], float]] = []
-        if trigger_frame is not None:
-            post_frames.append(trigger_frame)
-        while len(post_frames) < post_count:
-            frame, _, ts = read_frame()
-            post_frames.append((frame, ts))
-        frames.extend(post_frames)
+            status_var.set(
+                "Trigger detected - capturing remaining multi-channel samples..."
+            )
+            post_count = n_points - (len(pre_buffer) if pre_count > 0 else 0)
+            frames = list(pre_buffer)
+            post_frames: list[tuple[dict[int, float], float]] = []
+            if trigger_frame is not None:
+                post_frames.append(trigger_frame)
+            while len(post_frames) < post_count:
+                frame, _, ts = read_frame()
+                pump_events()
+                post_frames.append((frame, ts))
+            frames.extend(post_frames)
+    finally:
+        if gc_was_enabled:
+            gc.enable()
 
-    captured = {idx: [] for idx in active_channels}
+    captured = {idx: [] for idx in capture_channels}
     times: list[float] = []
     if frames:
         first_time = frames[0][1]
     else:
         first_time = None
     for frame, ts in frames:
-        for idx in active_channels:
+        for idx in capture_channels:
             captured[idx].append(frame.get(idx, float("nan")))
         if first_time is None:
             first_time = ts
@@ -1152,8 +1195,8 @@ def perform_capture(armed: bool) -> None:
 
     trigger_label = trigger_channel_var.get()
     trigger_index = CHANNEL_LOOKUP.get(trigger_label, 0)
-    active_channels = [i for i, var in enumerate(channel_vars) if var.get()]
-    if not active_channels:
+    selected_channels = [i for i, var in enumerate(channel_vars) if var.get()]
+    if not selected_channels:
         status_var.set("Select at least one channel")
         return
 
@@ -1162,9 +1205,9 @@ def perform_capture(armed: bool) -> None:
     position = trigger_position_var.get()
 
     if mode == "Benchmark":
-        active_channels = [trigger_index]
-    elif trigger_index not in active_channels:
-        active_channels.insert(0, trigger_index)
+        capture_channels = [trigger_index]
+    else:
+        capture_channels = selected_channels.copy()
 
     is_capturing = True
     arm_button.config(state="disabled")
@@ -1181,7 +1224,7 @@ def perform_capture(armed: bool) -> None:
         else:
             capture, times = run_multi_capture(
                 n_points,
-                active_channels,
+                capture_channels,
                 trigger_index,
                 threshold,
                 slope,
