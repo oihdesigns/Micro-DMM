@@ -69,6 +69,7 @@ CHANNEL_MAP = [
 
 TRIGGER_MODES = ("Benchmark", "Multi")
 TRIGGER_SLOPES = ("Rising", "Falling")
+TRIGGER_POSITIONS = ("Start", "Mid", "End")
 
 ALL_GPIO_PINS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 16, 19, 20, 21, 24, 25, 26, 27]
 SPI_PINS = {8, 9, 10, 11}
@@ -501,6 +502,7 @@ points_var = tk.StringVar(value="1000")
 trigger_level_var = tk.StringVar(value="0.0")
 trigger_mode_var = tk.StringVar(value=TRIGGER_MODES[0])
 trigger_slope_var = tk.StringVar(value=TRIGGER_SLOPES[0])
+trigger_position_var = tk.StringVar(value=TRIGGER_POSITIONS[0])
 
 channel_names = [c[0] for c in CHANNEL_MAP]
 trigger_channel_var = tk.StringVar(value=channel_names[0])
@@ -562,6 +564,21 @@ trigger_slope_combo = ttk.Combobox(
     width=14,
 )
 trigger_slope_combo.grid(row=row_counter, column=1, sticky="w", padx=4, pady=4)
+row_counter += 1
+
+trigger_position_label = ttk.Label(
+    logger_frame, text="Trigger Position:", font=CHANNEL_FONT
+)
+trigger_position_label.grid(row=row_counter, column=0, sticky="w", padx=4, pady=4)
+
+trigger_position_combo = ttk.Combobox(
+    logger_frame,
+    textvariable=trigger_position_var,
+    values=list(TRIGGER_POSITIONS),
+    state="readonly",
+    width=14,
+)
+trigger_position_combo.grid(row=row_counter, column=1, sticky="w", padx=4, pady=4)
 row_counter += 1
 
 status_label = ttk.Label(logger_frame, textvariable=status_var, font=CHANNEL_FONT)
@@ -654,6 +671,19 @@ def compute_trigger_value(ch_index: int, raw_value: int) -> float | None:
     if raw_var.get():
         return float(raw_value)
     return volts
+
+
+def compute_capture_values(ch_index: int, raw_value: int) -> tuple[float, float | None]:
+    volts = raw_to_volts(raw_value)
+    if dmm_math_var.get():
+        value, text = compute_dmm_value(ch_index, volts)
+        if text == "OVER":
+            return float("nan"), None
+        return value, value
+    if raw_var.get():
+        val = float(raw_value)
+        return val, val
+    return volts, volts
 
 
 def update_graph() -> None:
@@ -754,14 +784,43 @@ def run_benchmark_capture(
     threshold: float,
     slope: str,
     armed: bool,
+    position: str,
 ) -> tuple[dict[int, list[float]], list[float]]:
-    if armed:
-        wait_for_trigger(ch_index, threshold, slope)
-        status_var.set("Trigger detected - benchmarking...")
-    else:
-        status_var.set("Benchmark capture in progress...")
-
     set_channel(*CHANNEL_MAP[ch_index][1])
+
+    if not armed or position == "Start":
+        if armed:
+            wait_for_trigger(ch_index, threshold, slope)
+            status_var.set("Trigger detected - benchmarking...")
+        else:
+            status_var.set("Benchmark capture in progress...")
+
+        send_cmd(CMD_RDATAC)
+        wait_drdy_fast()
+
+        gc_was_enabled = gc.isenabled()
+        if gc_was_enabled:
+            gc.disable()
+
+        captured = {ch_index: [float("nan")] * n_points}
+        times = [0.0] * n_points
+        start = time.time()
+        try:
+            for idx in range(n_points):
+                wait_drdy_fast()
+                raw = read_data_raw_fast()
+                sample_value, _ = compute_capture_values(ch_index, raw)
+                captured[ch_index][idx] = sample_value
+                times[idx] = (time.time() - start) * 1000.0
+        finally:
+            if gc_was_enabled:
+                gc.enable()
+            send_cmd(CMD_SDATAC)
+        return captured, times
+
+    status_var.set(
+        f"Buffering for {position.lower()} trigger on {CHANNEL_MAP[ch_index][0]}"
+    )
     send_cmd(CMD_RDATAC)
     wait_drdy_fast()
 
@@ -769,27 +828,89 @@ def run_benchmark_capture(
     if gc_was_enabled:
         gc.disable()
 
-    captured = {ch_index: [float("nan")] * n_points}
-    times = [0.0] * n_points
-    start = time.time()
-    for idx in range(n_points):
-        wait_drdy_fast()
-        raw = read_data_raw_fast()
-        volts = raw_to_volts(raw)
-        if dmm_math_var.get():
-            value, text = compute_dmm_value(ch_index, volts)
-            sample_value = float("nan") if text == "OVER" else value
-        elif raw_var.get():
-            sample_value = float(raw)
+    try:
+        if position == "End":
+            buffer: deque[tuple[float, float]] = deque(maxlen=n_points)
+            prev_value: float | None = None
+            while True:
+                wait_drdy_fast()
+                raw = read_data_raw_fast()
+                sample_value, trigger_value = compute_capture_values(ch_index, raw)
+                sample_ts = time.time()
+                buffer.append((sample_value, sample_ts))
+                if trigger_value is None:
+                    prev_value = trigger_value
+                    continue
+                if prev_value is None:
+                    prev_value = trigger_value
+                    continue
+                if len(buffer) >= n_points:
+                    if slope == "Rising":
+                        triggered = prev_value < threshold <= trigger_value
+                    else:
+                        triggered = prev_value > threshold >= trigger_value
+                    if triggered:
+                        break
+                prev_value = trigger_value
+            samples = list(buffer)
+            status_var.set("Trigger detected - finalizing benchmark capture...")
         else:
-            sample_value = volts
-        captured[ch_index][idx] = sample_value
-        times[idx] = (time.time() - start) * 1000.0
+            pre_count = n_points // 2
+            if pre_count > 0:
+                pre_buffer: deque[tuple[float, float]] = deque(maxlen=pre_count)
+            else:
+                pre_buffer = deque()
+            prev_value: float | None = None
+            trigger_sample: tuple[float, float] | None = None
+            while True:
+                wait_drdy_fast()
+                raw = read_data_raw_fast()
+                sample_value, trigger_value = compute_capture_values(ch_index, raw)
+                sample_ts = time.time()
+                can_trigger = pre_count == 0 or len(pre_buffer) >= pre_count
+                triggered = False
+                if (
+                    trigger_value is not None
+                    and prev_value is not None
+                    and can_trigger
+                ):
+                    if slope == "Rising":
+                        triggered = prev_value < threshold <= trigger_value
+                    else:
+                        triggered = prev_value > threshold >= trigger_value
+                if triggered:
+                    trigger_sample = (sample_value, sample_ts)
+                    break
+                if pre_count > 0:
+                    pre_buffer.append((sample_value, sample_ts))
+                prev_value = trigger_value
 
-    if gc_was_enabled:
-        gc.enable()
+            status_var.set(
+                "Trigger detected - capturing remaining benchmark samples..."
+            )
+            post_count = n_points - (len(pre_buffer) if pre_count > 0 else 0)
+            samples = list(pre_buffer)
+            post_samples: list[tuple[float, float]] = []
+            if trigger_sample is not None:
+                post_samples.append(trigger_sample)
+            while len(post_samples) < post_count:
+                wait_drdy_fast()
+                raw = read_data_raw_fast()
+                sample_value, _ = compute_capture_values(ch_index, raw)
+                sample_ts = time.time()
+                post_samples.append((sample_value, sample_ts))
+            samples.extend(post_samples)
+    finally:
+        if gc_was_enabled:
+            gc.enable()
+        send_cmd(CMD_SDATAC)
 
-    send_cmd(CMD_SDATAC)
+    captured = {ch_index: [value for value, _ in samples]}
+    if samples:
+        first_time = samples[0][1]
+        times = [(ts - first_time) * 1000.0 for _, ts in samples]
+    else:
+        times = []
     return captured, times
 
 
@@ -800,33 +921,124 @@ def run_multi_capture(
     threshold: float,
     slope: str,
     armed: bool,
+    position: str,
 ) -> tuple[dict[int, list[float]], list[float]]:
-    if armed:
-        wait_for_trigger(trigger_index, threshold, slope)
-        status_var.set("Trigger detected - capturing multi-channel data...")
+    if not armed or position == "Start":
+        if armed:
+            wait_for_trigger(trigger_index, threshold, slope)
+            status_var.set("Trigger detected - capturing multi-channel data...")
+        else:
+            status_var.set("Capturing multi-channel data...")
+
+        captured = {idx: [] for idx in active_channels}
+        times: list[float] = []
+        start_time: float | None = None
+
+        for _sample_idx in range(n_points):
+            sample_timestamp = time.time()
+            for idx in active_channels:
+                raw = read_channel_raw(idx)
+                sample_value, _ = compute_capture_values(idx, raw)
+                captured[idx].append(sample_value)
+            if start_time is None:
+                start_time = sample_timestamp
+            times.append((sample_timestamp - start_time) * 1000.0)
+
+        return captured, times
+
+    status_var.set(
+        f"Buffering for {position.lower()} trigger on {CHANNEL_MAP[trigger_index][0]}"
+    )
+
+    def read_frame() -> tuple[dict[int, float], float | None, float]:
+        sample_timestamp = time.time()
+        frame: dict[int, float] = {}
+        trigger_value: float | None = None
+        for idx in active_channels:
+            raw_val = read_channel_raw(idx)
+            sample_value, trig_value = compute_capture_values(idx, raw_val)
+            frame[idx] = sample_value
+            if idx == trigger_index:
+                trigger_value = trig_value
+        return frame, trigger_value, sample_timestamp
+
+    if position == "End":
+        buffer: deque[tuple[dict[int, float], float]] = deque(maxlen=n_points)
+        prev_value: float | None = None
+        while True:
+            frame, trig_value, ts = read_frame()
+            buffer.append((frame, ts))
+            if trig_value is None:
+                prev_value = trig_value
+                continue
+            if prev_value is None:
+                prev_value = trig_value
+                continue
+            if len(buffer) >= n_points:
+                if slope == "Rising":
+                    triggered = prev_value < threshold <= trig_value
+                else:
+                    triggered = prev_value > threshold >= trig_value
+                if triggered:
+                    break
+            prev_value = trig_value
+        frames = list(buffer)
+        status_var.set("Trigger detected - finalizing multi-channel capture...")
     else:
-        status_var.set("Capturing multi-channel data...")
+        pre_count = n_points // 2
+        if pre_count > 0:
+            pre_buffer: deque[tuple[dict[int, float], float]] = deque(maxlen=pre_count)
+        else:
+            pre_buffer = deque()
+        prev_value: float | None = None
+        trigger_frame: tuple[dict[int, float], float] | None = None
+        while True:
+            frame, trig_value, ts = read_frame()
+            can_trigger = pre_count == 0 or len(pre_buffer) >= pre_count
+            triggered = False
+            if (
+                trig_value is not None
+                and prev_value is not None
+                and can_trigger
+            ):
+                if slope == "Rising":
+                    triggered = prev_value < threshold <= trig_value
+                else:
+                    triggered = prev_value > threshold >= trig_value
+            if triggered:
+                trigger_frame = (frame, ts)
+                break
+            if pre_count > 0:
+                pre_buffer.append((frame, ts))
+            prev_value = trig_value
+
+        status_var.set(
+            "Trigger detected - capturing remaining multi-channel samples..."
+        )
+        post_count = n_points - (len(pre_buffer) if pre_count > 0 else 0)
+        frames = list(pre_buffer)
+        post_frames: list[tuple[dict[int, float], float]] = []
+        if trigger_frame is not None:
+            post_frames.append(trigger_frame)
+        while len(post_frames) < post_count:
+            frame, _, ts = read_frame()
+            post_frames.append((frame, ts))
+        frames.extend(post_frames)
 
     captured = {idx: [] for idx in active_channels}
     times: list[float] = []
-    start_time: float | None = None
-
-    for _sample_idx in range(n_points):
-        sample_timestamp = time.time()
+    if frames:
+        first_time = frames[0][1]
+    else:
+        first_time = None
+    for frame, ts in frames:
         for idx in active_channels:
-            raw = read_channel_raw(idx)
-            volts = raw_to_volts(raw)
-            if dmm_math_var.get():
-                value, text = compute_dmm_value(idx, volts)
-                sample_value = float("nan") if text == "OVER" else value
-            elif raw_var.get():
-                sample_value = float(raw)
-            else:
-                sample_value = volts
-            captured[idx].append(sample_value)
-        if start_time is None:
-            start_time = sample_timestamp
-        times.append((sample_timestamp - start_time) * 1000.0)
+            captured[idx].append(frame.get(idx, float("nan")))
+        if first_time is None:
+            first_time = ts
+            times.append(0.0)
+        else:
+            times.append((ts - first_time) * 1000.0)
 
     return captured, times
 
@@ -947,6 +1159,7 @@ def perform_capture(armed: bool) -> None:
 
     mode = trigger_mode_var.get()
     slope = trigger_slope_var.get()
+    position = trigger_position_var.get()
 
     if mode == "Benchmark":
         active_channels = [trigger_index]
@@ -963,11 +1176,17 @@ def perform_capture(armed: bool) -> None:
     try:
         if mode == "Benchmark":
             capture, times = run_benchmark_capture(
-                n_points, trigger_index, threshold, slope, armed
+                n_points, trigger_index, threshold, slope, armed, position
             )
         else:
             capture, times = run_multi_capture(
-                n_points, active_channels, trigger_index, threshold, slope, armed
+                n_points,
+                active_channels,
+                trigger_index,
+                threshold,
+                slope,
+                armed,
+                position,
             )
         captured_data = capture
         timestamps = times
