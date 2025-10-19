@@ -15,6 +15,9 @@ from tkinter import ttk, filedialog
 
 # ---------------- ADS1256 low-level ----------------
 
+VREF = 5.000  # configurable reference voltage
+SETTLING_DRDYS = 5  # number of samples to discard after config change
+
 DRDY_PIN = 17
 CS_PIN = 22
 RST_PIN = 18
@@ -89,59 +92,51 @@ lgpio.gpio_claim_input(h, DRDY_PIN)
 lgpio.gpio_claim_output(h, RANGE_PIN)
 lgpio.gpio_write(h, CS_PIN, 1)
 
-
-def cs_low() -> None:
+def cs_low():
     lgpio.gpio_write(h, CS_PIN, 0)
 
-
-def cs_high() -> None:
+def cs_high():
     lgpio.gpio_write(h, CS_PIN, 1)
 
-
-def wait_drdy() -> None:
+def wait_drdy():
     while lgpio.gpio_read(h, DRDY_PIN) == 1:
         time.sleep(0.0001)
 
-
-def wait_drdy_fast() -> None:
+def wait_drdy_fast():
     while lgpio.gpio_read(h, DRDY_PIN) == 1:
         pass
 
-
-def send_cmd(cmd: int) -> None:
+def send_cmd(cmd: int):
     cs_low()
     spi.xfer2([cmd])
     cs_high()
 
-
-def write_reg(reg: int, data: int) -> None:
+def write_reg(reg: int, data: int):
     cs_low()
     spi.xfer2([CMD_WREG | reg, 0x00, data])
     cs_high()
 
-
-def perform_self_calibration() -> None:
+def perform_self_calibration():
     send_cmd(CMD_SDATAC)
     send_cmd(CMD_SELFCAL)
     wait_drdy()
+    for _ in range(SETTLING_DRDYS):
+        wait_drdy()
 
-
-def request_calibration() -> None:
+def request_calibration():
     global pending_calibration
     pending_calibration = True
     if not is_capturing:
         perform_self_calibration()
         pending_calibration = False
 
-
-def run_pending_calibration() -> None:
+def run_pending_calibration():
     global pending_calibration
     if pending_calibration and not is_capturing:
         perform_self_calibration()
         pending_calibration = False
 
-
-def read_data() -> int:
+def read_data():
     cs_low()
     spi.xfer2([CMD_RDATA])
     raw = spi.xfer2([0xFF, 0xFF, 0xFF])
@@ -151,8 +146,7 @@ def read_data() -> int:
         value -= 1 << 24
     return value
 
-
-def read_data_raw_fast() -> int:
+def read_data_raw_fast():
     cs_low()
     raw = spi.xfer2([0xFF, 0xFF, 0xFF])
     cs_high()
@@ -161,11 +155,10 @@ def read_data_raw_fast() -> int:
         value -= 1 << 24
     return value
 
-
-def set_channel(p: int, n: int) -> None:
+def set_channel(p: int, n: int):
     mux = (p << 4) | n
     write_reg(0x01, mux)
-
+    time.sleep(0.0002)  # allow MUX to settle
 
 # ---------------- ADC config ----------------
 
@@ -173,8 +166,7 @@ current_gain = 1
 is_capturing = False
 pending_calibration = False
 
-
-def ads1256_init() -> None:
+def ads1256_init():
     lgpio.gpio_write(h, RST_PIN, 0)
     time.sleep(0.01)
     lgpio.gpio_write(h, RST_PIN, 1)
@@ -188,27 +180,23 @@ def ads1256_init() -> None:
     set_gain("1x")
     run_pending_calibration()
 
-
-def set_buffer(enable: bool) -> None:
+def set_buffer(enable: bool):
     val = 0x01 if enable else 0x00
     write_reg(0x00, val)
 
-
-def set_drate(name: str) -> None:
+def set_drate(name: str):
     code = DRATE_TABLE.get(name, 0xF0)
     write_reg(0x03, code)
-    request_calibration()
+    perform_self_calibration()
 
-
-def set_gain(name: str) -> None:
+def set_gain(name: str):
     global current_gain
     gain_code = GAIN_TABLE.get(name, 0)
     current_gain = (1 << gain_code) if gain_code > 0 else 1
     write_reg(0x02, gain_code & 0x07)
-    request_calibration()
+    perform_self_calibration()
 
-
-def read_channel_raw(ch_index: int, *, fast: bool = False) -> int:
+def read_channel_raw(ch_index: int, *, fast: bool = False):
     set_channel(*CHANNEL_MAP[ch_index][1])
     send_cmd(CMD_SYNC)
     send_cmd(CMD_WAKEUP)
@@ -218,10 +206,8 @@ def read_channel_raw(ch_index: int, *, fast: bool = False) -> int:
         wait_drdy()
     return read_data()
 
-
 def raw_to_volts(raw: int) -> float:
-    return raw * 5.0 / (0x7FFFFF * current_gain)
-
+    return raw * VREF / (0x7FFFFF * current_gain)
 
 ads1256_init()
 
