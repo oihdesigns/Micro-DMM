@@ -1669,7 +1669,7 @@ void measureVoltage() {
     VACPresense = false;
   }
 
-  if(((fabs(averageVoltage) < 0.030 && currentMode != VACmanual && fabs(newVoltageReading)<0.05) || (currentMode == VACmanual && VAC<5)) && !preciseMode && voltageDisplay){
+  if(((fabs(averageVoltage) < 0.03 && currentMode != VACmanual && fabs(newVoltageReading)<0.2) || (currentMode == VACmanual && VAC<5)) && !preciseMode && voltageDisplay){
     Vzero = true;
     ClosedOrFloat();
   }else{
@@ -1937,7 +1937,7 @@ void updateDisplay() {
           }
        else if(vUndefined){
             display.print("V UNDF:");
-        }else if(vClosed){
+        }else{
         display.print("V CLD:");
       }
       display.print(bridgeV*1000,0);
