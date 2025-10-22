@@ -2,59 +2,114 @@
 #include <Adafruit_ADS1X15.h>
 
 Adafruit_ADS1115 ads;
+const int dacOutPin = A0;  // DAC output pin on Nano R4
 
-const int DAC_PIN = A0;  // Nano R4 DAC output (true 12-bit)
-const float INPUT_MIN = -5.0;
-const float INPUT_MAX =  5.0;
-const float DAC_MIN = 0.0;
-const float DAC_MAX = 5.0;
+// Timing control
+unsigned long lastSerialTime = 0;
+unsigned long lastAnalogTime = 0;
+const unsigned long serialInterval = 1000; // 1 Hz
+const unsigned long analogInterval = 10;   // 100 Hz
+
+// Auto-ranging thresholds
+adsGain_t currentGain = GAIN_ONE; // Start with ±4.096V
+float gainMax = 4.096;
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial);
+  Wire.begin();
 
-  Serial.println("ADS1115 Differential to DAC Mirror");
-
-  if (!ads.begin(0x48,&Wire1)) {
-    Serial.println("Failed to find ADS1115. Check wiring!");
-    while (1);
+  // Keep trying until ADS1115 is found
+  while (!ads.begin(0x48,&Wire1)) {
+    Serial.println("ADS1115 not found. Retrying...");
+    delay(1000);
   }
+  Serial.println("ADS1115 connected.");
 
-  // ±6.144V range — allows full ±5V input
-  ads.setGain(GAIN_TWOTHIRDS);
-
-  analogWriteResolution(12);  // 12-bit DAC (0–4095)
-  Serial.println("Setup complete.");
+  ads.setGain(currentGain);
 }
 
 void loop() {
-  // Read differential input
+  unsigned long currentMillis = millis();
+
+  // Read differential voltage
   int16_t raw = ads.readADC_Differential_0_1();
-  float volts = raw * 0.0001875;  // 0.1875 mV/bit for GAIN_TWOTHIRDS
+  float voltage = ads.computeVolts(raw);
 
-  // Remap ±5V input to 0–5V DAC output
-  float mapped = mapVoltage(volts, INPUT_MIN, INPUT_MAX, DAC_MIN, DAC_MAX);
+  // Auto-ranging logic
+  if (fabs(voltage) > 0.95 * gainMax) {
+    adsGain_t newGain = stepDownGain(currentGain);
+    if (newGain != currentGain) {
+      currentGain = newGain;
+      ads.setGain(currentGain);
+      gainMax = getGainMax(currentGain);
+      Serial.print("Lowering gain to range ±");
+      Serial.println(gainMax);
+    }
+  } else if (fabs(voltage) < 0.2 * gainMax) {
+    adsGain_t newGain = stepUpGain(currentGain);
+    if (newGain != currentGain) {
+      currentGain = newGain;
+      ads.setGain(currentGain);
+      gainMax = getGainMax(currentGain);
+      Serial.print("Increasing gain to range ±");
+      Serial.println(gainMax);
+    }
+  }
 
-  // Clip to safe range
-  if (mapped < 0.0) mapped = 0.0;
-  if (mapped > 5.0) mapped = 5.0;
+  // 100Hz DAC output update
+  if (currentMillis - lastAnalogTime >= analogInterval) {
+    lastAnalogTime = currentMillis;
 
-  // Convert to 12-bit DAC value
-  int dacValue = (int)(mapped / 5.0 * 4095);
-  analogWrite(DAC_PIN, dacValue);
+    // Scale voltage to DAC range (0–5V → 0–4095 for 12-bit DAC)
+    float scaledVoltage = (voltage + gainMax) * (5.0 / (2.0 * gainMax));
+    scaledVoltage = constrain(scaledVoltage, 0.0, 5.0);
 
-  // Print to serial
-  Serial.print("Diff: ");
-  Serial.print(volts*10, 4);
-  Serial.print(" V  ->  DAC: ");
-  Serial.print(mapped, 4);
-  Serial.print(" V  (");
-  Serial.print(dacValue);
-  Serial.println("/4095)");
+    int dacValue = (int)(scaledVoltage * 4095.0 / 5.0);
+    analogWriteResolution(12);
+    analogWrite(dacOutPin, dacValue);
+  }
 
-  delay(1000);
+  // 1Hz serial output update
+  if (currentMillis - lastSerialTime >= serialInterval) {
+    lastSerialTime = currentMillis;
+    Serial.print("Voltage: ");
+    Serial.print(voltage*7.284, 6);
+    Serial.print(" V, Gain range: ±");
+    Serial.println(gainMax, 3);
+  }
 }
 
-float mapVoltage(float x, float in_min, float in_max, float out_min, float out_max) {
-  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+// Gain stepping helpers
+adsGain_t stepUpGain(adsGain_t g) {
+  switch (g) {
+    case GAIN_TWOTHIRDS: return GAIN_ONE;
+    case GAIN_ONE: return GAIN_TWO;
+    case GAIN_TWO: return GAIN_FOUR;
+    case GAIN_FOUR: return GAIN_EIGHT;
+    case GAIN_EIGHT: return GAIN_SIXTEEN;
+    default: return g;
+  }
+}
+
+adsGain_t stepDownGain(adsGain_t g) {
+  switch (g) {
+    case GAIN_SIXTEEN: return GAIN_EIGHT;
+    case GAIN_EIGHT: return GAIN_FOUR;
+    case GAIN_FOUR: return GAIN_TWO;
+    case GAIN_TWO: return GAIN_ONE;
+    case GAIN_ONE: return GAIN_TWOTHIRDS;
+    default: return g;
+  }
+}
+
+float getGainMax(adsGain_t gain) {
+  switch (gain) {
+    case GAIN_TWOTHIRDS: return 6.144;
+    case GAIN_ONE: return 4.096;
+    case GAIN_TWO: return 2.048;
+    case GAIN_FOUR: return 1.024;
+    case GAIN_EIGHT: return 0.512;
+    case GAIN_SIXTEEN: return 0.256;
+    default: return 4.096;
+  }
 }
