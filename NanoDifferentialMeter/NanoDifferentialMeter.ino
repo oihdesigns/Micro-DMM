@@ -8,7 +8,7 @@ const int dacOutPin = A0;  // DAC output pin on Nano R4
 unsigned long lastSerialTime = 0;
 unsigned long lastAnalogTime = 0;
 const unsigned long serialInterval = 1000; // 1 Hz
-const unsigned long analogInterval = 10;   // 100 Hz
+const unsigned long analogInterval = 5;   // 200 Hz
 
 // Auto-ranging thresholds
 adsGain_t currentGain = GAIN_ONE; // Start with ±4.096V
@@ -26,6 +26,7 @@ void setup() {
   Serial.println("ADS1115 connected.");
 
   ads.setGain(currentGain);
+  ads.setDataRate(RATE_ADS1115_128SPS);
 }
 
 void loop() {
@@ -72,10 +73,10 @@ void loop() {
   // 1Hz serial output update
   if (currentMillis - lastSerialTime >= serialInterval) {
     lastSerialTime = currentMillis;
-    Serial.print("Voltage: ");
-    Serial.print(voltage*7.284, 6);
-    Serial.print(" V, Gain range: ±");
-    Serial.println(gainMax, 3);
+    Serial.print("VDC: ");
+    Serial.println(voltage*7.311, 6); //7.3147
+    //Serial.print(" V, Gain range: ±");
+    //Serial.println(gainMax, 3);
   }
 }
 
