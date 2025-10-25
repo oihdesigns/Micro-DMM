@@ -5509,6 +5509,12 @@
 		(uuid "5ff29a78-059d-498c-98d1-4220ddcec095")
 	)
 	(junction
+		(at 76.2 67.31)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "64c4965f-c583-4e64-b007-d188e8c969d9")
+	)
+	(junction
 		(at 138.43 86.36)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -5543,6 +5549,12 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "86f73af3-91f3-4b79-bf23-7a9722f29150")
+	)
+	(junction
+		(at 66.04 67.31)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "8c8e7d5f-712d-4b38-9afc-65c9bc0570ae")
 	)
 	(junction
 		(at 102.87 190.5)
@@ -6610,7 +6622,7 @@
 	)
 	(wire
 		(pts
-			(xy 81.28 67.31) (xy 86.36 67.31)
+			(xy 62.23 67.31) (xy 66.04 67.31)
 		)
 		(stroke
 			(width 0)
@@ -6737,6 +6749,16 @@
 			(type default)
 		)
 		(uuid "bbda2038-9ecc-4c9a-8725-19cd2b9ed306")
+	)
+	(wire
+		(pts
+			(xy 76.2 67.31) (xy 86.36 67.31)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bc1cdb3b-5f0c-474d-9b69-47a4440e88d6")
 	)
 	(wire
 		(pts
@@ -7007,6 +7029,16 @@
 			(type default)
 		)
 		(uuid "e20740ed-c00a-48e1-811d-43dd12843482")
+	)
+	(wire
+		(pts
+			(xy 66.04 67.31) (xy 76.2 67.31)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e3e8cc93-9cf2-423a-b56c-4bc77700a16e")
 	)
 	(wire
 		(pts
@@ -7342,7 +7374,7 @@
 	)
 	(global_label "VmeterMOSFET"
 		(shape input)
-		(at 81.28 67.31 180)
+		(at 62.23 67.31 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -7352,7 +7384,7 @@
 		)
 		(uuid "08b302d5-7134-47f2-bc6f-02c3c40748c5")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 64.6272 67.31 0)
+			(at 45.5772 67.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7397,6 +7429,28 @@
 		(uuid "0ed13583-bd7f-4839-a8dc-4c80012eaf28")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 86.36 185.6838 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+				(hide yes)
+			)
+		)
+	)
+	(global_label "VDD"
+		(shape input)
+		(at 66.04 59.69 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "1174250c-016e-4188-80f4-f29af38391ae")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 59.4262 59.69 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -11605,6 +11659,112 @@
 		)
 	)
 	(symbol
+		(lib_id "Switch:SW_Push")
+		(at 76.2 62.23 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "80cf9c35-5c91-4316-9eb2-d3a60de256f1")
+		(property "Reference" "SW3"
+			(at 77.47 60.9599 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "SW_Push"
+			(at 77.47 63.4999 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "Button_Switch_SMD:SW_SPST_CK_RS282G05A3"
+			(at 71.12 62.23 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 71.12 62.23 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Push button switch, generic, two pins"
+			(at 76.2 62.23 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "ValueTemp" "SW_Push"
+			(at 76.2 62.23 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Function" ""
+			(at 76.2 62.23 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Sim.Device" ""
+			(at 76.2 62.23 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Sim.Pins" ""
+			(at 76.2 62.23 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "2"
+			(uuid "3c98e44a-8d7e-4de2-9ebb-d1fbd0b49813")
+		)
+		(pin "1"
+			(uuid "a85befac-c71a-441d-8182-c2d317b61303")
+		)
+		(instances
+			(project "AnalogFrontEnd"
+				(path "/35d66a59-3ca7-406e-bad2-1c2903d980aa"
+					(reference "SW3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Device:R_US")
 		(at 161.29 125.73 90)
 		(unit 1)
@@ -12636,6 +12796,111 @@
 			(project "DMM on R4 V3"
 				(path "/35d66a59-3ca7-406e-bad2-1c2903d980aa"
 					(reference "Q1")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R_US")
+		(at 66.04 63.5 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "a39ee00e-cb40-4620-9d64-d22c03f9dbdf")
+		(property "Reference" "R3"
+			(at 68.072 62.23 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1K"
+			(at 67.818 64.516 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder"
+			(at 67.056 63.754 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 66.04 63.5 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Resistor, US symbol"
+			(at 66.04 63.5 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "ValueTemp" ""
+			(at 66.04 63.5 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Function" "V Driver Pullup"
+			(at 66.04 63.5 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Sim.Device" ""
+			(at 66.04 63.5 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Sim.Pins" ""
+			(at 66.04 63.5 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "d0e04728-07f6-49ea-abcd-45d6c4a24a2a")
+		)
+		(pin "2"
+			(uuid "514b6b40-b6ef-45dc-87f2-b25e65e0df98")
+		)
+		(instances
+			(project "AnalogFrontEnd"
+				(path "/35d66a59-3ca7-406e-bad2-1c2903d980aa"
+					(reference "R3")
 					(unit 1)
 				)
 			)
@@ -14183,6 +14448,73 @@
 		)
 	)
 	(symbol
+		(lib_id "power:GND")
+		(at 76.2 57.15 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "d474827b-d4c2-43fa-be8b-8badd3159c6d")
+		(property "Reference" "#PWR03"
+			(at 82.55 57.15 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "GND"
+			(at 80.01 57.1499 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" ""
+			(at 76.2 57.15 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 76.2 57.15 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 76.2 57.15 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "d4bffd05-8b31-4099-8c5a-61530f8eddbd")
+		)
+		(instances
+			(project "AnalogFrontEnd"
+				(path "/35d66a59-3ca7-406e-bad2-1c2903d980aa"
+					(reference "#PWR03")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Device:R_Pack04_SIP")
 		(at 99.06 172.72 0)
 		(unit 1)
@@ -15110,7 +15442,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Connector_PinSocket_2.54mm:PinSocket_1x05_P2.54mm_Vertical"
+		(property "Footprint" "Connector_PinSocket_2.54mm:PinSocket_1x06_P2.54mm_Vertical"
 			(at 81.28 87.63 0)
 			(effects
 				(font
