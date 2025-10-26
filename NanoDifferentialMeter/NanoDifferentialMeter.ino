@@ -3,6 +3,7 @@
 
 Adafruit_ADS1115 ads;
 const int dacOutPin = A0;  // DAC output pin on Nano R4
+const int relayPin = 2;
 
 // Timing control
 unsigned long lastSerialTime = 0;
@@ -27,6 +28,8 @@ void setup() {
 
   ads.setGain(currentGain);
   ads.setDataRate(RATE_ADS1115_128SPS);
+
+  pinMode(relayPin, OUTPUT);
 }
 
 void loop() {
@@ -55,6 +58,14 @@ void loop() {
       Serial.print("Increasing gain to range ±");
       Serial.println(gainMax);
     }
+  }
+
+  if(fabs(voltage*7.311)>2.5){
+    digitalWrite(relayPin, HIGH);
+    //Serial.println("relay On");
+  }else{
+    digitalWrite(relayPin, LOW);
+    //Serial.println("relay off");
   }
 
   // 100Hz DAC output update

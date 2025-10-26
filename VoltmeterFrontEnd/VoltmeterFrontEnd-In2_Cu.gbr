@@ -1,0 +1,112 @@
+%TF.GenerationSoftware,KiCad,Pcbnew,9.0.3*%
+%TF.CreationDate,2025-10-25T21:42:41-05:00*%
+%TF.ProjectId,VoltmeterFrontEnd,566f6c74-6d65-4746-9572-46726f6e7445,rev?*%
+%TF.SameCoordinates,Original*%
+%TF.FileFunction,Copper,L3,Inr*%
+%TF.FilePolarity,Positive*%
+%FSLAX46Y46*%
+G04 Gerber Fmt 4.6, Leading zero omitted, Abs format (unit mm)*
+G04 Created by KiCad (PCBNEW 9.0.3) date 2025-10-25 21:42:41*
+%MOMM*%
+%LPD*%
+G01*
+G04 APERTURE LIST*
+G04 Aperture macros list*
+%AMRoundRect*
+0 Rectangle with rounded corners*
+0 $1 Rounding radius*
+0 $2 $3 $4 $5 $6 $7 $8 $9 X,Y pos of 4 corners*
+0 Add a 4 corners polygon primitive as box body*
+4,1,4,$2,$3,$4,$5,$6,$7,$8,$9,$2,$3,0*
+0 Add four circle primitives for the rounded corners*
+1,1,$1+$1,$2,$3*
+1,1,$1+$1,$4,$5*
+1,1,$1+$1,$6,$7*
+1,1,$1+$1,$8,$9*
+0 Add four rect primitives between the rounded corners*
+20,1,$1+$1,$2,$3,$4,$5,0*
+20,1,$1+$1,$4,$5,$6,$7,0*
+20,1,$1+$1,$6,$7,$8,$9,0*
+20,1,$1+$1,$8,$9,$2,$3,0*%
+G04 Aperture macros list end*
+%TA.AperFunction,ComponentPad*%
+%ADD10C,2.600000*%
+%TD*%
+%TA.AperFunction,ComponentPad*%
+%ADD11RoundRect,0.250000X1.050000X-1.050000X1.050000X1.050000X-1.050000X1.050000X-1.050000X-1.050000X0*%
+%TD*%
+%TA.AperFunction,ComponentPad*%
+%ADD12C,3.600000*%
+%TD*%
+%TA.AperFunction,ComponentPad*%
+%ADD13R,1.700000X1.700000*%
+%TD*%
+%TA.AperFunction,ComponentPad*%
+%ADD14C,1.700000*%
+%TD*%
+%TA.AperFunction,ViaPad*%
+%ADD15C,0.800000*%
+%TD*%
+G04 APERTURE END LIST*
+D10*
+%TO.N,V_Input_Float*%
+%TO.C,J15*%
+X132417500Y-72217000D03*
+D11*
+%TO.N,V_Input_REF*%
+X132417500Y-77297000D03*
+%TD*%
+D12*
+%TO.N,N/C*%
+%TO.C,H4*%
+X94000000Y-84000000D03*
+%TD*%
+%TO.N,N/C*%
+%TO.C,H3*%
+X134500000Y-84000000D03*
+%TD*%
+%TO.N,N/C*%
+%TO.C,H2*%
+X134250000Y-65500000D03*
+%TD*%
+%TO.N,N/C*%
+%TO.C,H1*%
+X94000000Y-65500000D03*
+%TD*%
+D13*
+%TO.N,+9V*%
+%TO.C,J1*%
+X111296000Y-85502000D03*
+D14*
+%TO.N,VDD*%
+X113836000Y-85502000D03*
+%TO.N,GND*%
+X116376000Y-85502000D03*
+%TO.N,MOSFET_Ctrl*%
+X118916000Y-85502000D03*
+%TO.N,/V Ref to ADS-0*%
+X121456000Y-85502000D03*
+%TO.N,/ADC-1*%
+X123996000Y-85502000D03*
+%TD*%
+D15*
+%TO.N,GND*%
+X106750000Y-66000000D03*
+X123086000Y-68002000D03*
+X109000000Y-71500000D03*
+X99746000Y-76532000D03*
+X113481500Y-74002000D03*
+%TO.N,+9V*%
+X108500000Y-73750000D03*
+%TO.N,MOSFET_Ctrl*%
+X100508000Y-74754000D03*
+X110571000Y-80252000D03*
+%TO.N,VDD*%
+X119586000Y-71752000D03*
+X102286000Y-71452000D03*
+X114336000Y-77502000D03*
+X106244313Y-76697843D03*
+%TO.N,/ADC-1*%
+X120961000Y-72627000D03*
+%TD*%
+M02*
