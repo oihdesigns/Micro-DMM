@@ -9,14 +9,15 @@ class SerialLoggerApp:
     def __init__(self, master):
         self.master = master
         self.master.title("Arduino Differential Meter Logger")
-        self.master.geometry("1000x850")
+        self.master.geometry("1050x1000")
 
         # ---- State variables ----
         self.serial_conn = None
         self.running = False
         self.logging = False
-        self.data = []
+        self.data = []  # (t, v, a)
         self.latest_vdc = tk.StringVar(value="---")
+        self.latest_amp = tk.StringVar(value="---")
         self.rolloff_value = tk.DoubleVar(value=30)
         self.rolloff_unit = tk.StringVar(value="seconds")
         self.live_updates = True
@@ -25,8 +26,7 @@ class SerialLoggerApp:
         self.relay_v_text = tk.StringVar(value="--- V")
         self.last_line_time = time.time()
         self.timeout_seconds = 2.0
-        self.last_status_color = "gray"
-        self.relay_v_fault = False  # track current fault state
+        self.relay_v_fault = False
 
         # ---- GUI styling ----
         style = ttk.Style()
@@ -45,19 +45,25 @@ class SerialLoggerApp:
         self.connect_btn = ttk.Button(master, text="Connect", command=self.toggle_connection)
         self.connect_btn.grid(row=0, column=3, **pad)
 
-        # ---- Control buttons ----
+        # ---- Controls ----
         self.start_btn = ttk.Button(master, text="Start Logging",
                                     command=self.start_logging, state="disabled")
         self.start_btn.grid(row=1, column=0, **pad)
+        self.end_btn = ttk.Button(master, text="End Log", command=self.stop_logging, state="disabled")
+        self.end_btn.grid(row=1, column=1, **pad)
         self.stop_btn = tk.Button(master, text="Force Stop", bg="#d32f2f", fg="white",
                                   font=("Segoe UI", 11, "bold"), command=self.force_stop)
-        self.stop_btn.grid(row=1, column=1, **pad)
+        self.stop_btn.grid(row=1, column=2, **pad)
         self.go_btn = tk.Button(master, text="Go", bg="#2e7d32", fg="white",
                                 font=("Segoe UI", 11, "bold"), command=self.go_command)
-        self.go_btn.grid(row=1, column=2, **pad)
+        self.go_btn.grid(row=1, column=3, **pad)
         self.live_btn = ttk.Button(master, text="Live Updates: ON",
                                    command=self.toggle_live_updates)
-        self.live_btn.grid(row=1, column=3, **pad)
+        self.live_btn.grid(row=1, column=4, **pad)
+        self.clear_btn = ttk.Button(master, text="Clear Data", command=self.clear_data)
+        self.clear_btn.grid(row=1, column=5, **pad)
+
+
 
         # ---- Custom command row ----
         ttk.Label(master, text="Custom Command:").grid(row=2, column=0, sticky="e", **pad)
@@ -104,18 +110,28 @@ class SerialLoggerApp:
         ttk.Label(status_frame, text="Relay Supply:").grid(row=2, column=1, sticky="e")
         ttk.Label(status_frame, textvariable=self.relay_v_text).grid(row=2, column=2, sticky="w")
 
-        # ---- Numeric readout ----
-        ttk.Label(master, text="Live Voltage:").grid(row=5, column=0, sticky="e", **pad)
+        # ---- Live Readout Row (Voltage + Current) ----
+        ttk.Label(master, text="Voltage:").grid(row=5, column=0, sticky="e", **pad)
         self.vdc_label = ttk.Label(master, textvariable=self.latest_vdc,
                                    font=("Consolas", 36, "bold"), foreground="#0078D4")
-        self.vdc_label.grid(row=5, column=1, columnspan=3, sticky="w", **pad)
+        self.vdc_label.grid(row=5, column=1, sticky="w", **pad)
+
+        ttk.Label(master, text="Current:").grid(row=5, column=2, sticky="e", **pad)
+        self.amp_label = ttk.Label(master, textvariable=self.latest_amp,
+                                   font=("Consolas", 36, "bold"), foreground="#e67300")
+        self.amp_label.grid(row=5, column=3, sticky="w", **pad)
 
         # ---- Matplotlib plot ----
-        self.fig, self.ax = plt.subplots(figsize=(8, 4))
-        self.ax.set_xlabel("Time (s)")
-        self.ax.set_ylabel("Voltage (VDC)")
-        self.line, = self.ax.plot([], [], "r-", linewidth=1.5)
-        self.ax.grid(True)
+        self.fig, self.ax1 = plt.subplots(figsize=(8, 4))
+        self.ax1.set_xlabel("Time (s)")
+        self.ax1.set_ylabel("Voltage (VDC)", color="red")
+        self.line_v, = self.ax1.plot([], [], "r-", linewidth=1.5, label="Voltage")
+
+        self.ax2 = self.ax1.twinx()
+        self.ax2.set_ylabel("Current (A)", color="orange")
+        self.line_a, = self.ax2.plot([], [], color="orange", linewidth=1.5, label="Current")
+
+        self.ax1.grid(True)
         self.canvas = FigureCanvasTkAgg(self.fig, master)
         self.canvas.get_tk_widget().grid(row=6, column=0, columnspan=4, padx=10, pady=10)
 
@@ -128,6 +144,23 @@ class SerialLoggerApp:
         # Periodic tasks
         self.master.after(200, self.update_plot_periodic)
         self.master.after(500, self.connection_watchdog)
+
+        # ---- Clear Data logic ----
+    def clear_data(self):
+        """Reset collected data and clear the plot."""
+        self.data.clear()
+        self.latest_vdc.set("---")
+        self.latest_amp.set("---")
+        self.ax1.cla()
+        self.ax2.cla()
+        self.ax1.set_xlabel("Time (s)")
+        self.ax1.set_ylabel("Voltage (VDC)", color="red")
+        self.ax2.set_ylabel("Current (A)", color="orange")
+        self.line_v, = self.ax1.plot([], [], "r-", linewidth=1.5)
+        self.line_a, = self.ax2.plot([], [], color="orange", linewidth=1.5)
+        self.ax1.grid(True)
+        self.canvas.draw_idle()
+        self.append_serial_text("> Data Cleared\n")
 
     # ---------- Serial Handling ----------
     def refresh_ports(self):
@@ -176,12 +209,15 @@ class SerialLoggerApp:
                 self.last_line_time = time.time()
                 self.master.after(0, self.append_serial_text, line)
                 self.master.after(0, self.parse_status, line)
-                if "VDC" in line and "T(s)" in line:
+                if "VDC:" in line and "T(s):" in line:
                     try:
                         vdc = float(line.split("VDC:")[1].split()[0])
+                        amps = None
+                        if "A:" in line:
+                            amps = float(line.split("A:")[1].split()[0])
                         t = float(line.split("T(s):")[1])
-                        self.data.append((t, vdc))
-                        self.master.after(0, self.update_readout, vdc)
+                        self.data.append((t, vdc, amps))
+                        self.master.after(0, self.update_readout, vdc, amps)
                     except Exception:
                         continue
             except Exception:
@@ -194,7 +230,6 @@ class SerialLoggerApp:
         self.serial_text.see(tk.END)
 
     def parse_status(self, line):
-        # System status
         if "Good" in line:
             self.set_status("Good", "green")
         elif "Force Stop" in line:
@@ -202,7 +237,6 @@ class SerialLoggerApp:
         elif "ALARM" in line:
             self.set_status("ALARM", "red")
 
-        # Relay state
         if "Relay: Open" in line:
             self.relay_text.set("Open")
             self.relay_canvas.itemconfig(self.relay_indicator, fill="red")
@@ -210,7 +244,6 @@ class SerialLoggerApp:
             self.relay_text.set("Closed")
             self.relay_canvas.itemconfig(self.relay_indicator, fill="green")
 
-        # Relay voltage monitor
         if "Relay V:" in line:
             try:
                 val = float(line.split("Relay V:")[1].split()[0])
@@ -225,18 +258,20 @@ class SerialLoggerApp:
                     if not self.relay_v_fault:
                         self.relay_v_fault = True
                         self.set_status("Relay V Fault", "red")
-                        self.force_stop()  # send "S" automatically
+                        self.force_stop()
             except Exception:
                 pass
 
     def set_status(self, text, color):
         self.status_text.set(text)
         self.status_canvas.itemconfig(self.status_indicator, fill=color)
-        self.last_status_color = color
 
-    def update_readout(self, vdc):
-        if self.live_updates:
-            self.latest_vdc.set(f"{vdc:.4f} V")
+    def update_readout(self, vdc, amps=None):
+        if not self.live_updates:
+            return
+        self.latest_vdc.set(f"{vdc:.3f} V" if vdc is not None else "---")
+        if amps is not None:
+            self.latest_amp.set(f"{amps:.3f} A")
 
     # ---------- Watchdog ----------
     def connection_watchdog(self):
@@ -244,7 +279,7 @@ class SerialLoggerApp:
         if self.serial_conn and self.running:
             if now - self.last_line_time > self.timeout_seconds:
                 self.handle_disconnect()
-        self.master.after(500, self.connection_watchdog)
+        self.master.after(1000, self.connection_watchdog)
 
     def handle_disconnect(self):
         self.status_text.set("Disconnected")
@@ -269,41 +304,66 @@ class SerialLoggerApp:
     def update_plot_periodic(self):
         if self.live_updates and self.data:
             rolloff = self.get_rolloff_seconds()
-            times, volts = zip(*self.data)
+            times, volts, amps = zip(*self.data)
             subset = self.data[-rolloff:] if isinstance(rolloff, int) \
-                     else [(t, v) for t, v in self.data if t >= times[-1] - rolloff]
+                     else [(t, v, a) for t, v, a in self.data if t >= times[-1] - rolloff]
             if subset:
-                t_sub, v_sub = zip(*subset)
-                self.line.set_data(t_sub, v_sub)
-                self.ax.relim()
-                self.ax.autoscale_view()
+                t_sub, v_sub, a_sub = zip(*subset)
+                self.line_v.set_data(t_sub, v_sub)
+                self.line_a.set_data(t_sub, a_sub)
+                self.ax1.relim()
+                self.ax1.autoscale_view()
+                self.ax2.relim()
+                self.ax2.autoscale_view()
                 self.canvas.draw_idle()
         self.master.after(200, self.update_plot_periodic)
 
     # ---------- Logging ----------
     def start_logging(self):
+        """Start writing incoming data to CSV."""
         self.logging = True
         self.data = []
         self.start_btn.config(state="disabled")
+        self.end_btn.config(state="normal")
+
         self.csv_file = filedialog.asksaveasfilename(defaultextension=".csv",
                                                      filetypes=[("CSV Files", "*.csv")])
         if not self.csv_file:
             self.logging = False
+            self.start_btn.config(state="normal")
+            self.end_btn.config(state="disabled")
             return
-        threading.Thread(target=self.write_csv_loop, daemon=True).start()
+
+        self.append_serial_text(f"> Logging to: {self.csv_file}\n")
+        self.logging_thread = threading.Thread(target=self.write_csv_loop, daemon=True)
+        self.logging_thread.start()
+
+    def stop_logging(self):
+        """Stop logging gracefully."""
+        if self.logging:
+            self.logging = False
+            self.append_serial_text("> Logging stopped.\n")
+            self.start_btn.config(state="normal")
+            self.end_btn.config(state="disabled")
 
     def write_csv_loop(self):
         with open(self.csv_file, "w", newline="") as f:
             w = csv.writer(f)
-            w.writerow(["Time(s)", "Voltage(VDC)"])
-            last = 0
+            # New: Include relay and status columns
+            w.writerow(["Time(s)", "Voltage(VDC)", "Current(A)",
+                        "Relay_V(V)", "Relay_State", "System_Status"])
+            last_index = 0
             while self.logging:
-                if len(self.data) > last:
-                    for t, v in self.data[last:]:
-                        w.writerow([t, v])
-                    last = len(self.data)
+                if len(self.data) > last_index:
+                    for t, v, a in self.data[last_index:]:
+                        relay_v = self.relay_v_text.get().replace(" V", "")
+                        relay_state = self.relay_text.get()
+                        status = self.status_text.get()
+                        w.writerow([t, v, a, relay_v, relay_state, status])
+                    last_index = len(self.data)
                     f.flush()
                 time.sleep(0.5)
+
 
     # ---------- Commands ----------
     def force_stop(self):
@@ -326,6 +386,7 @@ class SerialLoggerApp:
         self.live_updates = not self.live_updates
         self.live_btn.config(text=f"Live Updates: {'ON' if self.live_updates else 'OFF'}")
         self.vdc_label.config(foreground="#0078D4" if self.live_updates else "gray")
+        self.amp_label.config(foreground="#e67300" if self.live_updates else "gray")
 
     def send_command(self):
         cmd = self.cmd_entry.get().strip()

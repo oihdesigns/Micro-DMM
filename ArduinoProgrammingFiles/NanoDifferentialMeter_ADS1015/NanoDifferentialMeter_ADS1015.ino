@@ -5,6 +5,7 @@ Adafruit_ADS1015 ads;
 const int dacOutPin = A0;  // DAC output pin on Nano R4
 const int relayPin = 2;
 const int relayVoltagePin = A7;
+const int ammeterPin = A6;
 
 // Timing control
 unsigned long lastSerialTime = 0;
@@ -27,6 +28,8 @@ float prevVoltage = 0.0;
 float prevOutVoltage = 0.0;
 float convertedVoltage = 0.0;
 
+float prevOutAmps = 0.0;
+
 float voltage = 0.0;
 float amps = 0.0;
 
@@ -39,6 +42,8 @@ bool alarmFlag = 0;
 bool forceStop = 0;
 bool updates = 1;
 
+float aRef = 5.0; //1.5 when using internal reference
+
 void handleSerialCommands(char command);
 
 
@@ -46,6 +51,9 @@ void setup() {
   Serial.begin(115200);
   delay(500);
   Wire.begin();
+
+  analogReadResolution(14);
+  //analogReference(AR_INTERNAL);
 
   // Keep trying until ADS1115 is found
   while (!ads.begin(0x48,&Wire1)) {
@@ -61,6 +69,7 @@ void setup() {
 
   pinMode(relayPin, OUTPUT);
   pinMode(relayVoltagePin, INPUT);
+  pinMode(ammeterPin, INPUT);
 }
 
 void loop() {
@@ -92,7 +101,7 @@ void loop() {
     // using amps*shunt so logic matches ADC input voltage range
     */
 
-  if(fabs(convertedVoltage) > 5 ){
+  if(fabs(convertedVoltage) > 10 ){
     alarm = 1;
   } else{
     alarm = 0;
@@ -137,6 +146,7 @@ void loop() {
   */
 
   float time = millis();
+  
   if(abs(prevVoltage)<abs(voltage)){
     vClimb = 1;
   }else{
@@ -150,25 +160,33 @@ void loop() {
     vThreshold = 1;
   }
 
+  float aThreshold = 0.0;
+  aThreshold= 0.2;
+  
   float relayVoltage = 0.0;
   relayVoltage = analogRead(relayVoltagePin);
-  relayVoltage = (relayVoltage/1023)*5*11.65;
+  relayVoltage = (relayVoltage/16383)*aRef*10.8;
+
+  float ammeterVoltage = 0.0;
+  ammeterVoltage = analogRead(ammeterPin);
+  amps = ((((ammeterVoltage/16383)*aRef)-2.51)/0.185 + prevAmps)/2; // Ammeter conversion factor, plus slight average smoothing
 
 
     
   
   // Voltage Updates
-  if ((currentMillis - lastSerialTime >= serialInterval) && (fabs(convertedVoltage)+vThreshold < fabs(prevOutVoltage)|| fabs(convertedVoltage)-vThreshold > fabs(prevOutVoltage))) {
+  if ((currentMillis - lastSerialTime >= serialInterval) && (fabs(convertedVoltage)+vThreshold < fabs(prevOutVoltage)|| fabs(convertedVoltage)-vThreshold > fabs(prevOutVoltage)
+  || (fabs(amps)+aThreshold < fabs(prevOutAmps)|| fabs(amps)-aThreshold > fabs(prevOutAmps)
+ ))) {
     lastSerialTime = currentMillis;
     prevOutVoltage = convertedVoltage;
-    Serial.print("VDC: ");
-    Serial.print(roundTo3SigAndHalf(convertedVoltage)); //7.3147
-    //Serial.print(" mA: ");
-    //Serial.print(amps*1000,1);
+    prevOutAmps = amps;
+Serial.print("VDC:");
+    Serial.print(roundTo3SigAndHalf(convertedVoltage));
+    Serial.print(" A:");
+    Serial.print(amps, 2);
     Serial.print(" T(s):");
     Serial.println(time/1000,3);
-    //Serial.print(" V, Gain range: ±");
-    //Serial.println(gainMax, 3);
   }
 
 //Status Update
@@ -195,6 +213,8 @@ void loop() {
     Serial.println(" / ");
     Serial.print("VDC:");
     Serial.print(roundTo3SigAndHalf(convertedVoltage));
+    Serial.print(" A:");
+    Serial.print(amps, 2);
     Serial.print(" T(s):");
     Serial.println(time/1000,3);
     
@@ -253,7 +273,7 @@ float getGainMax(adsGain_t g) {
 
 // --- Autorange logic for either channel ---
 void autoRangeChannel(float absValue, adsGain_t &currentGain, float &gainMax, const char *label) {
-  if (absValue > 0.95 * gainMax) {
+  if (absValue > 0.50 * gainMax) {
     adsGain_t newGain = stepDownGain(currentGain);
     if (newGain != currentGain) {
       currentGain = newGain;
@@ -262,7 +282,7 @@ void autoRangeChannel(float absValue, adsGain_t &currentGain, float &gainMax, co
       Serial.print(label); Serial.print(": Lowering gain to ±");
       Serial.println(gainMax);
     }
-  } else if (absValue < 0.1 * gainMax) {
+  } else if (absValue < 0.05 * gainMax) {
     adsGain_t newGain = stepUpGain(currentGain);
     if (newGain != currentGain) {
       currentGain = newGain;
