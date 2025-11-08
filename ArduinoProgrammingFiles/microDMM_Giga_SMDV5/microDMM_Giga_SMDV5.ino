@@ -367,8 +367,7 @@ bool vFlag = false;           // indicates voltage alert is active (to manage fl
 bool rFlag = false;           // indicates resistance continuity alert is active
 bool VACPresense = false;       // indicates VAC presence
 bool cycleTracking = false;
-bool vClosedflag = false;
-bool vClosedflagPrevious = false;
+
 
 // Logging buffers for current vs time (for 'L' command)
 const int LOG_SIZE = 100;
@@ -387,6 +386,8 @@ float bridgeV = 0.0;
 bool Vzero = true;
 bool vClosed = false;
 bool vUndefined = true;
+bool vClosedflag = false;
+bool vClosedflagPrevious = false;
 
 int blinkLimit = 0; //Limit how much the LED can blink between screen updates
 
