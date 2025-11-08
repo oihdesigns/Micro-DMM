@@ -87,6 +87,8 @@ void setup() {
   pinMode(relayVoltagePin, INPUT);
   pinMode(ammeterPin, INPUT);
   pinMode(VbridgePin, OUTPUT);
+
+  digitalWrite(VbridgePin, HIGH);
 }
 
 void loop() {
@@ -246,15 +248,18 @@ Serial.print("VDC:");
       Serial.print(" ");
       Serial.print("voltageRead:");
       Serial.print(bridgeV,4);
-      Serial.print(" ");
+      Serial.print(" / ");
       if(vClosedflag){
         Serial.print("V Closed");
       }
-      if(vFloating){
+      else if(vFloating){
         Serial.print("V Floating");
       }else{
         Serial.print("V Undefined");
       }
+    }else{
+      Serial.print(" / ");
+      Serial.print("V !0");
     }
     Serial.println(" / ");
     Serial.print("VDC:");
@@ -410,9 +415,12 @@ float roundTo3SigAndHalf(float x) {
 
 void ClosedOrFloat()
 {
+  float vClosedThres = 0.03;
+  float vFloatThres = 0.05;
+  
   vClosedflagPrevious = vClosedflag;
 
-  digitalWrite(VbridgePin, HIGH);
+  digitalWrite(VbridgePin, LOW);
   delay(2);
 
   //ads.setDataRate(RATE_ADS1115_64SPS);
@@ -429,12 +437,12 @@ void ClosedOrFloat()
   vFloating = false;
   vUndefined = false;
 
-  if(fabs(bridgeV)<0.03){
+  if(fabs(bridgeV)<vClosedThres){
     vClosedflag = true;
     if(debug){
       Serial.println("V Closed");
     }
-  }else if(fabs(bridgeV)> 0.05){
+  }else if(fabs(bridgeV)> vFloatThres){
     vFloating = true;
     if(debug){
       Serial.println("V Floating");
@@ -451,6 +459,6 @@ void ClosedOrFloat()
     vClosed = false;
   }
   
-  digitalWrite(VbridgePin, 0);
+  digitalWrite(VbridgePin, HIGH);
   //delay(2);
 }

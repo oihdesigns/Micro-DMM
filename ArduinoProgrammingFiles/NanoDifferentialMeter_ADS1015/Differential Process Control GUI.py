@@ -9,7 +9,7 @@ class SerialLoggerApp:
     def __init__(self, master):
         self.master = master
         self.master.title("Arduino Differential Meter Logger")
-        self.master.geometry("1050x1000")
+        self.master.geometry("1100x930")
 
         # ---- State variables ----
         self.serial_conn = None
@@ -18,6 +18,7 @@ class SerialLoggerApp:
         self.data = []  # (t, v, a)
         self.latest_vdc = tk.StringVar(value="---")
         self.latest_amp = tk.StringVar(value="---")
+        self.lead_status_text = tk.StringVar(value="---")   # ✅ new variable
         self.rolloff_value = tk.DoubleVar(value=30)
         self.rolloff_unit = tk.StringVar(value="seconds")
         self.live_updates = True
@@ -28,7 +29,7 @@ class SerialLoggerApp:
         self.timeout_seconds = 2.0
         self.relay_v_fault = False
 
-        # ---- GUI styling ----
+        # ---- GUI setup ----
         style = ttk.Style()
         style.configure("TLabel", font=("Segoe UI", 12))
         style.configure("TButton", font=("Segoe UI", 11))
@@ -110,7 +111,7 @@ class SerialLoggerApp:
         ttk.Label(status_frame, text="Relay Supply:").grid(row=2, column=1, sticky="e")
         ttk.Label(status_frame, textvariable=self.relay_v_text).grid(row=2, column=2, sticky="w")
 
-        # ---- Live Readout Row (Voltage + Current) ----
+        # ---- Live readouts row (Voltage + Current + Leads) ----
         ttk.Label(master, text="Voltage:").grid(row=5, column=0, sticky="e", **pad)
         self.vdc_label = ttk.Label(master, textvariable=self.latest_vdc,
                                    font=("Consolas", 36, "bold"), foreground="#0078D4")
@@ -120,6 +121,11 @@ class SerialLoggerApp:
         self.amp_label = ttk.Label(master, textvariable=self.latest_amp,
                                    font=("Consolas", 36, "bold"), foreground="#e67300")
         self.amp_label.grid(row=5, column=3, sticky="w", **pad)
+
+        ttk.Label(master, text="Leads:").grid(row=5, column=4, sticky="e", **pad)
+        self.lead_label = ttk.Label(master, textvariable=self.lead_status_text,
+                                    font=("Consolas", 24, "bold"))
+        self.lead_label.grid(row=5, column=5, sticky="w", **pad)
 
         # ---- Matplotlib plot ----
         self.fig, self.ax1 = plt.subplots(figsize=(8, 4))
@@ -209,6 +215,16 @@ class SerialLoggerApp:
                 self.last_line_time = time.time()
                 self.master.after(0, self.append_serial_text, line)
                 self.master.after(0, self.parse_status, line)
+                # New parsing for lead diagnostics
+                if "V Floating" in line:
+                    self.master.after(0, self.set_lead_status, "Floating")
+                    continue
+                if "V !0" in line:
+                    self.master.after(0, self.set_lead_status, "V !0")
+                    continue
+                elif "V Closed" in line:
+                    self.master.after(0, self.set_lead_status, "Closed")
+                    continue
                 if "VDC:" in line and "T(s):" in line:
                     try:
                         vdc = float(line.split("VDC:")[1].split()[0])
@@ -223,6 +239,20 @@ class SerialLoggerApp:
             except Exception:
                 break
         self.master.after(0, self.handle_disconnect)
+
+        # ---------- Lead status updater ----------
+    def set_lead_status(self, status):
+        """Update the displayed lead state (Floating / Closed / ---)."""
+        self.lead_status_text.set(status)
+        if status == "Floating":
+            self.lead_label.config(foreground="orange")
+        if status == "V !0":
+            self.lead_label.config(foreground="black")
+        elif status == "Closed":
+            self.lead_label.config(foreground="green")
+        else:
+            self.lead_label.config(foreground="gray")
+
 
     # ---------- Parsing & Indicators ----------
     def append_serial_text(self, line):
@@ -349,9 +379,9 @@ class SerialLoggerApp:
     def write_csv_loop(self):
         with open(self.csv_file, "w", newline="") as f:
             w = csv.writer(f)
-            # New: Include relay and status columns
+            # Added Lead_Status column
             w.writerow(["Time(s)", "Voltage(VDC)", "Current(A)",
-                        "Relay_V(V)", "Relay_State", "System_Status"])
+                        "Relay_V(V)", "Relay_State", "System_Status", "Lead_Status"])
             last_index = 0
             while self.logging:
                 if len(self.data) > last_index:
@@ -359,7 +389,8 @@ class SerialLoggerApp:
                         relay_v = self.relay_v_text.get().replace(" V", "")
                         relay_state = self.relay_text.get()
                         status = self.status_text.get()
-                        w.writerow([t, v, a, relay_v, relay_state, status])
+                        lead_status = self.lead_status_text.get()
+                        w.writerow([t, v, a, relay_v, relay_state, status, lead_status])
                     last_index = len(self.data)
                     f.flush()
                 time.sleep(0.5)
