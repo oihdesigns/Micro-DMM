@@ -2554,6 +2554,9 @@ void autologArraysToCSV() {
 
 void ClosedOrFloat()
 {
+
+  
+  
   vClosedflagPrevious = vClosedflag;
 
   digitalWrite(VbridgePin, HIGH);
@@ -2571,6 +2574,8 @@ void ClosedOrFloat()
   vFloating = false;
   vUndefined = false;
 
+  
+  
   if(fabs(bridgeV)<0.03){
     vClosedflag = true;
   }else if(fabs(bridgeV)> 0.05){

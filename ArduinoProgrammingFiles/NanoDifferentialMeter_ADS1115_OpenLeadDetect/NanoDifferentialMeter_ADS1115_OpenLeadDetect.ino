@@ -84,6 +84,13 @@ bool vClosed = false;
 bool vUndefined = true;
 bool vClosedflag = false;
 bool vClosedflagPrevious = false;
+bool vClosedPrevious = false;
+bool vFloatingPrevious = false;
+bool vUndefinedPrevious = false;
+
+bool vClosedtrig = 0;
+bool vFloattrig = 0;
+bool vUndefinedtrig = 0;
 
 // ADS1115 gain factors (mV per bit) for each gain setting
 const float GAIN_FACTOR_TWOTHIRDS = 0.1875;  // 2/3x (±6.144V range)
@@ -314,8 +321,14 @@ void measureVoltage(){
     // convert to voltage
       newVoltageReading = ((countV * kGainFactors[gainIndexVolt] / 1000.0f) * VOLTAGE_SCALE);
 
-  medianVoltageStep = (newVoltageReading - medianVoltage) * 0.2;
-  medianVoltage += medianVoltageStep;
+      if(newVoltageReading > (prevVoltage*1.5) || newVoltageReading < (prevVoltage*0.66)){
+        medianVoltage = newVoltageReading;
+      }else{
+        medianVoltageStep = (newVoltageReading - medianVoltage) * 0.2;
+        medianVoltage += medianVoltageStep;
+      }
+
+  
 
       if(fabs(medianVoltage) < 0.03){
     Vzero = true;
@@ -420,18 +433,17 @@ void updateDisplay() {
   display.print("Leads: ");
   display.setCursor(0,48);
   if(Vzero){
-    if(vClosedflag){
+    if(vClosed){
         display.print("Closed");
       }
-      else if(vFloating){
+      else{
         display.print("Floating");
-      }else{
-        display.print("Undefined");
-      }
-    }else{
+      }}
+      else{
       display.print(" ");
       display.print("(V !=0)");
-  }
+      }
+  
 
   display.display(); // update the OLED with all the drawn content
 }
@@ -463,13 +475,10 @@ void statusUpdate(){
       Serial.print("voltageRead:");
       Serial.print(bridgeV,4);
       Serial.print(" / ");
-      if(vClosedflag){
+      if(vClosed){
         Serial.print("V Closed");
-      }
-      else if(vFloating){
-        Serial.print("V Floating");
       }else{
-        Serial.print("V Undefined");
+        Serial.print("V Floating");
       }
     }else{
       Serial.print(" / ");
@@ -490,53 +499,65 @@ void statusUpdate(){
 
 }
 
-void ClosedOrFloat()
-{
-  float vClosedThres = 0.99;
-  float vFloatThres = 1.0;
-  
-  vClosedflagPrevious = vClosedflag;
+void ClosedOrFloat() {
+  const float vClosedThres = 0.25;
+  const float vFloatThres  = 0.25;
 
+  // Save previous states
+  bool prevClosed    = vClosed;
+  bool prevFloating  = vFloating;
+  bool prevUndefined = vUndefined;
+
+  float bridgeV1 = 0.0;
+  float bridgeV2 = 0.0;
+
+  // Reset current detection flags
+  vClosed = vFloating = vUndefined = false;
+
+  // Prepare to take a reading
   digitalWrite(VbridgePin, LOW);
-  delay(4);
+  delay(5);
 
-  //ads.setDataRate(RATE_ADS1115_64SPS);
   ads.setGain(GAIN_SIXTEEN);
-  bridgeV = (ads.readADC_Differential_0_1() * (0.0078125 / 1000.0) * VOLTAGE_SCALE);
+  bridgeV1 = ads.readADC_Differential_0_1() * (0.0078125f / 1000.0f) * VOLTAGE_SCALE;
+  delay(1);
+  bridgeV2 = ads.readADC_Differential_0_1() * (0.0078125f / 1000.0f) * VOLTAGE_SCALE;
 
-  //currentShuntVoltage = adcReadingCurrent; //I have no recollection of why this is here. Looks like an accidental 
-
-  if(debug){
-    Serial.print("voltageRead:");
-    Serial.println(bridgeV,4);
-    }
-  vClosedflag = false;
-  vFloating = false;
-  vUndefined = false;
-
-  if(fabs(bridgeV)<vClosedThres){
-    vClosedflag = true;
-    if(debug){
-      Serial.println("V Closed");
-    }
-  }else if(fabs(bridgeV)> vFloatThres){
-    vFloating = true;
-    if(debug){
-      Serial.println("V Floating");
-    }
-  }else{
-      vUndefined = true;
-      if(debug){
-        Serial.println("V Undefined");
-        }
-    }
-  if(vClosedflag && vClosedflagPrevious){
-    vClosed = true;
-  }else{
-    vClosed = false;
-  }
   
-  digitalWrite(VbridgePin, HIGH);
-  //delay(2);
-}
+  bridgeV = (abs(bridgeV1)+abs(bridgeV2))/2;
 
+
+  if (debug) {
+    Serial.print("voltageRead: ");
+    Serial.println(bridgeV, 4);
+  }
+
+  // --- Classification and stability detection ---
+  if (fabs(bridgeV) < vClosedThres) {
+    // Candidate for "Closed"
+    if (vClosedtrig) vClosed = true;  // repeats → stable
+    vClosedtrig = true;
+    vFloattrig = vUndefinedtrig = false;
+
+    if (debug) Serial.println("V Closed");
+
+  } else if (fabs(bridgeV) > vFloatThres) {
+    // Candidate for "Floating"
+    if (vFloattrig) vFloating = true;
+    vFloattrig = true;
+    vClosedtrig = vUndefinedtrig = false;
+
+    if (debug) Serial.println("V Floating");
+
+  } else {
+    // Intermediate region → keep last known stable state
+    if (prevClosed) {
+      vClosed = true;
+    } else{
+      vFloating = true;
+    }
+  }
+
+  // Release bridge
+  digitalWrite(VbridgePin, HIGH);
+}
