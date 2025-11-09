@@ -2368,7 +2368,7 @@ void drawPlot(const float data[], int n) {
   meanY = sumY / n;
   float rangeY = 1;
   
-if(!MinMaxDisplay){
+  if(!MinMaxDisplay){
   if(maxY - minY <0.05 && voltageDisplay && currentMode == Low){
     rangeY = 0.1;
 
@@ -2378,11 +2378,11 @@ if(!MinMaxDisplay){
   }else{
     rangeY = maxY - minY;
   }
-}else{
-minY = lowV;
-maxY = highV;
-rangeY = maxY - minY;
-}
+  }else{
+  minY = lowV;
+  maxY = highV;
+  rangeY = maxY - minY;
+  }
   
   //float rangeY = maxY - minY;
 
