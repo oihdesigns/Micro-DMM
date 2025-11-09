@@ -27,6 +27,10 @@ const unsigned long statusInterval = 2000; // 1 Hz
 const unsigned long analogInterval = 5;   // 200 Hz
 const unsigned long relayInterval = 100;   // 10 Hz
 
+float timefloating = 0.0;
+
+unsigned long currentMillis = 0;
+
 /*
 // Auto-ranging thresholds
 adsGain_t currentGainVolt = GAIN_ONE;  // ±4.096V
@@ -40,6 +44,8 @@ float prevVoltage = 0.0;
 float prevOutVoltage = 0.0;
 float convertedVoltage = 0.0;
 float newVoltageReading = 0.0;
+
+float relayVoltage = 0.0;
 
 float medianVoltage = 0.0;      // exponentially filtered voltage for display
 float medianVoltageStep = 0.0;
@@ -102,6 +108,10 @@ void handleSerialCommands(char command);
 
 void updateDisplay();
 
+void measureVoltage();
+
+void statusUpdate();
+
 
 void setup() {
   Serial.begin(115200);
@@ -148,7 +158,7 @@ void setup() {
 }
 
 void loop() {
-  unsigned long currentMillis = millis();
+  currentMillis = millis();
 
     // Handle serial commands (if any received)
   if (Serial.available() > 0) {
@@ -157,8 +167,123 @@ void loop() {
   }
 
   
-  float prevVoltage = newVoltageReading;
+  
   float prevAmps = amps;
+
+  measureVoltage();
+
+
+
+  if(fabs(medianVoltage) > 12.5 || fabs(medianVoltage) < 7){
+    alarm = 1;
+  } else{
+    alarm = 0;
+  }
+
+
+  if(currentMillis - lastRelayTime >= relayInterval){
+    lastRelayTime = currentMillis;
+  if(!alarm && !forceStop){
+    if(relayState == 0){
+      Serial.println("relay On");
+      relayState = 1;
+      digitalWrite(relayPin, HIGH);
+    }
+  }else{
+    if(relayState == 1){
+      digitalWrite(relayPin, LOW);
+      relayState = 0;
+      Serial.println("relay Off");
+    }
+  }
+
+  }
+
+
+/*
+  // 100Hz DAC output update
+  if (currentMillis - lastAnalogTime >= analogInterval) {
+    lastAnalogTime = currentMillis;
+
+    // Scale voltage to DAC range (0–5V → 0–4095 for 12-bit DAC)
+    float scaledVoltage = (voltage + gainMax) * (5.0 / (2.0 * gainMax));
+    scaledVoltage = constrain(scaledVoltage, 0.0, 5.0);
+
+    int dacValue = (int)(scaledVoltage * 4095.0 / 5.0);
+    analogWriteResolution(12);
+    analogWrite(dacOutPin, dacValue);
+  }
+  */
+
+ timefloating = millis();
+  
+  if(abs(prevVoltage)<abs(newVoltageReading)){
+    vClimb = 1;
+  }else{
+    vClimb = 0;
+  }
+
+  float vThreshold;
+  if(vClimb){
+    vThreshold = 0.25;
+  }else{
+    vThreshold = 1;
+  }
+
+  float aThreshold = 0.0;
+  aThreshold= 0.2;
+  
+  relayVoltage = analogRead(relayVoltagePin);
+  relayVoltage = (relayVoltage/16383)*aRef*10.8;
+
+
+  ammeterVoltage = analogRead(ammeterPin);
+  amps = ((((ammeterVoltage/16383)*aRef)-ammeterOffset)/0.185 + prevAmps)/2; // Ammeter conversion factor, plus slight average smoothing
+
+
+  // Voltage Updates
+  if ((currentMillis - lastSerialTime >= serialInterval) && (fabs(medianVoltage)+vThreshold < fabs(prevOutVoltage)|| fabs(medianVoltage)-vThreshold > fabs(prevOutVoltage)
+  || (fabs(amps)+aThreshold < fabs(prevOutAmps)|| fabs(amps)-aThreshold > fabs(prevOutAmps)))
+  //|| (Vzero && !VzeroFlag)
+ ) {
+    lastSerialTime = currentMillis;
+    prevOutVoltage = medianVoltage;
+    prevOutAmps = amps;
+    VzeroFlag = Vzero;
+Serial.print("VDC:");
+    Serial.print(medianVoltage,4);
+    //Serial.print(roundTo3SigAndHalf(medianVoltage));
+    Serial.print(" A:");
+    Serial.print(amps, 2);
+    Serial.print(" T(s):");
+    Serial.println(timefloating/1000,3);
+  }
+
+//Status Update
+  if ((currentMillis - lastIntervalTime >= statusInterval && updates) || (Vzero && !VzeroFlag)){
+    
+    statusUpdate();
+
+  }
+
+  if(alarm && !alarmFlag){
+    Serial.print("ALARM");
+    Serial.print(" T(s):");
+    Serial.println(timefloating/1000,3);
+    alarmFlag = 1;
+  }
+
+  if(!alarm && alarmFlag){
+    alarmFlag = 0;
+  }
+
+ updateDisplay();
+
+
+} //close loop
+
+void measureVoltage(){
+    float prevVoltage = newVoltageReading;
 
   static size_t  gainIndexVolt;
   // ADC count thresholds for gain switching
@@ -202,176 +327,7 @@ void loop() {
     VzeroFlag = false;
   } 
 
-
-  /*
-  
-  int16_t rawI = ads.readADC_Differential_2_3();
-  amps = ads.computeVolts(rawI) / shunt;
-  autoRangeChannel(fabs(amps * shunt), currentGainAmps, gainMaxAmps, "Current"); 
-    // using amps*shunt so logic matches ADC input voltage range
-    */
-
-  if(fabs(medianVoltage) > 12.5){
-    alarm = 1;
-  } else{
-    alarm = 0;
-  }
-
-
-  if(currentMillis - lastRelayTime >= relayInterval){
-    lastRelayTime = currentMillis;
-  if(fabs(medianVoltage)>7 && !alarm && !forceStop){
-    if(relayState == 0){
-      Serial.println("relay On");
-      relayState = 1;
-      digitalWrite(relayPin, HIGH);
-    }
-  }else{
-    if(relayState == 1){
-      digitalWrite(relayPin, LOW);
-      relayState = 0;
-      Serial.println("relay Off");
-    }
-  }
-
-
-    
-    //Serial.println("relay off");
-  }
-
-
-/*
-  // 100Hz DAC output update
-  if (currentMillis - lastAnalogTime >= analogInterval) {
-    lastAnalogTime = currentMillis;
-
-    // Scale voltage to DAC range (0–5V → 0–4095 for 12-bit DAC)
-    float scaledVoltage = (voltage + gainMax) * (5.0 / (2.0 * gainMax));
-    scaledVoltage = constrain(scaledVoltage, 0.0, 5.0);
-
-    int dacValue = (int)(scaledVoltage * 4095.0 / 5.0);
-    analogWriteResolution(12);
-    analogWrite(dacOutPin, dacValue);
-  }
-  */
-
-  float time = millis();
-  
-  if(abs(prevVoltage)<abs(newVoltageReading)){
-    vClimb = 1;
-  }else{
-    vClimb = 0;
-  }
-
-  float vThreshold;
-  if(vClimb){
-    vThreshold = 0.25;
-  }else{
-    vThreshold = 1;
-  }
-
-  float aThreshold = 0.0;
-  aThreshold= 0.2;
-  
-  float relayVoltage = 0.0;
-  relayVoltage = analogRead(relayVoltagePin);
-  relayVoltage = (relayVoltage/16383)*aRef*10.8;
-
-
-  ammeterVoltage = analogRead(ammeterPin);
-  amps = ((((ammeterVoltage/16383)*aRef)-ammeterOffset)/0.185 + prevAmps)/2; // Ammeter conversion factor, plus slight average smoothing
-
-
-    
-  
-  // Voltage Updates
-  if ((currentMillis - lastSerialTime >= serialInterval) && (fabs(medianVoltage)+vThreshold < fabs(prevOutVoltage)|| fabs(medianVoltage)-vThreshold > fabs(prevOutVoltage)
-  || (fabs(amps)+aThreshold < fabs(prevOutAmps)|| fabs(amps)-aThreshold > fabs(prevOutAmps)))
-  //|| (Vzero && !VzeroFlag)
- ) {
-    lastSerialTime = currentMillis;
-    prevOutVoltage = medianVoltage;
-    prevOutAmps = amps;
-    VzeroFlag = Vzero;
-Serial.print("VDC:");
-    Serial.print(medianVoltage,4);
-    //Serial.print(roundTo3SigAndHalf(medianVoltage));
-    Serial.print(" A:");
-    Serial.print(amps, 2);
-    Serial.print(" T(s):");
-    Serial.println(time/1000,3);
-  }
-
-//Status Update
-  if ((currentMillis - lastIntervalTime >= statusInterval && updates) || (Vzero && !VzeroFlag)){
-    lastIntervalTime = currentMillis;
-    VzeroFlag = Vzero;
-    Serial.print("Status:");
-    if(alarm){
-      Serial.print(" ALARM! ");
-      }else if(forceStop){
-      Serial.print(" Force Stop ");
-      }else{
-        Serial.print(" Good ");
-      }
-
-      Serial.print("/ Relay:");
-    
-    if(relayState){
-      Serial.print(" Closed");
-    }else{
-      Serial.print(" Open");
-    }
-    Serial.print("/ Relay V:");
-    Serial.print(relayVoltage);
-    if(Vzero){
-      Serial.print(" ");
-      Serial.print("voltageRead:");
-      Serial.print(bridgeV,4);
-      Serial.print(" / ");
-      if(vClosedflag){
-        Serial.print("V Closed");
-      }
-      else if(vFloating){
-        Serial.print("V Floating");
-      }else{
-        Serial.print("V Undefined");
-      }
-    }else{
-      Serial.print(" / ");
-      Serial.print("V !0");
-    }
-    Serial.println(" / ");
-    Serial.print("VDC:");
-    Serial.print(medianVoltage,4);
-    Serial.print(" Count V:");
-    Serial.print(countV);
-    //Serial.print(roundTo3SigAndHalf(medianVoltage));
-    Serial.print(" A:");
-    Serial.print(amps, 2);
-    Serial.print(" T(s):");
-    Serial.println(time/1000,3);
-    
-    //Serial.println(voltage);
-
-  }
-
-  if(alarm && !alarmFlag){
-    Serial.print("ALARM");
-    Serial.print(" T(s):");
-    Serial.println(time/1000,3);
-    alarmFlag = 1;
-  }
-
-  if(!alarm && alarmFlag){
-    alarmFlag = 0;
-  }
-
- updateDisplay();
-
-
-} //close loop
-
+}
 
 
 void handleSerialCommands(char command) {
@@ -450,7 +406,8 @@ void updateDisplay() {
   display.setCursor(0,16);
   display.setTextSize(1);
   display.print("State: ");
-  display.setCursor(0,24);
+  display.setTextSize(2);
+  display.setCursor(40,16);
   if(alarm){
     display.print("ALARM!");
     }else if(forceStop){
@@ -459,7 +416,6 @@ void updateDisplay() {
       display.print("Good");
     }
   
-  display.setTextSize(2);
   display.setCursor(0,32);
   display.print("Leads: ");
   display.setCursor(0,48);
@@ -480,6 +436,60 @@ void updateDisplay() {
   display.display(); // update the OLED with all the drawn content
 }
 
+void statusUpdate(){
+
+  lastIntervalTime = currentMillis;
+    VzeroFlag = Vzero;
+    Serial.print("Status:");
+    if(alarm){
+      Serial.print(" ALARM! ");
+      }else if(forceStop){
+      Serial.print(" Force Stop ");
+      }else{
+        Serial.print(" Good ");
+      }
+
+      Serial.print("/ Relay:");
+    
+    if(relayState){
+      Serial.print(" Closed");
+    }else{
+      Serial.print(" Open");
+    }
+    Serial.print("/ Relay V:");
+    Serial.print(relayVoltage);
+    if(Vzero){
+      Serial.print(" ");
+      Serial.print("voltageRead:");
+      Serial.print(bridgeV,4);
+      Serial.print(" / ");
+      if(vClosedflag){
+        Serial.print("V Closed");
+      }
+      else if(vFloating){
+        Serial.print("V Floating");
+      }else{
+        Serial.print("V Undefined");
+      }
+    }else{
+      Serial.print(" / ");
+      Serial.print("V !0");
+    }
+    Serial.println(" / ");
+    Serial.print("VDC:");
+    Serial.print(medianVoltage,4);
+    Serial.print(" Count V:");
+    Serial.print(countV);
+    //Serial.print(roundTo3SigAndHalf(medianVoltage));
+    Serial.print(" A:");
+    Serial.print(amps, 2);
+    Serial.print(" T(s):");
+    Serial.println(timefloating/1000,3);
+    
+    //Serial.println(voltage);
+
+}
+
 void ClosedOrFloat()
 {
   float vClosedThres = 0.99;
@@ -488,11 +498,11 @@ void ClosedOrFloat()
   vClosedflagPrevious = vClosedflag;
 
   digitalWrite(VbridgePin, LOW);
-  delay(2);
+  delay(4);
 
   //ads.setDataRate(RATE_ADS1115_64SPS);
   ads.setGain(GAIN_SIXTEEN);
-  bridgeV = (ads.readADC_Differential_0_1() * (0.0078125 / 1000.0) * 68.791);
+  bridgeV = (ads.readADC_Differential_0_1() * (0.0078125 / 1000.0) * VOLTAGE_SCALE);
 
   //currentShuntVoltage = adcReadingCurrent; //I have no recollection of why this is here. Looks like an accidental 
 
