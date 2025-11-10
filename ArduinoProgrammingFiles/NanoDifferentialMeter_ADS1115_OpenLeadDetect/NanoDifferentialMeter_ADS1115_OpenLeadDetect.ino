@@ -22,10 +22,13 @@ unsigned long lastSerialTime = 0;
 unsigned long lastIntervalTime = 0;
 unsigned long lastAnalogTime = 0;
 unsigned long lastRelayTime = 0;
+unsigned long lastDisplayTime = 0;
 const unsigned long serialInterval = 1; // 1 Hz
 const unsigned long statusInterval = 2000; // 1 Hz
 const unsigned long analogInterval = 5;   // 200 Hz
 const unsigned long relayInterval = 100;   // 10 Hz
+const unsigned long displayInterval = 1000; // 1 Hz
+
 
 float timefloating = 0.0;
 
@@ -154,7 +157,7 @@ void setup() {
 
   ads.setGain(GAIN_SIXTEEN);
   //gainMaxVolt = getGainMax(currentGainVolt);
-  ads.setDataRate(RATE_ADS1015_2400SPS);
+  ads.setDataRate(RATE_ADS1115_860SPS);
 
   pinMode(relayPin, OUTPUT);
   pinMode(relayVoltagePin, INPUT);
@@ -173,13 +176,9 @@ void loop() {
     handleSerialCommands(cmd);
   }
 
-  
-  
   float prevAmps = amps;
 
   measureVoltage();
-
-
 
   if(fabs(medianVoltage) > 12.5 || fabs(medianVoltage) < 7){
     alarm = 1;
@@ -238,7 +237,7 @@ void loop() {
   }
 
   float aThreshold = 0.0;
-  aThreshold= 0.2;
+  aThreshold= 0.5;
   
   relayVoltage = analogRead(relayVoltagePin);
   relayVoltage = (relayVoltage/16383)*aRef*10.8;
@@ -284,7 +283,10 @@ Serial.print("VDC:");
     alarmFlag = 0;
   }
 
- updateDisplay();
+  if(currentMillis - lastDisplayTime >= displayInterval){
+      lastDisplayTime = currentMillis;
+      updateDisplay();
+    }
 
 
 } //close loop
@@ -500,8 +502,8 @@ void statusUpdate(){
 }
 
 void ClosedOrFloat() {
-  const float vClosedThres = 0.25;
-  const float vFloatThres  = 0.25;
+  const float vClosedThres = 0.1;
+  //const float vFloatThres  = 0.25;
 
   // Save previous states
   bool prevClosed    = vClosed;
@@ -518,6 +520,7 @@ void ClosedOrFloat() {
   digitalWrite(VbridgePin, LOW);
   delay(5);
 
+  ads.setDataRate(RATE_ADS1115_128SPS);
   ads.setGain(GAIN_SIXTEEN);
   bridgeV1 = ads.readADC_Differential_0_1() * (0.0078125f / 1000.0f) * VOLTAGE_SCALE;
   delay(1);
@@ -541,7 +544,7 @@ void ClosedOrFloat() {
 
     if (debug) Serial.println("V Closed");
 
-  } else if (fabs(bridgeV) > vFloatThres) {
+  } else if (fabs(bridgeV) > vClosedThres) {
     // Candidate for "Floating"
     if (vFloattrig) vFloating = true;
     vFloattrig = true;
