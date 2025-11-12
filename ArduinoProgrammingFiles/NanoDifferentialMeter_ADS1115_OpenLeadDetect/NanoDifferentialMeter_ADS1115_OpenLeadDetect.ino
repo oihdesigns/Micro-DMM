@@ -10,6 +10,7 @@ const int relayPin = 2;
 const int relayVoltagePin = A7;
 const int ammeterPin = A6;
 const int VbridgePin = 3; // Control Voltage Bridge MOSFET
+const int clsdThreshold = A3; // Control Voltage Bridge MOSFET
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
@@ -91,6 +92,8 @@ bool vClosedPrevious = false;
 bool vFloatingPrevious = false;
 bool vUndefinedPrevious = false;
 float ClosedConfidence = 50;
+float vClosedThres = 0.1;
+float closedBias = 0.0;
 
 bool vClosedtrig = 0;
 bool vFloattrig = 0;
@@ -164,6 +167,7 @@ void setup() {
   pinMode(relayVoltagePin, INPUT);
   pinMode(ammeterPin, INPUT);
   pinMode(VbridgePin, OUTPUT);
+  pinMode(clsdThreshold, INPUT);
 
   digitalWrite(VbridgePin, HIGH);
 }
@@ -484,6 +488,9 @@ void statusUpdate(){
       Serial.print("voltageRead:");
       Serial.print(bridgeV,4);
       Serial.print(" / ");
+      Serial.print("Threshold:");
+      Serial.print(vClosedThres);
+      Serial.print(" / ");
       if(vClosed){
         Serial.print("V Closed");
       }else{
@@ -509,7 +516,7 @@ void statusUpdate(){
 }
 
 void ClosedOrFloat() {
-  const float vClosedThres = 0.1;
+
   //const float vFloatThres  = 0.25;
 
   // Save previous states
@@ -519,6 +526,13 @@ void ClosedOrFloat() {
 
   float bridgeV1 = 0.0;
   float bridgeV2 = 0.0;
+  
+
+  closedBias = analogRead(clsdThreshold);
+  closedBias = ((closedBias/16383)*2);
+
+  vClosedThres = 0.1*closedBias;
+
 
   // Reset current detection flags
   vClosed = vFloating = vUndefined = false;
@@ -529,12 +543,12 @@ void ClosedOrFloat() {
 
   ads.setDataRate(RATE_ADS1115_250SPS);
   ads.setGain(GAIN_SIXTEEN);
-  bridgeV1 = ads.readADC_Differential_0_1() * (0.0078125f / 1000.0f) * VOLTAGE_SCALE;
-  delay(1);
-  bridgeV2 = ads.readADC_Differential_0_1() * (0.0078125f / 1000.0f) * VOLTAGE_SCALE;
+  bridgeV = ads.readADC_Differential_0_1() * (0.0078125f / 1000.0f) * VOLTAGE_SCALE;
+  //delay(1);
+  //bridgeV2 = ads.readADC_Differential_0_1() * (0.0078125f / 1000.0f) * VOLTAGE_SCALE;
 
   
-  bridgeV = (abs(bridgeV1)+abs(bridgeV2))/2;
+  //bridgeV = (abs(bridgeV1)+abs(bridgeV2))/2;
 
 
   if (debug) {
