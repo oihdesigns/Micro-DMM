@@ -27,7 +27,7 @@ const unsigned long serialInterval = 1; // 1 Hz
 const unsigned long statusInterval = 2000; // 1 Hz
 const unsigned long analogInterval = 5;   // 200 Hz
 const unsigned long relayInterval = 100;   // 10 Hz
-const unsigned long displayInterval = 1000; // 1 Hz
+const unsigned long displayInterval = 100; // 1 Hz
 
 
 float timefloating = 0.0;
@@ -90,6 +90,7 @@ bool vClosedflagPrevious = false;
 bool vClosedPrevious = false;
 bool vFloatingPrevious = false;
 bool vUndefinedPrevious = false;
+float ClosedConfidence = 50;
 
 bool vClosedtrig = 0;
 bool vFloattrig = 0;
@@ -435,7 +436,7 @@ void updateDisplay() {
   display.print("Leads: ");
   display.setCursor(0,48);
   if(Vzero){
-    if(vClosed){
+    if(ClosedConfidence>50){
         display.print("Closed");
       }
       else{
@@ -445,6 +446,12 @@ void updateDisplay() {
       display.print(" ");
       display.print("(V !=0)");
       }
+    display.setCursor(80,32);
+    if(Vzero){
+    display.print(ClosedConfidence,0);
+    }else{
+    display.print("N/A");
+    }
   
 
   display.display(); // update the OLED with all the drawn content
@@ -520,7 +527,7 @@ void ClosedOrFloat() {
   digitalWrite(VbridgePin, LOW);
   delay(5);
 
-  ads.setDataRate(RATE_ADS1115_128SPS);
+  ads.setDataRate(RATE_ADS1115_250SPS);
   ads.setGain(GAIN_SIXTEEN);
   bridgeV1 = ads.readADC_Differential_0_1() * (0.0078125f / 1000.0f) * VOLTAGE_SCALE;
   delay(1);
@@ -541,6 +548,11 @@ void ClosedOrFloat() {
     if (vClosedtrig) vClosed = true;  // repeats → stable
     vClosedtrig = true;
     vFloattrig = vUndefinedtrig = false;
+    if(ClosedConfidence<99){
+      ClosedConfidence++;
+    }else{
+      ClosedConfidence = 100;
+    }
 
     if (debug) Serial.println("V Closed");
 
@@ -549,6 +561,11 @@ void ClosedOrFloat() {
     if (vFloattrig) vFloating = true;
     vFloattrig = true;
     vClosedtrig = vUndefinedtrig = false;
+    if(ClosedConfidence>0){
+      ClosedConfidence--;
+    }else{
+      ClosedConfidence = 0;
+    }
 
     if (debug) Serial.println("V Floating");
 
@@ -560,6 +577,8 @@ void ClosedOrFloat() {
       vFloating = true;
     }
   }
+
+  
 
   // Release bridge
   digitalWrite(VbridgePin, HIGH);
