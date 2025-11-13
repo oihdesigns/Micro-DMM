@@ -337,7 +337,7 @@ void measureVoltage(){
 
   
 
-      if(fabs(medianVoltage) < 0.03){
+      if(fabs(medianVoltage) < 0.1){
     Vzero = true;
     //VzeroFlag = true;
     ClosedOrFloat();
@@ -422,7 +422,7 @@ void updateDisplay() {
   display.setTextSize(2);
   display.setCursor(0,0);
   display.print("V: ");
-  display.print(medianVoltage,4);
+  display.print(medianVoltage,3);
   display.setCursor(0,16);
   display.setTextSize(1);
   display.print("State: ");
@@ -541,7 +541,7 @@ void ClosedOrFloat() {
   digitalWrite(VbridgePin, LOW);
   delay(5);
 
-  ads.setDataRate(RATE_ADS1115_250SPS);
+  ads.setDataRate(RATE_ADS1115_860SPS);
   ads.setGain(GAIN_SIXTEEN);
   bridgeV = ads.readADC_Differential_0_1() * (0.0078125f / 1000.0f) * VOLTAGE_SCALE;
   //delay(1);
