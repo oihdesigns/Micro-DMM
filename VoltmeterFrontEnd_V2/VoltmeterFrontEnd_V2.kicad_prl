@@ -49,8 +49,8 @@
       "conflict_shadows",
       "shapes"
     ],
-    "visible_layers": "ffffffff_ffffffff_fffffff7_ffffffff",
-    "zone_display_mode": 1
+    "visible_layers": "00000000_00000000_00000000_82002277",
+    "zone_display_mode": 0
   },
   "git": {
     "repo_password": "",
@@ -59,7 +59,7 @@
     "ssh_key": ""
   },
   "meta": {
-    "filename": "DMM_KiCAD_V4_next.kicad_prl",
+    "filename": "VoltmeterFrontEnd_V2.kicad_prl",
     "version": 5
   },
   "net_inspector_panel": {

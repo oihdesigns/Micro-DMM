@@ -86,6 +86,7 @@ float CorFTrig = 1.0;
 bool vClosedtrig = 0;
 bool vFloattrig = 0;
 bool vUndefinedtrig = 0;
+bool prevVzero = 0;
 
 // ADS1115 gain factors (mV per bit) for each gain setting
 const float GAIN_FACTOR_TWOTHIRDS = 0.1875;  // 2/3x (±6.144V range)
@@ -190,12 +191,12 @@ void loop() {
 
   // Voltage Updates
   if ((currentMillis - lastSerialTime >= serialInterval) && (fabs(medianVoltage)+vThreshold < fabs(prevOutVoltage)|| fabs(medianVoltage)-vThreshold > fabs(prevOutVoltage))
-  //|| (Vzero && !VzeroFlag)
- ) {
+    //|| (Vzero && !VzeroFlag)
+    ) {
     lastSerialTime = currentMillis;
     prevOutVoltage = medianVoltage;
-    VzeroFlag = Vzero;
-Serial.print("VDC:");
+    VzeroFlag = false;
+    Serial.print("Vtrig: VDC:");
     Serial.print(medianVoltage,4);
     //Serial.print(roundTo3SigAndHalf(medianVoltage));
     Serial.print(" T(s):");
@@ -203,10 +204,8 @@ Serial.print("VDC:");
   }
 
 //Status Update
-  if ((currentMillis - lastIntervalTime >= statusInterval && updates) || (Vzero && !VzeroFlag)){
-    
+  if ((currentMillis - lastIntervalTime >= statusInterval && updates) || (Vzero && VzeroFlag)){   
     statusUpdate();
-
   }
 
   if(alarm && !alarmFlag){
@@ -270,9 +269,17 @@ void measureVoltage(){
   CorFTrig = ((CorFTrig/16383)*0.2);
 
 
-      if(fabs(medianVoltage) < CorFTrig){
+      
+  prevVzero = Vzero;
+  
+  if(fabs(medianVoltage) < CorFTrig){
     Vzero = true;
-    //VzeroFlag = true;
+      if(prevVzero =! Vzero){
+        VzeroFlag = true;
+        }else{
+        VzeroFlag = false;
+      }
+    
     ClosedOrFloat();
   }else{
     Vzero = false;
@@ -385,7 +392,7 @@ void updateDisplay() {
 void statusUpdate(){
 
   lastIntervalTime = currentMillis;
-    VzeroFlag = Vzero;
+    VzeroFlag = false;
     Serial.print("Status:");
     if(alarm){
       Serial.print(" ALARM! ");
