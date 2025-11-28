@@ -25,7 +25,8 @@ volatile size_t sampleCount = 0;
 bool triggerPrev = false;
 
 
-float voltage = 0.0;
+float voltage01 = 0.0;
+float voltage23 = 0.0;
 float vScale = 69.669;
 
 
@@ -33,10 +34,15 @@ float vScale = 69.669;
 bool writeTrigger = 0;
 bool trigFlag = 0;
 float prevVoltage = 0.0;
-float vStep = 0.125;
-float lastLoggedV = 0.25;
-float vMax = 0.0;
-float vMin = 0.0;
+float vStep = 0.25;
+float noiseThreshold = 0.5;
+float lastLoggedV01 = 0.25;
+float vMax01 = 0.0;
+float vMin01 = 0.0;
+
+float lastLoggedV23 = 0.25;
+float vMax23 = 0.0;
+float vMin23 = 0.0;
 
 
 #define SD_CS_PIN 23
@@ -56,10 +62,11 @@ SdSpiConfig config(SD_CS_PIN, DEDICATED_SPI, SD_SCK_MHZ(16), &SPI1);
   float data1 = 1.234;
   float data2 = 5.678;
 
-  int16_t results;
+  int16_t results01;
+  int16_t results23;
 
   //float   multiplier = 3.0F;    /* ADS1015 @ +/- 6.144V gain (12-bit results) */
-  float   multiplier = 1.0F;    /* ADS1015 @ +/- 2.048V gain (12-bit results) */
+  float   multiplier = 0.5F;    /* ADS1015 @ +/- 2.048V gain (12-bit results) */
 
 
 // --- Helper: blink NeoPixel a color for a short time ---
@@ -132,7 +139,7 @@ void setup(void)
   pinMode(sdSurpress, INPUT_PULLUP);
 
   
-  ads.setGain(GAIN_TWO);  // 2/3x gain +/- 6.144V  1 bit = 3mV      0.1875mV (default)
+  ads.setGain(GAIN_FOUR);  // 2/3x gain +/- 6.144V  1 bit = 3mV      0.1875mV (default)
   ads.setDataRate(RATE_ADS1015_3300SPS); //Fast as possible
 
 
@@ -156,34 +163,55 @@ void setup(void)
 
 void loop(void)
 {
-  prevVoltage = voltage;
+  prevVoltage = voltage01;
 
   
-  results = ads.readADC_Differential_0_1(); // integer from ADS
+  results01 = ads.readADC_Differential_0_1(); // integer from ADS
+  results23 = ads.readADC_Differential_2_3(); // integer from ADS
 
-  voltage = ((results*multiplier)/1000)*vScale; //Convert to voltage
+  voltage01 = ((results01*multiplier)/1000)*vScale; //Convert to voltage
+  voltage23 = ((results23*multiplier)/1000)*vScale; //Convert to voltage
 
-  if(voltage>vMax){
-    vMax = voltage;
+  if(voltage01>vMax01){
+    vMax01 = voltage01;
     trigFlag = 1;
   }
-  if(voltage<vMin){
-    vMin = voltage;
+  if(voltage01<vMin01){
+    vMin01 = voltage01;
     trigFlag = 1;
   }
-  if(voltage > lastLoggedV+vStep){
-    trigFlag = 1;
-  }
-  if(voltage < lastLoggedV-vStep){
-    trigFlag = 1;
-  }
-
-
   
+  if(abs(voltage01) > noiseThreshold){
+    if(voltage01 > lastLoggedV01+vStep){
+      trigFlag = 1;
+    }
+    if(voltage01 < lastLoggedV01-vStep){
+      trigFlag = 1;
+    }
+  }
+
+  if(voltage23>vMax23){
+    vMax23 = voltage23;
+    trigFlag = 1;
+  }
+  if(voltage23<vMin23){
+    vMin23 = voltage23;
+    trigFlag = 1;
+  }
+ if(abs(voltage23) > noiseThreshold){ 
+    if(voltage23 > lastLoggedV23+vStep){
+      trigFlag = 1;
+    }
+    if(voltage23 < lastLoggedV23-vStep){
+      trigFlag = 1;
+    }
+ }
+
   
   if(trigFlag) { //trigger when voltage is more or less than vStep from the last logged V
     writeTrigger = true;
-    lastLoggedV = voltage;
+    lastLoggedV01 = voltage01;
+    lastLoggedV23 = voltage23;
     trigFlag = 0;
   }else{
     writeTrigger = false;
@@ -192,9 +220,9 @@ void loop(void)
 
   // If trigger is active, capture to RAM
   if (writeTrigger && digitalRead(sdSurpress)) {
-    captureSample(voltage, 0.0);
+    captureSample(voltage01, voltage23);
   }else{
-    logCSV(voltage, 0.0);
+    logCSV(voltage01, voltage23);
     writeTrigger = false;
   }
 
@@ -237,7 +265,7 @@ void logCSV(float data1, float data2) {
   logfile.flush();
   logfile.close();
 
-  Serial.print("Differential: "); Serial.print(results); Serial.print("("); Serial.print(voltage,3); Serial.println("V)");
+  Serial.print("Differential: "); Serial.print(results01); Serial.print("("); Serial.print(voltage01,3); Serial.println("V)");
 
 
   // Success!
