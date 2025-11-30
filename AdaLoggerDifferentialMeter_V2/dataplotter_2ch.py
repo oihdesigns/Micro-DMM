@@ -2,29 +2,40 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 def load_and_process(filename):
-    """Load CSV and convert microseconds → timestamp."""
-    df = pd.read_csv(filename, header=None, names=["microseconds", "ch1", "ch2"])
-    df["timestamp"] = pd.to_timedelta(df["microseconds"], unit="us")
+    """
+    Load CSV with columns:
+        0: milliseconds since start
+        1: ch1 voltage
+        2: ch2 voltage
+        3: microseconds since previous reading (ignored here)
+    Convert time to timedelta for plotting.
+    """
+    df = pd.read_csv(
+        filename,
+        header=None,
+        names=["milliseconds", "ch1", "ch2", "delta_us"]
+    )
+
+    # Convert milliseconds to HH:MM:SS.ffffff-style timedelta
+    df["timestamp"] = pd.to_timedelta(df["milliseconds"], unit="ms")
     return df
 
 def plot_combined_channels(file1, file2):
-    # Load both
+    # Load both files
     df1 = load_and_process(file1)
     df2 = load_and_process(file2)
 
-    # Combine into one dataframe
+    # Combine into one dataframe and sort by time
     df = pd.concat([df1, df2], ignore_index=True)
-
-    # Sort by timestamp (important if files overlap)
     df = df.sort_values(by="timestamp")
 
+    # Plot
     plt.figure(figsize=(12, 6))
 
-    # Plot two channels only
     plt.plot(df["timestamp"], df["ch1"], label="Channel 1", linewidth=1.4)
     plt.plot(df["timestamp"], df["ch2"], label="Channel 2", linewidth=1.4)
 
-    plt.xlabel("Time (uS)")
+    plt.xlabel("Time")
     plt.ylabel("Voltage (V)")
     plt.title("Combined Voltage vs Time (CH1 & CH2)")
     plt.legend()
@@ -32,4 +43,5 @@ def plot_combined_channels(file1, file2):
     plt.show()
 
 if __name__ == "__main__":
-    plot_combined_channels("capture.csv", "data.csv")
+    # Adjust names if you changed them
+    plot_combined_channels("capture4.csv", "log4.csv")

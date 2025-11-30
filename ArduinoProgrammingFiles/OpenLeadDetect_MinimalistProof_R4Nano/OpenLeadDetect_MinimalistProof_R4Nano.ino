@@ -53,7 +53,9 @@ static uint8_t gainIndex;
 
 float voltage = 0.0;
 
-float VOLTAGE_SCALE = 69.669;
+float vScale = 0.0;
+float VOLTAGE_SCALE_full = 69.669;
+float VOLTAGE_SCALE_low = 3.51108;
 
 bool vClimb = 0;
 
@@ -87,6 +89,9 @@ bool vClosedtrig = 0;
 bool vFloattrig = 0;
 bool vUndefinedtrig = 0;
 bool prevVzero = 0;
+
+bool manual = 0;
+bool range = 0;
 
 // ADS1115 gain factors (mV per bit) for each gain setting
 const float GAIN_FACTOR_TWOTHIRDS = 0.1875;  // 2/3x (±6.144V range)
@@ -156,7 +161,7 @@ void setup() {
   pinMode(clsdThreshold, INPUT);
   pinMode(zeroThreshold, INPUT);
 
-  digitalWrite(VbridgePin, HIGH);
+  digitalWrite(VbridgePin, LOW);
 }
 
 void loop() {
@@ -230,6 +235,20 @@ void loop() {
 void measureVoltage(){
     float prevVoltage = newVoltageReading;
 
+    if(manual){
+      if(!range){
+        digitalWrite(VbridgePin, LOW);
+        vScale = VOLTAGE_SCALE_full;
+      }else{
+        digitalWrite(VbridgePin, HIGH);
+        vScale = VOLTAGE_SCALE_low;
+        ads.setDataRate(RATE_ADS1115_64SPS);
+      }
+    }else{
+      vScale = VOLTAGE_SCALE_full;
+      ads.setDataRate(RATE_ADS1115_860SPS);
+    }
+
   static size_t  gainIndexVolt;
   // ADC count thresholds for gain switching
   static const int ADC_COUNT_LOW_THRESHOLD  = 10000;
@@ -255,7 +274,7 @@ void measureVoltage(){
       countV = ads.readADC_Differential_0_1();
     }
     // convert to voltage
-      newVoltageReading = ((countV * kGainFactors[gainIndexVolt] / 1000.0f) * VOLTAGE_SCALE);
+      newVoltageReading = ((countV * kGainFactors[gainIndexVolt] / 1000.0f) * vScale);
 
       if(newVoltageReading > (prevVoltage*1.5) || newVoltageReading < (prevVoltage*0.66)){
         medianVoltage = newVoltageReading;
@@ -272,7 +291,7 @@ void measureVoltage(){
       
   prevVzero = Vzero;
   
-  if(fabs(medianVoltage) < CorFTrig){
+  if(fabs(medianVoltage) < CorFTrig && manual == 0){
     Vzero = true;
       if(prevVzero =! Vzero){
         VzeroFlag = true;
@@ -306,6 +325,14 @@ void handleSerialCommands(char command) {
       Serial.println("Constant Updates Toggled");
       updates = !updates;
       break;     
+    case 'M':  // "M" for Manual Mode
+      Serial.println("Manual Mode Toggled");
+      manual = !manual;
+      break;      
+    case 'R':  // "R" for Range
+      Serial.println("Range Toggled");
+      range = !range;
+      break;  
     case 'D':  // "D" for debug
       Serial.println("Debug Toggled");
       debug = !debug;
@@ -458,12 +485,12 @@ void ClosedOrFloat() {
   vClosed = vFloating = vUndefined = false;
 
   // Prepare to take a reading
-  digitalWrite(VbridgePin, LOW);
+  digitalWrite(VbridgePin, HIGH);
   delay(5);
 
   ads.setDataRate(RATE_ADS1115_860SPS);
   ads.setGain(GAIN_SIXTEEN);
-  bridgeV = ads.readADC_Differential_0_1() * (0.0078125f / 1000.0f) * VOLTAGE_SCALE;
+  bridgeV = ads.readADC_Differential_0_1() * (0.0078125f / 1000.0f) * VOLTAGE_SCALE_full;
   //delay(1);
   //bridgeV2 = ads.readADC_Differential_0_1() * (0.0078125f / 1000.0f) * VOLTAGE_SCALE;
 
@@ -515,5 +542,5 @@ void ClosedOrFloat() {
   
 
   // Release bridge
-  digitalWrite(VbridgePin, HIGH);
+  digitalWrite(VbridgePin, LOW);
 }
