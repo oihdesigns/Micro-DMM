@@ -126,6 +126,8 @@ void setup() {
   delay(500);
   Wire.begin();
 
+  
+
 
   if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
   Serial.println(F("OLED init failed"));

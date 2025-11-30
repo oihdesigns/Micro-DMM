@@ -19,6 +19,14 @@ unsigned long lastLog = 0;
 #define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
+//Pin List
+#define SD_CS_PIN 23
+const int PIXEL_PIN = 17;       // Onboard NeoPixel
+const int sdEnable = 4;
+const int ch2Enable = 24;
+const int serialEnable = 25;
+const int trigThres = A0;
+
 
 // BUFFER SETTINGS
 const size_t MAX_SAMPLES = 2000;   // adjustable
@@ -47,8 +55,11 @@ float voltage23 = 0.0;
 //float vScale = 69.669; //for 15k bridge
 float vScale = 14.7482; //for 75k bridge
 
+float trigRaw = 0.0;
+
 
 bool ch2on = 0;
+bool logON = 1;
 
 bool logError = 0;
 
@@ -71,11 +82,6 @@ float vMax23 = 0.0;
 float vMin23 = 0.0;
 
 
-#define SD_CS_PIN 23
-const int PIXEL_PIN = 17;       // Onboard NeoPixel
-const int sdEnable = 4;
-const int ch2Enable = 24;
-const int serialEnable = 25;
 
 
 const int PIXEL_COUNT = 1;
@@ -176,14 +182,16 @@ void setup(void){
     delay(1000);
  Serial.println("Hello!");
 
-   Wire.begin();
-   Wire.setClock(1000000);   // 1 MHz I2C
+  Wire.begin();
+  Wire.setClock(1000000);   // 1 MHz I2C
+
+  analogReadResolution(12);
 
 
 
   if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
-  Serial.println(F("OLED init failed"));
-  while (1); // halt
+    Serial.println(F("OLED init failed"));
+    while (1); // halt
   }
   
   display.clearDisplay();
@@ -194,12 +202,14 @@ void setup(void){
   display.setCursor(0, 0);
   display.print("Datalogger");
   display.display();
-    delay(200);
+  
+  delay(200);
 
 
   pinMode(sdEnable, INPUT_PULLUP);
   pinMode(ch2Enable, INPUT_PULLUP);
   pinMode(serialEnable, INPUT_PULLUP);
+  pinMode(trigThres, INPUT);
 
   
   ads.setGain(GAIN_TWO);  // 2/3x gain +/- 6.144V  1 bit = 3mV      0.1875mV (default)
@@ -216,6 +226,8 @@ void setup(void){
   pixel.show();
 
   if(digitalRead(sdEnable)){
+    logON = 1;
+    
     if (!SD.begin(config)) {
       Serial.println("SD init failed!");
       while (1) {
@@ -248,6 +260,8 @@ void setup(void){
   }
   //triggerFile.println("time_us,data1,data2,data3");   // example header
   //triggerFile.flush();
+  }else{
+    logON = 0;
   }
   
   if(digitalRead(ch2Enable)){
@@ -262,6 +276,10 @@ void setup(void){
 
 void loop(void){
   prevVoltage = voltage01;
+
+  trigRaw = analogRead(trigThres);
+
+  vStep = 0.125*((4*trigRaw/4095)*(4*trigRaw/4095)*(4*trigRaw/4095));
 
   
   //results01 = ads.readADC_Differential_0_1(); // integer from ADS
@@ -326,7 +344,7 @@ void loop(void){
   }
 
   // If trigger is active, capture to RAM
-  if (writeTrigger && digitalRead(sdEnable)) {
+  if (writeTrigger && logON) {
     captureSample(voltage01, voltage23);
     triggerCount++;
   }else{
@@ -366,6 +384,10 @@ void updateDisplay(void) {
   display.print ("#logs:");
   display.print (triggerCount);
 
+  display.setCursor(64,32);
+  display.print ("trig");
+  display.print (vStep);
+
   timemS = millis();
   display.setCursor(0,40);
   display.print ("Runtime (s): ");
@@ -375,6 +397,10 @@ void updateDisplay(void) {
     display.setTextSize(2);
     display.setCursor(0,48);
     display.print ("SD ERROR");
+  }else if(!logON){
+    display.setTextSize(2);
+    display.setCursor(0,48);
+    display.print ("SD OFF");  
   }else{
     display.setTextSize(2);
     display.setCursor(0,48);
@@ -392,7 +418,7 @@ void logCSV(float data1, float data2) {
 
   
 
-  if(digitalRead(sdEnable)){
+  if(logON){
 
   intervalFile = SD.open(intervalFilename, FILE_WRITE);
 
