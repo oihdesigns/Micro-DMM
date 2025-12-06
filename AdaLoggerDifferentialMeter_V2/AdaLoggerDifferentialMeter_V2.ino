@@ -10,7 +10,10 @@
 Adafruit_ADS1015 ads;     /* Use this for the 12-bit version */
 
 // track timing
+unsigned long lastStatus = 0;
 unsigned long lastLog = 0;
+unsigned long lastLogMillies = 0;
+
 
 //Screen Setup
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
@@ -91,6 +94,7 @@ Adafruit_NeoPixel pixel(PIXEL_COUNT, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
 SdFat SD;
 File32 intervalFile;
 File32 triggerFile;
+File32 logfile;
 
 char intervalFilename[32];
 char triggerFilename[32];
@@ -146,7 +150,7 @@ void captureSample(float data1, float data2) { // FUNCTION: capture a sample int
 }
 
 void flushBufferToSD() { //FUNCTION: flush RAM buffer to SD
-  File32 logfile = SD.open(triggerFilename, FILE_WRITE);
+  logfile = SD.open(triggerFilename, FILE_WRITE);
   if (!logfile) {
     Serial.println("ERROR: Could not open capture file");
     return;
@@ -157,13 +161,12 @@ void flushBufferToSD() { //FUNCTION: flush RAM buffer to SD
   //Serial.println(" samples to SD...");
 
   for (size_t i = 0; i < sampleCount; i++) {
-    logfile.print(buffer[i].t,1);
+    
+    logfile.print(buffer[i].td,1);
     logfile.print(",");
     logfile.print(buffer[i].d1, 3);
     logfile.print(",");
-    logfile.print(buffer[i].d2, 1);
-    logfile.print(",");
-    logfile.println(buffer[i].td, 1);
+    logfile.println(buffer[i].d2, 1);
   }
 
   logfile.flush();
@@ -235,18 +238,6 @@ void setup(void){
       }
     }
 
-    // ---- Create interval logging file ----
-  makeUniqueFilename("log", ".csv", intervalFilename, sizeof(intervalFilename));
-  Serial.print("Interval log file: ");
-  Serial.println(intervalFilename);
-
-  intervalFile = SD.open(intervalFilename, FILE_WRITE);
-  if (!intervalFile) {
-    Serial.println("Failed to create interval log!");
-    while (1);
-  }
-  //intervalFile.println("time_ms,data1,data2,data3");  // example header
-  //intervalFile.flush();
 
   // ---- Create trigger capture file ----
   makeUniqueFilename("capture", ".csv", triggerFilename, sizeof(triggerFilename));
@@ -349,6 +340,12 @@ void loop(void){
     triggerCount++;
   }else{
     logCSV(voltage01, voltage23);
+    if(millis() - lastLog > 1000){
+      lastLog = millis();
+      captureSample(voltage01, voltage23);
+      flushBufferToSD();
+    }
+    
     writeTrigger = false;
   }
 
@@ -413,36 +410,11 @@ void updateDisplay(void) {
 // --- Regular CSV logging / Serial Print function (call every loop) ---
 void logCSV(float data1, float data2) {
   unsigned long now = millis();
-  if (now - lastLog < 2000) return;
-  lastLog = now;
-
-  
-
-  if(logON){
-
-  intervalFile = SD.open(intervalFilename, FILE_WRITE);
-
-  if (!intervalFilename) {
-    Serial.println("ERROR: Unable to open data.csv");
-    logError = true;
-    blinkPixel(255, 0, 0);     // RED for failure
-    return;
-  }
-  logError = false;
-
-  intervalFile.print(millis());
-  intervalFile.print(",");
-  intervalFile.print((data1), 1);
-  intervalFile.print(",");
-  intervalFile.println((data2), 1);
-  // Force flush to SD
-  intervalFile.flush();
-  intervalFile.close();
-  }
+  if (now - lastStatus < 2000) return;
+  lastStatus = now;
 
 
   updateDisplay();
-
 
   if(digitalRead(serialEnable)){
   Serial.print("T:"); Serial.print(millis());

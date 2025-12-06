@@ -15,3 +15,5 @@ The threshold for log triggers is adjusted via a potentiometer connected to A0. 
 Open and edit the bottom of the Python script on the card to the files you want to view, and then run to script to plot them.
 
 The display telling you the SD card is good/erroring is not fully proved out. 
+
+The analog input is isolated from the board, so you should be able to run the board off car power and measure the car power with minimal/zero noise interferance. Probably better to use a battery to keep everything on the same timebase. 
