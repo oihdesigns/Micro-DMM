@@ -343,14 +343,16 @@ void loop(void){
     if(millis() - lastLog > 1000){
       lastLog = millis();
       captureSample(voltage01, voltage23);
+      if(logON){
       flushBufferToSD();
+      }
     }
     
     writeTrigger = false;
   }
 
   // Detect trigger falling edge → flush
-  if (triggerPrev == true && writeTrigger == false) {
+  if (triggerPrev == true && writeTrigger == false && logON) {
     flushBufferToSD();
   }
 
