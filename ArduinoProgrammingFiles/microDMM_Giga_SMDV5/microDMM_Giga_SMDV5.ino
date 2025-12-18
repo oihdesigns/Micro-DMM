@@ -2473,15 +2473,15 @@ void drawTwoPlots(const float data[], const float data2[],  int n) {
   drawStatLine(minY, plotMin, yScale, COLOR_MIN);
   drawStatLine(meanY, plotMin, yScale, COLOR_MEAN);
   drawStatLine(maxY, plotMin, yScale, COLOR_MAX);
-}
-
-template<typename T>
-void printArrayCSV(FILE* f, const T* arr, size_t len, const char* fmt) {
-  for (size_t i = 0; i < len; ++i) {
-    fprintf(f, fmt, arr[i]);
-    if (i + 1 < len) fputc(',', f);
   }
-  fputc('\n', f);
+
+  template<typename T>
+  void printArrayCSV(FILE* f, const T* arr, size_t len, const char* fmt) {
+    for (size_t i = 0; i < len; ++i) {
+      fprintf(f, fmt, arr[i]);
+      if (i + 1 < len) fputc(',', f);
+    }
+    fputc('\n', f);
 }
 
 void manuallogArraysToCSV() {
@@ -2509,10 +2509,6 @@ void manuallogArraysToCSV() {
     fclose(f);
   Serial.println("All arrays logged as separate CSV rows.");
 }
-
-
-
-
 
 void shiftAndStore(float* array, float newValue) {
     for (int i = NUM_AUTO_VALUES - 1; i > 0; i--) {

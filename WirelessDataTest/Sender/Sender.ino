@@ -61,7 +61,7 @@ void loop() {
   
   
   if (now - lastSend >= 1000) {
-    lastSend = now;
+    lastSend = now + random(0,100);
 
     float tempC = readNTCTemperatureC(
         A1,        // analog pin
@@ -85,10 +85,13 @@ void loop() {
     int v3 = analogRead(A3);
 
     // Build formatted message
-    char msg[64];
+    char msg[64]; //same time for 32 or 64
     snprintf(msg, sizeof(msg),
-             "ADDR:%X 0:%d 1:%dF 2:%d",
-             addr, v0, tempF, v2);
+             //"ADDR:%X 0:%d 1:%dF 2:%d", //200ms
+             //addr, v0, tempF, v2);
+             //"ADDR:%X 1:%dF", //130ms for just this
+             "A%X %dF", //130ms for just this
+             addr, tempF);//115ms for this
 
     digitalWrite(txEnable, 1);
     
