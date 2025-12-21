@@ -31,6 +31,7 @@ const int sdEnable = 4;
 const int ch2Enable = 24;
 const int serialEnable = 25;
 const int trigThres = A0;
+const int autorangePin = 5;
 
 
 // BUFFER SETTINGS
@@ -51,7 +52,8 @@ int triggerCount = 0;
 
 
 //float   multiplier = 3.0F;    /* ADS1015 @ +/- 6.144V gain (12-bit results) */
-float   multiplier = 1.0F;    /* ADS1015 @ +/- 2.048V gain (12-bit results) */
+float   multiplier = 1.0F;    /* GAIN TWO ADS1015 @ +/- 2.048V gain (12-bit results) */
+//float   multiplier = 0.5F;    /*GAIN FOUR ADS1015 @ +/- 2.048V gain (12-bit results) */
 
 int16_t results01;
 int16_t results23;
@@ -86,8 +88,38 @@ float lastLoggedV23 = 0.25;
 float vMax23 = 0.0;
 float vMin23 = 0.0;
 
+//ADS autorange related
+
+bool firstVoltRun = 1;
+bool autorange = 1;
+
+// ADS1015 gain factors (mV per bit) for each gain setting
+const float GAIN_FACTOR_TWOTHIRDS = 3.0;  // 2/3x (±6.144V range)
+const float GAIN_FACTOR_1   = 2.0;   // ±4.096V
+const float GAIN_FACTOR_2   = 1.0;  // ±2.048V
+const float GAIN_FACTOR_4   = 0.5; // ±1.024V
+const float GAIN_FACTOR_8   = 0.25;// ±0.512V
+const float GAIN_FACTOR_16  = 0.125;// ±0.256V
 
 
+// instead of “static const int kGainLevels[] = { … };”
+static const adsGain_t kGainLevels[] = {
+  GAIN_TWOTHIRDS,
+  GAIN_ONE,
+  GAIN_TWO,
+  GAIN_FOUR,
+  GAIN_EIGHT,
+  GAIN_SIXTEEN
+};
+
+  static size_t  gainIndexVolt;
+  // ADC count thresholds for gain switching
+  static const int ADC_COUNT_LOW_THRESHOLD  = 250;
+  static const int ADC_COUNT_HIGH_THRESHOLD = 1800;
+  static const float kGainFactors[] = {GAIN_FACTOR_TWOTHIRDS, GAIN_FACTOR_1, GAIN_FACTOR_2, GAIN_FACTOR_4, GAIN_FACTOR_8, GAIN_FACTOR_16};
+  static const int   kNumGainLevels = sizeof(kGainLevels) / sizeof(kGainLevels[0]);
+
+  static const int ADC_GUARD_BAND = 100;
 
 const int PIXEL_COUNT = 1;
 
@@ -104,6 +136,10 @@ char intervalFilename[32];
 char triggerFilename[32];
 
 SdSpiConfig config(SD_CS_PIN, DEDICATED_SPI, SD_SCK_MHZ(16), &SPI1);
+
+int16_t readRaw01() {
+  return ads.readADC_Differential_0_1();   // blocking read -> fresh conversion
+}
 
 void printField(Print* pr, char sep, uint8_t v) {
   if (sep) {
@@ -224,6 +260,8 @@ void logCSV(float data1, float data2) {
   Serial.print("/ V 0-1: "); Serial.print(voltage01,3); Serial.print("V/ ");
   Serial.print("V 2-3: "); Serial.print(voltage23,3); Serial.print("V/ ");
   Serial.print("Total Logs: "); Serial.println(triggerCount);
+  //Serial.println(results01);
+  //Serial.println(gainIndexVolt);
   } 
 
 
@@ -276,9 +314,10 @@ void setup(void){
   pinMode(ch2Enable, INPUT_PULLUP);
   pinMode(serialEnable, INPUT_PULLUP);
   pinMode(trigThres, INPUT);
+  pinMode(autorangePin, INPUT_PULLUP);
 
   
-  ads.setGain(GAIN_TWO);  // 2/3x gain +/- 6.144V  1 bit = 3mV      0.1875mV (default)
+  //ads.setGain(GAIN_TWO);  // 2/3x gain +/- 6.144V  1 bit = 3mV      0.1875mV (default)
   ads.setDataRate(RATE_ADS1015_3300SPS); //Fast as possible
 
 
@@ -349,6 +388,14 @@ void setup(void){
     voltage23 = 0.0;
     ads.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_0_1, /*continuous=*/true);
   }
+
+  if(digitalRead(autorangePin)){
+    autorange = 1;
+    Serial.print("autorange on");
+  }else{
+    autorange = 0;
+    Serial.print("autorange off");
+  }
   
 }
 
@@ -359,19 +406,69 @@ void loop(void){
 
   vStep = 0.125*((4*trigRaw/4095)*(4*trigRaw/4095)*(4*trigRaw/4095));
 
+
+
   
   //results01 = ads.readADC_Differential_0_1(); // integer from ADS
   
   if(ch2on){
-  results01 = ads.readADC_Differential_0_1(); // integer from ADS
-  results23 = ads.readADC_Differential_2_3(); // integer from ADS
-  voltage23 = ((results23*multiplier)/1000)*vScale; //Convert to voltage
-  }else{
-  results01  = ads.getLastConversionResults();
+    results01 = ads.readADC_Differential_0_1(); // integer from ADS
+    results23 = ads.readADC_Differential_2_3(); // integer from ADS
+    voltage23 = ((results23*multiplier)/1000)*vScale; //Convert to voltage
+  }else if(autorange){
+
+    if (firstVoltRun) {
+      gainIndexVolt = kNumGainLevels - 1; // start at max gain
+      firstVoltRun  = false;
+      ads.setGain(kGainLevels[gainIndexVolt]);
+      (void)readRaw01();                  // throw away first sample after gain set
+    }
+    
+  
+  results01 = ads.getLastConversionResults();
+  int absCounts = abs(results01);
+
+  bool nearLow  = absCounts < (ADC_COUNT_LOW_THRESHOLD + ADC_GUARD_BAND);
+  bool nearHigh = absCounts > (ADC_COUNT_HIGH_THRESHOLD - ADC_GUARD_BAND);
+  
+  // set current gain
+  ads.setGain(kGainLevels[gainIndexVolt]);
+
+  // get a fresh conversion at THIS gain
+  results01 = readRaw01();
+
+  // autorange decision
+  if (abs(results01) > ADC_COUNT_HIGH_THRESHOLD && gainIndexVolt > 0) {
+    --gainIndexVolt;
+    ads.setGain(kGainLevels[gainIndexVolt]);
+    (void)readRaw01();          // discard one sample after changing gain
+    //Serial.print("range+");
+    return;                     // don't compute volts from the pre-change sample
   }
 
-  voltage01 = ((results01*multiplier)/1000)*vScale; //Convert to voltage
+  if (abs(results01) < ADC_COUNT_LOW_THRESHOLD && gainIndexVolt < (kNumGainLevels - 1)) {
+    ++gainIndexVolt;
+    ads.setGain(kGainLevels[gainIndexVolt]);
+    (void)readRaw01();          // discard one sample after changing gain
+    //Serial.print("range-");
+    return;                     // same idea
+  }
 
+  // now results01 definitely corresponds to current gainIndexVolt
+  voltage01 = ((results01 * kGainFactors[gainIndexVolt]) / 1000.0f) * vScale;
+  }else{
+        if (firstVoltRun) {
+      firstVoltRun  = false;
+      ads.setGain(GAIN_TWO);
+      (void)readRaw01();                  // throw away first sample after gain set
+    }
+    
+    multiplier = 1.0F; 
+    results01  = ads.getLastConversionResults();
+    voltage01 = ((results01*multiplier)/1000)*vScale; //Convert to voltage
+
+  }
+  
 
   if(voltage01>vMax01){
     vMax01 = voltage01;
