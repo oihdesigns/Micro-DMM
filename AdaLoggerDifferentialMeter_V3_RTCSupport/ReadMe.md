@@ -27,7 +27,7 @@ A differential-voltage datalogger built around an Adalogger platform, supporting
 
 ---
 
-### **DIP Switch 1 — Autorange** *(boot-only)*
+### **DIP Switch 1 — Autorange**
 
 - **UP:** Autorange **Disabled**
 - **DOWN:** Autorange **Enabled**
@@ -83,6 +83,10 @@ Useful for:
 
 ## Operating Notes
 
+### Turn Off:
+
+Connect jumper from "EN" pin to Ground to shut the board down. A battery can still be charged. Remove jumper to boot.
+
 ### Voltage Range
 
 - Approximate input range: **–40 V to +40 V** (as of current implementation)
@@ -106,10 +110,12 @@ Useful for:
 
 ### Battery Monitoring
 
-- Battery voltage is logged
+- Battery voltage is displayed for reference.
 - Approximate thresholds:
   - **Full:** ~4.2 V
   - **Low:** ~3.6 V
+ 
+  (Battery runtime will be added when known. The board pulls about 0.1A. That suggests around 22hrs from the 2200mAh battery.)
 
 ---
 
@@ -153,7 +159,6 @@ The plotting script is **very much in beta** and subject to change.
 - This allows:
   - Powering the logger from vehicle power
   - Measuring vehicle power with minimal noise coupling
-- For best results and a shared timebase, powering both the logger and measured system from a **battery** is recommended
 
 ---
 
@@ -163,12 +168,6 @@ The plotting script is **very much in beta** and subject to change.
 - Python plotting script is experimental
 - Temperature sensor not intended for precision measurements
 - Autorange and channel configuration require power cycling
-
----
-
-## License
-
-[Specify license here]
 
 ---
 
