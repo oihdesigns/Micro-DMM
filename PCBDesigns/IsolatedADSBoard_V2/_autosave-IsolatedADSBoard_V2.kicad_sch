@@ -3295,6 +3295,28 @@
 	)
 	(global_label "SCL"
 		(shape input)
+		(at 27.94 55.88 0)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "0dbf4036-5a97-433c-9dec-ee37b51b474e")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 34.4328 55.88 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+	)
+	(global_label "SCL"
+		(shape input)
 		(at 63.5 74.93 180)
 		(fields_autoplaced yes)
 		(effects
@@ -3482,6 +3504,28 @@
 		(uuid "46b25049-de26-47dd-9e25-cafcb1776bec")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 122.6676 69.85 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+	)
+	(global_label "VDD"
+		(shape input)
+		(at 27.94 50.8 0)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "46ebc668-8258-4d04-a22e-88228ecdcdcb")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 34.5538 50.8 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4195,6 +4239,28 @@
 			)
 		)
 	)
+	(global_label "SDA"
+		(shape input)
+		(at 27.94 53.34 0)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "fc597a3f-8c3b-4dbe-b46c-f27e637e513c")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 34.4933 53.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+	)
 	(global_label "5V-iso"
 		(shape input)
 		(at 93.98 109.22 0)
@@ -4844,6 +4910,71 @@
 			(project "IsolatedADSBoard"
 				(path "/948ff3f4-c0c6-4f78-99ba-ed3a397491b6"
 					(reference "#PWR025")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 27.94 48.26 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "53e46697-dd0f-463a-8343-9d27a4664477")
+		(property "Reference" "#PWR04"
+			(at 34.29 48.26 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "GND"
+			(at 33.02 49.276 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 27.94 48.26 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 27.94 48.26 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 27.94 48.26 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "0abe47e7-c739-44ef-9dc5-14718849797a")
+		)
+		(instances
+			(project "IsolatedADSBoard_V2"
+				(path "/948ff3f4-c0c6-4f78-99ba-ed3a397491b6"
+					(reference "#PWR04")
 					(unit 1)
 				)
 			)
@@ -6038,6 +6169,84 @@
 			(project "IsolatedADSBoard"
 				(path "/948ff3f4-c0c6-4f78-99ba-ed3a397491b6"
 					(reference "C8")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Connector_Generic_MountingPin:Conn_01x04_MountingPin")
+		(at 22.86 50.8 0)
+		(mirror y)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "fa481dbf-7f08-4e50-bf75-3ababb7b4f6c")
+		(property "Reference" "J5"
+			(at 22.86 41.91 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "Conn_01x04_MountingPin"
+			(at 22.86 44.45 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Connector_JST:JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal"
+			(at 22.86 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 22.86 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Generic connectable mounting pin connector, single row, 01x04, script generated (kicad-library-utils/schlib/autogen/connector/)"
+			(at 22.86 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "aadbe54d-ebef-48be-8ce8-8c6dce9e764d")
+		)
+		(pin "2"
+			(uuid "427a90e0-c9ae-4ba8-9089-5bd6bf77dc08")
+		)
+		(pin "4"
+			(uuid "67e253d2-7b71-4333-acf4-b75f18cb2e49")
+		)
+		(pin "3"
+			(uuid "a662f6a3-88e0-4d34-8602-83db80b84155")
+		)
+		(pin "MP"
+			(uuid "071365fd-57d7-4ced-ba92-aaf8cb481c0e")
+		)
+		(instances
+			(project "IsolatedADSBoard_V2"
+				(path "/948ff3f4-c0c6-4f78-99ba-ed3a397491b6"
+					(reference "J5")
 					(unit 1)
 				)
 			)

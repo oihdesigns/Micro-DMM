@@ -32,6 +32,9 @@ const int ch2Enable = 24;
 const int serialEnable = 25;
 const int trigThres = A0;
 const int autorangePin = 5;
+const int markButton = 6;
+const int battPin = A2;
+
 
 
 // BUFFER SETTINGS
@@ -64,9 +67,15 @@ float vScale = 14.7482; //for 75k bridge
 
 float trigRaw = 0.0;
 
+int tempF= 0;
+
+float battV = 0.0;
+float battRaw = 0;
+
 
 bool ch2on = 0;
 bool logON = 1;
+bool manualLog = 0;
 
 bool logError = 0;
 
@@ -90,7 +99,8 @@ float vMin23 = 0.0;
 
 //ADS autorange related
 
-bool firstVoltRun = 1;
+bool firstVoltRunAuto = 1;
+bool firstVoltRunMan = 1;
 bool autorange = 1;
 
 // ADS1015 gain factors (mV per bit) for each gain setting
@@ -136,6 +146,39 @@ char intervalFilename[32];
 char triggerFilename[32];
 
 SdSpiConfig config(SD_CS_PIN, DEDICATED_SPI, SD_SCK_MHZ(16), &SPI1);
+
+
+float readNTCTemperatureC(
+    uint8_t analogPin,
+    uint8_t adcBits,
+    float   vRef,
+    float   rFixed,
+    float   rNominal,
+    float   tNominalC,
+    float   beta
+  ) {
+    // Read ADC
+    uint32_t adcMax = (1UL << adcBits) - 1;
+    uint32_t adcRaw = analogRead(analogPin);
+
+    // Convert ADC code to voltage
+    float vNTC = (adcRaw * vRef) / adcMax;
+
+    // Protect against divide-by-zero and rail conditions
+    if (vNTC <= 0.0f || vNTC >= vRef) {
+        return NAN;
+    }
+
+    // Compute thermistor resistance
+    float rNTC = rFixed * (vNTC / (vRef - vNTC));
+
+    // Beta equation
+    float t0K = tNominalC + 273.15f;
+    float invT = (1.0f / t0K) + (1.0f / beta) * log(rNTC / rNominal);
+    float tempK = 1.0f / invT;
+
+    return tempK - 273.15f;
+}
 
 int16_t readRaw01() {
   return ads.readADC_Differential_0_1();   // blocking read -> fresh conversion
@@ -230,7 +273,16 @@ void flushBufferToSD() { //FUNCTION: flush RAM buffer to SD
     logfile.print(",");
     logfile.print(buffer[i].d2, 1);
     logfile.print(",");
-    logfile.println(now.timestamp());
+    logfile.print(tempF);
+    logfile.print(",");
+    //logfile.println(now.timestamp());
+    if(manualLog){
+      logfile.print(now.timestamp());
+      logfile.println(", MARK");
+      
+    }else{
+      logfile.println(now.timestamp());
+    }
   }
 
   logfile.flush();
@@ -256,10 +308,12 @@ void logCSV(float data1, float data2) {
   updateDisplay();
 
   if(digitalRead(serialEnable)){
-  Serial.print("T:"); Serial.print(now.timestamp());
+  Serial.print("Time:"); Serial.print(now.timestamp());
   Serial.print("/ V 0-1: "); Serial.print(voltage01,3); Serial.print("V/ ");
   Serial.print("V 2-3: "); Serial.print(voltage23,3); Serial.print("V/ ");
-  Serial.print("Total Logs: "); Serial.println(triggerCount);
+  Serial.print("temp"); Serial.print(tempF);
+  Serial.print(" Batt:"); Serial.print(battV,2);
+  Serial.print(" Total Logs: "); Serial.println(triggerCount);
   //Serial.println(results01);
   //Serial.println(gainIndexVolt);
   } 
@@ -315,6 +369,8 @@ void setup(void){
   pinMode(serialEnable, INPUT_PULLUP);
   pinMode(trigThres, INPUT);
   pinMode(autorangePin, INPUT_PULLUP);
+  pinMode(markButton, INPUT_PULLUP);
+  pinMode(battPin, INPUT);
 
   
   //ads.setGain(GAIN_TWO);  // 2/3x gain +/- 6.144V  1 bit = 3mV      0.1875mV (default)
@@ -370,7 +426,7 @@ void setup(void){
   // First row: human-readable timestamp
   logfile.print("Log Start Time,");
   logfile.println(now.timestamp());
-  logfile.println("Delta uS,Voltage Ch1 (V),Voltage Ch2 (V), RTC Stamp");
+  logfile.println("Delta uS,Voltage Ch1 (V),Voltage Ch2 (V), Temp, RTC Stamp");
   logfile.flush();
 
   Serial.print("Logging to: ");
@@ -389,22 +445,50 @@ void setup(void){
     ads.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_0_1, /*continuous=*/true);
   }
 
-  if(digitalRead(autorangePin)){
-    autorange = 1;
-    Serial.print("autorange on");
-  }else{
-    autorange = 0;
-    Serial.print("autorange off");
-  }
+
   
 }
 
 void loop(void){
+  
+  if(digitalRead(autorangePin)){
+    autorange = 1;
+    //Serial.print("autorange on");
+  }else{
+    autorange = 0;
+    //Serial.print("autorange off");
+  }
+  
   prevVoltage = voltage01;
 
   trigRaw = analogRead(trigThres);
-
   vStep = 0.125*((4*trigRaw/4095)*(4*trigRaw/4095)*(4*trigRaw/4095));
+
+  battRaw = analogRead(battPin);
+  battV = (battRaw/4095)*3.3*2;
+
+
+
+  if(digitalRead(markButton)){
+    manualLog = 0; //no log, because button is pulled up
+  }else{
+    manualLog = 1; //yes log
+    triggerCount++;
+  }
+
+  
+
+    float tempC = readNTCTemperatureC(
+      A1,        // analog pin
+      12,        // ADC bits
+      3.3,       // Vref
+      10000.0,   // fixed resistor (10k)
+      10000.0,   // NTC nominal resistance
+      25.0,      // nominal temp
+      3950.0     // beta value
+  );
+
+    tempF = (tempC*9/5)+32;
 
 
 
@@ -417,50 +501,53 @@ void loop(void){
     voltage23 = ((results23*multiplier)/1000)*vScale; //Convert to voltage
   }else if(autorange){
 
-    if (firstVoltRun) {
+    if (firstVoltRunAuto) {
       gainIndexVolt = kNumGainLevels - 1; // start at max gain
-      firstVoltRun  = false;
+      firstVoltRunAuto  = false;
+      firstVoltRunMan  = true;
       ads.setGain(kGainLevels[gainIndexVolt]);
       (void)readRaw01();                  // throw away first sample after gain set
     }
     
   
-  results01 = ads.getLastConversionResults();
-  int absCounts = abs(results01);
+    results01 = ads.getLastConversionResults();
+    int absCounts = abs(results01);
 
-  bool nearLow  = absCounts < (ADC_COUNT_LOW_THRESHOLD + ADC_GUARD_BAND);
-  bool nearHigh = absCounts > (ADC_COUNT_HIGH_THRESHOLD - ADC_GUARD_BAND);
-  
-  // set current gain
-  ads.setGain(kGainLevels[gainIndexVolt]);
-
-  // get a fresh conversion at THIS gain
-  results01 = readRaw01();
-
-  // autorange decision
-  if (abs(results01) > ADC_COUNT_HIGH_THRESHOLD && gainIndexVolt > 0) {
-    --gainIndexVolt;
+    bool nearLow  = absCounts < (ADC_COUNT_LOW_THRESHOLD + ADC_GUARD_BAND);
+    bool nearHigh = absCounts > (ADC_COUNT_HIGH_THRESHOLD - ADC_GUARD_BAND);
+    
+    // set current gain
     ads.setGain(kGainLevels[gainIndexVolt]);
-    (void)readRaw01();          // discard one sample after changing gain
-    //Serial.print("range+");
-    return;                     // don't compute volts from the pre-change sample
-  }
 
-  if (abs(results01) < ADC_COUNT_LOW_THRESHOLD && gainIndexVolt < (kNumGainLevels - 1)) {
-    ++gainIndexVolt;
-    ads.setGain(kGainLevels[gainIndexVolt]);
-    (void)readRaw01();          // discard one sample after changing gain
-    //Serial.print("range-");
-    return;                     // same idea
-  }
+    // get a fresh conversion at THIS gain
+    results01 = readRaw01();
 
-  // now results01 definitely corresponds to current gainIndexVolt
-  voltage01 = ((results01 * kGainFactors[gainIndexVolt]) / 1000.0f) * vScale;
+    // autorange decision
+    if (abs(results01) > ADC_COUNT_HIGH_THRESHOLD && gainIndexVolt > 0) {
+      --gainIndexVolt;
+      ads.setGain(kGainLevels[gainIndexVolt]);
+      (void)readRaw01();          // discard one sample after changing gain
+      //Serial.print("range+");
+      return;                     // don't compute volts from the pre-change sample
+    }
+
+    if (abs(results01) < ADC_COUNT_LOW_THRESHOLD && gainIndexVolt < (kNumGainLevels - 1)) {
+      ++gainIndexVolt;
+      ads.setGain(kGainLevels[gainIndexVolt]);
+      (void)readRaw01();          // discard one sample after changing gain
+      //Serial.print("range-");
+      return;                     // same idea
+    }
+
+    // now results01 definitely corresponds to current gainIndexVolt
+    voltage01 = ((results01 * kGainFactors[gainIndexVolt]) / 1000.0f) * vScale;
   }else{
-        if (firstVoltRun) {
-      firstVoltRun  = false;
+        if (firstVoltRunMan) {
+      firstVoltRunMan  = false;
+      firstVoltRunAuto  = true;
       ads.setGain(GAIN_TWO);
       (void)readRaw01();                  // throw away first sample after gain set
+      ads.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_0_1, /*continuous=*/true);
     }
     
     multiplier = 1.0F; 
@@ -524,11 +611,14 @@ void loop(void){
     triggerCount++;
   }else{
     logCSV(voltage01, voltage23);
-    if(millis() - lastLog > 1000){
+    if((millis() - lastLog > 1000) || manualLog){
+      if(!manualLog){
       lastLog = millis();
+      }
       captureSample(voltage01, voltage23);
       if(logON){
       flushBufferToSD();
+      manualLog = false;
       }
     }
     
@@ -536,11 +626,13 @@ void loop(void){
   }
 
   // Detect trigger falling edge → flush
-  if (triggerPrev == true && writeTrigger == false && logON) {
+  if (((triggerPrev == true && writeTrigger == false) || manualLog == true) && logON) {
     flushBufferToSD();
   }
 
   triggerPrev = writeTrigger;
+
+
 }
 
 void updateDisplay(void) {
@@ -552,8 +644,10 @@ void updateDisplay(void) {
   display.setCursor(0,0);
   display.print("V01:");
   display.print(voltage01,2);
-  display.setCursor(0,16);
   
+  
+  display.setTextSize(1);
+  display.setCursor(0,16);
   display.print("V23:");
   if(digitalRead(ch2Enable)){
     
@@ -561,6 +655,9 @@ void updateDisplay(void) {
   }else{
     display.print("OFF");
   }
+  display.setCursor(0,24);
+  display.print("Batt: ");
+  display.print((battV,2);
 
   display.setTextSize(1);
   display.setCursor(0,32);
@@ -577,17 +674,32 @@ void updateDisplay(void) {
   display.print ((timemS/1000),0);
   
   if (logError) {
-    display.setTextSize(2);
+    //display.setTextSize(2);
     display.setCursor(0,48);
     display.print ("SD ERROR");
   }else if(!logON){
-    display.setTextSize(2);
+    //display.setTextSize(2);
     display.setCursor(0,48);
     display.print ("SD OFF");  
   }else{
-    display.setTextSize(2);
+    //display.setTextSize(2);
     display.setCursor(0,48);
     display.print ("SD GOOD");
+  }
+
+  display.setCursor(64,48);
+  display.print ("Temp");
+  display.print (tempF);
+  display.print ("F");
+
+
+  
+  display.setCursor(0,56);
+  display.print ("Autorange: ");
+  if(autorange){
+    display.print ("ON");
+  }else{
+    display.print ("OFF");
   }
 
   display.display(); // update the OLED with all the drawn content
