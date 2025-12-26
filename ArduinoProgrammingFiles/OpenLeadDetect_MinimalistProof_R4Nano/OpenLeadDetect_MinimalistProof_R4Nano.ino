@@ -6,6 +6,8 @@
 
 Adafruit_ADS1115 ads;
 const int VbridgePin = 3; // Control Voltage Bridge MOSFET
+const int VEnablePin = 4; // Vref Enable Pin
+const int VEnableControl = 5; // User Control Vref Enable
 const int clsdThreshold = A3; // Control Voltage Bridge MOSFET
 const int zeroThreshold = A2; // Control Voltage Bridge MOSFET
 
@@ -44,6 +46,7 @@ float prevVoltage = 0.0;
 float prevOutVoltage = 0.0;
 float convertedVoltage = 0.0;
 float newVoltageReading = 0.0;
+float vActual = 0.0;
 
 float medianVoltage = 0.0;      // exponentially filtered voltage for display
 float medianVoltageStep = 0.0;
@@ -54,7 +57,7 @@ static uint8_t gainIndex;
 float voltage = 0.0;
 
 float vScale = 0.0;
-float VOLTAGE_SCALE_full = 69.669;
+float VOLTAGE_SCALE_full = 69.5771;
 float VOLTAGE_SCALE_low = 3.51108;
 
 bool vClimb = 0;
@@ -65,6 +68,8 @@ bool forceStop = 0;
 bool updates = 1;
 bool debug = 0;
 bool firstVoltRun = 1;
+
+bool vRefEnable = 0;
 
 float aRef = 5.0; //1.5 when using internal reference
 
@@ -162,12 +167,22 @@ void setup() {
   pinMode(VbridgePin, OUTPUT);
   pinMode(clsdThreshold, INPUT);
   pinMode(zeroThreshold, INPUT);
+  pinMode(VEnablePin, OUTPUT);
+  pinMode(VEnableControl, INPUT_PULLUP);
 
   digitalWrite(VbridgePin, LOW);
 }
 
 void loop() {
   currentMillis = millis();
+
+  if(digitalRead(VEnableControl)){
+    vRefEnable = 1;
+    digitalWrite(VEnablePin, 1);
+  }else{
+    vRefEnable = 0;
+    digitalWrite(VEnablePin, 0);
+  }
 
     // Handle serial commands (if any received)
   if (Serial.available() > 0) {
@@ -276,14 +291,25 @@ void measureVoltage(){
       countV = ads.readADC_Differential_0_1();
     }
     // convert to voltage
-      newVoltageReading = ((countV * kGainFactors[gainIndexVolt] / 1000.0f) * vScale);
+      vActual=(countV * kGainFactors[gainIndexVolt] / 1000.0f);
+      if(vRefEnable){
+         newVoltageReading = vActual * vScale;
+      }else{
+        newVoltageReading = (vActual - 0.0015) * vScale;
+      }
+      
+      
 
+      /* Buggy?
       if(newVoltageReading > (prevVoltage*1.5) || newVoltageReading < (prevVoltage*0.66)){
         medianVoltage = newVoltageReading;
       }else{
         medianVoltageStep = (newVoltageReading - medianVoltage) * 0.2;
         medianVoltage += medianVoltageStep;
       }
+      */
+
+      medianVoltage=newVoltageReading; //For debugging reasons
 
   
   CorFTrig = analogRead(zeroThreshold);
@@ -293,7 +319,7 @@ void measureVoltage(){
       
   prevVzero = Vzero;
   
-  if(fabs(medianVoltage) < CorFTrig && manual == 0){
+  if((fabs(medianVoltage) < CorFTrig && manual == 0) && vRefEnable){
     Vzero = true;
       if(prevVzero =! Vzero){
         VzeroFlag = true;
@@ -303,6 +329,7 @@ void measureVoltage(){
     
     ClosedOrFloat();
   }else{
+    //medianVoltage = medianVoltage - 0.109; //Trying to figure out if/why I need this.
     Vzero = false;
     vFloating = false;
     VzeroFlag = false;
@@ -395,6 +422,8 @@ void updateDisplay() {
   display.setCursor(0,16);
   display.print("Leads: ");
   display.setCursor(0,32);
+  if(vRefEnable){
+  
   if(Vzero){
     if(ClosedConfidence>10){
         display.print("Closed");
@@ -412,6 +441,9 @@ void updateDisplay() {
     display.print("%");
     }else{
     display.print("N/A");
+    }
+    }else{
+      display.print("Disabled");
     }
   
 
@@ -452,6 +484,8 @@ void statusUpdate(){
     Serial.println(" / ");
     Serial.print("VDC:");
     Serial.print(medianVoltage,4);
+    Serial.print(" V Actual:");
+    Serial.print(vActual, 4);
     Serial.print(" Count V:");
     Serial.print(countV);
     //Serial.print(roundTo3SigAndHalf(medianVoltage));

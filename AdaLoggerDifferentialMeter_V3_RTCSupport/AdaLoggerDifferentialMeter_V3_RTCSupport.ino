@@ -34,6 +34,7 @@ const int trigThres = A0;
 const int autorangePin = 5;
 const int markButton = 6;
 const int battPin = A2;
+const int slowLogPin = 9;
 
 
 
@@ -51,7 +52,7 @@ volatile size_t sampleCount = 0;
 // Trigger state tracking
 bool triggerPrev = false;
 
-int triggerCount = 0;
+int logCount = 0;
 
 
 //float   multiplier = 3.0F;    /* ADS1015 @ +/- 6.144V gain (12-bit results) */
@@ -78,6 +79,8 @@ bool logON = 1;
 bool manualLog = 0;
 
 bool logError = 0;
+
+float logInterval = 0.0;
 
 bool writeTrigger = 0;
 bool trigFlag = 0;
@@ -313,7 +316,7 @@ void logCSV(float data1, float data2) {
   Serial.print("V 2-3: "); Serial.print(voltage23,3); Serial.print("V/ ");
   Serial.print("temp"); Serial.print(tempF);
   Serial.print(" Batt:"); Serial.print(battV,2);
-  Serial.print(" Total Logs: "); Serial.println(triggerCount);
+  Serial.print(" Total Logs: "); Serial.println(logCount);
   //Serial.println(results01);
   //Serial.println(gainIndexVolt);
   } 
@@ -371,6 +374,7 @@ void setup(void){
   pinMode(autorangePin, INPUT_PULLUP);
   pinMode(markButton, INPUT_PULLUP);
   pinMode(battPin, INPUT);
+  pinMode(slowLogPin, INPUT_PULLUP);
 
   
   //ads.setGain(GAIN_TWO);  // 2/3x gain +/- 6.144V  1 bit = 3mV      0.1875mV (default)
@@ -458,6 +462,12 @@ void loop(void){
     autorange = 0;
     //Serial.print("autorange off");
   }
+
+  if(digitalRead(slowLogPin)){
+    logInterval = 60000;
+    }else{
+    logInterval = 1000;
+  }
   
   prevVoltage = voltage01;
 
@@ -473,7 +483,7 @@ void loop(void){
     manualLog = 0; //no log, because button is pulled up
   }else{
     manualLog = 1; //yes log
-    triggerCount++;
+    logCount++;
   }
 
   
@@ -608,16 +618,17 @@ void loop(void){
   // If trigger is active, capture to RAM
   if (writeTrigger && logON) {
     captureSample(voltage01, voltage23);
-    triggerCount++;
+    logCount++;
   }else{
     logCSV(voltage01, voltage23);
-    if((millis() - lastLog > 1000) || manualLog){
+    if((millis() - lastLog > logInterval) || manualLog){
       if(!manualLog){
       lastLog = millis();
       }
       captureSample(voltage01, voltage23);
       if(logON){
       flushBufferToSD();
+      logCount++;
       manualLog = false;
       }
     }
@@ -657,12 +668,12 @@ void updateDisplay(void) {
   }
   display.setCursor(0,24);
   display.print("Batt: ");
-  display.print((battV,2);
+  display.print(battV,2);
 
   display.setTextSize(1);
   display.setCursor(0,32);
   display.print ("#logs:");
-  display.print (triggerCount);
+  display.print (logCount);
 
   display.setCursor(64,32);
   display.print ("trig");
@@ -695,12 +706,14 @@ void updateDisplay(void) {
 
   
   display.setCursor(0,56);
-  display.print ("Autorange: ");
+  display.print ("Range: ");
   if(autorange){
-    display.print ("ON");
+    display.print ("Auto");
   }else{
-    display.print ("OFF");
+    display.print ("Full");
   }
+
+  display.setCursor(0,56);  
 
   display.display(); // update the OLED with all the drawn content
 }

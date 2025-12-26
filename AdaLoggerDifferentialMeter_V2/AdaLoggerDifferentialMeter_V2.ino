@@ -5,8 +5,10 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <RTClib.h>
 
 
+RTC_PCF8523 rtc;
 Adafruit_ADS1015 ads;     /* Use this for the 12-bit version */
 
 // track timing
@@ -96,10 +98,32 @@ File32 intervalFile;
 File32 triggerFile;
 File32 logfile;
 
+char filename[40];
+
 char intervalFilename[32];
 char triggerFilename[32];
 
 SdSpiConfig config(SD_CS_PIN, DEDICATED_SPI, SD_SCK_MHZ(16), &SPI1);
+
+void printField(Print* pr, char sep, uint8_t v) {
+  if (sep) {
+    pr->write(sep);
+  }
+  if (v < 10) {
+    pr->write('0');
+  }
+  pr->print(v);
+}
+
+void printNow(Print* pr) {
+  DateTime now = rtc.now();
+  pr->print(now.year());
+  printField(pr, '-', now.month());
+  printField(pr, '-', now.day());
+  printField(pr, ' ', now.hour());
+  printField(pr, ':', now.minute());
+  printField(pr, ':', now.second());
+}
 
 // --- Helper: blink NeoPixel a color for a short time ---
 void blinkPixel(uint8_t r, uint8_t g, uint8_t b, int duration = 5) {
@@ -150,11 +174,13 @@ void captureSample(float data1, float data2) { // FUNCTION: capture a sample int
 }
 
 void flushBufferToSD() { //FUNCTION: flush RAM buffer to SD
-  logfile = SD.open(triggerFilename, FILE_WRITE);
+  logfile = SD.open(filename, FILE_WRITE);
   if (!logfile) {
     Serial.println("ERROR: Could not open capture file");
     return;
   }
+
+  DateTime now = rtc.now();
 
   //Serial.print("Writing ");
   //Serial.print(sampleCount);
@@ -166,7 +192,9 @@ void flushBufferToSD() { //FUNCTION: flush RAM buffer to SD
     logfile.print(",");
     logfile.print(buffer[i].d1, 3);
     logfile.print(",");
-    logfile.println(buffer[i].d2, 1);
+    logfile.print(buffer[i].d2, 1);
+    logfile.print(",");
+    logfile.println(now.timestamp());
   }
 
   logfile.flush();
@@ -179,6 +207,30 @@ void flushBufferToSD() { //FUNCTION: flush RAM buffer to SD
   // Reset buffer
   sampleCount = 0;
 }
+
+// --- Regular CSV logging / Serial Print function (call every loop) ---
+void logCSV(float data1, float data2) {
+  unsigned long currentmillis = millis();
+  if (currentmillis - lastStatus < 2000) return;
+  lastStatus = currentmillis;
+
+  DateTime now = rtc.now();
+
+
+  updateDisplay();
+
+  if(digitalRead(serialEnable)){
+  Serial.print("T:"); Serial.print(now.timestamp());
+  Serial.print("/ V 0-1: "); Serial.print(voltage01,3); Serial.print("V/ ");
+  Serial.print("V 2-3: "); Serial.print(voltage23,3); Serial.print("V/ ");
+  Serial.print("Total Logs: "); Serial.println(triggerCount);
+  } 
+
+
+  // Success!
+  blinkPixel(0, 128, 128);       //  GREEN for success
+}
+
 
 void setup(void){
   Serial.begin(115200);
@@ -207,6 +259,17 @@ void setup(void){
   display.display();
   
   delay(200);
+
+  // Start RTC
+  if (!rtc.begin()) {
+    Serial.println("RTC not found!");
+    while (1);
+  }
+
+  // Print current time
+  DateTime now = rtc.now();
+  Serial.print("RTC Time: ");
+  Serial.println(now.timestamp());
 
 
   pinMode(sdEnable, INPUT_PULLUP);
@@ -239,6 +302,7 @@ void setup(void){
     }
 
 
+  /* //Not needed with RTC
   // ---- Create trigger capture file ----
   makeUniqueFilename("capture", ".csv", triggerFilename, sizeof(triggerFilename));
   Serial.print("Trigger log file: ");
@@ -251,6 +315,29 @@ void setup(void){
   }
   //triggerFile.println("time_us,data1,data2,data3");   // example header
   //triggerFile.flush();
+  */
+
+  // Create unique CSV filename with timestamp
+  sprintf(filename, "log_%04d%02d%02d_%02d%02d%02d.csv",
+          now.year(), now.month(), now.day(),
+          now.hour(), now.minute(), now.second());
+
+  logfile = SD.open(filename, FILE_WRITE);
+  if (!logfile) {
+    Serial.println("Could not create log file!");
+    while (1);
+  }
+
+  // First row: human-readable timestamp
+  logfile.print("Log Start Time,");
+  logfile.println(now.timestamp());
+  logfile.println("Timestamp,Voltage(V)");
+  logfile.flush();
+
+  Serial.print("Logging to: ");
+  Serial.println(filename);
+
+
   }else{
     logON = 0;
   }
@@ -408,26 +495,4 @@ void updateDisplay(void) {
 
   display.display(); // update the OLED with all the drawn content
 }
-
-// --- Regular CSV logging / Serial Print function (call every loop) ---
-void logCSV(float data1, float data2) {
-  unsigned long now = millis();
-  if (now - lastStatus < 2000) return;
-  lastStatus = now;
-
-
-  updateDisplay();
-
-  if(digitalRead(serialEnable)){
-  Serial.print("T:"); Serial.print(millis());
-  Serial.print("/ V 0-1: "); Serial.print(voltage01,3); Serial.print("V/ ");
-  Serial.print("V 2-3: "); Serial.print(voltage23,3); Serial.print("V/ ");
-  Serial.print("Total Logs: "); Serial.println(triggerCount);
-  } 
-
-
-  // Success!
-  blinkPixel(0, 128, 128);       //  GREEN for success
-}
-
 
