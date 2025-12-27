@@ -1,7 +1,7 @@
 {
   "board": {
     "active_layer": 0,
-    "active_layer_preset": "Design View",
+    "active_layer_preset": "",
     "auto_track_width": true,
     "hidden_netclasses": [],
     "hidden_nets": [],
@@ -49,7 +49,7 @@
       "conflict_shadows",
       "shapes"
     ],
-    "visible_layers": "ffffffff_ffffffff_fffffff7_ffffff7f",
+    "visible_layers": "00000000_00000000_00000000_82002277",
     "zone_display_mode": 1
   },
   "git": {
@@ -59,7 +59,7 @@
     "ssh_key": ""
   },
   "meta": {
-    "filename": "VoltmeterFrontEnd_b_asOrdered.kicad_prl",
+    "filename": "VoltmeterFrontEnd_c.kicad_prl",
     "version": 5
   },
   "net_inspector_panel": {
