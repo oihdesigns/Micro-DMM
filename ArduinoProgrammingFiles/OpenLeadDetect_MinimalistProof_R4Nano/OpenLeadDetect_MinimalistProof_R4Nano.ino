@@ -57,7 +57,7 @@ static uint8_t gainIndex;
 float voltage = 0.0;
 
 float vScale = 0.0;
-float VOLTAGE_SCALE_full = 69.5771;
+float VOLTAGE_SCALE_full = 66.1065;
 float VOLTAGE_SCALE_low = 3.51108;
 
 bool vClimb = 0;
@@ -170,7 +170,7 @@ void setup() {
   pinMode(VEnablePin, OUTPUT);
   pinMode(VEnableControl, INPUT_PULLUP);
 
-  digitalWrite(VbridgePin, LOW);
+  digitalWrite(VbridgePin, HIGH);
 }
 
 void loop() {
@@ -254,10 +254,10 @@ void measureVoltage(){
 
     if(manual){
       if(!range){
-        digitalWrite(VbridgePin, LOW);
+        digitalWrite(VbridgePin, HIGH);
         vScale = VOLTAGE_SCALE_full;
       }else{
-        digitalWrite(VbridgePin, HIGH);
+        digitalWrite(VbridgePin, LOW);
         vScale = VOLTAGE_SCALE_low;
         ads.setDataRate(RATE_ADS1115_64SPS);
       }
@@ -295,7 +295,7 @@ void measureVoltage(){
       if(vRefEnable){
          newVoltageReading = vActual * vScale;
       }else{
-        newVoltageReading = (vActual - 0.0015) * vScale;
+        newVoltageReading = (vActual) * vScale;
       }
       
       
@@ -421,6 +421,9 @@ void updateDisplay() {
 
   display.setCursor(0,16);
   display.print("Leads: ");
+  display.setTextSize(1);
+  display.print(vClosedThres,3);
+  display.setTextSize(2);
   display.setCursor(0,32);
   if(vRefEnable){
   
@@ -470,7 +473,7 @@ void statusUpdate(){
       Serial.print(bridgeV,4);
       Serial.print(" / ");
       Serial.print("Threshold:");
-      Serial.print(vClosedThres);
+      Serial.print(vClosedThres,4);
       Serial.print(" / ");
       if(vClosed){
         Serial.print("V Closed");
@@ -521,7 +524,7 @@ void ClosedOrFloat() {
   vClosed = vFloating = vUndefined = false;
 
   // Prepare to take a reading
-  digitalWrite(VbridgePin, HIGH);
+  digitalWrite(VbridgePin, LOW);
   delay(5);
 
   ads.setDataRate(RATE_ADS1115_860SPS);
@@ -540,7 +543,7 @@ void ClosedOrFloat() {
   }
 
   // --- Classification and stability detection ---
-  if (fabs(bridgeV) < vClosedThres) {
+  if (fabs(bridgeV) > vClosedThres) {
     // Candidate for "Closed"
     if (vClosedtrig) vClosed = true;  // repeats → stable
     vClosedtrig = true;
@@ -553,7 +556,7 @@ void ClosedOrFloat() {
 
     if (debug) Serial.println("V Closed");
 
-  } else if (fabs(bridgeV) > vClosedThres) {
+  } else if (fabs(bridgeV) < vClosedThres) {
     // Candidate for "Floating"
     if (vFloattrig) vFloating = true;
     vFloattrig = true;
@@ -578,5 +581,5 @@ void ClosedOrFloat() {
   
 
   // Release bridge
-  digitalWrite(VbridgePin, LOW);
+  digitalWrite(VbridgePin, HIGH);
 }
