@@ -62,6 +62,7 @@ float   multiplier = 1.0F;    /* GAIN TWO ADS1015 @ +/- 2.048V gain (12-bit resu
 int16_t results01;
 int16_t results23;
 float voltage01 = 0.0;
+float voltage01actual = 0.0;
 float voltage23 = 0.0;
 //float vScale = 69.669; //for 15k bridge
 float vScale = 14.7482; //for 75k bridge
@@ -313,8 +314,14 @@ void logCSV(float data1, float data2) {
   if(digitalRead(serialEnable)){
   Serial.print("Time:"); Serial.print(now.timestamp());
   Serial.print("/ V 0-1: "); Serial.print(voltage01,3); Serial.print("V/ ");
-  Serial.print("V 2-3: "); Serial.print(voltage23,3); Serial.print("V/ ");
-  Serial.print("temp"); Serial.print(tempF);
+  Serial.print("V0-1 actual:");
+  Serial.print(voltage01actual);
+  Serial.print("/ Gain: ");
+  Serial.print(gainIndexVolt);
+  Serial.print("/ Vint:");
+  Serial.print(results01);
+  //Serial.print("/ V 2-3: "); Serial.print(voltage23,3); Serial.print("V/ ");
+  Serial.print("/ temp"); Serial.print(tempF);
   Serial.print(" Batt:"); Serial.print(battV,2);
   Serial.print(" Total Logs: "); Serial.println(logCount);
   //Serial.println(results01);
@@ -550,19 +557,21 @@ void loop(void){
     }
 
     // now results01 definitely corresponds to current gainIndexVolt
-    voltage01 = ((results01 * kGainFactors[gainIndexVolt]) / 1000.0f) * vScale;
+    voltage01actual = (results01 * kGainFactors[gainIndexVolt]) / 1000.0f;
+    voltage01 = voltage01actual * vScale;
   }else{
         if (firstVoltRunMan) {
       firstVoltRunMan  = false;
       firstVoltRunAuto  = true;
-      ads.setGain(GAIN_TWO);
+      ads.setGain(GAIN_ONE);
       (void)readRaw01();                  // throw away first sample after gain set
       ads.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_0_1, /*continuous=*/true);
     }
     
-    multiplier = 1.0F; 
+    multiplier = 2.0F; 
     results01  = ads.getLastConversionResults();
-    voltage01 = ((results01*multiplier)/1000)*vScale; //Convert to voltage
+    voltage01actual = (results01*multiplier)/1000;
+    voltage01 = voltage01actual*vScale; //Convert to voltage
 
   }
   
@@ -710,7 +719,7 @@ void updateDisplay(void) {
   if(autorange){
     display.print ("Auto");
   }else{
-    display.print ("Full");
+    display.print ("Fixed");
   }
 
   display.setCursor(0,56);  
