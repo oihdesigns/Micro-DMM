@@ -529,18 +529,19 @@ void ClosedOrFloat() {
 
   ads.setDataRate(RATE_ADS1115_860SPS);
   ads.setGain(GAIN_SIXTEEN);
-  bridgeV = ads.readADC_Differential_0_1() * (0.0078125f / 1000.0f) * VOLTAGE_SCALE_full;
+  bridgeV1 = ads.readADC_Differential_0_1() * (0.0078125f / 1000.0f) * VOLTAGE_SCALE_full;
+  digitalWrite(VbridgePin, HIGH);
   //delay(1);
-  //bridgeV2 = ads.readADC_Differential_0_1() * (0.0078125f / 1000.0f) * VOLTAGE_SCALE;
+  
+  digitalWrite(VbridgePin, LOW);
+  bridgeV2 = ads.readADC_Differential_0_1() * (0.0078125f / 1000.0f) * VOLTAGE_SCALE_full;
+
+    // Release bridge
+  digitalWrite(VbridgePin, HIGH);
 
   
-  //bridgeV = (abs(bridgeV1)+abs(bridgeV2))/2;
+  bridgeV = (abs(bridgeV1)+abs(bridgeV2))/2;
 
-
-  if (debug) {
-    Serial.print("voltageRead: ");
-    Serial.println(bridgeV, 4);
-  }
 
   // --- Classification and stability detection ---
   if (fabs(bridgeV) > vClosedThres) {
@@ -554,7 +555,11 @@ void ClosedOrFloat() {
       ClosedConfidence = 20;
     }
 
-    if (debug) Serial.println("V Closed");
+    if (debug){
+      Serial.print("voltageRead: ");
+      Serial.print(bridgeV, 4);
+      Serial.println("V Closed");
+      }
 
   } else if (fabs(bridgeV) < vClosedThres) {
     // Candidate for "Floating"
@@ -567,7 +572,11 @@ void ClosedOrFloat() {
       ClosedConfidence = 0;
     }
 
-    if (debug) Serial.println("V Floating");
+    if (debug){
+      Serial.print("voltageRead: ");
+      Serial.print(bridgeV, 4);
+      Serial.println("V Floating");
+      }
 
   } else {
     // Intermediate region → keep last known stable state
@@ -578,8 +587,5 @@ void ClosedOrFloat() {
     }
   }
 
-  
 
-  // Release bridge
-  digitalWrite(VbridgePin, HIGH);
 }
