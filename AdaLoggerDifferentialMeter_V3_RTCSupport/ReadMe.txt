@@ -53,9 +53,15 @@ Suppress the microSD card usage. Useful for streaming data in / troubleshooting.
 
 Can only be set during boot.
 
+Pin 9: Slow Log Pin
+
+Connected to Ground: Normal Logging Interval (1s)
+Floating / Connected High: Logs at 60s Interval 
+
+
 Notes on Usage:
 
-The range (as I write this) is roughly -40 to +40v.
+The range (as I write this) is roughly -90 to +90v.
 
 There is a button that when pressed writes "mark" on that row of the CSV file.
 

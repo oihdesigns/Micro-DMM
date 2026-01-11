@@ -185,7 +185,7 @@ float readNTCTemperatureC(
 }
 
 int16_t readRaw01() {
-  return ads.readADC_Differential_0_1();   // blocking read -> fresh conversion
+  return ads.readADC_Differential_2_3();   // blocking read -> fresh conversion
 }
 
 void printField(Print* pr, char sep, uint8_t v) {
@@ -453,7 +453,7 @@ void setup(void){
   }else{
     ch2on = false;
     voltage23 = 0.0;
-    ads.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_0_1, /*continuous=*/true);
+    ads.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3, /*continuous=*/true);
   }
 
 
@@ -510,12 +510,17 @@ void loop(void){
 
 
   
-  //results01 = ads.readADC_Differential_0_1(); // integer from ADS
+  //results01 = ads.readADC_Differential_2_3(); // integer from ADS
   
   if(ch2on){
-    results01 = ads.readADC_Differential_0_1(); // integer from ADS
-    results23 = ads.readADC_Differential_2_3(); // integer from ADS
-    voltage23 = ((results23*multiplier)/1000)*vScale; //Convert to voltage
+    results01 = ads.readADC_Differential_2_3();
+    results23 = ads.readADC_Differential_0_1();
+
+    voltage01actual = (results01 * multiplier) / 1000.0f;
+    voltage01       = voltage01actual * vScale;
+
+    voltage23       = ((results23 * multiplier) / 1000.0f) * vScale;
+  
   }else if(autorange){
 
     if (firstVoltRunAuto) {
@@ -565,7 +570,7 @@ void loop(void){
       firstVoltRunAuto  = true;
       ads.setGain(GAIN_ONE);
       (void)readRaw01();                  // throw away first sample after gain set
-      ads.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_0_1, /*continuous=*/true);
+      ads.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3, /*continuous=*/true);
     }
     
     multiplier = 2.0F; 
