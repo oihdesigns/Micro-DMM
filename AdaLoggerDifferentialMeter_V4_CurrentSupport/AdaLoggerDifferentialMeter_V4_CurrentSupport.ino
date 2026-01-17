@@ -48,7 +48,7 @@ const int screenEnable = 13;
 //solder version
 
 const int ch2Enable = 13;
-const int serialEnable = 12;
+const int currentEnable = 12;
 const int autorangePin = 11;
 const int slowLogPin = 10;
 const int screenEnable = 9;
@@ -71,6 +71,7 @@ const size_t MAX_SAMPLES = 2000;   // adjustable
 struct Sample {
   float d1;
   float d2;
+  float d3;
   float td;
   float t;   // optional: timestamp in microseconds
 };
@@ -88,7 +89,7 @@ float   multiplier = 1.0F;    /* GAIN TWO ADS1015 @ +/- 2.048V gain (12-bit resu
 //float   multiplier = 0.5F;    /*GAIN FOUR ADS1015 @ +/- 2.048V gain (12-bit results) */
 
 int16_t ads0_results23;
-int16_t ads1_results01;
+int16_t ads1_results23;
 int16_t results23;
 float voltage01 = 0.0;
 float voltage01actual = 0.0;
@@ -125,6 +126,10 @@ float noiseThreshold = 0.5;
 float lastLoggedV01 = 0.25;
 float vMax01 = 0.0;
 float vMin01 = 0.0;
+
+float lastLoggedI = 0.25;
+float iMax = 0.0;
+float iMin = 0.0;
 
 float prevTriggerT = 0.0;
 float deltaT = 0.0;
@@ -222,8 +227,8 @@ int16_t readRaw23() {
   return ads.readADC_Differential_2_3();   // blocking read -> fresh conversion
 }
 
-int16_t ads2ReadRaw01() {
-  return ads2.readADC_Differential_0_1();   // blocking read -> fresh conversion
+int16_t ads2ReadRaw23() {
+  return ads2.readADC_Differential_2_3();   // blocking read -> fresh conversion
 }
 
 void printField(Print* pr, char sep, uint8_t v) {
@@ -274,7 +279,7 @@ void makeUniqueFilename(const char* base, const char* suffix, char* outBuf, size
   snprintf(outBuf, outSize, "/%s9999%s", base, suffix);
 }
 
-void captureSample(float data1, float data2) { // FUNCTION: capture a sample into RAM
+void captureSample(float data1, float data2, float data3) { // FUNCTION: capture a sample into RAM
   if (sampleCount >= MAX_SAMPLES) return;   // buffer full - ignore or handle differently
 
   prevTriggerT=triggerT;
@@ -285,6 +290,7 @@ void captureSample(float data1, float data2) { // FUNCTION: capture a sample int
 
   buffer[sampleCount].d1 = data1;
   buffer[sampleCount].d2 = data2;
+  buffer[sampleCount].d3 = data3;
   buffer[sampleCount].t  = (timemS+(triggerT/1000));       // optional timestamp
   buffer[sampleCount].td  = deltaT;
 
@@ -315,6 +321,8 @@ void flushBufferToSD() { //FUNCTION: flush RAM buffer to SD
     logfile.print(",");
     logfile.print(buffer[i].d2, 1);
     logfile.print(",");
+    logfile.print(buffer[i].d3, 4);
+    logfile.print(",");
     logfile.print(tempF);
     logfile.print(",");
     //logfile.println(now.timestamp());
@@ -339,7 +347,7 @@ void flushBufferToSD() { //FUNCTION: flush RAM buffer to SD
 }
 
 // --- Regular CSV logging / Serial Print function (call every loop) ---
-void logCSV(float data1, float data2) {
+void outputs(float data1, float data2) {
   unsigned long currentmillis = millis();
   if (currentmillis - lastStatus < 2000) return;
   lastStatus = currentmillis;
@@ -351,7 +359,6 @@ void logCSV(float data1, float data2) {
     updateDisplay();
   
 
-  if(digitalRead(serialEnable)){
   Serial.print("Time:"); Serial.print(now.timestamp());
   Serial.print("/ V 0-1: "); Serial.print(voltage01,3); Serial.print("V/ ");
   Serial.print("V0-1 actual:");
@@ -369,7 +376,6 @@ void logCSV(float data1, float data2) {
   Serial.print(" Total Logs: "); Serial.println(logCount);
   //Serial.println(results01);
   //Serial.println(gainIndexVolt);
-  } 
 
   // Success!
   blinkPixel(0, 128, 128);       //  GREEN for success
@@ -422,7 +428,7 @@ void setup(void){
 
   pinMode(sdEnable, INPUT_PULLUP);
   pinMode(ch2Enable, INPUT_PULLUP);
-  pinMode(serialEnable, INPUT_PULLUP);
+  pinMode(currentEnable, INPUT_PULLUP);
   pinMode(trigThres, INPUT);
   pinMode(autorangePin, INPUT_PULLUP);
   pinMode(markButton, INPUT_PULLUP);
@@ -489,7 +495,7 @@ void setup(void){
   // First row: human-readable timestamp
   logfile.print("Log Start Time,");
   logfile.println(now.timestamp());
-  logfile.println("Delta uS,Voltage Ch1 (V),Voltage Ch2 (V), Temp, RTC Stamp");
+  logfile.println("Delta uS,V Ch1,V Ch2, I, Temp, RTC Stamp");
   logfile.flush();
 
   Serial.print("Logging to: ");
@@ -517,11 +523,11 @@ void setup(void){
 void loop(void){
   
   if(digitalRead(autorangePin)){
-    autorange = 1;
-    //Serial.print("autorange on");
-  }else{
-    autorange = 0;
-    //Serial.print("autorange off");
+      autorange = 1;
+      //Serial.print("autorange on");
+    }else{
+      autorange = 0;
+      //Serial.print("autorange off");
   }
 
   if(digitalRead(slowLogPin)){
@@ -642,20 +648,24 @@ void loop(void){
       firstVoltRunMan  = false;
       firstVoltRunAuto  = true;
       ads.setGain(GAIN_ONE);
-      ads2.setGain(GAIN_FOUR);
+      ads2.setGain(GAIN_EIGHT);
       (void)readRaw23();
-      (void)ads2ReadRaw01();                  // throw away first sample after gain set
+      (void)ads2ReadRaw23();                  // throw away first sample after gain set
       ads.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3, /*continuous=*/true);
-      ads2.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_0_1, /*continuous=*/true);
+      ads2.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3, /*continuous=*/true);
     }
     
     multiplier = 2.0F; 
     ads0_results23  = ads.getLastConversionResults();
-    ads1_results01 = ads2.getLastConversionResults();
+
     voltage01actual = (ads0_results23*multiplier)/1000;
     voltage01 = voltage01actual*vScale; //Convert to voltage
-
-    current = ((ads1_results01*0.5)/1000)*10;
+    if(digitalRead(currentEnable)){
+    ads1_results23 = ads2.getLastConversionResults();
+    current = ((ads1_results23*-0.25)/1000)*10;
+    }else{
+      current=0;
+    }
 
   }
   
@@ -668,6 +678,15 @@ void loop(void){
     vMin01 = voltage01;
     trigFlag = 1;
   }
+
+    if(current>iMax){
+    iMax = current;
+    trigFlag = 1;
+  }
+    if(current<iMin){
+    iMin = current;
+    trigFlag = 1;
+  }
   
   if(abs(voltage01) > noiseThreshold){
     if(voltage01 > lastLoggedV01+vStep){
@@ -677,6 +696,18 @@ void loop(void){
       trigFlag = 1;
     }
   }
+
+  if(abs(current) > 0.05){
+    if(current > lastLoggedI+0.1){
+      trigFlag = 1;
+    }
+    if(current < lastLoggedI-0.1){
+      trigFlag = 1;
+    }
+  }  
+
+
+
 
   if(digitalRead(ch2Enable)){
     if(voltage23>vMax23){
@@ -688,10 +719,10 @@ void loop(void){
       trigFlag = 1;
     }
   if(abs(voltage23) > noiseThreshold){ 
-      if(voltage23 > lastLoggedV23+vStep){
+      if(voltage23 > lastLoggedV23+0.1){
         trigFlag = 1;
       }
-      if(voltage23 < lastLoggedV23-vStep){
+      if(voltage23 < lastLoggedV23-0.1){
         trigFlag = 1;
       }
     }
@@ -702,6 +733,7 @@ void loop(void){
     writeTrigger = true;
     lastLoggedV01 = voltage01;
     lastLoggedV23 = voltage23;
+    lastLoggedI = current;
     trigFlag = 0;
   }else{
     writeTrigger = false;
@@ -710,15 +742,15 @@ void loop(void){
 
   // If trigger is active, capture to RAM
   if (writeTrigger && logON) {
-    captureSample(voltage01, voltage23);
+    captureSample(voltage01, voltage23, current);
     logCount++;
   }else{
-    logCSV(voltage01, voltage23);
+    outputs(voltage01, voltage23);
     if((millis() - lastLog > logInterval) || manualLog){
       if(!manualLog){
       lastLog = millis();
       }
-      captureSample(voltage01, voltage23);
+      captureSample(voltage01, voltage23, current);
       if(logON){
       flushBufferToSD();
       logCount++;
@@ -746,22 +778,26 @@ void updateDisplay(void) {
   
   // Display Voltages
   display.setCursor(0,0);
-  display.print("V01:");
+  display.print("V:");
   display.print(voltage01,2);
   
-  
-  display.setTextSize(1);
   display.setCursor(0,16);
-  display.print("V23:");
-  if(digitalRead(ch2Enable)){
-    
-    display.print(voltage23,2);
+  
+  display.print("mA:");
+  if(digitalRead(currentEnable)){
+  display.print((current*1000),0);
   }else{
-    display.print("OFF");
+    display.print("off (#4)");
   }
-  display.setCursor(0,24);
-  display.print("Batt: ");
-  display.print(battV,2);
+
+  display.setTextSize(1);
+  
+  if(digitalRead(ch2Enable)){
+  display.setCursor(0,16);
+  display.print("V2:");
+  display.print(voltage23,2);
+  }
+  
 
   display.setTextSize(1);
   display.setCursor(0,32);
@@ -784,7 +820,7 @@ void updateDisplay(void) {
   }else if(!logON){
     //display.setTextSize(2);
     display.setCursor(0,48);
-    display.print ("SD OFF");  
+    display.print ("SD OFF (#8)");  
   }else{
     //display.setTextSize(2);
     display.setCursor(0,48);
@@ -805,6 +841,10 @@ void updateDisplay(void) {
   }else{
     display.print ("Fixed");
   }
+
+  display.setCursor(72,56);
+  display.print("Batt: ");
+  display.print(battV,1);
 
   display.setCursor(0,56);  
 

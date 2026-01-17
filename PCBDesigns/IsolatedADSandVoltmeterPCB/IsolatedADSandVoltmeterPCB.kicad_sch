@@ -4009,6 +4009,24 @@
 				(hide yes)
 			)
 		)
+		(property "Cost (10+)" ""
+			(at 31.75 105.41 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" ""
+			(at 31.75 105.41 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "1"
 			(uuid "b794c1ce-9035-41fe-85db-b9b808ab243a")
 		)
@@ -4064,7 +4082,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://www.xppower.com/storage/portals/0/pdfs/SF_SCT01F.pdf"
 			(at 71.12 85.09 0)
 			(effects
 				(font
@@ -4074,6 +4092,24 @@
 			)
 		)
 		(property "Description" ""
+			(at 71.12 85.09 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Cost (10+)" "2.51"
+			(at 71.12 85.09 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" "https://www.digikey.com/en/products/detail/xp-power/SCT01F03S05/26667143"
 			(at 71.12 85.09 0)
 			(effects
 				(font
@@ -4194,6 +4230,24 @@
 				(hide yes)
 			)
 		)
+		(property "Cost (10+)" "2.23"
+			(at 173.99 72.39 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" "https://www.digikey.com/en/products/detail/texas-instruments/ADS1015IDGSR/2231559"
+			(at 173.99 72.39 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "4"
 			(uuid "d07c5522-d71f-43cd-b43b-5cae12a60efe")
 		)
@@ -4287,6 +4341,24 @@
 				(hide yes)
 			)
 		)
+		(property "Cost (10+)" "0.42"
+			(at 167.64 110.49 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" "https://www.digikey.com/en/products/detail/jst-sales-america-inc/SM04B-SRSS-TB/926710"
+			(at 167.64 110.49 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "1"
 			(uuid "9bc5467a-1ef6-40d2-9ce4-c5f126ef1e6c")
 		)
@@ -4330,7 +4402,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "4.7K"
+		(property "Value" "1K"
 			(at 242.57 77.4699 0)
 			(effects
 				(font
@@ -4358,6 +4430,24 @@
 			)
 		)
 		(property "Description" "Resistor, US symbol"
+			(at 240.03 76.2 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Cost (10+)" "0.03"
+			(at 240.03 76.2 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" "https://www.digikey.com/en/products/detail/susumu/RR1220P-102-D/432291"
 			(at 240.03 76.2 0)
 			(effects
 				(font
@@ -4472,6 +4562,24 @@
 				(hide yes)
 			)
 		)
+		(property "Cost (10+)" "0.08"
+			(at 125.73 30.48 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" "https://www.digikey.com/en/products/detail/susumu/RG2012P-4993-B-T5/1240783"
+			(at 125.73 30.48 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "1"
 			(uuid "cb80991a-e131-422a-a223-35feb6fdf8ef")
 		)
@@ -4506,7 +4614,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "4.7K"
+		(property "Value" "1K"
 			(at 60.96 30.4799 0)
 			(effects
 				(font
@@ -4534,6 +4642,24 @@
 			)
 		)
 		(property "Description" "Resistor, US symbol"
+			(at 58.42 29.21 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Cost (10+)" "0.03"
+			(at 58.42 29.21 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" "https://www.digikey.com/en/products/detail/susumu/RR1220P-102-D/432291"
 			(at 58.42 29.21 0)
 			(effects
 				(font
@@ -4631,6 +4757,24 @@
 		)
 		(property "Sim.Pins" ""
 			(at 135.89 43.18 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Cost (10+)" "0.05"
+			(at 135.89 43.18 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" "https://www.digikey.com/en/products/detail/onsemi/BAT54T1G/918319"
+			(at 135.89 43.18 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4837,6 +4981,24 @@
 				(hide yes)
 			)
 		)
+		(property "Cost (10+)" "0.42"
+			(at 22.86 72.39 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" "https://www.digikey.com/en/products/detail/jst-sales-america-inc/SM04B-SRSS-TB/926710"
+			(at 22.86 72.39 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "1"
 			(uuid "9a80d9fd-4a1b-4095-8bff-dcf8d91387b8")
 		)
@@ -4913,6 +5075,24 @@
 				(hide yes)
 			)
 		)
+		(property "Cost (10+)" ""
+			(at 129.54 107.95 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" ""
+			(at 129.54 107.95 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "2"
 			(uuid "46f3ba87-9dbf-4149-8f26-a5fdfdac9418")
 		)
@@ -4959,7 +5139,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "4.7K"
+		(property "Value" "1K"
 			(at 50.8 30.4799 0)
 			(effects
 				(font
@@ -4987,6 +5167,24 @@
 			)
 		)
 		(property "Description" "Resistor, US symbol"
+			(at 48.26 29.21 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Cost (10+)" "0.03"
+			(at 48.26 29.21 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" "https://www.digikey.com/en/products/detail/susumu/RR1220P-102-D/432291"
 			(at 48.26 29.21 0)
 			(effects
 				(font
@@ -5065,6 +5263,24 @@
 				(hide yes)
 			)
 		)
+		(property "Cost (10+)" ""
+			(at 90.17 158.75 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" ""
+			(at 90.17 158.75 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(instances
 			(project "IsolatedADSBoard_V2"
 				(path "/948ff3f4-c0c6-4f78-99ba-ed3a397491b6"
@@ -5091,7 +5307,7 @@
 				)
 			)
 		)
-		(property "Value" "0"
+		(property "Value" "1K"
 			(at 197.104 81.788 90)
 			(effects
 				(font
@@ -5155,6 +5371,24 @@
 		)
 		(property "Sim.Pins" ""
 			(at 194.31 81.28 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Cost (10+)" "0.03"
+			(at 194.31 81.28 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" "https://www.digikey.com/en/products/detail/susumu/RR1220P-102-D/432291"
+			(at 194.31 81.28 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5266,6 +5500,24 @@
 				(hide yes)
 			)
 		)
+		(property "Cost (10+)" ""
+			(at 101.6 22.86 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" ""
+			(at 101.6 22.86 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "2"
 			(uuid "93647dec-99ad-456e-9b61-99654ebfa44f")
 		)
@@ -5336,6 +5588,24 @@
 				(hide yes)
 			)
 		)
+		(property "Cost (10+)" ""
+			(at 90.17 163.83 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" ""
+			(at 90.17 163.83 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(instances
 			(project "IsolatedADSBoard_V2"
 				(path "/948ff3f4-c0c6-4f78-99ba-ed3a397491b6"
@@ -5390,6 +5660,24 @@
 			)
 		)
 		(property "Description" "I2C Isolator, 2.5 kVrms, Bidirectional clock and data, SOIC-8"
+			(at 78.74 72.39 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Cost (10+)" "3.45"
+			(at 78.74 72.39 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" "https://www.digikey.com/en/products/detail/texas-instruments/ISO1540DR/3587222"
 			(at 78.74 72.39 0)
 			(effects
 				(font
@@ -5478,6 +5766,24 @@
 			)
 		)
 		(property "Description" "Mounting Hole without connection"
+			(at 90.17 148.59 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Cost (10+)" ""
+			(at 90.17 148.59 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" ""
 			(at 90.17 148.59 0)
 			(effects
 				(font
@@ -5706,6 +6012,24 @@
 				(hide yes)
 			)
 		)
+		(property "Cost (10+)" "0.05"
+			(at 128.27 43.18 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" "https://www.digikey.com/en/products/detail/onsemi/BAT54T1G/918319"
+			(at 128.27 43.18 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "1"
 			(uuid "01e6ef7f-b844-4203-9800-f3db5bd26979")
 		)
@@ -5876,6 +6200,24 @@
 				(hide yes)
 			)
 		)
+		(property "Cost (10+)" "0.016"
+			(at 165.1 58.42 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" "https://www.digikey.com/en/products/detail/kemet/C0805C104K5RACTU/411169"
+			(at 165.1 58.42 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "1"
 			(uuid "f022aab1-0d59-48b6-b90a-58855da5d7aa")
 		)
@@ -5981,6 +6323,24 @@
 				(hide yes)
 			)
 		)
+		(property "Cost (10+)" "0.06"
+			(at 115.57 39.37 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" "https://www.digikey.com/en/products/detail/panasonic-electronic-components/ERA-6AEB753V/1465794"
+			(at 115.57 39.37 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "1"
 			(uuid "5ec53490-6340-4687-a06a-b03abbe9434f")
 		)
@@ -6051,6 +6411,24 @@
 				(hide yes)
 			)
 		)
+		(property "Cost (10+)" ""
+			(at 90.17 153.67 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" ""
+			(at 90.17 153.67 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(instances
 			(project "IsolatedADSBoard_V2"
 				(path "/948ff3f4-c0c6-4f78-99ba-ed3a397491b6"
@@ -6079,7 +6457,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "4.7K"
+		(property "Value" "1K"
 			(at 227.33 77.4699 0)
 			(effects
 				(font
@@ -6107,6 +6485,24 @@
 			)
 		)
 		(property "Description" "Resistor, US symbol"
+			(at 224.79 76.2 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Cost (10+)" "0.03"
+			(at 224.79 76.2 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" "https://www.digikey.com/en/products/detail/susumu/RR1220P-102-D/432291"
 			(at 224.79 76.2 0)
 			(effects
 				(font
@@ -6220,6 +6616,24 @@
 				(hide yes)
 			)
 		)
+		(property "Cost (10+)" "0.08"
+			(at 107.95 31.75 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" "https://www.digikey.com/en/products/detail/susumu/RG2012P-4993-B-T5/1240783"
+			(at 107.95 31.75 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "1"
 			(uuid "79fe6aab-6039-4b03-9174-e61e4870c47f")
 		)
@@ -6254,7 +6668,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "4.7K"
+		(property "Value" "1K"
 			(at 233.68 77.4699 0)
 			(effects
 				(font
@@ -6282,6 +6696,24 @@
 			)
 		)
 		(property "Description" "Resistor, US symbol"
+			(at 231.14 76.2 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Cost (10+)" "0.03"
+			(at 231.14 76.2 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" "https://www.digikey.com/en/products/detail/susumu/RR1220P-102-D/432291"
 			(at 231.14 76.2 0)
 			(effects
 				(font
@@ -6395,6 +6827,24 @@
 				(hide yes)
 			)
 		)
+		(property "Cost (10+)" "0.016"
+			(at 54.61 73.66 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" "https://www.digikey.com/en/products/detail/kemet/C0805C104K5RACTU/411169"
+			(at 54.61 73.66 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "1"
 			(uuid "6fbe18b0-d957-49cf-b018-9dcb02286867")
 		)
@@ -6456,6 +6906,24 @@
 			)
 		)
 		(property "Description" "Generic connectable mounting pin connector, single row, 01x04, script generated (kicad-library-utils/schlib/autogen/connector/)"
+			(at 22.86 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Cost (10+)" "0.42"
+			(at 22.86 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" "https://www.digikey.com/en/products/detail/jst-sales-america-inc/SM04B-SRSS-TB/926710"
 			(at 22.86 50.8 0)
 			(effects
 				(font
@@ -6570,6 +7038,24 @@
 			)
 		)
 		(property "Sim.Pins" ""
+			(at 113.03 73.66 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Cost (10+)" "0.016"
+			(at 113.03 73.66 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "DigiKey Link" "https://www.digikey.com/en/products/detail/kemet/C0805C104K5RACTU/411169"
 			(at 113.03 73.66 0)
 			(effects
 				(font
