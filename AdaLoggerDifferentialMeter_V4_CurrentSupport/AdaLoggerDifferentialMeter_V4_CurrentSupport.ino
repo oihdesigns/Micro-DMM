@@ -95,7 +95,7 @@ float voltage01 = 0.0;
 float voltage01actual = 0.0;
 float voltage23 = 0.0;
 //float vScale = 69.669; //for 15k bridge
-float vScale = 14.7482; //for 75k bridge
+float vScale = 14.319; //for 75k bridge
 
 float current = 0.0;
 
@@ -648,7 +648,7 @@ void loop(void){
       firstVoltRunMan  = false;
       firstVoltRunAuto  = true;
       ads.setGain(GAIN_ONE);
-      ads2.setGain(GAIN_EIGHT);
+      ads2.setGain(GAIN_SIXTEEN);
       (void)readRaw23();
       (void)ads2ReadRaw23();                  // throw away first sample after gain set
       ads.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3, /*continuous=*/true);
@@ -662,7 +662,7 @@ void loop(void){
     voltage01 = voltage01actual*vScale; //Convert to voltage
     if(digitalRead(currentEnable)){
     ads1_results23 = ads2.getLastConversionResults();
-    current = ((ads1_results23*-0.25)/1000)*10;
+    current = ((ads1_results23*-0.125)/1000)*10;
     }else{
       current=0;
     }
@@ -697,7 +697,7 @@ void loop(void){
     }
   }
 
-  if(abs(current) > 0.05){
+  if(abs(current) > 0.025){
     if(current > lastLoggedI+0.1){
       trigFlag = 1;
     }
