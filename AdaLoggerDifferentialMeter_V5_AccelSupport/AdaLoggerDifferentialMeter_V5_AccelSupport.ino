@@ -1,3 +1,11 @@
+/*
+Logging speed notes: 
+Voltage only (single channel): ~2kHz (500uS)
+Voltage + Current: ~1kHz (1000uS)
+Voltage + Accel: 1400uS
+Voltage + Current + Accel: 500Hz (2000uS)
+*/
+
 #include <Adafruit_ADS1X15.h>
 #include <SPI.h>
 #include "SdFat.h"
@@ -33,6 +41,34 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define SD_CS_PIN 23
 const int PIXEL_PIN = 17;       // Onboard NeoPixel
 
+Adafruit_ADXL343 accel = Adafruit_ADXL343(12345);
+  float accelX = 0.0;
+  float accelY = 0.0;
+  float accelZ = 0.0;
+
+  float accelThres = 0.0;
+
+  float accelXMax = 0.0;
+  float accelYMax = 0.0;
+  float accelZMax = 0.0;
+
+  float accelLastLoggedX = 0.0;
+  float accelLastLoggedY = 0.0;
+  float accelLastLoggedZ = 0.0;
+
+
+
+  unsigned long accelXTime = 0.0;
+  unsigned long accelYTime = 0.0;
+  unsigned long accelZTime = 0.0;
+
+  unsigned long accelWindowTime = 0.0;
+
+  int accelCount;
+  int accelZMaxcount;
+
+
+
 
 /*
 //breadboard version
@@ -49,7 +85,8 @@ const int screenEnable = 13;
 
 //solder version
 
-const int ch2Enable = 13;
+const int ch2Enable = 25;
+const int accelPin = 13;
 const int currentEnable = 12;
 const int autorangePin = 11;
 const int slowLogPin = 10;
@@ -61,24 +98,22 @@ const int markButton = 5;
 const int trigThres = A0; //10K Pot vcc to gnd
 const int battPin = A2; //2x 4.7K 
 //Note: A3 is the temp pin: 10k vcc to pin, ntc pin to ground
-//6 still unused... 
-
-
-
-
 
 
 // BUFFER SETTINGS
-const size_t MAX_SAMPLES = 2000;   // adjustable
-struct Sample {
-  float d1;
-  float d2;
-  float d3;
-  float td;
-  float t;   // optional: timestamp in microseconds
-};
-Sample buffer[MAX_SAMPLES];
-volatile size_t sampleCount = 0;
+  const size_t MAX_SAMPLES = 2000;   // adjustable
+  struct Sample {
+    float d1;
+    float d2;
+    float d3;
+    float d4;
+    float d5;
+    float d6;
+    float td;
+    float t;   // optional: timestamp in microseconds
+  };
+  Sample buffer[MAX_SAMPLES];
+  volatile size_t sampleCount = 0;
 
 // Trigger state tracking
 bool triggerPrev = false;
@@ -281,7 +316,7 @@ void makeUniqueFilename(const char* base, const char* suffix, char* outBuf, size
   snprintf(outBuf, outSize, "/%s9999%s", base, suffix);
 }
 
-void captureSample(float data1, float data2, float data3) { // FUNCTION: capture a sample into RAM
+void captureSample(float data1, float data2, float data3, float data4, float data5, float data6) { // FUNCTION: capture a sample into RAM
   if (sampleCount >= MAX_SAMPLES) return;   // buffer full - ignore or handle differently
 
   prevTriggerT=triggerT;
@@ -293,6 +328,9 @@ void captureSample(float data1, float data2, float data3) { // FUNCTION: capture
   buffer[sampleCount].d1 = data1;
   buffer[sampleCount].d2 = data2;
   buffer[sampleCount].d3 = data3;
+  buffer[sampleCount].d4 = data4;
+  buffer[sampleCount].d5 = data5;
+  buffer[sampleCount].d6 = data6;
   buffer[sampleCount].t  = (timemS+(triggerT/1000));       // optional timestamp
   buffer[sampleCount].td  = deltaT;
 
@@ -324,6 +362,12 @@ void flushBufferToSD() { //FUNCTION: flush RAM buffer to SD
     logfile.print(buffer[i].d2, 1);
     logfile.print(",");
     logfile.print(buffer[i].d3, 4);
+    logfile.print(",");
+    logfile.print(buffer[i].d4, 2);
+    logfile.print(",");
+    logfile.print(buffer[i].d5, 2);
+    logfile.print(",");
+    logfile.print(buffer[i].d6, 2);
     logfile.print(",");
     logfile.print(tempF);
     logfile.print(",");
@@ -376,6 +420,18 @@ void outputs(float data1, float data2) {
   Serial.print("/ temp"); Serial.print(tempF);
   Serial.print(" Batt:"); Serial.print(battV,2);
   Serial.print(" Total Logs: "); Serial.println(logCount);
+  Serial.print ("Accel: ");
+  Serial.print("X: "); Serial.print(accelXMax); Serial.print("  T:"); Serial.print("  ");
+  Serial.print("Y: "); Serial.print(accelYMax); Serial.print("  T:"); Serial.print("  ");
+  Serial.print("Z: "); Serial.print(accelZMax); Serial.print("  T:"); Serial.print(" count:"); Serial.print(accelCount); Serial.print(" maxcount:");Serial.print(accelZMaxcount); Serial.print("  ");Serial.println("m/s^2 ");
+
+  accelXMax = 0;
+  accelYMax = 0;
+  accelZMax = 0;
+  accelWindowTime = 0.0;
+  accelCount = 0;
+  accelZMaxcount =0;
+
   //Serial.println(results01);
   //Serial.println(gainIndexVolt);
 
@@ -430,6 +486,7 @@ void setup(void){
 
   pinMode(sdEnable, INPUT_PULLUP);
   pinMode(ch2Enable, INPUT_PULLUP);
+  pinMode(accelPin, INPUT_PULLUP);
   pinMode(currentEnable, INPUT_PULLUP);
   pinMode(trigThres, INPUT);
   pinMode(autorangePin, INPUT_PULLUP);
@@ -452,6 +509,21 @@ void setup(void){
     Serial.println("Failed to initialize ADS 2 .");
     while (1);  
   }
+
+  /* Initialise the sensor */
+  if(!accel.begin())
+  {
+    /* There was a problem detecting the ADXL343 ... check your connections */
+    Serial.println("Ooops, no ADXL343 detected ... Check your wiring!");
+    while(1);
+  }
+
+    /* Set the range to whatever is appropriate for your project */
+  // accel.setRange(ADXL343_RANGE_16_G);
+  // accel.setRange(ADXL343_RANGE_8_G);
+  accel.setRange(ADXL343_RANGE_4_G);
+  // accel.setRange(ADXL343_RANGE_2_G);
+  accel.setDataRate(ADXL343_DATARATE_1600_HZ);
   
   pixel.begin();
   pixel.clear();
@@ -497,7 +569,7 @@ void setup(void){
   // First row: human-readable timestamp
   logfile.print("Log Start Time,");
   logfile.println(now.timestamp());
-  logfile.println("Delta uS,V Ch1,V Ch2, I, Temp, RTC Stamp");
+  logfile.println("Delta uS,V Ch1,V Ch2, I, X, Y, Z, Temp, RTC Stamp");
   logfile.flush();
 
   Serial.print("Logging to: ");
@@ -508,7 +580,7 @@ void setup(void){
     logON = 0;
   }
   
-  if(digitalRead(ch2Enable)){
+  if(!digitalRead(ch2Enable)){
     ch2on = true;    
   }else{
     ch2on = false;
@@ -518,7 +590,7 @@ void setup(void){
 
   }
 
-
+ Serial.print("Setup Complete");
   
 }
 
@@ -541,7 +613,7 @@ void loop(void){
   if(digitalRead(screenEnable)){
     screenInhibit = 0;
     screenInhibitPrevious = 0;
-  }else{
+  }else{ //This section isn't working. Not sure why.
     screenInhibit = 1;
     if(screenInhibitPrevious = 0){
       display.setTextSize(2);
@@ -574,8 +646,6 @@ void loop(void){
     logCount++;
   }
 
-  
-
     float tempC = readNTCTemperatureC(
       A3,        // analog pin
       12,        // ADC bits
@@ -592,7 +662,53 @@ void loop(void){
 
   
   //results01 = ads.readADC_Differential_2_3(); // integer from ADS
+
+  //Serial.print("accel start");
+  //This is where we read acceleration.
   
+  if(digitalRead(accelPin)){
+  sensors_event_t event;
+
+    //accelWindowTime = micros();
+
+    accel.getEvent(&event);
+
+    accelX = event.acceleration.x;
+    accelY = event.acceleration.y;  
+    accelZ = event.acceleration.z;
+    accelCount++; 
+
+    accelThres = 3;
+
+    if(abs(accelX)-accelThres > abs(accelLastLoggedX)||abs(accelX)+accelThres < abs(accelLastLoggedX)){
+      accelXMax = accelX;
+      //accelXTime = micros()-accelWindowTime;
+      trigFlag = 1;
+      //Serial.print(accelX);
+    }
+    if(abs(accelY)-accelThres > abs(accelLastLoggedY)||abs(accelY)+accelThres < abs(accelLastLoggedY)){
+      accelYMax = accelY;
+      //accelYTime = micros()-accelWindowTime;
+      trigFlag = 1;
+    }
+    if(abs(accelZ)-accelThres > abs(accelLastLoggedZ)||abs(accelZ)+accelThres < abs(accelLastLoggedZ)){
+      accelZMax = accelZ;
+      //accelZTime = micros()-accelWindowTime;
+      accelZMaxcount++;
+      trigFlag = 1;
+    }
+  
+  }else{
+    accelX = 0;
+    accelX = 0;
+    accelX = 0;
+  }
+
+  //Serial.print("accel stop");
+
+
+  
+  //This is where the voltage reading starts
   if(ch2on){
     ads0_results23 = ads.readADC_Differential_2_3();
     results23 = ads.readADC_Differential_0_1();
@@ -711,23 +827,23 @@ void loop(void){
 
 
 
-  if(digitalRead(ch2Enable)){
-    if(voltage23>vMax23){
-      vMax23 = voltage23;
-      trigFlag = 1;
-    }
-    if(voltage23<vMin23){
-      vMin23 = voltage23;
-      trigFlag = 1;
-    }
-  if(abs(voltage23) > noiseThreshold){ 
-      if(voltage23 > lastLoggedV23+0.1){
+  if(!digitalRead(ch2Enable)){
+      if(voltage23>vMax23){
+        vMax23 = voltage23;
         trigFlag = 1;
       }
-      if(voltage23 < lastLoggedV23-0.1){
+      if(voltage23<vMin23){
+        vMin23 = voltage23;
         trigFlag = 1;
       }
-    }
+    if(abs(voltage23) > noiseThreshold){ 
+        if(voltage23 > lastLoggedV23+0.1){
+          trigFlag = 1;
+        }
+        if(voltage23 < lastLoggedV23-0.1){
+          trigFlag = 1;
+        }
+      }
   }
 
   
@@ -736,6 +852,9 @@ void loop(void){
     lastLoggedV01 = voltage01;
     lastLoggedV23 = voltage23;
     lastLoggedI = current;
+    accelLastLoggedX = accelX;
+    accelLastLoggedY = accelY;
+    accelLastLoggedZ = accelZ;
     trigFlag = 0;
   }else{
     writeTrigger = false;
@@ -744,7 +863,7 @@ void loop(void){
 
   // If trigger is active, capture to RAM
   if (writeTrigger && logON) {
-    captureSample(voltage01, voltage23, current);
+    captureSample(voltage01, voltage23, current, accelX, accelY, accelZ);
     logCount++;
   }else{
     outputs(voltage01, voltage23);
@@ -752,7 +871,7 @@ void loop(void){
       if(!manualLog){
       lastLog = millis();
       }
-      captureSample(voltage01, voltage23, current);
+      captureSample(voltage01, voltage23, current, accelX, accelY, accelZ);
       if(logON){
       flushBufferToSD();
       logCount++;
@@ -789,15 +908,21 @@ void updateDisplay(void) {
   if(digitalRead(currentEnable)){
   display.print((current*1000),0);
   }else{
-    display.print("off (#4)");
+    display.print("- #4");
   }
 
   display.setTextSize(1);
   
-  if(digitalRead(ch2Enable)){
+  if(!digitalRead(ch2Enable)){
   display.setCursor(0,16);
   display.print("V2:");
   display.print(voltage23,2);
+  }
+
+  if(digitalRead(accelPin)){
+    display.setTextSize(1);
+    display.setCursor(108,0);
+    display.print("g1");
   }
   
 
@@ -822,7 +947,7 @@ void updateDisplay(void) {
   }else if(!logON){
     //display.setTextSize(2);
     display.setCursor(0,48);
-    display.print ("SD OFF (#8)");  
+    display.print ("SD OFF #8");  
   }else{
     //display.setTextSize(2);
     display.setCursor(0,48);
@@ -841,7 +966,7 @@ void updateDisplay(void) {
   if(autorange){
     display.print ("Auto");
   }else{
-    display.print ("Fixed");
+    display.print ("F #5");
   }
 
   display.setCursor(72,56);
