@@ -46,7 +46,7 @@ Adafruit_ADXL343 accel = Adafruit_ADXL343(12345);
   float accelY = 0.0;
   float accelZ = 0.0;
 
-  float accelThres = 0.0;
+  float accelThres = 4;
 
   float accelXMax = 0.0;
   float accelYMax = 0.0;
@@ -95,7 +95,7 @@ const int sdEnable = 6;
 
 const int markButton = 5;
 
-const int trigThres = A0; //10K Pot vcc to gnd
+const int trigThresPin = A0; //10K Pot vcc to gnd
 const int battPin = A2; //2x 4.7K 
 //Note: A3 is the temp pin: 10k vcc to pin, ntc pin to ground
 
@@ -136,7 +136,8 @@ float vScale = 14.319; //for 75k bridge
 
 float current = 0.0;
 
-float trigRaw = 0.0;
+float voltageTrigRaw = 0.0;
+float accelThresRaw = 0.0;
 
 int tempF= 0;
 
@@ -443,6 +444,87 @@ void outputs(float data1, float data2) {
   
 }
 
+void measureVoltage(void){
+
+    if(!digitalRead(accelPin)){
+    //need to make this only work if V is the only measurement avaliable
+    voltageTrigRaw = analogRead(trigThresPin);
+    vStep = 0.125*((4*voltageTrigRaw/4095)*(4*voltageTrigRaw/4095)*(4*voltageTrigRaw/4095));
+  }
+
+    if(ch2on){
+    ads0_results23 = ads.readADC_Differential_2_3();
+    results23 = ads.readADC_Differential_0_1();
+
+    voltage01actual = (ads0_results23 * multiplier) / 1000.0f;
+    voltage01       = voltage01actual * vScale;
+
+    voltage23       = ((results23 * multiplier) / 1000.0f) * vScale;
+  
+  }else if(autorange){
+
+    if (firstVoltRunAuto) {
+      gainIndexVolt = kNumGainLevels - 1; // start at max gain
+      firstVoltRunAuto  = false;
+      firstVoltRunMan  = true;
+      ads.setGain(kGainLevels[gainIndexVolt]);
+      (void)readRaw23();                  // throw away first sample after gain set
+    }
+    
+  
+    ads0_results23 = ads.getLastConversionResults();
+    int absCounts = abs(ads0_results23);
+
+    bool nearLow  = absCounts < (ADC_COUNT_LOW_THRESHOLD + ADC_GUARD_BAND);
+    bool nearHigh = absCounts > (ADC_COUNT_HIGH_THRESHOLD - ADC_GUARD_BAND);
+    
+    // set current gain
+    ads.setGain(kGainLevels[gainIndexVolt]);
+
+    // get a fresh conversion at THIS gain
+    ads0_results23 = readRaw23();
+
+    // autorange decision
+    if (abs(ads0_results23) > ADC_COUNT_HIGH_THRESHOLD && gainIndexVolt > 0) {
+      --gainIndexVolt;
+      ads.setGain(kGainLevels[gainIndexVolt]);
+      (void)readRaw23();          // discard one sample after changing gain
+      //Serial.print("range+");
+      return;                     // don't compute volts from the pre-change sample
+    }
+
+    if (abs(ads0_results23) < ADC_COUNT_LOW_THRESHOLD && gainIndexVolt < (kNumGainLevels - 1)) {
+      ++gainIndexVolt;
+      ads.setGain(kGainLevels[gainIndexVolt]);
+      (void)readRaw23();          // discard one sample after changing gain
+      //Serial.print("range-");
+      return;                     // same idea
+    }
+
+    // now results01 definitely corresponds to current gainIndexVolt
+    voltage01actual = (ads0_results23 * kGainFactors[gainIndexVolt]) / 1000.0f;
+    voltage01 = voltage01actual * vScale;
+  }else{
+        if (firstVoltRunMan) {
+      firstVoltRunMan  = false;
+      firstVoltRunAuto  = true;
+      ads.setGain(GAIN_ONE);
+      ads2.setGain(GAIN_SIXTEEN);
+      (void)readRaw23();
+      (void)ads2ReadRaw23();                  // throw away first sample after gain set
+      ads.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3, /*continuous=*/true);
+      ads2.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3, /*continuous=*/true);
+    }
+    
+    multiplier = 2.0F; 
+    ads0_results23  = ads.getLastConversionResults();
+
+    voltage01actual = (ads0_results23*multiplier)/1000;
+    voltage01 = voltage01actual*vScale; //Convert to voltage
+
+
+ }
+}
 
 void setup(void){
   Serial.begin(115200);
@@ -488,7 +570,7 @@ void setup(void){
   pinMode(ch2Enable, INPUT_PULLUP);
   pinMode(accelPin, INPUT_PULLUP);
   pinMode(currentEnable, INPUT_PULLUP);
-  pinMode(trigThres, INPUT);
+  pinMode(trigThresPin, INPUT);
   pinMode(autorangePin, INPUT_PULLUP);
   pinMode(markButton, INPUT_PULLUP);
   pinMode(battPin, INPUT);
@@ -613,29 +695,27 @@ void loop(void){
   if(digitalRead(screenEnable)){
     screenInhibit = 0;
     screenInhibitPrevious = 0;
-  }else{ //This section isn't working. Not sure why.
-    screenInhibit = 1;
-    if(screenInhibitPrevious = 0){
-      display.setTextSize(2);
-      display.setRotation(0); //rotates text on OLED 1=90 degrees, 2=180 degrees
-      display.setTextColor(SSD1306_WHITE);
-  // Splash screen
-      display.setCursor(0, 0);
-      display.clearDisplay();
-      display.print("Inhibit");
-      display.display();
-      
+    }else{ //This section isn't working. Not sure why.
+      screenInhibit = 1;
+      if(screenInhibitPrevious = 0){
+        display.setTextSize(2);
+        display.setRotation(0); //rotates text on OLED 1=90 degrees, 2=180 degrees
+        display.setTextColor(SSD1306_WHITE);
+    // Splash screen
+        display.setCursor(0, 0);
+        display.clearDisplay();
+        display.print("Inhibit");
+        display.display();
+        
     }
     screenInhibitPrevious = 1;
   }
   
   prevVoltage = voltage01;
 
-  trigRaw = analogRead(trigThres);
-  vStep = 0.125*((4*trigRaw/4095)*(4*trigRaw/4095)*(4*trigRaw/4095));
-
   battRaw = analogRead(battPin);
   battV = (battRaw/4095)*3.3*2;
+
 
 
 
@@ -678,7 +758,8 @@ void loop(void){
     accelZ = event.acceleration.z;
     accelCount++; 
 
-    accelThres = 3;
+    accelThresRaw = analogRead(trigThresPin);
+    accelThres = 0.25*((4*accelThresRaw/4095)*(4*accelThresRaw/4095)*(4*accelThresRaw/4095));;
 
     if(abs(accelX)-accelThres > abs(accelLastLoggedX)||abs(accelX)+accelThres < abs(accelLastLoggedX)){
       accelXMax = accelX;
@@ -709,82 +790,16 @@ void loop(void){
 
   
   //This is where the voltage reading starts
-  if(ch2on){
-    ads0_results23 = ads.readADC_Differential_2_3();
-    results23 = ads.readADC_Differential_0_1();
 
-    voltage01actual = (ads0_results23 * multiplier) / 1000.0f;
-    voltage01       = voltage01actual * vScale;
 
-    voltage23       = ((results23 * multiplier) / 1000.0f) * vScale;
-  
-  }else if(autorange){
+  measureVoltage();
 
-    if (firstVoltRunAuto) {
-      gainIndexVolt = kNumGainLevels - 1; // start at max gain
-      firstVoltRunAuto  = false;
-      firstVoltRunMan  = true;
-      ads.setGain(kGainLevels[gainIndexVolt]);
-      (void)readRaw23();                  // throw away first sample after gain set
-    }
-    
-  
-    ads0_results23 = ads.getLastConversionResults();
-    int absCounts = abs(ads0_results23);
-
-    bool nearLow  = absCounts < (ADC_COUNT_LOW_THRESHOLD + ADC_GUARD_BAND);
-    bool nearHigh = absCounts > (ADC_COUNT_HIGH_THRESHOLD - ADC_GUARD_BAND);
-    
-    // set current gain
-    ads.setGain(kGainLevels[gainIndexVolt]);
-
-    // get a fresh conversion at THIS gain
-    ads0_results23 = readRaw23();
-
-    // autorange decision
-    if (abs(ads0_results23) > ADC_COUNT_HIGH_THRESHOLD && gainIndexVolt > 0) {
-      --gainIndexVolt;
-      ads.setGain(kGainLevels[gainIndexVolt]);
-      (void)readRaw23();          // discard one sample after changing gain
-      //Serial.print("range+");
-      return;                     // don't compute volts from the pre-change sample
-    }
-
-    if (abs(ads0_results23) < ADC_COUNT_LOW_THRESHOLD && gainIndexVolt < (kNumGainLevels - 1)) {
-      ++gainIndexVolt;
-      ads.setGain(kGainLevels[gainIndexVolt]);
-      (void)readRaw23();          // discard one sample after changing gain
-      //Serial.print("range-");
-      return;                     // same idea
-    }
-
-    // now results01 definitely corresponds to current gainIndexVolt
-    voltage01actual = (ads0_results23 * kGainFactors[gainIndexVolt]) / 1000.0f;
-    voltage01 = voltage01actual * vScale;
-  }else{
-        if (firstVoltRunMan) {
-      firstVoltRunMan  = false;
-      firstVoltRunAuto  = true;
-      ads.setGain(GAIN_ONE);
-      ads2.setGain(GAIN_SIXTEEN);
-      (void)readRaw23();
-      (void)ads2ReadRaw23();                  // throw away first sample after gain set
-      ads.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3, /*continuous=*/true);
-      ads2.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3, /*continuous=*/true);
-    }
-    
-    multiplier = 2.0F; 
-    ads0_results23  = ads.getLastConversionResults();
-
-    voltage01actual = (ads0_results23*multiplier)/1000;
-    voltage01 = voltage01actual*vScale; //Convert to voltage
-    if(digitalRead(currentEnable)){
+  if(digitalRead(currentEnable)){
+     
     ads1_results23 = ads2.getLastConversionResults();
     current = ((ads1_results23*-0.125)/1000)*10;
     }else{
       current=0;
-    }
-
   }
   
 
@@ -923,6 +938,8 @@ void updateDisplay(void) {
     display.setTextSize(1);
     display.setCursor(108,0);
     display.print("g1");
+    display.setCursor(100,8);
+    display.print(accelThres);
   }
   
 
