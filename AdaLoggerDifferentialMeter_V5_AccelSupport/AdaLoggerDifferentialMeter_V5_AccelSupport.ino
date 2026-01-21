@@ -41,6 +41,41 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define SD_CS_PIN 23
 const int PIXEL_PIN = 17;       // Onboard NeoPixel
 
+
+
+
+
+
+/*
+//breadboard version
+const int sdEnable = 4;
+const int ch2Enable = 24;
+const int serialEnable = 25;
+const int trigThres = A0; //10K Pot vcc to gnd
+const int autorangePin = 5;
+const int markButton = 6;
+const int battPin = A2; //2x 4.7K 
+const int slowLogPin = 9;
+const int screenEnable = 13;
+*/
+
+//solder version
+
+const int ch2Enable = 25;
+const int voltReadPin = 24;
+const int accelPin = 13; //DIP3
+const int currentEnable = 12; //DIP4
+const int autorangePin = 11; //DIP5
+const int slowLogPin = 10; //DIP6
+const int screenEnable = 9; //DIP7
+const int sdEnable = 6; //DIP8
+
+const int markButton = 5;
+
+const int trigThresPin = A0; //10K Pot vcc to gnd
+const int battPin = A2; //2x 4.7K 
+//Note: A3 is the temp pin: 10k vcc to pin, ntc pin to ground
+
 Adafruit_ADXL343 accel = Adafruit_ADXL343(12345);
   float accelX = 0.0;
   float accelY = 0.0;
@@ -66,38 +101,6 @@ Adafruit_ADXL343 accel = Adafruit_ADXL343(12345);
 
   int accelCount;
   int accelZMaxcount;
-
-
-
-
-/*
-//breadboard version
-const int sdEnable = 4;
-const int ch2Enable = 24;
-const int serialEnable = 25;
-const int trigThres = A0; //10K Pot vcc to gnd
-const int autorangePin = 5;
-const int markButton = 6;
-const int battPin = A2; //2x 4.7K 
-const int slowLogPin = 9;
-const int screenEnable = 13;
-*/
-
-//solder version
-
-const int ch2Enable = 25;
-const int accelPin = 13;
-const int currentEnable = 12;
-const int autorangePin = 11;
-const int slowLogPin = 10;
-const int screenEnable = 9;
-const int sdEnable = 6;
-
-const int markButton = 5;
-
-const int trigThresPin = A0; //10K Pot vcc to gnd
-const int battPin = A2; //2x 4.7K 
-//Note: A3 is the temp pin: 10k vcc to pin, ntc pin to ground
 
 
 // BUFFER SETTINGS
@@ -261,13 +264,47 @@ float readNTCTemperatureC(
     return tempK - 273.15f;
 }
 
-int16_t readRaw23() {
-  return ads.readADC_Differential_2_3();   // blocking read -> fresh conversion
+void readAccel(void){
+  sensors_event_t event;
+
+    //accelWindowTime = micros();
+
+    accel.getEvent(&event);
+
+    accelX = event.acceleration.x;
+    accelY = event.acceleration.y;  
+    accelZ = event.acceleration.z;
+    accelCount++; 
+
+    accelThresRaw = analogRead(trigThresPin);
+    accelThres = 0.25*((4*accelThresRaw/4095)*(4*accelThresRaw/4095)*(4*accelThresRaw/4095));;
+
+    if(abs(accelX)-accelThres > abs(accelLastLoggedX)||abs(accelX)+accelThres < abs(accelLastLoggedX)){
+      accelXMax = accelX;
+      //accelXTime = micros()-accelWindowTime;
+      trigFlag = 1;
+      //Serial.print(accelX);
+    }
+    if(abs(accelY)-accelThres > abs(accelLastLoggedY)||abs(accelY)+accelThres < abs(accelLastLoggedY)){
+      accelYMax = accelY;
+      //accelYTime = micros()-accelWindowTime;
+      trigFlag = 1;
+    }
+    if(abs(accelZ)-accelThres > abs(accelLastLoggedZ)||abs(accelZ)+accelThres < abs(accelLastLoggedZ)){
+      accelZMax = accelZ;
+      //accelZTime = micros()-accelWindowTime;
+      accelZMaxcount++;
+      trigFlag = 1;
+    }
 }
 
+int16_t readRaw23() {
+    return ads.readADC_Differential_2_3();   // blocking read -> fresh conversion
+  }
+
 int16_t ads2ReadRaw23() {
-  return ads2.readADC_Differential_2_3();   // blocking read -> fresh conversion
-}
+    return ads2.readADC_Differential_2_3();   // blocking read -> fresh conversion
+  }
 
 void printField(Print* pr, char sep, uint8_t v) {
   if (sep) {
@@ -572,6 +609,7 @@ void setup(void){
   pinMode(currentEnable, INPUT_PULLUP);
   pinMode(trigThresPin, INPUT);
   pinMode(autorangePin, INPUT_PULLUP);
+  pinMode(voltReadPin, INPUT_PULLUP);
   pinMode(markButton, INPUT_PULLUP);
   pinMode(battPin, INPUT);
   pinMode(slowLogPin, INPUT_PULLUP);
@@ -747,37 +785,8 @@ void loop(void){
   //This is where we read acceleration.
   
   if(digitalRead(accelPin)){
-  sensors_event_t event;
-
-    //accelWindowTime = micros();
-
-    accel.getEvent(&event);
-
-    accelX = event.acceleration.x;
-    accelY = event.acceleration.y;  
-    accelZ = event.acceleration.z;
-    accelCount++; 
-
-    accelThresRaw = analogRead(trigThresPin);
-    accelThres = 0.25*((4*accelThresRaw/4095)*(4*accelThresRaw/4095)*(4*accelThresRaw/4095));;
-
-    if(abs(accelX)-accelThres > abs(accelLastLoggedX)||abs(accelX)+accelThres < abs(accelLastLoggedX)){
-      accelXMax = accelX;
-      //accelXTime = micros()-accelWindowTime;
-      trigFlag = 1;
-      //Serial.print(accelX);
-    }
-    if(abs(accelY)-accelThres > abs(accelLastLoggedY)||abs(accelY)+accelThres < abs(accelLastLoggedY)){
-      accelYMax = accelY;
-      //accelYTime = micros()-accelWindowTime;
-      trigFlag = 1;
-    }
-    if(abs(accelZ)-accelThres > abs(accelLastLoggedZ)||abs(accelZ)+accelThres < abs(accelLastLoggedZ)){
-      accelZMax = accelZ;
-      //accelZTime = micros()-accelWindowTime;
-      accelZMaxcount++;
-      trigFlag = 1;
-    }
+  
+  readAccel();
   
   }else{
     accelX = 0;
@@ -791,8 +800,11 @@ void loop(void){
   
   //This is where the voltage reading starts
 
-
-  measureVoltage();
+ if(digitalRead(voltReadPin)){
+    measureVoltage();
+  }else{
+    voltage01 = 0.0;
+  }
 
   if(digitalRead(currentEnable)){
      
