@@ -16,6 +16,7 @@ Voltage + Current + Accel: 500Hz (2000uS)
 #include <RTClib.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_ADXL343.h>
+#include <Adafruit_ST7789.h>
 
 
 RTC_PCF8523 rtc;
@@ -29,22 +30,23 @@ unsigned long lastStatus = 0;
 unsigned long lastLog = 0;
 unsigned long lastLogMillies = 0;
 
-
+/*
 //Screen Setup
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 #define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
 #define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+*/
+
+
+// TFT pins are predefined for the Feather in the core
+Adafruit_ST7789 display = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
+
 
 //Pin List
-#define SD_CS_PIN 23
-const int PIXEL_PIN = 17;       // Onboard NeoPixel
-
-
-
-
-
+#define SD_CS_PIN 15
+const int PIXEL_PIN = 33;       // Onboard NeoPixel
 
 /*
 //breadboard version
@@ -61,8 +63,8 @@ const int screenEnable = 13;
 
 //solder version
 
-const int ch2Enable = 25;
-const int voltReadPin = 24;
+//const int ch2Enable = 25;
+//const int voltReadPin = 24;
 const int accelPin = 13; //DIP3
 const int currentEnable = 12; //DIP4
 const int autorangePin = 11; //DIP5
@@ -229,7 +231,7 @@ char filename[40];
 char intervalFilename[32];
 char triggerFilename[32];
 
-SdSpiConfig config(SD_CS_PIN, DEDICATED_SPI, SD_SCK_MHZ(16), &SPI1);
+SdSpiConfig config(SD_CS_PIN, DEDICATED_SPI, SD_SCK_MHZ(16), &SPI);
 
 
 float readNTCTemperatureC(
@@ -574,7 +576,7 @@ void setup(void){
   analogReadResolution(12);
 
 
-
+/*
   if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
     Serial.println(F("OLED init failed"));
     while (1); // halt
@@ -588,7 +590,22 @@ void setup(void){
   display.setCursor(0, 0);
   display.print("Datalogger");
   display.display();
-  
+  */
+
+  pinMode(TFT_BACKLITE, OUTPUT);
+  digitalWrite(TFT_BACKLITE, HIGH);
+
+  // turn on the TFT / I2C power supply
+  pinMode(TFT_I2C_POWER, OUTPUT);
+  digitalWrite(TFT_I2C_POWER, HIGH);
+  delay(10);
+
+  // Initialize TFT
+  display.init(135, 240); // Init ST7789 240x135
+  display.setRotation(3);
+  display.fillScreen(ST77XX_BLACK);
+
+
   delay(200);
 
   // Start RTC
@@ -604,19 +621,20 @@ void setup(void){
 
 
   pinMode(sdEnable, INPUT_PULLUP);
-  pinMode(ch2Enable, INPUT_PULLUP);
+
   pinMode(accelPin, INPUT_PULLUP);
   pinMode(currentEnable, INPUT_PULLUP);
   pinMode(trigThresPin, INPUT);
   pinMode(autorangePin, INPUT_PULLUP);
-  pinMode(voltReadPin, INPUT_PULLUP);
   pinMode(markButton, INPUT_PULLUP);
   pinMode(battPin, INPUT);
   pinMode(slowLogPin, INPUT_PULLUP);
   pinMode(screenEnable, INPUT_PULLUP);
 
+  //pinMode(ch2Enable, INPUT_PULLUP);
+  //pinMode(voltReadPin, INPUT_PULLUP);
   
-  //ads.setGain(GAIN_TWO);  // 2/3x gain +/- 6.144V  1 bit = 3mV      0.1875mV (default)
+  ads.setGain(GAIN_TWO);  // 2/3x gain +/- 6.144V  1 bit = 3mV      0.1875mV (default)
   ads.setDataRate(RATE_ADS1015_3300SPS); //Fast as possible
 
 
@@ -700,15 +718,24 @@ void setup(void){
     logON = 0;
   }
   
+  
+  
+ /* 
   if(!digitalRead(ch2Enable)){
     ch2on = true;    
   }else{
     ch2on = false;
     voltage23 = 0.0;
-    ads.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3, /*continuous=*/true);
-    ads2.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3, /*continuous=*/true);
+    ads.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3,true);  //continuous
+    ads2.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3, true); //continuous
 
   }
+  */
+
+      ch2on = false;
+    voltage23 = 0.0;
+    ads.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3, /*continuous=*/true);
+    ads2.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3, /*continuous=*/true);
 
  Serial.print("Setup Complete");
   
@@ -741,9 +768,9 @@ void loop(void){
         display.setTextColor(SSD1306_WHITE);
     // Splash screen
         display.setCursor(0, 0);
-        display.clearDisplay();
+//        display.clearDisplay();
         display.print("Inhibit");
-        display.display();
+//        display.display();
         
     }
     screenInhibitPrevious = 1;
@@ -800,11 +827,15 @@ void loop(void){
   
   //This is where the voltage reading starts
 
+/*
  if(digitalRead(voltReadPin)){
     measureVoltage();
   }else{
     voltage01 = 0.0;
   }
+*/
+
+  measureVoltage();
 
   if(digitalRead(currentEnable)){
      
@@ -853,7 +884,7 @@ void loop(void){
 
 
 
-
+/*
   if(!digitalRead(ch2Enable)){
       if(voltage23>vMax23){
         vMax23 = voltage23;
@@ -872,6 +903,7 @@ void loop(void){
         }
       }
   }
+  */
 
   
   if(trigFlag) { //trigger when voltage is more or less than vStep from the last logged V
@@ -920,9 +952,13 @@ void loop(void){
 }
 
 void updateDisplay(void) {
+  
+  
   // Prepare values for display
-  display.clearDisplay();
+  display.fillRect(0, 0, 128, 64, ST77XX_RED);
+  //display.fillScreen(ST77XX_RED);
   display.setTextSize(2);
+  display.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
   
   // Display Voltages
   display.setCursor(0,0);
@@ -940,11 +976,13 @@ void updateDisplay(void) {
 
   display.setTextSize(1);
   
+  /*
   if(!digitalRead(ch2Enable)){
   display.setCursor(0,16);
   display.print("V2:");
   display.print(voltage23,2);
   }
+  */
 
   if(digitalRead(accelPin)){
     display.setTextSize(1);
@@ -1004,6 +1042,6 @@ void updateDisplay(void) {
 
   display.setCursor(0,56);  
 
-  display.display(); // update the OLED with all the drawn content
+  //display.display(); // update the OLED with all the drawn content
 }
 
