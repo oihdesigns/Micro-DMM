@@ -16,6 +16,7 @@ Voltage + Current + Accel: 500Hz (2000uS)
 #include <RTClib.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_ADXL343.h>
+#include <Adafruit_ST7789.h>
 
 
 RTC_PCF8523 rtc;
@@ -29,17 +30,23 @@ unsigned long lastStatus = 0;
 unsigned long lastLog = 0;
 unsigned long lastLogMillies = 0;
 
-
+/*
 //Screen Setup
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 #define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
 #define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+*/
+
+
+// TFT pins are predefined for the Feather in the core
+Adafruit_ST7789 display = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
+
 
 //Pin List
-#define SD_CS_PIN 23
-const int PIXEL_PIN = 17;       // Onboard NeoPixel
+#define SD_CS_PIN 15
+const int PIXEL_PIN = 33;       // Onboard NeoPixel
 
 /*
 //breadboard version
@@ -56,8 +63,8 @@ const int screenEnable = 13;
 
 //solder version
 
-const int ch2Enable = 25;
-const int voltReadPin = 24;
+//const int ch2Enable = 25;
+//const int voltReadPin = 24;
 const int accelPin = 13; //DIP3
 const int currentEnable = 12; //DIP4
 const int autorangePin = 11; //DIP5
@@ -158,8 +165,6 @@ bool writeTrigger = 0;
 bool trigFlag = 0;
 float prevVoltage = 0.0;
 float vStep = 0.25;
-float iStep = 0.1;                          // Dynamic current threshold
-float iStepRaw = 0.0;                       // Raw pot reading for current
 float noiseThreshold = 0.5;
 float lastLoggedV01 = 0.25;
 float vMax01 = 0.0;
@@ -204,10 +209,6 @@ static const adsGain_t kGainLevels[] = {
 };
 
   static size_t  gainIndexVolt;
-  static size_t  gainIndexCurrent = 5;          // ads2 gain index, starts at GAIN_SIXTEEN
-  static size_t  gainIndexCurrentPrev = 5;      // Track previous to avoid unnecessary I2C
-  static adxl34x_range_t currentAccelRange = ADXL343_RANGE_4_G;  // Track ADXL range
-  static size_t thresholdSuggestedGainVolt = 255;     // Sentinel for "not yet set"
   // ADC count thresholds for gain switching
   static const int ADC_COUNT_LOW_THRESHOLD  = 250;
   static const int ADC_COUNT_HIGH_THRESHOLD = 1800;
@@ -230,7 +231,7 @@ char filename[40];
 char intervalFilename[32];
 char triggerFilename[32];
 
-SdSpiConfig config(SD_CS_PIN, DEDICATED_SPI, SD_SCK_MHZ(16), &SPI1);
+SdSpiConfig config(SD_CS_PIN, DEDICATED_SPI, SD_SCK_MHZ(16), &SPI);
 
 
 float readNTCTemperatureC(
@@ -265,76 +266,6 @@ float readNTCTemperatureC(
     return tempK - 273.15f;
 }
 
-void readPotAndSetThresholds(void) {
-  float raw = analogRead(trigThresPin);
-  float norm = raw / 4095.0;                       // 0-1
-  float cubic = norm * norm * norm;                 // cubic taper
-
-  if (digitalRead(accelPin)) {
-    // Accel enabled → pot controls accel threshold (0-16g)
-    accelThresRaw = raw;
-    accelThres = 0.25 + cubic * 16.0;              // 0.25g to ~16g
-  } else if (digitalRead(currentEnable)) {
-    // Current enabled (no accel) → pot controls current threshold (0-2A)
-    iStepRaw = raw;
-    iStep = 0.01 + cubic * 2.0;                    // 0.01A to ~2A
-  } else if (digitalRead(voltReadPin)) {
-    // Voltage only → pot controls voltage threshold (0-8V)
-    voltageTrigRaw = raw;
-    vStep = 0.01 + cubic * 8.0;                    // 0.01V to ~8V
-  }
-}
-
-void updateGainsFromThresholds(void) {
-  // --- Voltage gain (sets autorange starting point) ---
-  if (digitalRead(voltReadPin) && autorange) {
-    size_t suggestedGain;
-    if (vStep > 6.0)           suggestedGain = 0;    // TWOTHIRDS
-    else if (vStep > 3.0)      suggestedGain = 1;    // ONE
-    else if (vStep > 1.5)      suggestedGain = 2;    // TWO
-    else if (vStep > 0.75)     suggestedGain = 3;    // FOUR
-    else if (vStep > 0.375)    suggestedGain = 4;    // EIGHT
-    else                        suggestedGain = 5;    // SIXTEEN
-
-    if (suggestedGain != thresholdSuggestedGainVolt) {
-      thresholdSuggestedGainVolt = suggestedGain;
-      gainIndexVolt = suggestedGain;
-      firstVoltRunAuto = true;                        // re-init autorange from new point
-    }
-  }
-
-  // --- Current gain (direct control of ads2) ---
-  if (digitalRead(currentEnable)) {
-    size_t newCurrentGain;
-    if (iStep > 1.0)           newCurrentGain = 0;   // TWOTHIRDS
-    else if (iStep > 0.5)      newCurrentGain = 1;   // ONE
-    else if (iStep > 0.25)     newCurrentGain = 2;   // TWO
-    else if (iStep > 0.1)      newCurrentGain = 3;   // FOUR
-    else                        newCurrentGain = 4;   // EIGHT
-
-    if (newCurrentGain != gainIndexCurrent) {
-      gainIndexCurrent = newCurrentGain;
-      ads2.setGain(kGainLevels[gainIndexCurrent]);
-      (void)ads2ReadRaw23();                          // discard sample after gain change
-      ads2.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3, /*continuous=*/true);
-    }
-  }
-
-  // --- Accel range ---
-  if (digitalRead(accelPin)) {
-    adxl34x_range_t newRange;
-    if (accelThres > 8.0)      newRange = ADXL343_RANGE_16_G;
-    else if (accelThres > 4.0)  newRange = ADXL343_RANGE_8_G;
-    else if (accelThres > 2.0)  newRange = ADXL343_RANGE_4_G;
-    else                        newRange = ADXL343_RANGE_2_G;
-
-    if (newRange != currentAccelRange) {
-      currentAccelRange = newRange;
-      accel.setRange(currentAccelRange);
-    }
-  }
-}
-
 void readAccel(void){
   sensors_event_t event;
 
@@ -345,7 +276,10 @@ void readAccel(void){
     accelX = event.acceleration.x;
     accelY = event.acceleration.y;  
     accelZ = event.acceleration.z;
-    accelCount++;
+    accelCount++; 
+
+    accelThresRaw = analogRead(trigThresPin);
+    accelThres = 0.25*((4*accelThresRaw/4095)*(4*accelThresRaw/4095)*(4*accelThresRaw/4095));;
 
     if(abs(accelX)-accelThres > abs(accelLastLoggedX)||abs(accelX)+accelThres < abs(accelLastLoggedX)){
       accelXMax = accelX;
@@ -551,19 +485,25 @@ void outputs(float data1, float data2) {
 
 void measureVoltage(void){
 
+    if(!digitalRead(accelPin)){
+    //need to make this only work if V is the only measurement avaliable
+    voltageTrigRaw = analogRead(trigThresPin);
+    vStep = 0.125*((4*voltageTrigRaw/4095)*(4*voltageTrigRaw/4095)*(4*voltageTrigRaw/4095));
+  }
+
     if(ch2on){
-      ads0_results23 = ads.readADC_Differential_2_3();
-      results23 = ads.readADC_Differential_0_1();
+    ads0_results23 = ads.readADC_Differential_2_3();
+    results23 = ads.readADC_Differential_0_1();
 
-      voltage01actual = (ads0_results23 * multiplier) / 1000.0f;
-      voltage01       = voltage01actual * vScale;
+    voltage01actual = (ads0_results23 * multiplier) / 1000.0f;
+    voltage01       = voltage01actual * vScale;
 
-      voltage23       = ((results23 * multiplier) / 1000.0f) * vScale;
+    voltage23       = ((results23 * multiplier) / 1000.0f) * vScale;
   
   }else if(autorange){
 
     if (firstVoltRunAuto) {
-      gainIndexVolt = (thresholdSuggestedGainVolt < kNumGainLevels) ? thresholdSuggestedGainVolt : (kNumGainLevels - 1);
+      gainIndexVolt = kNumGainLevels - 1; // start at max gain
       firstVoltRunAuto  = false;
       firstVoltRunMan  = true;
       ads.setGain(kGainLevels[gainIndexVolt]);
@@ -608,7 +548,7 @@ void measureVoltage(void){
       firstVoltRunMan  = false;
       firstVoltRunAuto  = true;
       ads.setGain(GAIN_ONE);
-      ads2.setGain(kGainLevels[gainIndexCurrent]);
+      ads2.setGain(GAIN_SIXTEEN);
       (void)readRaw23();
       (void)ads2ReadRaw23();                  // throw away first sample after gain set
       ads.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3, /*continuous=*/true);
@@ -631,19 +571,16 @@ void setup(void){
  Serial.println("Hello!");
 
   Wire.begin();
-  Serial.println("Wire Begin");
   Wire.setClock(1000000);   // 1 MHz I2C
 
   analogReadResolution(12);
 
 
-
+/*
   if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
     Serial.println(F("OLED init failed"));
     while (1); // halt
   }
-
-   Serial.println("Display Started");
   
   display.clearDisplay();
   display.setTextSize(2);
@@ -653,7 +590,22 @@ void setup(void){
   display.setCursor(0, 0);
   display.print("Datalogger");
   display.display();
-  
+  */
+
+  pinMode(TFT_BACKLITE, OUTPUT);
+  digitalWrite(TFT_BACKLITE, HIGH);
+
+  // turn on the TFT / I2C power supply
+  pinMode(TFT_I2C_POWER, OUTPUT);
+  digitalWrite(TFT_I2C_POWER, HIGH);
+  delay(10);
+
+  // Initialize TFT
+  display.init(135, 240); // Init ST7789 240x135
+  display.setRotation(3);
+  display.fillScreen(ST77XX_BLACK);
+
+
   delay(200);
 
   // Start RTC
@@ -669,19 +621,20 @@ void setup(void){
 
 
   pinMode(sdEnable, INPUT_PULLUP);
-  pinMode(ch2Enable, INPUT_PULLUP);
+
   pinMode(accelPin, INPUT_PULLUP);
   pinMode(currentEnable, INPUT_PULLUP);
   pinMode(trigThresPin, INPUT);
   pinMode(autorangePin, INPUT_PULLUP);
-  pinMode(voltReadPin, INPUT_PULLUP);
   pinMode(markButton, INPUT_PULLUP);
   pinMode(battPin, INPUT);
   pinMode(slowLogPin, INPUT_PULLUP);
   pinMode(screenEnable, INPUT_PULLUP);
 
+  //pinMode(ch2Enable, INPUT_PULLUP);
+  //pinMode(voltReadPin, INPUT_PULLUP);
   
-  //ads.setGain(GAIN_TWO);  // 2/3x gain +/- 6.144V  1 bit = 3mV      0.1875mV (default)
+  ads.setGain(GAIN_TWO);  // 2/3x gain +/- 6.144V  1 bit = 3mV      0.1875mV (default)
   ads.setDataRate(RATE_ADS1015_3300SPS); //Fast as possible
 
 
@@ -695,7 +648,20 @@ void setup(void){
     while (1);  
   }
 
-  Serial.println("Both ADSs Started");
+  /* Initialise the sensor */
+  if(!accel.begin())
+  {
+    /* There was a problem detecting the ADXL343 ... check your connections */
+    Serial.println("Ooops, no ADXL343 detected ... Check your wiring!");
+    while(1);
+  }
+
+    /* Set the range to whatever is appropriate for your project */
+  // accel.setRange(ADXL343_RANGE_16_G);
+  // accel.setRange(ADXL343_RANGE_8_G);
+  accel.setRange(ADXL343_RANGE_4_G);
+  // accel.setRange(ADXL343_RANGE_2_G);
+  accel.setDataRate(ADXL343_DATARATE_1600_HZ);
   
   pixel.begin();
   pixel.clear();
@@ -710,6 +676,22 @@ void setup(void){
         blinkPixel(128, 0, 0, 200);   // Red repeating = SD unavailable
       }
     }
+
+
+  /* //Not needed with RTC
+  // ---- Create trigger capture file ----
+  makeUniqueFilename("capture", ".csv", triggerFilename, sizeof(triggerFilename));
+  Serial.print("Trigger log file: ");
+  Serial.println(triggerFilename);
+
+  triggerFile = SD.open(triggerFilename, FILE_WRITE);
+  if (!triggerFile) {
+    Serial.println("Failed to create trigger capture file!");
+    while (1);
+  }
+  //triggerFile.println("time_us,data1,data2,data3");   // example header
+  //triggerFile.flush();
+  */
 
   // Create unique CSV filename with timestamp
   sprintf(filename, "log_%04d%02d%02d_%02d%02d%02d.csv",
@@ -734,35 +716,26 @@ void setup(void){
 
   }else{
     logON = 0;
-    Serial.println("Logging Off");
-
   }
-
-    /* Initialise the sensor */
-  if(!accel.begin())
-  {
-    /* There was a problem detecting the ADXL343 ... check your connections */
-    Serial.println("Ooops, no ADXL343 detected ... Check your wiring!");
-    while(1);
-  }
-
-    /* Set the range to whatever is appropriate for your project */
-  // accel.setRange(ADXL343_RANGE_16_G);
-  // accel.setRange(ADXL343_RANGE_8_G);
-  accel.setRange(ADXL343_RANGE_4_G);
-  // accel.setRange(ADXL343_RANGE_2_G);
-  accel.setDataRate(ADXL343_DATARATE_1600_HZ);
   
+  
+  
+ /* 
   if(!digitalRead(ch2Enable)){
     ch2on = true;    
   }else{
-    Serial.println("Ch2 Off");
     ch2on = false;
+    voltage23 = 0.0;
+    ads.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3,true);  //continuous
+    ads2.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3, true); //continuous
+
+  }
+  */
+
+      ch2on = false;
     voltage23 = 0.0;
     ads.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3, /*continuous=*/true);
     ads2.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3, /*continuous=*/true);
-
-  }
 
  Serial.print("Setup Complete");
   
@@ -795,9 +768,9 @@ void loop(void){
         display.setTextColor(SSD1306_WHITE);
     // Splash screen
         display.setCursor(0, 0);
-        display.clearDisplay();
+//        display.clearDisplay();
         display.print("Inhibit");
-        display.display();
+//        display.display();
         
     }
     screenInhibitPrevious = 1;
@@ -808,8 +781,8 @@ void loop(void){
   battRaw = analogRead(battPin);
   battV = (battRaw/4095)*3.3*2;
 
-  readPotAndSetThresholds();
-  updateGainsFromThresholds();
+
+
 
   if(digitalRead(markButton)){
     manualLog = 0; //no log, because button is pulled up
@@ -854,16 +827,20 @@ void loop(void){
   
   //This is where the voltage reading starts
 
+/*
  if(digitalRead(voltReadPin)){
     measureVoltage();
   }else{
     voltage01 = 0.0;
   }
+*/
+
+  measureVoltage();
 
   if(digitalRead(currentEnable)){
      
     ads1_results23 = ads2.getLastConversionResults();
-    current = ((ads1_results23*-kGainFactors[gainIndexCurrent])/1000)*10;
+    current = ((ads1_results23*-0.125)/1000)*10;
     }else{
       current=0;
   }
@@ -897,17 +874,17 @@ void loop(void){
   }
 
   if(abs(current) > 0.025){
-    if(current > lastLoggedI+iStep){
+    if(current > lastLoggedI+0.1){
       trigFlag = 1;
     }
-    if(current < lastLoggedI-iStep){
+    if(current < lastLoggedI-0.1){
       trigFlag = 1;
     }
   }  
 
 
 
-
+/*
   if(!digitalRead(ch2Enable)){
       if(voltage23>vMax23){
         vMax23 = voltage23;
@@ -926,6 +903,7 @@ void loop(void){
         }
       }
   }
+  */
 
   
   if(trigFlag) { //trigger when voltage is more or less than vStep from the last logged V
@@ -974,9 +952,13 @@ void loop(void){
 }
 
 void updateDisplay(void) {
+  
+  
   // Prepare values for display
-  display.clearDisplay();
+  display.fillRect(0, 0, 128, 64, ST77XX_RED);
+  //display.fillScreen(ST77XX_RED);
   display.setTextSize(2);
+  display.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
   
   // Display Voltages
   display.setCursor(0,0);
@@ -994,11 +976,13 @@ void updateDisplay(void) {
 
   display.setTextSize(1);
   
+  /*
   if(!digitalRead(ch2Enable)){
   display.setCursor(0,16);
   display.print("V2:");
   display.print(voltage23,2);
   }
+  */
 
   if(digitalRead(accelPin)){
     display.setTextSize(1);
@@ -1015,16 +999,8 @@ void updateDisplay(void) {
   display.print (logCount);
 
   display.setCursor(64,32);
-  if (digitalRead(accelPin)) {
-    display.print("aT:");
-    display.print(accelThres,1);
-  } else if (digitalRead(currentEnable)) {
-    display.print("iT:");
-    display.print(iStep,2);
-  } else {
-    display.print("vT:");
-    display.print(vStep,2);
-  }
+  display.print ("trig");
+  display.print (vStep);
 
   timemS = millis();
   display.setCursor(0,40);
@@ -1066,6 +1042,6 @@ void updateDisplay(void) {
 
   display.setCursor(0,56);  
 
-  display.display(); // update the OLED with all the drawn content
+  //display.display(); // update the OLED with all the drawn content
 }
 
