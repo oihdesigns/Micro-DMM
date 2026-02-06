@@ -83,18 +83,20 @@ bool updates     = true;
 bool debug       = false;
 bool forceStop   = false;
 bool cfSuppress  = false;    // closed/float detection suppressed
+bool prevcfSuppress = false; ///previous supression state 
 bool alarm1       = false;
 bool alarmFlag   = false;
 
 // ── Lead-detection state ──────────────────────────────────────────
 bool  vFloating        = false;
 float bridgeV          = 0.0;
+float bridgeAvg        = 0.0; 
 bool  Vzero            = true;
 bool  VzeroFlag        = true;
 bool  vClosed          = false;
 bool  vUndefined       = true;
 float ClosedConfidence = 10.0;
-float vClosedThres     = 0.1;
+float vClosedThres     = 5.0;
 float closedBias       = 0.0;
 float CorFTrig         = 1.0;
 
@@ -356,7 +358,6 @@ void measureVoltage() {
   } else {
     digitalWrite(VbridgePin, LOW);          // ensure bridge disconnected
     vScale = VOLTAGE_SCALE_full;
-    ads.setDataRate(RATE_ADS1115_860SPS);
   }
 
   if (firstVoltRun) {
@@ -364,6 +365,18 @@ void measureVoltage() {
     firstVoltRun = false;
   }
 
+  if(prevcfSuppress != cfSuppress){
+
+    if(cfSuppress){
+      ads.setDataRate(RATE_ADS1115_64SPS);
+      Serial.print("64sps");
+    }else{
+      ads.setDataRate(RATE_ADS1115_860SPS);
+      Serial.print("860sps");
+    }
+    prevcfSuppress = cfSuppress;
+  }
+  
   ads.setGain(kGainLevels[gainIndexVolt]);
   countV = ads.readADC_Differential_0_1();
 
@@ -408,16 +421,15 @@ void ClosedOrFloat() {
   // Closed-threshold pot (12-bit)
   //closedBias   = (analogRead(clsdThreshold) / 4095.0f) * 2.0f;
   //vClosedThres = 0.1f * closedBias;
-
-  vClosedThres = 0.1f;
+  //vClosedThres = 0.1f;
 
   vClosed = vFloating = vUndefined = false;
 
   // First bridge sample
   digitalWrite(VbridgePin, HIGH);
-  delay(5);
-  ads.setDataRate(RATE_ADS1115_860SPS);
-  ads.setGain(GAIN_SIXTEEN);
+  delay(1);
+  //ads.setDataRate(RATE_ADS1115_860SPS);
+  //ads.setGain(GAIN_SIXTEEN);
   float bv1 = ads.readADC_Differential_0_1()
               * (0.0078125f / 1000.0f) * VOLTAGE_SCALE_full;
   digitalWrite(VbridgePin, LOW);
@@ -431,6 +443,11 @@ void ClosedOrFloat() {
   bridgeV = (fabs(bv1) + fabs(bv2)) / 2.0f;
 */
   bridgeV = bv1;
+  if(fabs(bridgeV)>fabs(bridgeAvg)){
+      bridgeAvg = bridgeAvg - (fabs(bridgeV)/10);
+    }else{
+      bridgeAvg = bridgeAvg + (fabs(bridgeV)/10);
+  }
   // ── Classification ──
   if (fabs(bridgeV) < vClosedThres) {
     if (vClosedtrig) vClosed = true;
@@ -577,7 +594,7 @@ void updateDisplay() {
 
   // ── Confidence percentage (dynamic, overwrites in place) ──
   if (vRefEnable && Vzero && !cfSuppress) {
-    float pct = ClosedConfidence * 5.0f;
+    float pct = (abs(bridgeAvg) / (vClosedThres))*100;
     tft.setTextSize(2);
     tft.setTextColor(COL_TEXT, COL_BG);
     tft.setCursor(174, 75);
@@ -588,8 +605,8 @@ void updateDisplay() {
 
   // ── Confidence bar (fills with colour, no black flash) ──
   if (vRefEnable && Vzero && !cfSuppress) {
-    float pct = ClosedConfidence * 5.0f;
-    int barW  = (int)(pct / 100.0f * 200);
+    float pct = abs(bridgeAvg) / (vClosedThres*3);
+    int barW  = (int)(pct * 200);
     tft.fillRect(4,        98, barW,       6, COL_BAR_FILL);
     tft.fillRect(4 + barW, 98, 200 - barW, 6, COL_BAR_EMPTY);
     tft.drawRect(3, 97, 202, 8, COL_DIVIDER);
@@ -605,8 +622,8 @@ void updateDisplay() {
   dtostrf(vClosedThres, 5, 3, buf);  tft.print(buf);
 
   tft.setCursor(90, 112);
-  tft.print("Zero:");
-  dtostrf(CorFTrig, 5, 3, buf);      tft.print(buf);
+  tft.print("bAvg:");
+  dtostrf(bridgeAvg, 5, 3, buf);      tft.print(buf);
 
   tft.setCursor(180, 112);
   tft.print("Gain:");
