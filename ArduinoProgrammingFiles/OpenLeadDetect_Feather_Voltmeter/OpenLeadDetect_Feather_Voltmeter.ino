@@ -7,7 +7,8 @@
  *
  * Hardware:
  *   - Adafruit ESP32-S2 or S3 TFT Feather
- *   - ADS1115 16-bit ADC on I2C (addr 0x48)
+ *   - ADS1115 (16-bit) or ADS1015 (12-bit) ADC on I2C (addr 0x48)
+ *     Select via USE_ADS1115 / USE_ADS1015 define below
  *   - Voltage divider bridge with MOSFET on VbridgePin
  *   - VRef enable switch on VEnableControl (active-high, pulled up)
  *   - Pot on clsdThreshold for closed-detect sensitivity  (optional)
@@ -26,7 +27,15 @@
 #include <Adafruit_NeoPixel.h>
 #include <Adafruit_MAX1704X.h>
 
+// ── ADC Selection: Comment/uncomment ONE of these ────────────────
+//#define USE_ADS1115    // 16-bit ADC
+#define USE_ADS1015  // 12-bit ADC
+
+#ifdef USE_ADS1115
 Adafruit_ADS1115 ads;
+#else
+Adafruit_ADS1015 ads;
+#endif
 
 // TFT -- pin macros are predefined by the Feather board package
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
@@ -49,9 +58,9 @@ const unsigned long battReadInterval = 10000;  // 10 s between reads
 const int VbridgePin     = 5;    // MOSFET gate for bridge measurement
 const int VEnablePin     = 6;    // Vref enable output
 const int VEnableControl = 9;    // Vref enable switch (INPUT_PULLUP)
-const int clsdThreshold  = A1;   // Pot: closed-detect sensitivity
-const int zeroThreshold  = A0;   // Pot: zero-voltage threshold
-const int cfSuppressPin  = 13;   // Pull low to suppress closed/float detection
+const int clsdThreshold  = A0;   // Pot: closed-detect sensitivity
+const int zeroThreshold  = A1;   // Pot: zero-voltage threshold
+const int cfSuppressBtn  = 0;    // Boot button (GPIO 0) toggles closed/float suppression
 
 // ── Timing ────────────────────────────────────────────────────────
 unsigned long currentMillis   = 0;
@@ -66,11 +75,12 @@ const unsigned long displayInterval = 1000;   // 4 Hz TFT refresh
 // ── Voltage measurement ───────────────────────────────────────────
 float medianVoltage     = 0.0;
 float newVoltageReading = 0.0;
+float displayVoltage    = 0.0;   // smoothed or raw depending on cfSuppress
 float prevOutVoltage    = 0.0;
 float vActual           = 0.0;
 int16_t countV          = 0;
 
-const float VOLTAGE_SCALE_full = 69.4486;
+const float VOLTAGE_SCALE_full = 69.6023;
 const float VOLTAGE_SCALE_low  = 3.51108;
 float vScale = 0.0;
 
@@ -82,8 +92,9 @@ bool range       = false;
 bool updates     = true;
 bool debug       = false;
 bool forceStop   = false;
-bool cfSuppress  = false;    // closed/float detection suppressed
-bool prevcfSuppress = false; ///previous supression state 
+bool cfSuppress      = false;   // closed/float detection suppressed
+bool prevcfSuppress  = false;   // previous suppression state
+bool cfBtnPrev       = true;    // previous boot button state (HIGH = released) 
 bool alarm1       = false;
 bool alarmFlag   = false;
 
@@ -91,12 +102,13 @@ bool alarmFlag   = false;
 bool  vFloating        = false;
 float bridgeV          = 0.0;
 float bridgeAvg        = 0.0; 
+float bridgeAvgDiff    = 0.0;
 bool  Vzero            = true;
 bool  VzeroFlag        = true;
 bool  vClosed          = false;
 bool  vUndefined       = true;
-float ClosedConfidence = 10.0;
-float vClosedThres     = 5.0;
+float ClosedConfidence = 5.0;
+
 float closedBias       = 0.0;
 float CorFTrig         = 1.0;
 
@@ -113,13 +125,34 @@ bool prevVoltageHigh    = false;
 bool prevClosedForBlink = false;
 unsigned long lastClosedBlinkTime = 0;
 
-// ── ADS1115 auto-ranging ──────────────────────────────────────────
-const float GAIN_FACTOR_TWOTHIRDS = 0.1875;   // +/-6.144 V
+// ── ADC auto-ranging (values differ for ADS1115 vs ADS1015) ───────
+#ifdef USE_ADS1115
+// ADS1115: 16-bit, gain factors in mV/bit
+const float GAIN_FACTOR_TWOTHIRDS = 0.1875;    // +/-6.144 V
 const float GAIN_FACTOR_1         = 0.125;     // +/-4.096 V
 const float GAIN_FACTOR_2         = 0.0625;    // +/-2.048 V
 const float GAIN_FACTOR_4         = 0.03125;   // +/-1.024 V
 const float GAIN_FACTOR_8         = 0.015625;  // +/-0.512 V
 const float GAIN_FACTOR_16        = 0.0078125; // +/-0.256 V
+static const int ADC_COUNT_LOW_THRESH  = 10000;
+static const int ADC_COUNT_HIGH_THRESH = 30000;
+float vClosedThres     = 0.07;
+#define ADS_RATE_FAST  RATE_ADS1115_860SPS
+#define ADS_RATE_SLOW  RATE_ADS1115_64SPS
+#else
+// ADS1015: 12-bit, gain factors in mV/bit (16x larger than ADS1115)
+const float GAIN_FACTOR_TWOTHIRDS = 3.0;       // +/-6.144 V
+const float GAIN_FACTOR_1         = 2.0;       // +/-4.096 V
+const float GAIN_FACTOR_2         = 1.0;       // +/-2.048 V
+const float GAIN_FACTOR_4         = 0.5;       // +/-1.024 V
+const float GAIN_FACTOR_8         = 0.25;      // +/-0.512 V
+const float GAIN_FACTOR_16        = 0.125;     // +/-0.256 V
+static const int ADC_COUNT_LOW_THRESH  = 600;
+static const int ADC_COUNT_HIGH_THRESH = 1800;
+float vClosedThres     = 0.15;
+#define ADS_RATE_FAST  RATE_ADS1015_3300SPS
+#define ADS_RATE_SLOW  RATE_ADS1015_250SPS
+#endif
 
 static const adsGain_t kGainLevels[] = {
   GAIN_TWOTHIRDS, GAIN_ONE, GAIN_TWO,
@@ -129,9 +162,7 @@ static const float kGainFactors[] = {
   GAIN_FACTOR_TWOTHIRDS, GAIN_FACTOR_1, GAIN_FACTOR_2,
   GAIN_FACTOR_4, GAIN_FACTOR_8, GAIN_FACTOR_16
 };
-static const int kNumGainLevels       = sizeof(kGainLevels) / sizeof(kGainLevels[0]);
-static const int ADC_COUNT_LOW_THRESH  = 10000;
-static const int ADC_COUNT_HIGH_THRESH = 30000;
+static const int kNumGainLevels = sizeof(kGainLevels) / sizeof(kGainLevels[0]);
 static size_t gainIndexVolt;
 
 // ── TFT colour palette ───────────────────────────────────────────
@@ -200,7 +231,7 @@ void setup() {
   }
   Serial.println("ADS1115 connected.");
   ads.setGain(GAIN_SIXTEEN);
-  ads.setDataRate(RATE_ADS1115_860SPS);
+  ads.setDataRate(ADS_RATE_FAST);
 
   // ── GPIO ──
   pinMode(VbridgePin,     OUTPUT);
@@ -208,7 +239,7 @@ void setup() {
   pinMode(VEnableControl, INPUT_PULLUP);
   pinMode(clsdThreshold,  INPUT);
   pinMode(zeroThreshold,  INPUT);
-  pinMode(cfSuppressPin,  INPUT_PULLUP);
+  pinMode(cfSuppressBtn,  INPUT_PULLUP);
   digitalWrite(VbridgePin, LOW);    // bridge disconnected (resting state)
 
   // ── NeoPixel ──
@@ -264,7 +295,14 @@ void loop() {
   // ── VRef switch ──
   vRefEnable = digitalRead(VEnableControl);
   digitalWrite(VEnablePin, vRefEnable ? HIGH : LOW);
-  cfSuppress = !digitalRead(cfSuppressPin);   // active-low
+  // Boot button toggle (falling edge = press)
+  bool cfBtnNow = digitalRead(cfSuppressBtn);
+  if (cfBtnNow == LOW && cfBtnPrev == HIGH) {
+    cfSuppress = !cfSuppress;                 // toggle on press
+    Serial.print("CF suppress: ");
+    Serial.println(cfSuppress ? "ON" : "OFF");
+  }
+  cfBtnPrev = cfBtnNow;
 
   // ── Serial commands ──
   if (Serial.available()) {
@@ -278,7 +316,7 @@ void loop() {
 
   // ── NeoPixel alerts (immediate blinks on state change) ──
   bool voltageHigh = (fabs(medianVoltage) > VOLTAGE_ALARM_THRESH);
-  bool closedNow   = (vRefEnable && Vzero && ClosedConfidence > 10);
+  bool closedNow   = (vRefEnable && Vzero && ClosedConfidence > 5);
 
   // Red blink the instant voltage first crosses above threshold
   if (voltageHigh && !prevVoltageHigh) {
@@ -305,7 +343,7 @@ void loop() {
     prevOutVoltage = medianVoltage;
     VzeroFlag = false;
     Serial.print("Vtrig: VDC:");
-    Serial.print(medianVoltage, 4);
+    Serial.print(displayVoltage, 4);
     Serial.print(" T(s):");
     Serial.println(currentMillis / 1000.0, 3);
   }
@@ -315,9 +353,6 @@ void loop() {
       (Vzero && VzeroFlag)) {
     statusUpdate();
   }
-
-  if ( alarm && !alarmFlag) { Serial.println("ALARM"); alarmFlag = true;  }
-  if (!alarm &&  alarmFlag) { alarmFlag = false; }
 
   // ── Battery (slow read, every 10 s) ──
   if (battFound && (currentMillis - lastBattRead >= battReadInterval)) {
@@ -353,7 +388,7 @@ void measureVoltage() {
     } else {
       digitalWrite(VbridgePin, LOW);
       vScale = VOLTAGE_SCALE_low;
-      ads.setDataRate(RATE_ADS1115_64SPS);
+      ads.setDataRate(ADS_RATE_SLOW);
     }
   } else {
     digitalWrite(VbridgePin, LOW);          // ensure bridge disconnected
@@ -368,10 +403,10 @@ void measureVoltage() {
   if(prevcfSuppress != cfSuppress){
 
     if(cfSuppress){
-      ads.setDataRate(RATE_ADS1115_64SPS);
+      ads.setDataRate(ADS_RATE_SLOW);
       Serial.print("64sps");
     }else{
-      ads.setDataRate(RATE_ADS1115_860SPS);
+      ads.setDataRate(ADS_RATE_FAST);
       Serial.print("860sps");
     }
     prevcfSuppress = cfSuppress;
@@ -392,11 +427,22 @@ void measureVoltage() {
   }
 
   vActual           = countV * kGainFactors[gainIndexVolt] / 1000.0f;
-  newVoltageReading = (vActual * vScale)-0.023;
-  medianVoltage     = newVoltageReading;
+  newVoltageReading = (vActual * vScale) - 0.023;
+
+  // Exponential rolling average (same style as bridgeAvg)
+  if (fabs(newVoltageReading) > fabs(medianVoltage)) {
+    medianVoltage = medianVoltage + (newVoltageReading - medianVoltage) / 10.0f;
+  } else {
+    medianVoltage = medianVoltage + (newVoltageReading - medianVoltage) / 10.0f;
+  }
+  // Note: both branches are the same -- simple EMA with alpha=0.1
+  // Keeping structure parallel to bridgeAvg for consistency
+
+  // Display value: raw when suppressed, smoothed otherwise
+  displayVoltage = cfSuppress ? newVoltageReading : medianVoltage;
 
   // Zero-threshold pot  (ESP32 12-bit: 0-4095)
-  CorFTrig = 0.2;
+  CorFTrig = 0.1;
   //CorFTrig = (analogRead(zeroThreshold) / 4095.0f) * 0.2f;
 
   prevVzero = Vzero;
@@ -419,41 +465,50 @@ void ClosedOrFloat() {
   bool prevClosed = vClosed;
 
   // Closed-threshold pot (12-bit)
-  //closedBias   = (analogRead(clsdThreshold) / 4095.0f) * 2.0f;
-  //vClosedThres = 0.1f * closedBias;
-  //vClosedThres = 0.1f;
+ // closedBias   = (analogRead(clsdThreshold) / 4095.0f) * 2.0f;
+ // vClosedThres = 5.0f * closedBias;
+
 
   vClosed = vFloating = vUndefined = false;
 
   // First bridge sample
   digitalWrite(VbridgePin, HIGH);
   delay(1);
-  //ads.setDataRate(RATE_ADS1115_860SPS);
-  //ads.setGain(GAIN_SIXTEEN);
+  //ads.setDataRate(ADS_RATE_FAST);
+  ads.setGain(GAIN_EIGHT);
   float bv1 = ads.readADC_Differential_0_1()
-              * (0.0078125f / 1000.0f) * VOLTAGE_SCALE_full;
+              * (GAIN_FACTOR_8 / 1000.0f);
   digitalWrite(VbridgePin, LOW);
 /*
   // Second bridge sample
   digitalWrite(VbridgePin, HIGH);
   float bv2 = ads.readADC_Differential_0_1()
-              * (0.0078125f / 1000.0f) * VOLTAGE_SCALE_full;
+              * (0.0078125f / 1000.0f);
   digitalWrite(VbridgePin, LOW);
 
   bridgeV = (fabs(bv1) + fabs(bv2)) / 2.0f;
 */
   bridgeV = bv1;
   if(fabs(bridgeV)>fabs(bridgeAvg)){
-      bridgeAvg = bridgeAvg - (fabs(bridgeV)/10);
+      bridgeAvg = bridgeAvg - (fabs(bridgeV)/10);      
     }else{
       bridgeAvg = bridgeAvg + (fabs(bridgeV)/10);
   }
+
+/*
+  if(fabs(bridgeV)-fabs(bridgeAvg)>bridgeAvgDiff){
+    bridgeAvgDiff=bridgeAvgDiff-((fabs(bridgeV)-fabs(bridgeAvg))/10);
+  }else{
+    bridgeAvgDiff=bridgeAvgDiff+((fabs(bridgeV)-fabs(bridgeAvg))/10);
+  }
+*/
+
   // ── Classification ──
   if (fabs(bridgeV) < vClosedThres) {
     if (vClosedtrig) vClosed = true;
     vClosedtrig = true;
     vFloattrig = vUndefinedtrig = false;
-    ClosedConfidence = min(ClosedConfidence + 1.0f, 20.0f);
+    ClosedConfidence = min(ClosedConfidence + 1.0f, 10.0f);
     if (debug) {
       Serial.print("Bridge:");
       Serial.print(bridgeV, 4);
@@ -476,6 +531,9 @@ void ClosedOrFloat() {
     if (prevClosed) vClosed  = true;
     else            vFloating = true;
   }
+
+  delay(2); //this allow settling before we resume  
+
 }
 
 // ==================================================================
@@ -504,7 +562,7 @@ void updateDisplay() {
   if      (!vRefEnable)            st = 3;   // disabled
   else if (cfSuppress)             st = 4;   // closed/float suppressed
   else if (!Vzero)                 st = 2;   // V != 0
-  else if (ClosedConfidence > 10)  st = 0;   // closed
+  else if (ClosedConfidence > 5)   st = 0;   // closed
   else                             st = 1;   // floating
 
   bool statusChanged = (st != prevSt)           || firstUpdate;
@@ -534,9 +592,9 @@ void updateDisplay() {
   // behind each character, so no fillRect needed between refreshes.
   tft.setTextSize(3);
   char vBuf[14];
-  if (!Vzero) {
+  if (!Vzero || cfSuppress) {
     tft.setTextColor(COL_VOLTAGE, COL_BG);
-    dtostrf(medianVoltage, 10, 3, vBuf);       // fixed 10-char width
+    dtostrf(displayVoltage, 10, 3, vBuf);      // fixed 10-char width
   } else {
     tft.setTextColor(COL_LABEL, COL_BG);
     char tmp[8];
@@ -604,12 +662,31 @@ void updateDisplay() {
   }
 
   // ── Confidence bar (fills with colour, no black flash) ──
+  // Bar spans 200px. 100% threshold is at 1/3 of bar (67px from left).
   if (vRefEnable && Vzero && !cfSuppress) {
-    float pct = abs(bridgeAvg) / (vClosedThres*3);
-    int barW  = (int)(pct * 200);
-    tft.fillRect(4,        98, barW,       6, COL_BAR_FILL);
-    tft.fillRect(4 + barW, 98, 200 - barW, 6, COL_BAR_EMPTY);
-    tft.drawRect(3, 97, 202, 8, COL_DIVIDER);
+    const int barX      = 4;
+    const int barY      = 98;
+    const int barTotal  = 200;
+    const int barH      = 6;
+    const int thresh100 = barTotal / 3;   // 100% mark at 67px
+
+    float pct = fabs(bridgeAvg) / (vClosedThres * 3.0f);
+    int barW  = constrain((int)(pct * barTotal), 0, barTotal);
+
+    if (barW <= thresh100) {
+      // All green, nothing over threshold
+      tft.fillRect(barX,        barY, barW,            barH, COL_BAR_FILL);
+      tft.fillRect(barX + barW, barY, barTotal - barW, barH, COL_BAR_EMPTY);
+    } else {
+      // Green up to threshold, red beyond
+      tft.fillRect(barX,            barY, thresh100,          barH, COL_BAR_FILL);
+      tft.fillRect(barX + thresh100, barY, barW - thresh100,   barH, ST77XX_RED);
+      tft.fillRect(barX + barW,      barY, barTotal - barW,    barH, COL_BAR_EMPTY);
+    }
+
+    // Border and 100% threshold marker line
+    tft.drawRect(barX - 1, barY - 1, barTotal + 2, barH + 2, COL_DIVIDER);
+    tft.drawFastVLine(barX + thresh100, barY - 1, barH + 2, COL_TEXT);
   }
 
   // ── Bottom info (overwrite in place with bg colour, no fillRect) ──
@@ -664,21 +741,17 @@ void statusUpdate() {
   lastStatusTime = currentMillis;
   VzeroFlag = false;
 
-  Serial.print("Status:");
-  if (alarm)          Serial.print(" ALARM! ");
-  else if (forceStop) Serial.print(" Force Stop ");
-  else                Serial.print(" Good ");
-
   if (Vzero) {
     Serial.print(" Bridge:");    Serial.print(bridgeV, 4);
     Serial.print(" / Thres:");   Serial.print(vClosedThres, 4);
     Serial.print(" / ");         Serial.print(vClosed ? "Closed" : "Floating");
+    Serial.print(" / Avg Diff");         Serial.print(bridgeAvgDiff);
   } else {
     Serial.print(" / V !0");
   }
 
-  Serial.print(" / VDC:");   Serial.print(medianVoltage, 4);
-  Serial.print(" Actual:");   Serial.print(vActual, 4);
+  Serial.print(" / VDC:");   Serial.print(displayVoltage, 4);
+  Serial.print(" Actual(mV):");   Serial.print((vActual*1000), 2);
   Serial.print(" Count:");    Serial.print(countV);
   if (battFound) {
     Serial.print(" Batt:");   Serial.print(battVoltage, 2);
