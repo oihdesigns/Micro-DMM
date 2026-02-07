@@ -31,6 +31,23 @@
 //#define USE_ADS1115    // 16-bit ADC
 #define USE_ADS1015  // 12-bit ADC
 
+// ── VRef Enable Logic: Comment/uncomment ONE of these ────────────
+#define VENABLE_ACTIVE_HIGH   // VEnablePin HIGH = Vref enabled
+//#define VENABLE_ACTIVE_LOW  // VEnablePin LOW  = Vref enabled
+
+// ── Bridge MOSFET Logic: Comment/uncomment ONE of these ──────────
+//#define VBRIDGE_ACTIVE_HIGH   // VbridgePin HIGH = bridge connected
+#define VBRIDGE_ACTIVE_LOW  // VbridgePin LOW  = bridge connected
+
+// Bridge pin states (computed from above selection)
+#ifdef VBRIDGE_ACTIVE_HIGH
+#define BRIDGE_ON   HIGH
+#define BRIDGE_OFF  LOW
+#else
+#define BRIDGE_ON   LOW
+#define BRIDGE_OFF  HIGH
+#endif
+
 #ifdef USE_ADS1115
 Adafruit_ADS1115 ads;
 #else
@@ -240,7 +257,7 @@ void setup() {
   pinMode(clsdThreshold,  INPUT);
   pinMode(zeroThreshold,  INPUT);
   pinMode(cfSuppressBtn,  INPUT_PULLUP);
-  digitalWrite(VbridgePin, LOW);    // bridge disconnected (resting state)
+  digitalWrite(VbridgePin, BRIDGE_ON);  // bridge connected (resting state)
 
   // ── NeoPixel ──
   pixel.begin();
@@ -294,7 +311,11 @@ void loop() {
 
   // ── VRef switch ──
   vRefEnable = digitalRead(VEnableControl);
+#ifdef VENABLE_ACTIVE_HIGH
   digitalWrite(VEnablePin, vRefEnable ? HIGH : LOW);
+#else
+  digitalWrite(VEnablePin, vRefEnable ? LOW : HIGH);
+#endif
   // Boot button toggle (falling edge = press)
   bool cfBtnNow = digitalRead(cfSuppressBtn);
   if (cfBtnNow == LOW && cfBtnPrev == HIGH) {
@@ -333,21 +354,6 @@ void loop() {
   }
   prevClosedForBlink = closedNow;
 
-  float vThreshold = vClimb ? 0.25f : 1.0f;
-
-  // Serial output on significant voltage change
-  if ((currentMillis - lastSerialTime >= serialInterval) &&
-      (fabs(medianVoltage) + vThreshold < fabs(prevOutVoltage) ||
-       fabs(medianVoltage) - vThreshold > fabs(prevOutVoltage))) {
-    lastSerialTime = currentMillis;
-    prevOutVoltage = medianVoltage;
-    VzeroFlag = false;
-    Serial.print("Vtrig: VDC:");
-    Serial.print(displayVoltage, 4);
-    Serial.print(" T(s):");
-    Serial.println(currentMillis / 1000.0, 3);
-  }
-
   // Periodic status
   if ((currentMillis - lastStatusTime >= statusInterval && updates) ||
       (Vzero && VzeroFlag)) {
@@ -383,15 +389,15 @@ void loop() {
 void measureVoltage() {
   if (manual) {
     if (!range) {
-      digitalWrite(VbridgePin, HIGH);
+      digitalWrite(VbridgePin, BRIDGE_OFF);
       vScale = VOLTAGE_SCALE_full;
     } else {
-      digitalWrite(VbridgePin, LOW);
+      digitalWrite(VbridgePin, BRIDGE_ON);
       vScale = VOLTAGE_SCALE_low;
       ads.setDataRate(ADS_RATE_SLOW);
     }
   } else {
-    digitalWrite(VbridgePin, LOW);          // ensure bridge disconnected
+    digitalWrite(VbridgePin, BRIDGE_OFF);   // ensure bridge disconnected
     vScale = VOLTAGE_SCALE_full;
   }
 
@@ -427,7 +433,7 @@ void measureVoltage() {
   }
 
   vActual           = countV * kGainFactors[gainIndexVolt] / 1000.0f;
-  newVoltageReading = (vActual * vScale) - 0.023;
+  newVoltageReading = (vActual * vScale);// - 0.023;
 
   // Exponential rolling average (same style as bridgeAvg)
   if (fabs(newVoltageReading) > fabs(medianVoltage)) {
@@ -442,7 +448,7 @@ void measureVoltage() {
   displayVoltage = cfSuppress ? newVoltageReading : medianVoltage;
 
   // Zero-threshold pot  (ESP32 12-bit: 0-4095)
-  CorFTrig = 0.1;
+  CorFTrig = 0.25;
   //CorFTrig = (analogRead(zeroThreshold) / 4095.0f) * 0.2f;
 
   prevVzero = Vzero;
@@ -472,19 +478,19 @@ void ClosedOrFloat() {
   vClosed = vFloating = vUndefined = false;
 
   // First bridge sample
-  digitalWrite(VbridgePin, HIGH);
+  digitalWrite(VbridgePin, BRIDGE_ON);
   delay(1);
   //ads.setDataRate(ADS_RATE_FAST);
   ads.setGain(GAIN_EIGHT);
   float bv1 = ads.readADC_Differential_0_1()
               * (GAIN_FACTOR_8 / 1000.0f);
-  digitalWrite(VbridgePin, LOW);
+  digitalWrite(VbridgePin, BRIDGE_OFF);
 /*
   // Second bridge sample
-  digitalWrite(VbridgePin, HIGH);
+  digitalWrite(VbridgePin, BRIDGE_ON);
   float bv2 = ads.readADC_Differential_0_1()
               * (0.0078125f / 1000.0f);
-  digitalWrite(VbridgePin, LOW);
+  digitalWrite(VbridgePin, BRIDGE_OFF);
 
   bridgeV = (fabs(bv1) + fabs(bv2)) / 2.0f;
 */
@@ -532,7 +538,7 @@ void ClosedOrFloat() {
     else            vFloating = true;
   }
 
-  delay(2); //this allow settling before we resume  
+  delay(2); //this allows settling before we resume  
 
 }
 
