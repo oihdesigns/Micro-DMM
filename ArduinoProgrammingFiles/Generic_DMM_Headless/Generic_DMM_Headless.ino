@@ -12,17 +12,20 @@
 // ======================= User Configuration =======================
 #define ADC_BITS        14        // ADC resolution: 10 (Uno/Nano), 12 (Due/ESP32), 14 (R4), 16 (GIGA)
 #define ADC_PIN         A0        // Analog input pin
-#define VREF            4.7       // Reference voltage (3.3 or 5.0)
-#define ANALOG_OFFSET   1.65692       // DC offset at 0V input (e.g. 1.65692 for AMC0330)
-#define PROBE_SCALE_INIT 15.9574      // Voltage divider ratio (1.0 = no divider)
+#define VREF            3.307       // Reference voltage (3.3 or 5.0)
+#define ANALOG_OFFSET   1.65718       // DC offset at 0V input (e.g. 1.65692 for AMC0330)
+#define PROBE_SCALE_INIT 16.7658      // Voltage divider ratio (1.0 = no divider)
 #define DMM_INTERVAL_MS 250       // Streaming rate (250ms = 4Hz)
 #define BAUD_RATE       115200
 
 // ======================= Derived Constants ========================
 static const float ADC_MAX_F = (float)((1 << ADC_BITS) - 1);
 
+// ======================= Calibration State ========================
+static float analogOffset = ANALOG_OFFSET;
+static float probeScale   = PROBE_SCALE_INIT;
+
 // ======================= DMM State ================================
-static float probeScale = PROBE_SCALE_INIT;
 
 static float dmmAvg    = 0;
 static float dmmMin    = 9999;
@@ -42,7 +45,7 @@ static unsigned long lastDmmSend = 0;
 // ======================= Voltage Conversion =======================
 static inline float adcToVolts(uint16_t raw) {
   float rawV = ((float)raw / ADC_MAX_F) * VREF;
-  return (rawV - ANALOG_OFFSET) * probeScale;
+  return (rawV - analogOffset) * probeScale;
 }
 
 // ======================= Serial Output ============================
@@ -68,13 +71,22 @@ void sendConfig() {
   Serial.print("$CFG,");
   Serial.print(probeScale, 4);
   Serial.print(",");
-  Serial.print(ANALOG_OFFSET, 5);
+  Serial.print(analogOffset, 5);
   Serial.print(",");
   Serial.print(VREF, 2);
   Serial.print(",");
   Serial.print((int)ADC_MAX_F);
   Serial.print(",");
   Serial.println(0);   // plotW = 0 (no scope)
+}
+
+void sendCalValues() {
+  Serial.println("------ Copy these into your #defines ------");
+  Serial.print("#define ANALOG_OFFSET   ");
+  Serial.println(analogOffset, 5);
+  Serial.print("#define PROBE_SCALE_INIT ");
+  Serial.println(probeScale, 5);
+  Serial.println("--------------------------------------------");
 }
 
 void sendMode() {
@@ -108,6 +120,15 @@ void handleSerialCmd(const char* cmd) {
   else if (strcmp(c, "VAC") == 0) {
     dmmShowVac = !dmmShowVac;
   }
+  else if (strcmp(c, "ZERO") == 0) {
+    // Set zero: current raw ADC voltage becomes the new offset
+    analogOffset = dmmAvg / probeScale + analogOffset;
+    dmmAvg = 0;
+    dmmMin = 0;
+    dmmMax = 0;
+    sendConfig();
+    sendCalValues();
+  }
   else if (strncmp(c, "CAL,", 4) == 0) {
     float target = atof(c + 4);
     if (fabsf(dmmAvg) > 0.01f && target > 0) {
@@ -115,6 +136,7 @@ void handleSerialCmd(const char* cmd) {
       dmmMin = dmmAvg;
       dmmMax = dmmAvg;
       sendConfig();
+      sendCalValues();
     }
   }
   // Scope commands (!TB, !VD, !OFS, !RUN, !AUTO, !TRIG, !MODE) are
@@ -149,6 +171,8 @@ void setup() {
     defined(ARDUINO_ARCH_RENESAS) || defined(ARDUINO_ARCH_RENESAS_UNO)
   analogReadResolution(ADC_BITS);
 #endif
+
+analogReference(AR_EXTERNAL);
 
   // Initialize DMM state
   dmmAvg    = 0;
