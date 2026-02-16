@@ -11,6 +11,7 @@ Dependencies:
 import sys
 import time
 import collections
+from datetime import datetime
 
 from PyQt6.QtCore import QThread, pyqtSignal, Qt, QTimer
 from PyQt6.QtWidgets import (
@@ -98,6 +99,9 @@ class SerialReader(QThread):
                 "refV": float(parts[5]),
                 "refSet": int(parts[6]) != 0,
                 "showVac": int(parts[7]) != 0,
+                "curAvg": float(parts[8]) if len(parts) > 8 else 0.0,
+                "curMin": float(parts[9]) if len(parts) > 9 else 0.0,
+                "curMax": float(parts[10]) if len(parts) > 10 else 0.0,
             }
             self.dmm_reading.emit(data)
         except (IndexError, ValueError):
@@ -112,6 +116,8 @@ class SerialReader(QThread):
                 "vref": float(parts[3]),
                 "adcMax": float(parts[4]),
                 "plotW": int(parts[5]),
+                "shuntR": float(parts[6]) if len(parts) > 6 else 0.1,
+                "ampGain": float(parts[7]) if len(parts) > 7 else 8.0,
             }
             self.config_received.emit(cfg)
         except (IndexError, ValueError):
@@ -128,15 +134,28 @@ class DmmTab(QWidget):
         "QPushButton:hover {{ background: {hover}; }}"
     )
 
+    MAX_HOLDS = 10
+
     def __init__(self):
         super().__init__()
         self.trend_data = collections.deque(maxlen=240)  # ~60s at 4Hz
         self.trend_times = collections.deque(maxlen=240)
         self._t0 = None
         self._reader = None
+        self._last_avg = 0.0
+        self._last_vrms = 0.0
+        self._last_cur = 0.0
+        self._dp = 4    # voltage decimal places — updated from $CFG
+        self._dp_cur = 4  # current decimal places — updated from $CFG
+        self._show_current = True
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
+        outer_layout = QHBoxLayout(self)
+        outer_layout.setContentsMargins(8, 8, 8, 8)
+
+        # ── Left: main DMM content ──
+        left = QWidget()
+        layout = QVBoxLayout(left)
+        layout.setContentsMargins(0, 0, 0, 0)
 
         # ── Control bar ──
         self.ctrl_frame = ctrl_frame = QFrame()
@@ -156,6 +175,18 @@ class DmmTab(QWidget):
             btn.setStyleSheet(self._CTRL_BTN_STYLE.format(bg=color, hover=hover))
             btn.clicked.connect(lambda checked, c=cmd: self._send(c))
             ctrl_layout.addWidget(btn)
+
+        # Hold button
+        hold_btn = QPushButton("Hold")
+        hold_btn.setStyleSheet(self._CTRL_BTN_STYLE.format(bg="#c864ff", hover="#a050d0"))
+        hold_btn.clicked.connect(self._on_hold)
+        ctrl_layout.addWidget(hold_btn)
+
+        # Current channel toggle
+        self.cur_toggle_btn = QPushButton("Current: ON")
+        self.cur_toggle_btn.setStyleSheet(self._CTRL_BTN_STYLE.format(bg="#ff6644", hover="#cc5236"))
+        self.cur_toggle_btn.clicked.connect(self._toggle_current)
+        ctrl_layout.addWidget(self.cur_toggle_btn)
 
         ctrl_layout.addStretch()
 
@@ -191,6 +222,13 @@ class DmmTab(QWidget):
         self.mode_label.setStyleSheet("color: #8c8c96;")
         layout.addWidget(self.mode_label)
 
+        # Current readout
+        self.cur_label = QLabel("0.000 A")
+        self.cur_label.setFont(QFont("Consolas", 28, QFont.Weight.Bold))
+        self.cur_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.cur_label.setStyleSheet("color: #ff6644;")
+        layout.addWidget(self.cur_label)
+
         # Stats row
         self.stats_frame = stats_frame = QFrame()
         stats_frame.setStyleSheet("background: #222; border-radius: 4px;")
@@ -198,9 +236,9 @@ class DmmTab(QWidget):
         stats_layout.setContentsMargins(12, 6, 12, 6)
 
         self.stat_labels = {}
-        for name in ("Min", "Max", "VRMS", "Delta"):
+        for name in ("Min", "Max", "VRMS", "Delta", "I Min", "I Max"):
             lbl = QLabel(f"{name}: ---")
-            lbl.setFont(QFont("Consolas", 13))
+            lbl.setFont(QFont("Consolas", 11))
             lbl.setStyleSheet("color: #ddd;")
             stats_layout.addWidget(lbl)
             self.stat_labels[name] = lbl
@@ -216,6 +254,43 @@ class DmmTab(QWidget):
         self.trend_curve = self.trend_widget.plot(pen=pg.mkPen("#00ff32", width=2))
         layout.addWidget(self.trend_widget, stretch=1)
 
+        outer_layout.addWidget(left, stretch=1)
+
+        # ── Right: hold column ──
+        self.hold_frame = QFrame()
+        self.hold_frame.setFixedWidth(440)
+        self.hold_frame.setStyleSheet("background: #222; border-radius: 4px;")
+        hold_col = QVBoxLayout(self.hold_frame)
+        hold_col.setContentsMargins(8, 6, 8, 8)
+        hold_col.setSpacing(2)
+
+        # Header row
+        self._hold_hdr = QLabel("  Time       V           VRMS         A")
+        self._hold_hdr.setFont(QFont("Consolas", 10, QFont.Weight.Bold))
+        self._hold_hdr.setStyleSheet("color: #c864ff; border-bottom: 1px solid #444;")
+        hold_col.addWidget(self._hold_hdr)
+
+        # Pre-create label slots for held entries
+        self._hold_labels = []
+        for _ in range(self.MAX_HOLDS):
+            lbl = QLabel("")
+            lbl.setFont(QFont("Consolas", 10))
+            lbl.setStyleSheet("color: #ddd;")
+            lbl.hide()
+            hold_col.addWidget(lbl)
+            self._hold_labels.append(lbl)
+
+        hold_col.addStretch()
+
+        clear_btn = QPushButton("Clear Holds")
+        clear_btn.setStyleSheet(self._CTRL_BTN_STYLE.format(bg="#555", hover="#666"))
+        clear_btn.clicked.connect(self._on_clear_holds)
+        hold_col.addWidget(clear_btn)
+
+        outer_layout.addWidget(self.hold_frame)
+
+        self._holds = []  # list of (timestamp_str, avg_str, vrms_str, cur_str)
+
     def update_reading(self, data: dict):
         avg = data["avg"]
         vmin = data["min"]
@@ -224,6 +299,13 @@ class DmmTab(QWidget):
         ref_v = data["refV"]
         ref_set = data["refSet"]
         show_vac = data["showVac"]
+        cur_avg = data.get("curAvg", 0.0)
+        cur_min = data.get("curMin", 0.0)
+        cur_max = data.get("curMax", 0.0)
+
+        self._last_avg = avg
+        self._last_vrms = vrms
+        self._last_cur = cur_avg
 
         # Determine big reading
         if ref_set:
@@ -239,18 +321,25 @@ class DmmTab(QWidget):
             big_color = "#00ff32"
             mode_text = "VDC"
 
-        self.big_label.setText(f"{big_value:+.4f} V")
+        dp = self._dp
+        dp_c = self._dp_cur
+        self.big_label.setText(f"{big_value:+.{dp}f} V")
         self.big_label.setStyleSheet(f"color: {big_color};")
         self.mode_label.setText(mode_text)
 
+        # Current readout
+        self.cur_label.setText(f"{cur_avg:+.{dp_c}f} A")
+
         # Stats
-        self.stat_labels["Min"].setText(f"Min: {vmin:.4f} V")
-        self.stat_labels["Max"].setText(f"Max: {vmax:.4f} V")
-        self.stat_labels["VRMS"].setText(f"VRMS: {vrms:.4f} V")
+        self.stat_labels["Min"].setText(f"Min: {vmin:.{dp}f} V")
+        self.stat_labels["Max"].setText(f"Max: {vmax:.{dp}f} V")
+        self.stat_labels["VRMS"].setText(f"VRMS: {vrms:.{dp}f} V")
         if ref_set:
-            self.stat_labels["Delta"].setText(f"Ref: {ref_v:+.4f} V")
+            self.stat_labels["Delta"].setText(f"Ref: {ref_v:+.{dp}f} V")
         else:
             self.stat_labels["Delta"].setText("Ref: ---")
+        self.stat_labels["I Min"].setText(f"I Min: {cur_min:.{dp_c}f} A")
+        self.stat_labels["I Max"].setText(f"I Max: {cur_max:.{dp_c}f} A")
 
         # Trend
         now = time.monotonic()
@@ -272,6 +361,56 @@ class DmmTab(QWidget):
         if val is not None:
             self._send(f"!CAL,{val:.1f}")
 
+    def _on_hold(self):
+        stamp = datetime.now().strftime("%H:%M:%S")
+        dp = self._dp
+        dp_c = self._dp_cur
+        avg_s = f"{self._last_avg:+.{dp}f}"
+        vrms_s = f"{self._last_vrms:.{dp}f}"
+        cur_s = f"{self._last_cur:+.{dp_c}f}"
+        self._holds.insert(0, (stamp, avg_s, vrms_s, cur_s))
+        if len(self._holds) > self.MAX_HOLDS:
+            self._holds.pop()
+        self._refresh_hold_display()
+
+    def _on_clear_holds(self):
+        self._holds.clear()
+        self._refresh_hold_display()
+
+    def _toggle_current(self):
+        self._show_current = not self._show_current
+        if self._show_current:
+            self.cur_toggle_btn.setText("Current: ON")
+            self.cur_toggle_btn.setStyleSheet(
+                self._CTRL_BTN_STYLE.format(bg="#ff6644", hover="#cc5236"))
+            self.cur_label.show()
+            self.stat_labels["I Min"].show()
+            self.stat_labels["I Max"].show()
+            self._hold_hdr.setText("  Time       V           VRMS         A")
+        else:
+            self.cur_toggle_btn.setText("Current: OFF")
+            self.cur_toggle_btn.setStyleSheet(
+                self._CTRL_BTN_STYLE.format(bg="#555", hover="#666"))
+            self.cur_label.hide()
+            self.stat_labels["I Min"].hide()
+            self.stat_labels["I Max"].hide()
+            self._hold_hdr.setText("  Time       V           VRMS")
+        self._refresh_hold_display()
+
+    def _refresh_hold_display(self):
+        for i, lbl in enumerate(self._hold_labels):
+            if i < len(self._holds):
+                stamp, avg_s, vrms_s, cur_s = self._holds[i]
+                if self._show_current:
+                    lbl.setText(f"  {stamp}  {avg_s:>10}  {vrms_s:>10}  {cur_s:>10}")
+                else:
+                    lbl.setText(f"  {stamp}  {avg_s:>10}  {vrms_s:>10}")
+                lbl.setStyleSheet("color: #ddd; border-bottom: 1px solid #333;")
+                lbl.show()
+            else:
+                lbl.setText("")
+                lbl.hide()
+
 
 # ──────────────────────── Main Window ────────────────────────
 
@@ -279,7 +418,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Generic DMM — PC Viewer")
-        self.resize(800, 600)
+        self.resize(1230, 600)
         self.reader = None
         self.cfg = None
         self._latest_dmm = None
@@ -421,10 +560,12 @@ class MainWindow(QMainWindow):
 
         if self._compact:
             self._full_size = self.size()
-            # Hide controls, stats, trend, connection widgets, status bar
+            # Hide controls, stats, trend, hold column, current, connection widgets, status bar
             dmm.ctrl_frame.hide()
             dmm.stats_frame.hide()
             dmm.trend_widget.hide()
+            dmm.hold_frame.hide()
+            dmm.cur_label.hide()
             self.port_label.hide()
             self.port_combo.hide()
             self.refresh_btn.hide()
@@ -438,6 +579,8 @@ class MainWindow(QMainWindow):
             dmm.ctrl_frame.show()
             dmm.stats_frame.show()
             dmm.trend_widget.show()
+            dmm.hold_frame.show()
+            dmm.cur_label.show()
             self.port_label.show()
             self.port_combo.show()
             self.refresh_btn.show()
@@ -452,8 +595,28 @@ class MainWindow(QMainWindow):
 
     def _on_config(self, cfg: dict):
         self.cfg = cfg
+        adc_max = cfg["adcMax"]
+        vref = cfg["vref"]
+        probe_scale = cfg["probeScale"]
+        shunt_r = cfg.get("shuntR", 0.1)
+        amp_gain = cfg.get("ampGain", 8.0)
+        if adc_max > 0:
+            # Voltage decimal places
+            lsb = (vref / adc_max) * probe_scale
+            dp = 0
+            while lsb < 1.0 and dp < 6:
+                lsb *= 10.0
+                dp += 1
+            self.dmm_tab._dp = dp
+            # Current decimal places
+            cur_lsb = (vref / adc_max) / amp_gain / shunt_r
+            dp_c = 0
+            while cur_lsb < 1.0 and dp_c < 6:
+                cur_lsb *= 10.0
+                dp_c += 1
+            self.dmm_tab._dp_cur = dp_c
         self.status_bar.showMessage(
-            f"Config: probeScale={cfg['probeScale']:.4f}  offset={cfg['amc0330Offset']:.5f}  Vref={cfg['vref']:.2f}"
+            f"Config: probeScale={cfg['probeScale']:.4f}  offset={cfg['amc0330Offset']:.5f}  Vref={cfg['vref']:.2f}  dp={self.dmm_tab._dp}  dp_cur={self.dmm_tab._dp_cur}"
         )
 
     def _on_dmm_reading(self, data: dict):

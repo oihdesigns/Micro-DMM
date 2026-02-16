@@ -14,7 +14,13 @@
 #define ADC_PIN         A0        // Analog input pin
 #define VREF            3.307       // Reference voltage (3.3 or 5.0)
 #define ANALOG_OFFSET   1.65718       // DC offset at 0V input (e.g. 1.65692 for AMC0330)
-#define PROBE_SCALE_INIT 16.7658      // Voltage divider ratio (1.0 = no divider)
+#define PROBE_SCALE_INIT 35.276      // Voltage divider ratio (1.0 = no divider)
+// ---- Current channel (AMC1200B differential) ----
+#define CUR_PIN_POS     A1        // AMC1200B positive output
+#define CUR_PIN_NEG     A2        // AMC1200B negative output
+#define AMC1200B_GAIN   8.0       // AMC1200B voltage gain (V/V)
+#define SHUNT_R         0.1       // Shunt resistor value (ohms)
+
 #define DMM_INTERVAL_MS 250       // Streaming rate (250ms = 4Hz)
 #define BAUD_RATE       115200
 
@@ -25,7 +31,7 @@ static const float ADC_MAX_F = (float)((1 << ADC_BITS) - 1);
 static float analogOffset = ANALOG_OFFSET;
 static float probeScale   = PROBE_SCALE_INIT;
 
-// ======================= DMM State ================================
+// ======================= Voltage DMM State ========================
 
 static float dmmAvg    = 0;
 static float dmmMin    = 9999;
@@ -34,6 +40,12 @@ static float dmmVrms   = 0;
 static float dmmRefV   = 0;
 static bool  dmmRefSet = false;
 static bool  dmmShowVac = false;
+
+// ======================= Current Channel State ====================
+
+static float curAvg    = 0;
+static float curMin    = 9999;
+static float curMax    = -9999;
 
 // ======================= Serial Command Buffer ====================
 static char  serialCmdBuf[32];
@@ -48,23 +60,66 @@ static inline float adcToVolts(uint16_t raw) {
   return (rawV - analogOffset) * probeScale;
 }
 
+// LSB at the probe tip — smallest voltage change the ADC can resolve
+static inline float probeLsb() {
+  return (VREF / ADC_MAX_F) * probeScale;
+}
+
+// Round a value to the nearest LSB
+static inline float roundToLsb(float v, float lsb) {
+  return roundf(v / lsb) * lsb;
+}
+
+// Number of decimal places needed to show the LSB digit
+static uint8_t decimalsForLsb(float lsb) {
+  uint8_t d = 0;
+  while (lsb < 1.0f && d < 6) { lsb *= 10.0f; d++; }
+  return d;
+}
+
+// ======================= Current Conversion =======================
+
+// Read differential AMC1200B outputs and convert to amps
+static float readCurrent() {
+  float vPos = ((float)analogRead(CUR_PIN_POS) / ADC_MAX_F) * VREF;
+  float vNeg = ((float)analogRead(CUR_PIN_NEG) / ADC_MAX_F) * VREF;
+  float diffV = vPos - vNeg;
+  return diffV / AMC1200B_GAIN / SHUNT_R;
+}
+
+// Current LSB — smallest current change the ADC can resolve
+static inline float currentLsb() {
+  return (VREF / ADC_MAX_F) / AMC1200B_GAIN / SHUNT_R;
+}
+
 // ======================= Serial Output ============================
 
 void sendDmmReading() {
+  float vLsb = probeLsb();
+  uint8_t vDp = decimalsForLsb(vLsb);
+  float cLsb = currentLsb();
+  uint8_t cDp = decimalsForLsb(cLsb);
+
   Serial.print("$DMM,");
-  Serial.print(dmmAvg, 5);
+  Serial.print(roundToLsb(dmmAvg, vLsb), vDp);
   Serial.print(",");
-  Serial.print(dmmMin, 5);
+  Serial.print(roundToLsb(dmmMin, vLsb), vDp);
   Serial.print(",");
-  Serial.print(dmmMax, 5);
+  Serial.print(roundToLsb(dmmMax, vLsb), vDp);
   Serial.print(",");
-  Serial.print(dmmVrms, 5);
+  Serial.print(roundToLsb(dmmVrms, vLsb), vDp);
   Serial.print(",");
-  Serial.print(dmmRefV, 5);
+  Serial.print(roundToLsb(dmmRefV, vLsb), vDp);
   Serial.print(",");
   Serial.print(dmmRefSet ? 1 : 0);
   Serial.print(",");
-  Serial.println(dmmShowVac ? 1 : 0);
+  Serial.print(dmmShowVac ? 1 : 0);
+  Serial.print(",");
+  Serial.print(roundToLsb(curAvg, cLsb), cDp);
+  Serial.print(",");
+  Serial.print(roundToLsb(curMin, cLsb), cDp);
+  Serial.print(",");
+  Serial.println(roundToLsb(curMax, cLsb), cDp);
 }
 
 void sendConfig() {
@@ -77,7 +132,11 @@ void sendConfig() {
   Serial.print(",");
   Serial.print((int)ADC_MAX_F);
   Serial.print(",");
-  Serial.println(0);   // plotW = 0 (no scope)
+  Serial.print(0);   // plotW = 0 (no scope)
+  Serial.print(",");
+  Serial.print(SHUNT_R, 4);
+  Serial.print(",");
+  Serial.println(AMC1200B_GAIN, 1);
 }
 
 void sendCalValues() {
@@ -107,6 +166,8 @@ void handleSerialCmd(const char* cmd) {
   else if (strcmp(c, "RST") == 0) {
     dmmMin = dmmAvg;
     dmmMax = dmmAvg;
+    curMin = curAvg;
+    curMax = curAvg;
   }
   else if (strcmp(c, "REF") == 0) {
     if (dmmRefSet) {
@@ -183,6 +244,10 @@ analogReference(AR_EXTERNAL);
   dmmRefSet = false;
   dmmShowVac = false;
 
+  curAvg    = 0;
+  curMin    = 9999;
+  curMax    = -9999;
+
   sendConfig();
   sendMode();
 }
@@ -196,9 +261,13 @@ void loop() {
   uint16_t raw = analogRead(ADC_PIN);
   float v = adcToVolts(raw);
 
-  // EMA smoothing (alpha = 0.1)
-  const float alpha = 0.1f;
+  // EMA smoothing (alpha = 0.2)
+  const float alpha = 0.2f;
+  if((v*1.3)>dmmAvg || (v*0.8)<dmmAvg){
   dmmAvg  = dmmAvg * (1.0f - alpha) + v * alpha;
+  }else{
+    dmmAvg = v;
+  }
 
   // Running min / max
   if (v < dmmMin) dmmMin = v;
@@ -209,6 +278,12 @@ void loop() {
   static float acSqEma = 0;
   acSqEma = acSqEma * (1.0f - alpha) + (ac * ac) * alpha;
   dmmVrms = sqrtf(acSqEma);
+
+  // --- Current channel acquisition ---
+  float cur = readCurrent();
+  curAvg = curAvg * (1.0f - alpha) + cur * alpha;
+  if (cur < curMin) curMin = cur;
+  if (cur > curMax) curMax = cur;
 
   // --- Send DMM reading at configured interval ---
   unsigned long now = millis();

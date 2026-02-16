@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python generate_sch.py:*)",
+      "Bash(where:*)",
+      "Bash(python3:*)",
+      "Bash(/c/Users/Nick/AppData/Local/Programs/Python/Python312/python.exe:*)"
+    ]
+  }
+}

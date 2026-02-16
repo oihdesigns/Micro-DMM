@@ -1,43 +1,22 @@
 /*
- * OpenLeadDetect_Feather_Voltmeter_AlertBridge.ino
+ * OpenLeadDetect_Feather_Voltmeter.ino
  *
- * EXPERIMENTAL VERSION: Uses ADS1x15 ALERT pin to control bridge MOSFET
- * instead of GPIO.
+ * Differential voltmeter with open/closed lead detection.
+ * Runs on Adafruit ESP32-S2/S3 TFT Feather (ST7789 240x135).
+ * Ported from OpenLeadDetect_MinimalistProof_R4Nano.
  *
- * Bridge behavior:
- *   - Bridge ON (default): MOSFET conducts, bypasses high-value resistor
- *   - Bridge OFF (measurement): MOSFET off, high-value resistor in circuit
- *
- * Hardware setup for ALERT bridge control:
- *   - Connect ADS ALERT pin to N-channel MOSFET gate
- *   - Add external pull-up resistor on ALERT (ALERT is open-drain)
- *   - ALERT HIGH (pulled up) -> gate HIGH -> MOSFET ON -> Bridge ON
- *   - ALERT LOW (asserted)   -> gate LOW  -> MOSFET OFF -> Bridge OFF
- *   - Tie AIN3 to a reference voltage (~480mV via voltage divider)
- *   - Differential voltage measurement on AIN0/AIN1 (as before)
- *
- * How it works (comparator disabled by default):
- *   - Default: Comparator DISABLED -> ALERT high-Z -> pulled HIGH -> Bridge ON
- *   - This prevents unintended ALERT toggling during normal voltage measurement
- *   - AIN3 has ~480mV reference (~30720 counts ADS1115, ~1920 counts ADS1015)
- *
- * Closed/Float measurement sequence:
- *   1. setBridgeOff(): Enable comparator with low threshold -> AIN3 triggers -> ALERT LOW
- *   2. measureWithBridgeOffThenOn(): Read AIN0-1 (ALERT latched), disable comparator
- *      -> ALERT high-Z (pulled HIGH) -> Bridge ON
- *   3. The reading captured voltage WITH bridge OFF
- *
- * Note: This is experimental. The traditional GPIO approach is more reliable.
- *       Requires AIN3 reference voltage (~480mV) to be properly configured.
- *
- * Other hardware:
- *   - Adafruit ESP32-S2/S3 TFT Feather
- *   - ADS1115/ADS1015 ADC on I2C (addr 0x48)
- *   - VRef enable switch on VEnableControl
+ * Hardware:
+ *   - Adafruit ESP32-S2 or S3 TFT Feather
+ *   - ADS1115 (16-bit) or ADS1015 (12-bit) ADC on I2C (addr 0x48)
+ *     Select via USE_ADS1115 / USE_ADS1015 define below
+ *   - Voltage divider bridge with MOSFET on VbridgePin
+ *   - VRef enable switch on VEnableControl (active-high, pulled up)
+ *   - Pot on clsdThreshold for closed-detect sensitivity  (optional)
+ *   - Pot on zeroThreshold for zero-voltage threshold      (optional)
  *
  * Serial commands (115200 baud):
  *   S  Force Stop    G  Go    U  Toggle updates
- *   M  Manual mode   R  Range toggle   D  Debug   B  Bridge test   ?  Help
+ *   M  Manual mode   R  Range toggle   D  Debug   ?  Help
  */
 
 #include <Wire.h>
@@ -48,13 +27,53 @@
 #include <Adafruit_NeoPixel.h>
 #include <Adafruit_MAX1704X.h>
 
+// ADS1x15 I2C address (change if you strapped ADDR differently)
+static const uint8_t ADS_ADDR = 0x48;
+
+// ADS1115/ADS1015 register pointers
+static const uint8_t ADS_REG_POINTER_CONFIG     = 0x01;
+static const uint8_t ADS_REG_POINTER_LOWTHRESH = 0x02;
+static const uint8_t ADS_REG_POINTER_HITHRESH  = 0x03;
+
+static void adsWriteReg16(uint8_t reg, uint16_t value) {
+  Wire.beginTransmission(ADS_ADDR);
+  Wire.write(reg);
+  Wire.write((uint8_t)(value >> 8));     // MSB first
+  Wire.write((uint8_t)(value & 0xFF));   // LSB
+  Wire.endTransmission();
+}
+
+static uint16_t adsReadReg16(uint8_t reg) {
+  Wire.beginTransmission(ADS_ADDR);
+  Wire.write(reg);
+  Wire.endTransmission(false);           // repeated start
+  Wire.requestFrom((int)ADS_ADDR, 2);
+  uint16_t hi = Wire.read();
+  uint16_t lo = Wire.read();
+  return (hi << 8) | lo;
+}
+
+
 // ── ADC Selection: Comment/uncomment ONE of these ────────────────
 //#define USE_ADS1115    // 16-bit ADC
-#define USE_ADS1015      // 12-bit ADC
+#define USE_ADS1015  // 12-bit ADC
 
 // ── VRef Enable Logic: Comment/uncomment ONE of these ────────────
 #define VENABLE_ACTIVE_HIGH   // VEnablePin HIGH = Vref enabled
 //#define VENABLE_ACTIVE_LOW  // VEnablePin LOW  = Vref enabled
+
+// ── Bridge MOSFET Logic: Comment/uncomment ONE of these ──────────
+//#define VBRIDGE_ACTIVE_HIGH   // VbridgePin HIGH = bridge connected
+#define VBRIDGE_ACTIVE_LOW  // VbridgePin LOW  = bridge connected
+
+// Bridge pin states (computed from above selection)
+#ifdef VBRIDGE_ACTIVE_HIGH
+#define BRIDGE_ON   HIGH
+#define BRIDGE_OFF  LOW
+#else
+#define BRIDGE_ON   LOW
+#define BRIDGE_OFF  HIGH
+#endif
 
 #ifdef USE_ADS1115
 Adafruit_ADS1115 ads;
@@ -79,56 +98,13 @@ float battVoltage  = 0.0;
 unsigned long lastBattRead = 0;
 const unsigned long battReadInterval = 10000;  // 10 s between reads
 
-// ── Pin assignments ───────────────────────────────────────────────
-// NOTE: VbridgePin is NOT used in this version - ALERT pin controls bridge
+// ── Pin assignments (adjust for your wiring) ─────────────────────
+const int VbridgePin     = 5;    // MOSFET gate for bridge measurement
 const int VEnablePin     = 6;    // Vref enable output
 const int VEnableControl = 9;    // Vref enable switch (INPUT_PULLUP)
 const int clsdThreshold  = A0;   // Pot: closed-detect sensitivity
 const int zeroThreshold  = A1;   // Pot: zero-voltage threshold
 const int cfSuppressBtn  = 0;    // Boot button (GPIO 0) toggles closed/float suppression
-
-// ── ADS1x15 I2C Register Addresses ────────────────────────────────
-#define ADS_ADDR           0x48
-#define ADS_REG_CONVERSION 0x00
-#define ADS_REG_CONFIG     0x01
-#define ADS_REG_LO_THRESH  0x02
-#define ADS_REG_HI_THRESH  0x03
-
-// ── Config Register Bit Definitions ──────────────────────────────
-#define ADS_CFG_OS_SINGLE   0x8000  // Start single conversion
-#define ADS_CFG_MUX_DIFF01  0x0000  // AIN0-AIN1 differential
-#define ADS_CFG_MUX_S0      0x4000  // AIN0 single-ended
-#define ADS_CFG_MUX_S3      0x7000  // AIN3 single-ended
-#define ADS_CFG_PGA_8       0x0400  // Gain 8 = +/-0.512V
-#define ADS_CFG_MODE_CONT   0x0000  // Continuous conversion
-#define ADS_CFG_MODE_SS     0x0100  // Single-shot
-#define ADS_CFG_COMP_TRAD   0x0000  // Traditional comparator
-#define ADS_CFG_COMP_POL_LO 0x0000  // ALERT active low
-#define ADS_CFG_COMP_LAT    0x0004  // Latching mode
-#define ADS_CFG_COMP_QUE1   0x0000  // Assert after 1 conversion
-#define ADS_CFG_COMP_DISABLE 0x0003 // Disable comparator (ALERT = high-Z, pulled HIGH)
-
-// Data rate bits (different for ADS1115 vs ADS1015)
-#ifdef USE_ADS1115
-#define ADS_CFG_DR_FAST     0x00E0  // 860 SPS
-#define ADS_CFG_DR_SLOW     0x0060  // 64 SPS
-#else
-#define ADS_CFG_DR_FAST     0x00E0  // 3300 SPS
-#define ADS_CFG_DR_SLOW     0x0040  // 250 SPS
-#endif
-
-// ── ALERT/Comparator Thresholds ──────────────────────────────────
-// AIN3 tied to reference voltage (~480mV)
-// At GAIN_8: ADS1115 = ~30720 counts, ADS1015 = ~1920 counts
-// Bridge control via threshold manipulation on AIN3:
-//   - THRESH_BRIDGE_OFF: Low value that AIN3 exceeds → ALERT LOW → Bridge OFF
-//   - THRESH_BRIDGE_ON:  Max value that nothing exceeds → clear latch → ALERT HIGH → Bridge ON
-#ifdef USE_ADS1115
-const int16_t THRESH_BRIDGE_OFF = 1000;    // ~15.6mV - AIN3 at 480mV easily exceeds this
-#else
-const int16_t THRESH_BRIDGE_OFF = 200;     // ~50mV - AIN3 at 480mV easily exceeds this
-#endif
-const int16_t THRESH_BRIDGE_ON = 32767;    // Maximum - nothing will exceed this
 
 // ── Timing ────────────────────────────────────────────────────────
 unsigned long currentMillis   = 0;
@@ -138,12 +114,12 @@ unsigned long lastDisplayTime = 0;
 
 const unsigned long serialInterval  = 1;
 const unsigned long statusInterval  = 2000;
-const unsigned long displayInterval = 1000;
+const unsigned long displayInterval = 1000;   // 4 Hz TFT refresh
 
 // ── Voltage measurement ───────────────────────────────────────────
 float medianVoltage     = 0.0;
 float newVoltageReading = 0.0;
-float displayVoltage    = 0.0;
+float displayVoltage    = 0.0;   // smoothed or raw depending on cfSuppress
 float prevOutVoltage    = 0.0;
 float vActual           = 0.0;
 int16_t countV          = 0;
@@ -160,25 +136,30 @@ bool range       = false;
 bool updates     = true;
 bool debug       = false;
 bool forceStop   = false;
-bool cfSuppress      = false;
-bool prevcfSuppress  = false;
-bool cfBtnPrev       = true;
+bool cfSuppress      = false;   // closed/float detection suppressed
+bool prevcfSuppress  = false;   // previous suppression state
+bool cfBtnPrev       = true;    // previous boot button state (HIGH = released) 
 bool alarm1       = false;
 bool alarmFlag   = false;
 
 // ── Lead-detection state ──────────────────────────────────────────
 bool  vFloating        = false;
 float bridgeV          = 0.0;
-float bridgeAvg        = 0.0;
+float bridgeAvg        = 0.0; 
 float bridgeAvgDiff    = 0.0;
 bool  Vzero            = true;
 bool  VzeroFlag        = true;
 bool  vClosed          = false;
 bool  vUndefined       = true;
 float ClosedConfidence = 5.0;
-float vClosedThres     = 0.3;
+int ch3                = 0;
+
 float closedBias       = 0.0;
-float CorFTrig         = 2.0;
+float CorFTrig         = 1.0;
+
+float compartorOFF     = 3000.0;
+float compartorON      = 100.0;
+
 
 bool vClosedtrig    = false;
 bool vFloattrig     = false;
@@ -188,36 +169,38 @@ bool prevVzero      = false;
 // ── NeoPixel alert state ──────────────────────────────────────────
 const float VOLTAGE_ALARM_THRESH     = 3.2;
 const unsigned long BLINK_DURATION_MS    = 40;
-const unsigned long CLOSED_BLINK_MIN_MS  = 500;
+const unsigned long CLOSED_BLINK_MIN_MS  = 500;  // max 2 green blinks/sec
 bool prevVoltageHigh    = false;
 bool prevClosedForBlink = false;
 unsigned long lastClosedBlinkTime = 0;
 
-// ── ADC gain factors & thresholds ─────────────────────────────────
+// ── ADC auto-ranging (values differ for ADS1115 vs ADS1015) ───────
 #ifdef USE_ADS1115
-const float GAIN_FACTOR_TWOTHIRDS = 0.1875;      // +/-6.144 V
-const float GAIN_FACTOR_1         = 0.125;       // +/-4.096 V
-const float GAIN_FACTOR_2         = 0.0625;      // +/-2.048 V
-const float GAIN_FACTOR_4         = 0.03125;     // +/-1.024 V
-const float GAIN_FACTOR_8         = 0.015625;    // +/-0.512 V
-const float GAIN_FACTOR_16        = 0.0078125;   // +/-0.256 V
+// ADS1115: 16-bit, gain factors in mV/bit
+const float GAIN_FACTOR_TWOTHIRDS = 0.1875;    // +/-6.144 V
+const float GAIN_FACTOR_1         = 0.125;     // +/-4.096 V
+const float GAIN_FACTOR_2         = 0.0625;    // +/-2.048 V
+const float GAIN_FACTOR_4         = 0.03125;   // +/-1.024 V
+const float GAIN_FACTOR_8         = 0.015625;  // +/-0.512 V
+const float GAIN_FACTOR_16        = 0.0078125; // +/-0.256 V
 static const int ADC_COUNT_LOW_THRESH  = 10000;
 static const int ADC_COUNT_HIGH_THRESH = 30000;
+float vClosedThres     = 0.07;
 #define ADS_RATE_FAST  RATE_ADS1115_860SPS
 #define ADS_RATE_SLOW  RATE_ADS1115_64SPS
-const float vClosedThresDefault = 0.07;
 #else
-const float GAIN_FACTOR_TWOTHIRDS = 3.0;         // +/-6.144 V
-const float GAIN_FACTOR_1         = 2.0;         // +/-4.096 V
-const float GAIN_FACTOR_2         = 1.0;         // +/-2.048 V
-const float GAIN_FACTOR_4         = 0.5;         // +/-1.024 V
-const float GAIN_FACTOR_8         = 0.25;        // +/-0.512 V
-const float GAIN_FACTOR_16        = 0.125;       // +/-0.256 V
+// ADS1015: 12-bit, gain factors in mV/bit (16x larger than ADS1115)
+const float GAIN_FACTOR_TWOTHIRDS = 3.0;       // +/-6.144 V
+const float GAIN_FACTOR_1         = 2.0;       // +/-4.096 V
+const float GAIN_FACTOR_2         = 1.0;       // +/-2.048 V
+const float GAIN_FACTOR_4         = 0.5;       // +/-1.024 V
+const float GAIN_FACTOR_8         = 0.25;      // +/-0.512 V
+const float GAIN_FACTOR_16        = 0.125;     // +/-0.256 V
 static const int ADC_COUNT_LOW_THRESH  = 600;
 static const int ADC_COUNT_HIGH_THRESH = 1800;
+float vClosedThres     = 0.15;
 #define ADS_RATE_FAST  RATE_ADS1015_3300SPS
 #define ADS_RATE_SLOW  RATE_ADS1015_250SPS
-const float vClosedThresDefault = 0.1;
 #endif
 
 static const adsGain_t kGainLevels[] = {
@@ -231,21 +214,73 @@ static const float kGainFactors[] = {
 static const int kNumGainLevels = sizeof(kGainLevels) / sizeof(kGainLevels[0]);
 static size_t gainIndexVolt;
 
+// Config bits (ADS1115)
+static const uint16_t ADS_OS_SINGLE      = 0x8000;
+static const uint16_t ADS_MODE_SINGLE    = 0x0100;   // single-shot
+static const uint16_t ADS_COMP_MODE_TRAD = 0x0000;   // traditional
+static const uint16_t ADS_COMP_POL_ALOW  = 0x0000;   // active low
+static const uint16_t ADS_COMP_LAT_LATCH = 0x0004;   // latch
+static const uint16_t ADS_COMP_QUE_1CONV = 0x0000;   // assert after 1 conversion
+static const uint16_t ADS_COMP_QUE_DISABLE = 0x0003; // disable comparator
+
+// MUX for single-ended AIN3
+static const uint16_t ADS_MUX_SINGLE_3   = 0x7000;
+
+// Pick a PGA + data rate that you will NOT be changing for alert control
+static const uint16_t ADS_PGA_6_144V     = 0x0000;  // +/-6.144V (gain 2/3)
+static const uint16_t ADS_DR_128SPS      = 0x0080;  // 128 SPS (example)
+
+void alert_release_hiZ() {
+  uint16_t cfg =
+      0x8000 | 0x7000 | 0x0000 | 0x0100 | 0x0080 |
+      0x0000 | 0x0000 | 0x0000 | 0x0003;
+
+  adsWriteReg16(ADS_REG_POINTER_CONFIG, cfg);
+
+  // Clear any latched alert (belt-and-suspenders)
+  (void)adsReadReg16(0x00);   // conversion register pointer is 0x00
+}
+
+
+void alert_force_low_latched() {
+  // Force comparator to always assert (conversion > -32768 is always true)
+  adsWriteReg16(ADS_REG_POINTER_HITHRESH, 0x8000); // -32768
+  adsWriteReg16(ADS_REG_POINTER_LOWTHRESH, 0x8000);
+
+  uint16_t cfg =
+      0x8000 |   // OS: start conversion now
+      0x7000 |   // MUX: AIN3
+      0x0000 |   // PGA: +/-6.144V
+      0x0100 |   // MODE: single-shot
+      0x0080 |   // DR: 128 SPS
+      0x0000 |   // COMP_MODE: traditional
+      0x0000 |   // COMP_POL: active low
+      0x0004 |   // COMP_LAT: latch
+      0x0000;    // COMP_QUE: assert after 1 conversion
+
+  adsWriteReg16(ADS_REG_POINTER_CONFIG, cfg);
+
+  delay(10);     // enough time for one conversion at 128 SPS
+}
+
+
+
+
 // ── TFT colour palette ───────────────────────────────────────────
 #define COL_BG         ST77XX_BLACK
-#define COL_HEADER     0x1082
+#define COL_HEADER     0x1082          // dark blue-grey
 #define COL_TEXT       ST77XX_WHITE
-#define COL_LABEL      0xBDF7
+#define COL_LABEL      0xBDF7          // light grey
 #define COL_VOLTAGE    ST77XX_CYAN
 #define COL_CLOSED_FG  ST77XX_WHITE
-#define COL_CLOSED_BG  0x0400
+#define COL_CLOSED_BG  0x0400          // dark green
 #define COL_FLOAT_FG   ST77XX_WHITE
-#define COL_FLOAT_BG   0x8200
-#define COL_VNONZERO   0xFFE0
-#define COL_DISABLED   0x7BEF
-#define COL_DIVIDER    0x4208
-#define COL_BAR_FILL   0x07E0
-#define COL_BAR_EMPTY  0x2104
+#define COL_FLOAT_BG   0x8200          // dark orange
+#define COL_VNONZERO   0xFFE0          // yellow
+#define COL_DISABLED   0x7BEF          // grey
+#define COL_DIVIDER    0x4208          // dim grey
+#define COL_BAR_FILL   0x07E0          // bright green
+#define COL_BAR_EMPTY  0x2104          // very dark grey
 
 // ── Forward declarations ──────────────────────────────────────────
 void drawStaticUI();
@@ -255,177 +290,6 @@ void updateDisplay();
 void statusUpdate();
 void handleSerialCommands(char cmd);
 void blinkPixel(uint8_t r, uint8_t g, uint8_t b, unsigned long duration = BLINK_DURATION_MS);
-void setBridgeOn();
-void setBridgeOff();
-void initComparator();
-void writeAdsRegister(uint8_t reg, uint16_t value);
-uint16_t readAdsRegister(uint8_t reg);
-int16_t measureWithBridgeOffThenOn();
-int16_t readADC_Diff01_NoComparator(uint8_t gain);
-
-// ==================================================================
-//  I2C REGISTER ACCESS FOR ADS1x15
-// ==================================================================
-void writeAdsRegister(uint8_t reg, uint16_t value) {
-  Wire.beginTransmission(ADS_ADDR);
-  Wire.write(reg);
-  Wire.write((uint8_t)(value >> 8));    // MSB
-  Wire.write((uint8_t)(value & 0xFF));  // LSB
-  Wire.endTransmission();
-}
-
-uint16_t readAdsRegister(uint8_t reg) {
-  Wire.beginTransmission(ADS_ADDR);
-  Wire.write(reg);
-  Wire.endTransmission();
-  Wire.requestFrom((uint8_t)ADS_ADDR, (uint8_t)2);
-  uint16_t value = (uint16_t)Wire.read() << 8;
-  value |= Wire.read();
-  return value;
-}
-
-// ==================================================================
-//  ADC READ WITH COMPARATOR ALWAYS DISABLED
-// ==================================================================
-// This bypasses the Adafruit library to ensure ALERT stays high-Z
-// PGA values: 0=6.144V, 1=4.096V, 2=2.048V, 3=1.024V, 4=0.512V, 5=0.256V
-int16_t readADC_Diff01_NoComparator(uint8_t pga) {
-  // Build config: AIN0-AIN1 diff, single-shot, COMPARATOR DISABLED
-  uint16_t config = 0x8000 |                    // OS=1: Start conversion
-                    0x0000 |                    // MUX=000: AIN0-AIN1
-                    ((uint16_t)pga << 9) |      // PGA bits 11:9
-                    0x0100 |                    // MODE=1: Single-shot
-                    ADS_CFG_DR_FAST |           // Data rate
-                    ADS_CFG_COMP_DISABLE;       // COMP_QUE=11: Disable comparator
-
-  // Write config to start conversion
-  writeAdsRegister(ADS_REG_CONFIG, config);
-
-  // Poll for conversion complete (OS bit goes to 1 when done)
-  uint16_t status;
-  do {
-    status = readAdsRegister(ADS_REG_CONFIG);
-  } while ((status & 0x8000) == 0);
-
-  // Read and return result
-  return (int16_t)readAdsRegister(ADS_REG_CONVERSION);
-}
-
-// ==================================================================
-//  ALERT PIN BRIDGE CONTROL
-// ==================================================================
-// Hardware: ALERT pin controls MOSFET gate (active-low, open-drain with pull-up)
-//   - ALERT HIGH (high-Z, pulled up) → MOSFET ON → Bridge ON (default)
-//   - ALERT LOW  (asserted) → MOSFET OFF → Bridge OFF
-//
-// Default state: Comparator DISABLED
-//   - ALERT is high-impedance, pulled HIGH by external resistor → Bridge ON
-//   - This prevents any unintended ALERT toggling during normal voltage measurement
-//
-// Bridge control (only during ClosedOrFloat):
-//   - setBridgeOff(): Enable comparator with low threshold → AIN3 triggers → ALERT LOW
-//   - measureWithBridgeOffThenOn(): Read while latched, then disable comparator → ALERT HIGH
-//
-// Strategy for Closed/Float measurement:
-//   1. setBridgeOff(): Enable comparator, low threshold, AIN3 exceeds → ALERT LOW
-//   2. measureWithBridgeOffThenOn(): Switch to AIN0-1 (ALERT latched LOW),
-//      read measurement, disable comparator → ALERT high-Z (pulled HIGH) → Bridge ON
-//   3. The reading captured the voltage WITH bridge OFF
-
-void initComparator() {
-  // Set thresholds (used when comparator is enabled during bridge control)
-  writeAdsRegister(ADS_REG_HI_THRESH, THRESH_BRIDGE_ON);
-  writeAdsRegister(ADS_REG_LO_THRESH, (int16_t)0x8000);
-
-  // Do a quick read of AIN3 for diagnostic info
-  uint16_t configRead = ADS_CFG_MUX_S3 | ADS_CFG_PGA_8 | ADS_CFG_MODE_CONT |
-                        ADS_CFG_DR_FAST | ADS_CFG_COMP_DISABLE;
-  writeAdsRegister(ADS_REG_CONFIG, configRead);
-  delay(5);
-  int16_t ain3 = (int16_t)readAdsRegister(ADS_REG_CONVERSION);
-
-  // Disable comparator - ALERT goes high-Z, pulled HIGH by external resistor = Bridge ON
-  // Comparator will only be enabled briefly during ClosedOrFloat()
-  uint16_t configDisable = ADS_CFG_MUX_DIFF01 | ADS_CFG_PGA_8 | ADS_CFG_MODE_SS |
-                           ADS_CFG_DR_FAST | ADS_CFG_COMP_DISABLE;
-  writeAdsRegister(ADS_REG_CONFIG, configDisable);
-
-  Serial.println("Comparator initialized (disabled by default)");
-  Serial.println("Default state: Bridge ON (ALERT high-Z, pulled HIGH)");
-  Serial.print("AIN3 reading: ");
-  Serial.print(ain3);
-  Serial.print(" counts, THRESH_OFF: ");
-  Serial.print(THRESH_BRIDGE_OFF);
-  Serial.print(", THRESH_ON: ");
-  Serial.println(THRESH_BRIDGE_ON);
-}
-
-void setBridgeOff() {
-  // Set low threshold so AIN3 reading (~30720 or ~1920) exceeds it
-  writeAdsRegister(ADS_REG_HI_THRESH, THRESH_BRIDGE_OFF);
-
-  // Configure for AIN3, continuous mode
-  uint16_t config = ADS_CFG_MUX_S3 | ADS_CFG_PGA_8 | ADS_CFG_MODE_CONT |
-                    ADS_CFG_DR_FAST | ADS_CFG_COMP_TRAD | ADS_CFG_COMP_POL_LO |
-                    ADS_CFG_COMP_LAT | ADS_CFG_COMP_QUE1;
-  writeAdsRegister(ADS_REG_CONFIG, config);
-
-  // Wait for conversion → AIN3 > THRESH_BRIDGE_OFF → ALERT LOW, latches
-  delay(2);
-
-  if (debug) {
-    Serial.print("Bridge OFF - Hi_thresh: ");
-    Serial.print(THRESH_BRIDGE_OFF);
-    Serial.println(" (ALERT should be LOW)");
-  }
-}
-
-int16_t measureWithBridgeOffThenOn() {
-  // Switch to AIN0-1 differential while ALERT is still latched LOW (bridge OFF)
-  // Keep comparator enabled so latch holds
-  uint16_t config = ADS_CFG_MUX_DIFF01 | ADS_CFG_PGA_8 | ADS_CFG_MODE_CONT |
-                    ADS_CFG_DR_FAST | ADS_CFG_COMP_TRAD | ADS_CFG_COMP_POL_LO |
-                    ADS_CFG_COMP_LAT | ADS_CFG_COMP_QUE1;
-  writeAdsRegister(ADS_REG_CONFIG, config);
-
-  // Wait for conversion (bridge still OFF during this time - ALERT latched)
-  delay(1);
-
-  // Set high threshold BEFORE reading so ALERT won't re-trigger after latch clears
-  writeAdsRegister(ADS_REG_HI_THRESH, THRESH_BRIDGE_ON);
-
-  // Read result - this clears the latch!
-  int16_t reading = (int16_t)readAdsRegister(ADS_REG_CONVERSION);
-
-  // NOW disable comparator - ALERT goes high-Z, pulled HIGH = Bridge ON
-  // This prevents any further comparator activity until next ClosedOrFloat()
-  uint16_t configDisable = ADS_CFG_MUX_DIFF01 | ADS_CFG_PGA_8 | ADS_CFG_MODE_SS |
-                           ADS_CFG_DR_FAST | ADS_CFG_COMP_DISABLE;
-  writeAdsRegister(ADS_REG_CONFIG, configDisable);
-
-  if (debug) {
-    Serial.print("Bridge measurement (bridge was OFF): ");
-    Serial.print(reading);
-    Serial.println(" counts (comparator disabled, bridge ON)");
-  }
-
-  return reading;
-}
-
-void setBridgeOn() {
-  // Disable comparator - ALERT goes high-Z, pulled HIGH by external resistor = Bridge ON
-  // This is the safest way to ensure bridge is ON
-  uint16_t config = ADS_CFG_MUX_DIFF01 | ADS_CFG_PGA_8 | ADS_CFG_MODE_SS |
-                    ADS_CFG_DR_FAST | ADS_CFG_COMP_DISABLE;
-  writeAdsRegister(ADS_REG_CONFIG, config);
-
-  // Reset threshold to high value for next bridge operation
-  writeAdsRegister(ADS_REG_HI_THRESH, THRESH_BRIDGE_ON);
-
-  if (debug) {
-    Serial.println("Bridge ON (comparator disabled, ALERT high-Z pulled HIGH)");
-  }
-}
 
 // ==================================================================
 //  SETUP
@@ -443,7 +307,7 @@ void setup() {
 
   // ── Initialise TFT ──
   tft.init(135, 240);
-  tft.setRotation(3);
+  tft.setRotation(3);              // landscape, USB on right
   tft.fillScreen(COL_BG);
 
   // Splash screen
@@ -456,42 +320,30 @@ void setup() {
   tft.setTextSize(1);
   tft.setTextColor(COL_LABEL);
   tft.setCursor(16, 90);
-  tft.print("ALERT Bridge v1.0");
+  tft.print("Feather Voltmeter  v1.0");
 
   // ── I2C + ADC ──
   Wire.begin();
-  analogReadResolution(12);
+  analogReadResolution(12);        // ESP32 12-bit ADC (0-4095)
 
   while (!ads.begin(0x48, &Wire)) {
-#ifdef USE_ADS1115
     Serial.println("ADS1115 not found - retrying...");
-#else
-    Serial.println("ADS1015 not found - retrying...");
-#endif
     delay(1000);
   }
-#ifdef USE_ADS1115
   Serial.println("ADS1115 connected.");
-#else
-  Serial.println("ADS1015 connected.");
-#endif
-
-  // Configure for comparator/ALERT usage
-  ads.setGain(GAIN_EIGHT);
+  ads.setGain(GAIN_SIXTEEN);
   ads.setDataRate(ADS_RATE_FAST);
+  alert_release_hiZ();  // default high (via pull-up)
 
-  // Initialize comparator for bridge control
-  initComparator();
 
-  // Start with bridge ON (default state)
-  setBridgeOn();
-
-  // ── GPIO (no VbridgePin needed!) ──
+  // ── GPIO ──
+  pinMode(VbridgePin,     OUTPUT);
   pinMode(VEnablePin,     OUTPUT);
   pinMode(VEnableControl, INPUT_PULLUP);
   pinMode(clsdThreshold,  INPUT);
   pinMode(zeroThreshold,  INPUT);
   pinMode(cfSuppressBtn,  INPUT_PULLUP);
+  digitalWrite(VbridgePin, BRIDGE_ON);  // bridge connected (resting state)
 
   // ── NeoPixel ──
   pixel.begin();
@@ -512,22 +364,25 @@ void setup() {
     Serial.println("MAX17048 not found - battery info unavailable.");
   }
 
-  delay(1200);
+  delay(1200);                     // hold splash visible
   tft.fillScreen(COL_BG);
   drawStaticUI();
 }
 
 // ── Draw elements that never change ──────────────────────────────
 void drawStaticUI() {
+  // Header bar
   tft.fillRect(0, 0, 240, 16, COL_HEADER);
   tft.setTextSize(1);
   tft.setTextColor(COL_VOLTAGE, COL_HEADER);
   tft.setCursor(4, 4);
-  tft.print("OPEN LEAD (ALERT)");
+  tft.print("OPEN LEAD DETECT");
 
+  // Dividers
   tft.drawFastHLine(0, 17, 240, COL_DIVIDER);
   tft.drawFastHLine(0, 68, 240, COL_DIVIDER);
 
+  // Voltage section label
   tft.setTextSize(1);
   tft.setTextColor(COL_LABEL, COL_BG);
   tft.setCursor(4, 20);
@@ -547,11 +402,10 @@ void loop() {
 #else
   digitalWrite(VEnablePin, vRefEnable ? LOW : HIGH);
 #endif
-
-  // Boot button toggle
+  // Boot button toggle (falling edge = press)
   bool cfBtnNow = digitalRead(cfSuppressBtn);
   if (cfBtnNow == LOW && cfBtnPrev == HIGH) {
-    cfSuppress = !cfSuppress;
+    cfSuppress = !cfSuppress;                 // toggle on press
     Serial.print("CF suppress: ");
     Serial.println(cfSuppress ? "ON" : "OFF");
   }
@@ -567,15 +421,17 @@ void loop() {
   measureVoltage();
   vClimb = (fabs(prev) < fabs(newVoltageReading));
 
-  // ── NeoPixel alerts ──
+  // ── NeoPixel alerts (immediate blinks on state change) ──
   bool voltageHigh = (fabs(medianVoltage) > VOLTAGE_ALARM_THRESH);
   bool closedNow   = (vRefEnable && Vzero && ClosedConfidence > 5);
 
+  // Red blink the instant voltage first crosses above threshold
   if (voltageHigh && !prevVoltageHigh) {
     blinkPixel(250, 0, 0);
   }
   prevVoltageHigh = voltageHigh;
 
+  // Green blink the instant circuit first detected closed (rate-limited)
   if (closedNow && !prevClosedForBlink) {
     if (currentMillis - lastClosedBlinkTime >= CLOSED_BLINK_MIN_MS) {
       blinkPixel(0, 250, 0);
@@ -590,7 +446,7 @@ void loop() {
     statusUpdate();
   }
 
-  // ── Battery ──
+  // ── Battery (slow read, every 10 s) ──
   if (battFound && (currentMillis - lastBattRead >= battReadInterval)) {
     lastBattRead = currentMillis;
     battPct     = constrain(battMonitor.cellPercent(), 0.0f, 100.0f);
@@ -602,6 +458,7 @@ void loop() {
     lastDisplayTime = currentMillis;
     updateDisplay();
 
+    // Periodic blinks at screen refresh rate (1 Hz)
     if (voltageHigh) {
       blinkPixel(200, 0, 0);
     } else if (closedNow &&
@@ -616,55 +473,72 @@ void loop() {
 //  VOLTAGE MEASUREMENT  +  AUTO-RANGE  +  ZERO DETECT
 // ==================================================================
 void measureVoltage() {
-  // All ADC reads now use our custom function that keeps comparator DISABLED
-  // This guarantees ALERT stays high-Z (pulled HIGH = bridge ON)
-
-  vScale = VOLTAGE_SCALE_full;
+  if (manual) {
+    if (!range) {
+      digitalWrite(VbridgePin, BRIDGE_OFF);
+      alert_release_hiZ();
+      vScale = VOLTAGE_SCALE_full;
+    } else {
+      digitalWrite(VbridgePin, BRIDGE_ON);
+      alert_force_low_latched();
+      vScale = VOLTAGE_SCALE_low;
+      ads.setDataRate(ADS_RATE_SLOW);
+    }
+  } else {
+    //digitalWrite(VbridgePin, BRIDGE_OFF);   // ensure bridge disconnected
+    
+    vScale = VOLTAGE_SCALE_full;
+  }
 
   if (firstVoltRun) {
-    gainIndexVolt = kNumGainLevels - 1;
+    gainIndexVolt = kNumGainLevels - 1;   // start at highest gain
     firstVoltRun = false;
   }
 
-  // Read using our custom function (comparator always disabled)
-  // gainIndexVolt maps directly to PGA value (0-5)
-  countV = readADC_Diff01_NoComparator(gainIndexVolt);
+  if(prevcfSuppress != cfSuppress){
 
-  // Auto-range: adjust gain if needed
+    if(cfSuppress){
+      ads.setDataRate(ADS_RATE_SLOW);
+      Serial.print("64sps");
+    }else{
+      ads.setDataRate(ADS_RATE_FAST);
+      Serial.print("860sps");
+    }
+    prevcfSuppress = cfSuppress;
+  }
+  
+  ads.setGain(kGainLevels[gainIndexVolt]);
+  countV = ads.readADC_Differential_0_1();
+
   if (abs(countV) > ADC_COUNT_HIGH_THRESH && gainIndexVolt > 0) {
     --gainIndexVolt;
-    countV = readADC_Diff01_NoComparator(gainIndexVolt);
+    ads.setGain(kGainLevels[gainIndexVolt]);
+    countV = ads.readADC_Differential_0_1();
   } else if (abs(countV) < ADC_COUNT_LOW_THRESH &&
              gainIndexVolt < (size_t)(kNumGainLevels - 1)) {
     ++gainIndexVolt;
-    countV = readADC_Diff01_NoComparator(gainIndexVolt);
+    ads.setGain(kGainLevels[gainIndexVolt]);
+    countV = ads.readADC_Differential_0_1();
   }
 
   vActual           = countV * kGainFactors[gainIndexVolt] / 1000.0f;
-  newVoltageReading = vActual * vScale;
+  newVoltageReading = (vActual * vScale);// - 0.023;
 
-  // Debug output every ~2 seconds
-  static unsigned long lastDebugPrint = 0;
-  if (millis() - lastDebugPrint > 2000) {
-    lastDebugPrint = millis();
-    Serial.print("DEBUG: gainIdx=");
-    Serial.print(gainIndexVolt);
-    Serial.print(" factor=");
-    Serial.print(kGainFactors[gainIndexVolt], 4);
-    Serial.print(" countV=");
-    Serial.print(countV);
-    Serial.print(" vActual=");
-    Serial.print(vActual, 4);
-    Serial.print(" vScale=");
-    Serial.print(vScale, 2);
-    Serial.print(" result=");
-    Serial.println(newVoltageReading, 3);
+  // Exponential rolling average (same style as bridgeAvg)
+  if (fabs(newVoltageReading) > fabs(medianVoltage)) {
+    medianVoltage = medianVoltage + (newVoltageReading - medianVoltage) / 10.0f;
+  } else {
+    medianVoltage = medianVoltage + (newVoltageReading - medianVoltage) / 10.0f;
   }
+  // Note: both branches are the same -- simple EMA with alpha=0.1
+  // Keeping structure parallel to bridgeAvg for consistency
 
-  // Exponential rolling average
-  medianVoltage = medianVoltage + (newVoltageReading - medianVoltage) / 10.0f;
-
+  // Display value: raw when suppressed, smoothed otherwise
   displayVoltage = cfSuppress ? newVoltageReading : medianVoltage;
+
+  // Zero-threshold pot  (ESP32 12-bit: 0-4095)
+  CorFTrig = 0.25;
+  //CorFTrig = (analogRead(zeroThreshold) / 4095.0f) * 0.2f;
 
   prevVzero = Vzero;
 
@@ -685,27 +559,49 @@ void measureVoltage() {
 void ClosedOrFloat() {
   bool prevClosed = vClosed;
 
+  // Closed-threshold pot (12-bit)
+ // closedBias   = (analogRead(clsdThreshold) / 4095.0f) * 2.0f;
+ // vClosedThres = 5.0f * closedBias;
+
+
   vClosed = vFloating = vUndefined = false;
 
-  // Turn bridge OFF via ALERT pin (ALERT goes LOW, latches)
-  setBridgeOff();
-  delay(1);  // settling time
+  // First bridge sample
+  //digitalWrite(VbridgePin, BRIDGE_ON);
+  alert_force_low_latched();
+  delay(1);
+  //ads.setDataRate(ADS_RATE_FAST);
+  ads.setGain(GAIN_EIGHT);
+  float bv1 = ads.readADC_Differential_0_1()
+              * (GAIN_FACTOR_8 / 1000.0f);
+  //digitalWrite(VbridgePin, BRIDGE_OFF);
+  alert_release_hiZ();
+  
+/*
+  // Second bridge sample
+  digitalWrite(VbridgePin, BRIDGE_ON);
+  float bv2 = ads.readADC_Differential_0_1()
+              * (0.0078125f / 1000.0f);
+  digitalWrite(VbridgePin, BRIDGE_OFF);
 
-  // Measure with bridge OFF, then turn bridge back ON
-  // The latch keeps bridge OFF during measurement, reading clears latch
-  int16_t bridgeReading = measureWithBridgeOffThenOn();
-
-  // Convert to volts (at GAIN_8)
-  // Bridge is now back ON (default state)
-  bridgeV = bridgeReading * (GAIN_FACTOR_8 / 1000.0f);
-
-  if (fabs(bridgeV) > fabs(bridgeAvg)) {
-    bridgeAvg = bridgeAvg - (fabs(bridgeV) / 10);
-  } else {
-    bridgeAvg = bridgeAvg + (fabs(bridgeV) / 10);
+  bridgeV = (fabs(bv1) + fabs(bv2)) / 2.0f;
+*/
+  bridgeV = bv1;
+  if(fabs(bridgeV)>fabs(bridgeAvg)){
+      bridgeAvg = bridgeAvg - (fabs(bridgeV)/10);      
+    }else{
+      bridgeAvg = bridgeAvg + (fabs(bridgeV)/10);
   }
 
-  // Classification
+/*
+  if(fabs(bridgeV)-fabs(bridgeAvg)>bridgeAvgDiff){
+    bridgeAvgDiff=bridgeAvgDiff-((fabs(bridgeV)-fabs(bridgeAvg))/10);
+  }else{
+    bridgeAvgDiff=bridgeAvgDiff+((fabs(bridgeV)-fabs(bridgeAvg))/10);
+  }
+*/
+
+  // ── Classification ──
   if (fabs(bridgeV) < vClosedThres) {
     if (vClosedtrig) vClosed = true;
     vClosedtrig = true;
@@ -716,6 +612,7 @@ void ClosedOrFloat() {
       Serial.print(bridgeV, 4);
       Serial.println(" -> Closed");
     }
+
   } else if (fabs(bridgeV) > vClosedThres) {
     if (vFloattrig) vFloating = true;
     vFloattrig = true;
@@ -726,12 +623,15 @@ void ClosedOrFloat() {
       Serial.print(bridgeV, 4);
       Serial.println(" -> Float");
     }
+
   } else {
+    // Exactly equal - hold previous state
     if (prevClosed) vClosed  = true;
     else            vFloating = true;
   }
 
-  delay(10);
+  delay(100); //this allows settling before we resume  
+
 }
 
 // ==================================================================
@@ -749,22 +649,25 @@ void blinkPixel(uint8_t r, uint8_t g, uint8_t b, unsigned long duration) {
 //  TFT DISPLAY UPDATE
 // ==================================================================
 void updateDisplay() {
-  static int  prevSt      = -1;
+  // Previous-state tracking (static persists across calls)
+  static int  prevSt      = -1;     // forces first-call draw
   static bool prevVRef    = true;
   static bool prevVzDisp  = false;
   static bool firstUpdate = true;
 
+  // ── Determine current states ──
   int st;
-  if      (!vRefEnable)            st = 3;
-  else if (cfSuppress)             st = 4;
-  else if (!Vzero)                 st = 2;
-  else if (ClosedConfidence > 5)   st = 0;
-  else                             st = 1;
+  if      (!vRefEnable)            st = 3;   // disabled
+  else if (cfSuppress)             st = 4;   // closed/float suppressed
+  else if (!Vzero)                 st = 2;   // V != 0
+  else if (ClosedConfidence > 5)   st = 0;   // closed
+  else                             st = 1;   // floating
 
   bool statusChanged = (st != prevSt)           || firstUpdate;
   bool vzeroChanged  = (Vzero != prevVzDisp)    || firstUpdate;
   bool vrefChanged   = (vRefEnable != prevVRef) || firstUpdate;
 
+  // ── VRef indicator (header) -- only on change ──
   if (vrefChanged) {
     tft.fillRect(160, 0, 80, 16, COL_HEADER);
     tft.setTextSize(1);
@@ -773,36 +676,41 @@ void updateDisplay() {
       tft.setTextColor(COL_BAR_FILL, COL_HEADER);
       tft.print("VRef: ON ");
     } else {
-      tft.setTextColor(0xFDA0, COL_HEADER);
+      tft.setTextColor(0xFDA0, COL_HEADER);   // orange
       tft.print("VRef: OFF");
     }
   }
 
+  // ── Voltage value ──
+  // Clear once when Vzero state toggles (format/colour changes)
   if (vzeroChanged) {
     tft.fillRect(0, 30, 240, 36, COL_BG);
   }
-
+  // Overwrite in place -- setTextColor(fg, bg) paints background
+  // behind each character, so no fillRect needed between refreshes.
   tft.setTextSize(3);
   char vBuf[14];
   if (!Vzero || cfSuppress) {
     tft.setTextColor(COL_VOLTAGE, COL_BG);
-    dtostrf(displayVoltage, 10, 3, vBuf);
+    dtostrf(displayVoltage, 10, 3, vBuf);      // fixed 10-char width
   } else {
     tft.setTextColor(COL_LABEL, COL_BG);
     char tmp[8];
     dtostrf(CorFTrig, 5, 3, tmp);
-    snprintf(vBuf, sizeof(vBuf), "  <%s    ", tmp);
+    snprintf(vBuf, sizeof(vBuf), "  <%s    ", tmp);  // pad to ~10 chars
   }
   tft.setCursor(4, 34);
   tft.print(vBuf);
 
+  // Unit label (constant position, bg-colour overwrites itself)
   tft.setTextSize(2);
   tft.setTextColor(COL_LABEL, COL_BG);
   tft.setCursor(222, 38);
   tft.print("V");
 
+  // ── Lead-status badge -- only on change ──
   if (statusChanged) {
-    tft.fillRect(0, 70, 168, 26, COL_BG);
+    tft.fillRect(0, 70, 168, 26, COL_BG);      // clear badge zone
     tft.setTextSize(2);
     switch (st) {
       case 0:
@@ -833,45 +741,53 @@ void updateDisplay() {
         tft.print("VOLT ONLY");
         break;
     }
+    // Clear confidence / bar areas when leaving a state that shows them
     if (!(vRefEnable && Vzero && !cfSuppress)) {
       tft.fillRect(170, 72, 70, 22, COL_BG);
       tft.fillRect(3, 97, 204, 8, COL_BG);
     }
   }
 
+  // ── Confidence percentage (dynamic, overwrites in place) ──
   if (vRefEnable && Vzero && !cfSuppress) {
-    float pct = (abs(bridgeAvg) / vClosedThres) * 100;
+    float pct = (abs(bridgeAvg) / (vClosedThres))*100;
     tft.setTextSize(2);
     tft.setTextColor(COL_TEXT, COL_BG);
     tft.setCursor(174, 75);
     char cBuf[8];
-    snprintf(cBuf, sizeof(cBuf), "%3d%%", (int)pct);
+    snprintf(cBuf, sizeof(cBuf), "%3d%%", (int)pct);   // fixed 4-char
     tft.print(cBuf);
   }
 
+  // ── Confidence bar (fills with colour, no black flash) ──
+  // Bar spans 200px. 100% threshold is at 1/3 of bar (67px from left).
   if (vRefEnable && Vzero && !cfSuppress) {
     const int barX      = 4;
     const int barY      = 98;
     const int barTotal  = 200;
     const int barH      = 6;
-    const int thresh100 = barTotal / 3;
+    const int thresh100 = barTotal / 3;   // 100% mark at 67px
 
     float pct = fabs(bridgeAvg) / (vClosedThres * 3.0f);
     int barW  = constrain((int)(pct * barTotal), 0, barTotal);
 
     if (barW <= thresh100) {
+      // All green, nothing over threshold
       tft.fillRect(barX,        barY, barW,            barH, COL_BAR_FILL);
       tft.fillRect(barX + barW, barY, barTotal - barW, barH, COL_BAR_EMPTY);
     } else {
+      // Green up to threshold, red beyond
       tft.fillRect(barX,            barY, thresh100,          barH, COL_BAR_FILL);
       tft.fillRect(barX + thresh100, barY, barW - thresh100,   barH, ST77XX_RED);
       tft.fillRect(barX + barW,      barY, barTotal - barW,    barH, COL_BAR_EMPTY);
     }
 
+    // Border and 100% threshold marker line
     tft.drawRect(barX - 1, barY - 1, barTotal + 2, barH + 2, COL_DIVIDER);
     tft.drawFastVLine(barX + thresh100, barY - 1, barH + 2, COL_TEXT);
   }
 
+  // ── Bottom info (overwrite in place with bg colour, no fillRect) ──
   char buf[12];
   tft.setTextSize(1);
   tft.setTextColor(COL_LABEL, COL_BG);
@@ -887,7 +803,7 @@ void updateDisplay() {
   tft.setCursor(180, 112);
   tft.print("Gain:");
   tft.print((int)gainIndexVolt);
-  tft.print(" ");
+  tft.print(" ");                     // trailing space covers shrinking digit
 
   tft.setCursor(4, 124);
   tft.print("Bridge:");
@@ -899,6 +815,7 @@ void updateDisplay() {
   tft.print(buf);
   tft.print("s");
 
+  // Battery in bottom-right corner
   tft.setCursor(198, 124);
   if (battFound) {
     char bBuf[8];
@@ -908,6 +825,7 @@ void updateDisplay() {
     tft.print("B: --");
   }
 
+  // ── Update tracked state ──
   prevSt     = st;
   prevVRef   = vRefEnable;
   prevVzDisp = Vzero;
@@ -925,6 +843,7 @@ void statusUpdate() {
     Serial.print(" Bridge:");    Serial.print(bridgeV, 4);
     Serial.print(" / Thres:");   Serial.print(vClosedThres, 4);
     Serial.print(" / ");         Serial.print(vClosed ? "Closed" : "Floating");
+    Serial.print(" / Avg Diff");         Serial.print(bridgeAvgDiff);
   } else {
     Serial.print(" / V !0");
   }
@@ -951,16 +870,8 @@ void handleSerialCommands(char command) {
     case 'M': Serial.println("Manual toggled");    manual  = !manual;   break;
     case 'R': Serial.println("Range toggled");     range   = !range;    break;
     case 'D': Serial.println("Debug toggled");     debug   = !debug;    break;
-    case 'B':
-      Serial.println("Bridge test: turning OFF...");
-      setBridgeOff();
-      delay(1000);
-      Serial.println("Bridge test: turning ON (default)...");
-      setBridgeOn();
-      Serial.println("Bridge test complete");
-      break;
     case '?':
-      Serial.println("Commands: S(Stop) G(Go) U(Updates) M(Manual) R(Range) D(Debug) B(Bridge test)");
+      Serial.println("Commands: S(Stop) G(Go) U(Updates) M(Manual) R(Range) D(Debug)");
       break;
     default: break;
   }
