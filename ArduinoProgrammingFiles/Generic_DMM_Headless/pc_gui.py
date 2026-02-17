@@ -188,6 +188,13 @@ class DmmTab(QWidget):
         self.cur_toggle_btn.clicked.connect(self._toggle_current)
         ctrl_layout.addWidget(self.cur_toggle_btn)
 
+        # Adaptive smoothing toggle
+        self._smooth_on = False
+        self.smooth_btn = QPushButton("Smooth: OFF")
+        self.smooth_btn.setStyleSheet(self._CTRL_BTN_STYLE.format(bg="#555", hover="#666"))
+        self.smooth_btn.clicked.connect(self._toggle_smooth)
+        ctrl_layout.addWidget(self.smooth_btn)
+
         ctrl_layout.addStretch()
 
         # Calibration controls
@@ -396,6 +403,18 @@ class DmmTab(QWidget):
             self.stat_labels["I Max"].hide()
             self._hold_hdr.setText("  Time       V           VRMS")
         self._refresh_hold_display()
+
+    def _toggle_smooth(self):
+        self._smooth_on = not self._smooth_on
+        self._send("!SMOOTH")
+        if self._smooth_on:
+            self.smooth_btn.setText("Smooth: ON")
+            self.smooth_btn.setStyleSheet(
+                self._CTRL_BTN_STYLE.format(bg="#2e8b57", hover="#246d45"))
+        else:
+            self.smooth_btn.setText("Smooth: OFF")
+            self.smooth_btn.setStyleSheet(
+                self._CTRL_BTN_STYLE.format(bg="#555", hover="#666"))
 
     def _refresh_hold_display(self):
         for i, lbl in enumerate(self._hold_labels):

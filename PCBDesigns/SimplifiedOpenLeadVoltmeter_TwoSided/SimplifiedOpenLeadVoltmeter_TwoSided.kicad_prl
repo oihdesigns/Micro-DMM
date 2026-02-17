@@ -50,7 +50,7 @@
       "conflict_shadows",
       "shapes"
     ],
-    "visible_layers": "ffffffff_ffffffff_fffffff7_ffffffff",
+    "visible_layers": "ffffffff_ffffffff_fffffff7_ffffff7f",
     "zone_display_mode": 1
   },
   "git": {
@@ -59,11 +59,13 @@
     "ssh_key": ""
   },
   "meta": {
-    "filename": "AMC0330R_Mount.kicad_prl",
+    "filename": "SimplifiedOpenLeadVoltmeter_TwoSided.kicad_prl",
     "version": 5
   },
   "net_inspector_panel": {
     "col_hidden": [
+      false,
+      false,
       false,
       false,
       false,
@@ -85,7 +87,9 @@
       6,
       7,
       8,
-      9
+      9,
+      10,
+      11
     ],
     "col_widths": [
       222,
@@ -96,6 +100,8 @@
       136,
       136,
       98,
+      136,
+      136,
       136,
       136
     ],

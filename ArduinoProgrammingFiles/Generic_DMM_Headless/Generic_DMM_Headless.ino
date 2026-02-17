@@ -13,8 +13,8 @@
 #define ADC_BITS        14        // ADC resolution: 10 (Uno/Nano), 12 (Due/ESP32), 14 (R4), 16 (GIGA)
 #define ADC_PIN         A0        // Analog input pin
 #define VREF            3.307       // Reference voltage (3.3 or 5.0)
-#define ANALOG_OFFSET   1.65718       // DC offset at 0V input (e.g. 1.65692 for AMC0330)
-#define PROBE_SCALE_INIT 35.276      // Voltage divider ratio (1.0 = no divider)
+#define ANALOG_OFFSET   1.65159       // DC offset at 0V input (e.g. 1.65692 for AMC0330)
+#define PROBE_SCALE_INIT 34.5451      // Voltage divider ratio (1.0 = no divider)
 // ---- Current channel (AMC1200B differential) ----
 #define CUR_PIN_POS     A1        // AMC1200B positive output
 #define CUR_PIN_NEG     A2        // AMC1200B negative output
@@ -40,6 +40,9 @@ static float dmmVrms   = 0;
 static float dmmRefV   = 0;
 static bool  dmmRefSet = false;
 static bool  dmmShowVac = false;
+
+// ======================= Smoothing State ===========================
+static bool  dmmSmooth = false;
 
 // ======================= Current Channel State ====================
 
@@ -181,6 +184,9 @@ void handleSerialCmd(const char* cmd) {
   else if (strcmp(c, "VAC") == 0) {
     dmmShowVac = !dmmShowVac;
   }
+  else if (strcmp(c, "SMOOTH") == 0) {
+    dmmSmooth = !dmmSmooth;
+  }
   else if (strcmp(c, "ZERO") == 0) {
     // Set zero: current raw ADC voltage becomes the new offset
     analogOffset = dmmAvg / probeScale + analogOffset;
@@ -261,19 +267,28 @@ void loop() {
   uint16_t raw = analogRead(ADC_PIN);
   float v = adcToVolts(raw);
 
-  // EMA smoothing (alpha = 0.2)
+  // EMA smoothing
   const float alpha = 0.2f;
-  if((v*1.3)>dmmAvg || (v*0.8)<dmmAvg){
-  dmmAvg  = dmmAvg * (1.0f - alpha) + v * alpha;
-  }else{
-    dmmAvg = v;
+
+  if (dmmSmooth) {
+    // Adaptive alpha: heavier smoothing when VRMS (noise) is high
+    float vLsb = probeLsb();
+    float a = alpha * vLsb / (vLsb + dmmVrms);
+    if (a < 0.001f) a = 0.001f;
+    dmmAvg = dmmAvg * (1.0f - a) + v * a;
+  } else {
+    if((v*1.3)>dmmAvg || (v*0.8)<dmmAvg){
+      dmmAvg  = dmmAvg * (1.0f - alpha) + v * alpha;
+    }else{
+      dmmAvg = v;
+    }
   }
 
   // Running min / max
   if (v < dmmMin) dmmMin = v;
   if (v > dmmMax) dmmMax = v;
 
-  // AC-coupled RMS (EMA of squared AC component)
+  // AC-coupled RMS (EMA of squared AC component — always runs at fixed alpha)
   float ac = v - dmmAvg;
   static float acSqEma = 0;
   acSqEma = acSqEma * (1.0f - alpha) + (ac * ac) * alpha;
@@ -281,7 +296,22 @@ void loop() {
 
   // --- Current channel acquisition ---
   float cur = readCurrent();
-  curAvg = curAvg * (1.0f - alpha) + cur * alpha;
+  static float curAcSqEma = 0;
+
+  if (dmmSmooth) {
+    float cLsb = currentLsb();
+    float curRms = sqrtf(curAcSqEma);
+    float ca = alpha * cLsb / (cLsb + curRms);
+    if (ca < 0.001f) ca = 0.001f;
+    curAvg = curAvg * (1.0f - ca) + cur * ca;
+  } else {
+    curAvg = curAvg * (1.0f - alpha) + cur * alpha;
+  }
+
+  // Current RMS (always tracked so adaptive alpha is ready)
+  float curAc = cur - curAvg;
+  curAcSqEma = curAcSqEma * (1.0f - alpha) + (curAc * curAc) * alpha;
+
   if (cur < curMin) curMin = cur;
   if (cur > curMax) curMax = cur;
 
