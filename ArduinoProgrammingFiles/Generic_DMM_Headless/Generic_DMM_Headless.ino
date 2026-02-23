@@ -41,6 +41,11 @@ static float dmmRefV   = 0;
 static bool  dmmRefSet = false;
 static bool  dmmShowVac = false;
 
+// Windowed RMS accumulators (reset each reporting interval)
+static double rmsVSum   = 0.0;
+static double rmsVSqSum = 0.0;
+static uint32_t rmsSampleCount = 0;
+
 // ======================= Smoothing State ===========================
 static bool  dmmSmooth = false;
 
@@ -249,6 +254,9 @@ analogReference(AR_EXTERNAL);
   dmmRefV   = 0;
   dmmRefSet = false;
   dmmShowVac = false;
+  rmsVSum   = 0.0;
+  rmsVSqSum = 0.0;
+  rmsSampleCount = 0;
 
   curAvg    = 0;
   curMin    = 9999;
@@ -256,6 +264,21 @@ analogReference(AR_EXTERNAL);
 
   sendConfig();
   sendMode();
+
+    // Configure LED_BUILTIN pin as output
+  pinMode(LED_BUILTIN, OUTPUT);
+  
+  // Initialize LEDR, LEDG and LEDB as outputs
+  pinMode(LEDR, OUTPUT);
+  pinMode(LEDG, OUTPUT);
+  pinMode(LEDB, OUTPUT);
+  
+  // Turn off all LEDs initially
+  analogWrite(LEDR, 64);
+  analogWrite(LEDG, 255);
+  analogWrite(LEDB, 64);
+
+
 }
 
 // ======================= Main Loop ================================
@@ -267,32 +290,29 @@ void loop() {
   uint16_t raw = analogRead(ADC_PIN);
   float v = adcToVolts(raw);
 
-  // EMA smoothing
-  const float alpha = 0.2f;
+  // Time-based EMA for DC average display (tau ≈ 50 ms)
+  // Using micros() keeps the time-constant correct regardless of loop speed.
+  static unsigned long lastUs = 0;
+  unsigned long nowUs = micros();
+  float dtSec = (float)(nowUs - lastUs) * 1e-6f;
+  lastUs = nowUs;
+  if (dtSec < 0.0f || dtSec > 0.5f) dtSec = 0.001f; // clamp on first call / wrap
 
-  if (dmmSmooth) {
-    // Adaptive alpha: heavier smoothing when VRMS (noise) is high
-    float vLsb = probeLsb();
-    float a = alpha * vLsb / (vLsb + dmmVrms);
-    if (a < 0.001f) a = 0.001f;
-    dmmAvg = dmmAvg * (1.0f - a) + v * a;
-  } else {
-    if((v*1.3)>dmmAvg || (v*0.8)<dmmAvg){
-      dmmAvg  = dmmAvg * (1.0f - alpha) + v * alpha;
-    }else{
-      dmmAvg = v;
-    }
-  }
+  const float tau_dc = dmmSmooth ? 0.5f : 0.05f; // 500 ms smooth / 50 ms normal
+  float alpha = dtSec / (tau_dc + dtSec);
+  if (alpha < 1e-6f) alpha = 1e-6f;
+  if (alpha > 1.0f)  alpha = 1.0f;
+  dmmAvg = dmmAvg * (1.0f - alpha) + v * alpha;
 
   // Running min / max
   if (v < dmmMin) dmmMin = v;
   if (v > dmmMax) dmmMax = v;
 
-  // AC-coupled RMS (EMA of squared AC component — always runs at fixed alpha)
-  float ac = v - dmmAvg;
-  static float acSqEma = 0;
-  acSqEma = acSqEma * (1.0f - alpha) + (ac * ac) * alpha;
-  dmmVrms = sqrtf(acSqEma);
+  // Windowed RMS: accumulate sum(v) and sum(v²) over the reporting interval.
+  // At send time: Vrms = sqrt(mean(v²) - mean(v)²)  →  true AC-RMS (DC-rejected).
+  rmsVSum   += (double)v;
+  rmsVSqSum += (double)v * (double)v;
+  rmsSampleCount++;
 
   // --- Current channel acquisition ---
   float cur = readCurrent();
@@ -317,8 +337,30 @@ void loop() {
 
   // --- Send DMM reading at configured interval ---
   unsigned long now = millis();
+
   if (now - lastDmmSend >= DMM_INTERVAL_MS) {
     lastDmmSend = now;
+
+    // Compute true AC-RMS from the window accumulated since last send.
+    // sqrt(E[v²] - E[v]²) removes any DC bias automatically.
+    if (rmsSampleCount > 0) {
+      double meanV   = rmsVSum   / rmsSampleCount;
+      double meanVSq = rmsVSqSum / rmsSampleCount;
+      double variance = meanVSq - meanV * meanV;
+      dmmVrms = (variance > 0.0) ? sqrtf((float)variance) : 0.0f;
+    }
+    rmsVSum        = 0.0;
+    rmsVSqSum      = 0.0;
+    rmsSampleCount = 0;
+
+    analogWrite(LEDR, 255);
+    analogWrite(LEDG, 0);
+    analogWrite(LEDB, 255);
+
     sendDmmReading();
+    
+    analogWrite(LEDR, 64);
+    analogWrite(LEDG, 255);
+    analogWrite(LEDB, 64);
   }
 }

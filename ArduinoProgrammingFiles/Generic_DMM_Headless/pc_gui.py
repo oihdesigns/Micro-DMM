@@ -474,6 +474,15 @@ class MainWindow(QMainWindow):
         self.connect_btn.clicked.connect(self._toggle_connect)
         conn_bar.addWidget(self.connect_btn)
 
+        self.reset_btn = QPushButton("Reset")
+        self.reset_btn.setStyleSheet(
+            "QPushButton { background: #555; color: #dcdcdc; border: 1px solid #666; "
+            "border-radius: 4px; padding: 4px 10px; font-weight: bold; }"
+            "QPushButton:hover { background: #666; }"
+        )
+        self.reset_btn.clicked.connect(self._on_reset)
+        conn_bar.addWidget(self.reset_btn)
+
         self.conn_status = QLabel("Disconnected")
         self.conn_status.setStyleSheet("color: #aaa;")
         conn_bar.addWidget(self.conn_status)
@@ -571,6 +580,18 @@ class MainWindow(QMainWindow):
         if self.reader:
             self.reader.send_command(cmd)
 
+    def _on_reset(self):
+        """Re-sync GUI state with Arduino after a reboot."""
+        # Reset GUI toggles to match Arduino power-on defaults
+        dmm = self.dmm_tab
+        dmm._smooth_on = False
+        dmm.smooth_btn.setText("Smooth: OFF")
+        dmm.smooth_btn.setStyleSheet(
+            dmm._CTRL_BTN_STYLE.format(bg="#555", hover="#666"))
+        # Request fresh config from the Arduino
+        self._send_cmd("!CFG")
+        self.status_bar.showMessage("Reset — re-synced with Arduino")
+
     # ── Compact mode ──
 
     def _toggle_compact(self):
@@ -589,6 +610,7 @@ class MainWindow(QMainWindow):
             self.port_combo.hide()
             self.refresh_btn.hide()
             self.connect_btn.hide()
+            self.reset_btn.hide()
             self.conn_status.hide()
             self.status_bar.hide()
             self.compact_btn.setText("Expand")
@@ -604,6 +626,7 @@ class MainWindow(QMainWindow):
             self.port_combo.show()
             self.refresh_btn.show()
             self.connect_btn.show()
+            self.reset_btn.show()
             self.conn_status.show()
             self.status_bar.show()
             self.compact_btn.setText("Compact")
