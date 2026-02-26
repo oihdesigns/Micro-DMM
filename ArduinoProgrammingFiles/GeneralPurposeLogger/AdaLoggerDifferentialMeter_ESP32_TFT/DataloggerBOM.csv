@@ -1,0 +1,19 @@
+,,,,,,,,Cost,,Cost Total
+"v  C4, C7, C8",3,0.1uF,0,0,0,Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder,~,0.016,https://www.digikey.com/en/products/detail/kemet/C0805C104K5RACTU/411169, $0.05 
+        C4,1,0.1uF,0,0,0,Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder,~,0.016,https://www.digikey.com/en/products/detail/kemet/C0805C104K5RACTU/411169, $0.02 
+        C7,1,0.1uF,0,0,0,Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder,~,0.016,https://www.digikey.com/en/products/detail/kemet/C0805C104K5RACTU/411169, $0.02 
+        C8,1,0.1uF,0,0,0,Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder,~,0.016,https://www.digikey.com/en/products/detail/kemet/C0805C104K5RACTU/411169, $0.02 
+">  D4, D5",2,D_Schottky,0,0,0,Diode_SMD:D_SOD-123,~,0.05,https://www.digikey.com/en/products/detail/onsemi/BAT54T1G/918319, $0.10 
+>  H1-H4,4,MountingHole,0,1,0,MountingHole:MountingHole_3.2mm_M3_DIN965_Pad_TopBottom,~,,, $-   
+    J1,1,Screw_Terminal_01x04,0,0,0,Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical,~,,, $-   
+    J2,1,Screw_Terminal_01x06,0,0,0,Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical,~,,, $-   
+>  J3-J5,3,Conn_01x04_MountingPin,0,0,0,Connector_JST:JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal,~,0.42,https://www.digikey.com/en/products/detail/jst-sales-america-inc/SM04B-SRSS-TB/926710, $1.26 
+    J15,1,Barrel_Jack,0,0,0,TerminalBlock_Phoenix:TerminalBlock_Phoenix_MKDS-3-2-5.08_1x02_P5.08mm_Horizontal,~,,, $-   
+">  R1, R2, R5-R7, R12",6,1K,0,0,0,Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,~,0.03,https://www.digikey.com/en/products/detail/susumu/RR1220P-102-D/432291, $0.18 
+">  R17, R18",2,499.0K,0,0,0,Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,~,0.08,https://www.digikey.com/en/products/detail/susumu/RG2012P-4993-B-T5/1240783, $0.16 
+    R24,1,15K,0,0,0,Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,~,0.06,https://www.digikey.com/en/products/detail/panasonic-electronic-components/ERA-6AEB753V/1465794, $0.06 
+    U3,1,ADS1115IDGS,0,0,0,Package_SO:TSSOP-10_3x3mm_P0.5mm,http://www.ti.com/lit/ds/symlink/ads1113.pdf,2.23,https://www.digikey.com/en/products/detail/texas-instruments/ADS1015IDGSR/2231559, $2.23 
+    U13,1,ISO1540,0,0,0,Package_SO:SOIC-8_3.9x4.9mm_P1.27mm,http://www.ti.com/lit/ds/symlink/iso1541.pdf,3.45,https://www.digikey.com/en/products/detail/texas-instruments/ISO1540DR/3587222, $3.45 
+    U14,1,RFM-0505S,0,0,0,Library:XP SCT01F03S05,https://www.xppower.com/storage/portals/0/pdfs/SF_SCT01F.pdf,2.51,https://www.digikey.com/en/products/detail/xp-power/SCT01F03S05/26667143, $2.51 
+,,,,,,,,,,
+,,,,,,,,,Components Cost, $10.05 

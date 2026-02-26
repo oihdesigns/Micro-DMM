@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Datalogger Viewer</title>
+<script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    min-height: 100vh;
+  }
+  header {
+    background: #16213e;
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    border-bottom: 1px solid #0f3460;
+    flex-wrap: wrap;
+  }
+  header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #e94560;
+    white-space: nowrap;
+  }
+  .file-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .file-btn {
+    background: #0f3460;
+    color: #e0e0e0;
+    border: 1px solid #e94560;
+    padding: 6px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.2s;
+  }
+  .file-btn:hover { background: #e94560; color: #fff; }
+  .file-name {
+    font-size: 13px;
+    color: #8899aa;
+    max-width: 400px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .log-meta {
+    margin-left: auto;
+    font-size: 12px;
+    color: #8899aa;
+    text-align: right;
+  }
+  .toggle-bar {
+    background: #16213e;
+    padding: 8px 24px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+    border-bottom: 1px solid #0f3460;
+  }
+  .toggle-bar label {
+    font-size: 11px;
+    color: #8899aa;
+    margin-right: 8px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .ch-toggle {
+    padding: 4px 12px;
+    border-radius: 3px;
+    border: 1px solid #333;
+    background: #1a1a2e;
+    color: #888;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+    user-select: none;
+  }
+  .ch-toggle.active {
+    border-color: var(--ch-color);
+    color: var(--ch-color);
+    background: rgba(255,255,255,0.05);
+  }
+  .time-mode-group {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .time-mode-group label { margin-right: 4px; }
+  .time-radio {
+    display: none;
+  }
+  .time-radio-label {
+    padding: 4px 10px;
+    border-radius: 3px;
+    border: 1px solid #333;
+    background: #1a1a2e;
+    color: #888;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+  }
+  .time-radio:checked + .time-radio-label {
+    border-color: #e94560;
+    color: #e94560;
+    background: rgba(233,69,96,0.1);
+  }
+
+  #drop-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: calc(100vh - 100px);
+    padding: 40px;
+  }
+  #drop-zone.has-data { display: none; }
+  .drop-area {
+    border: 2px dashed #0f3460;
+    border-radius: 12px;
+    padding: 60px 80px;
+    text-align: center;
+    transition: border-color 0.2s, background 0.2s;
+    max-width: 500px;
+  }
+  .drop-area.drag-over {
+    border-color: #e94560;
+    background: rgba(233,69,96,0.05);
+  }
+  .drop-area p { margin: 8px 0; color: #8899aa; font-size: 14px; }
+  .drop-area .big { font-size: 18px; color: #e0e0e0; }
+
+  #plot-container {
+    display: none;
+    width: 100%;
+    padding: 0;
+  }
+  #plot-container.visible { display: block; }
+  #plot { width: 100%; }
+
+  input[type="file"] { display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Datalogger Viewer</h1>
+  <div class="file-controls">
+    <button class="file-btn" onclick="fileInput.click()">Open CSV</button>
+    <input type="file" id="fileInput" accept=".csv,.txt">
+    <span class="file-name" id="fileName"></span>
+  </div>
+  <div class="log-meta" id="logMeta"></div>
+</header>
+
+<div class="toggle-bar" id="toggleBar" style="display:none">
+  <label>Channels:</label>
+  <div id="channelToggles"></div>
+  <div class="time-mode-group">
+    <label>X-Axis:</label>
+    <input type="radio" name="timeMode" id="timeElapsed" value="elapsed" class="time-radio" checked>
+    <label for="timeElapsed" class="time-radio-label">Elapsed</label>
+    <input type="radio" name="timeMode" id="timeWall" value="wall" class="time-radio">
+    <label for="timeWall" class="time-radio-label">Wall Clock</label>
+  </div>
+</div>
+
+<div id="drop-zone">
+  <div class="drop-area" id="dropArea">
+    <p class="big">Drop a datalogger CSV here</p>
+    <p>or click <strong>Open CSV</strong> above</p>
+  </div>
+</div>
+
+<div id="plot-container">
+  <div id="plot"></div>
+</div>
+
+<script>
+const COLORS = [
+  '#e94560', '#00b4d8', '#06d6a0', '#ffd166',
+  '#ef476f', '#118ab2', '#8338ec', '#ff6b35'
+];
+
+let parsedData = null;
+let activeChannels = new Set();
+
+const fileInput = document.getElementById('fileInput');
+const dropArea = document.getElementById('dropArea');
+const dropZone = document.getElementById('drop-zone');
+const plotContainer = document.getElementById('plot-container');
+const toggleBar = document.getElementById('toggleBar');
+
+// File input
+fileInput.addEventListener('change', e => {
+  if (e.target.files.length) loadFile(e.target.files[0]);
+});
+
+// Drag and drop
+dropArea.addEventListener('dragover', e => { e.preventDefault(); dropArea.classList.add('drag-over'); });
+dropArea.addEventListener('dragleave', () => dropArea.classList.remove('drag-over'));
+dropArea.addEventListener('drop', e => {
+  e.preventDefault();
+  dropArea.classList.remove('drag-over');
+  if (e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]);
+});
+
+// Time mode radios
+document.querySelectorAll('input[name="timeMode"]').forEach(r => {
+  r.addEventListener('change', () => { if (parsedData) renderPlot(); });
+});
+
+function loadFile(file) {
+  document.getElementById('fileName').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = e => {
+    parsedData = parseCSV(e.target.result);
+    if (parsedData) {
+      dropZone.classList.add('has-data');
+      plotContainer.classList.add('visible');
+      toggleBar.style.display = 'flex';
+      buildToggles();
+      renderPlot();
+    }
+  };
+  reader.readAsText(file);
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 3) return null;
+
+  // Row 1: metadata
+  const metaLine = lines[0];
+  let logStart = '';
+  if (metaLine.toLowerCase().startsWith('log start time')) {
+    logStart = metaLine.split(',').slice(1).join(',').trim();
+  }
+
+  // Row 2: headers
+  const headers = lines[1].split(',').map(h => h.trim());
+
+  // Parse data rows
+  const cols = {};
+  headers.forEach(h => cols[h] = []);
+
+  for (let i = 2; i < lines.length; i++) {
+    const vals = lines[i].split(',').map(v => v.trim());
+    if (vals.length < headers.length) continue;
+    headers.forEach((h, j) => cols[h].push(vals[j]));
+  }
+
+  // Build cumulative time in seconds from Delta uS
+  const deltaKey = headers.find(h => h.toLowerCase().includes('delta'));
+  const rtcKey = headers.find(h => h.toLowerCase().includes('rtc'));
+  const cumTimeSec = [];
+  let t = 0;
+  if (deltaKey) {
+    const deltas = cols[deltaKey];
+    for (let i = 0; i < deltas.length; i++) {
+      if (i === 0) {
+        t = parseFloat(deltas[0]) / 1e6;
+      } else {
+        t += parseFloat(deltas[i]) / 1e6;
+      }
+      cumTimeSec.push(t);
+    }
+  }
+
+  // Parse RTC timestamps
+  let wallTimes = [];
+  if (rtcKey) {
+    wallTimes = cols[rtcKey].map(v => new Date(v));
+  }
+
+  // Identify numeric data channels (skip delta and RTC)
+  const dataChannels = headers.filter(h => {
+    if (deltaKey && h === deltaKey) return false;
+    if (rtcKey && h === rtcKey) return false;
+    return cols[h].some(v => !isNaN(parseFloat(v)));
+  });
+
+  const channelData = {};
+  dataChannels.forEach(ch => {
+    channelData[ch] = cols[ch].map(v => parseFloat(v));
+  });
+
+  // Display meta
+  const meta = document.getElementById('logMeta');
+  const n = cumTimeSec.length;
+  const dur = cumTimeSec[n - 1] - cumTimeSec[0];
+  meta.innerHTML = logStart
+    ? `Start: ${logStart} &nbsp;|&nbsp; ${n} samples &nbsp;|&nbsp; ${dur.toFixed(1)}s`
+    : `${n} samples &nbsp;|&nbsp; ${dur.toFixed(1)}s`;
+
+  // Default: all channels active
+  activeChannels = new Set(dataChannels);
+
+  return { cumTimeSec, wallTimes, dataChannels, channelData, logStart };
+}
+
+function buildToggles() {
+  const container = document.getElementById('channelToggles');
+  container.innerHTML = '';
+  parsedData.dataChannels.forEach((ch, i) => {
+    const color = COLORS[i % COLORS.length];
+    const btn = document.createElement('span');
+    btn.className = 'ch-toggle active';
+    btn.style.setProperty('--ch-color', color);
+    btn.textContent = ch;
+    btn.addEventListener('click', () => {
+      if (activeChannels.has(ch)) {
+        activeChannels.delete(ch);
+        btn.classList.remove('active');
+      } else {
+        activeChannels.add(ch);
+        btn.classList.add('active');
+      }
+      renderPlot();
+    });
+    container.appendChild(btn);
+  });
+}
+
+function renderPlot() {
+  const { cumTimeSec, wallTimes, dataChannels, channelData } = parsedData;
+  const useWall = document.getElementById('timeWall').checked;
+
+  const visibleChannels = dataChannels.filter(ch => activeChannels.has(ch));
+  if (visibleChannels.length === 0) {
+    Plotly.purge('plot');
+    return;
+  }
+
+  // Group channels into subplots by related type
+  const groups = groupChannels(visibleChannels);
+  const numSubplots = groups.length;
+
+  const traces = [];
+  const xData = useWall ? wallTimes : cumTimeSec;
+  const xTitle = useWall ? 'Time' : 'Elapsed Time (s)';
+
+  groups.forEach((group, gi) => {
+    const yAxis = gi === 0 ? 'y' : `y${gi + 1}`;
+    group.channels.forEach(ch => {
+      const ci = dataChannels.indexOf(ch);
+      traces.push({
+        x: xData,
+        y: channelData[ch],
+        name: ch,
+        type: 'scattergl',
+        mode: 'lines+markers',
+        marker: { size: 3, color: COLORS[ci % COLORS.length] },
+        line: { width: 1.5, color: COLORS[ci % COLORS.length] },
+        yaxis: yAxis,
+        xaxis: 'x',
+      });
+    });
+  });
+
+  // Compute subplot heights
+  const gap = 0.03;
+  const totalGap = gap * (numSubplots - 1);
+  const plotH = (1 - totalGap) / numSubplots;
+
+  const layout = {
+    height: Math.max(500, numSubplots * 220),
+    paper_bgcolor: '#1a1a2e',
+    plot_bgcolor: '#16213e',
+    font: { color: '#ccc', size: 11 },
+    margin: { l: 60, r: 30, t: 10, b: 50 },
+    showlegend: true,
+    legend: { orientation: 'h', y: 1.02, x: 0.5, xanchor: 'center', font: { size: 11 } },
+    xaxis: {
+      title: xTitle,
+      gridcolor: '#0f3460',
+      zerolinecolor: '#0f3460',
+      rangeslider: { bgcolor: '#16213e', bordercolor: '#0f3460', thickness: 0.08 },
+      type: useWall ? 'date' : 'linear',
+      domain: [0, 1],
+    },
+    dragmode: 'zoom',
+  };
+
+  groups.forEach((group, gi) => {
+    const key = gi === 0 ? 'yaxis' : `yaxis${gi + 1}`;
+    const domBottom = 1 - (gi + 1) * plotH - gi * gap;
+    const domTop = 1 - gi * plotH - gi * gap;
+    layout[key] = {
+      title: group.label,
+      gridcolor: '#0f3460',
+      zerolinecolor: '#0f3460',
+      domain: [Math.max(0, domBottom), domTop],
+      anchor: 'x',
+    };
+  });
+
+  const config = {
+    responsive: true,
+    displayModeBar: true,
+    modeBarButtonsToAdd: ['toggleSpikelines'],
+    scrollZoom: true,
+  };
+
+  Plotly.react('plot', traces, layout, config);
+}
+
+function groupChannels(channels) {
+  // Group related channels into shared subplots
+  const groups = [];
+  const assigned = new Set();
+
+  // Accelerometer: X, Y, Z
+  const accel = channels.filter(ch => /^[XYZ]$/i.test(ch.trim()));
+  if (accel.length) {
+    groups.push({ label: 'Accel (X/Y/Z)', channels: accel });
+    accel.forEach(c => assigned.add(c));
+  }
+
+  // Voltage channels
+  const volts = channels.filter(ch => !assigned.has(ch) && /^V\b/i.test(ch.trim()));
+  if (volts.length) {
+    groups.push({ label: 'Voltage', channels: volts });
+    volts.forEach(c => assigned.add(c));
+  }
+
+  // Current
+  const curr = channels.filter(ch => !assigned.has(ch) && /^I$/i.test(ch.trim()));
+  if (curr.length) {
+    groups.push({ label: 'Current', channels: curr });
+    curr.forEach(c => assigned.add(c));
+  }
+
+  // Everything else gets its own subplot
+  channels.forEach(ch => {
+    if (!assigned.has(ch)) {
+      groups.push({ label: ch, channels: [ch] });
+    }
+  });
+
+  return groups;
+}
+</script>
+</body>
+</html>
