@@ -7,7 +7,12 @@
       "WebFetch(domain:docs.arduino.cc)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(git -C \"C:\\\\Users\\\\Nick\\\\Documents\\\\GitHub\\\\Micro-DMM\\\\ArduinoProgrammingFiles\" log --oneline -15)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "WebFetch(domain:architeuthis-flux.github.io)",
+      "WebFetch(domain:jumperlessv5.readthedocs.io)",
+      "WebFetch(domain:jumperless-docs.readthedocs.io)",
+      "WebFetch(domain:docs.jumperless.org)",
+      "WebFetch(domain:api.github.com)"
     ]
   }
 }

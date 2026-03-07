@@ -59,8 +59,8 @@ static uint16_t adsReadReg16(uint8_t reg) {
 #define USE_ADS1015  // 12-bit ADC
 
 // ── VRef Enable Logic: Comment/uncomment ONE of these ────────────
-#define VENABLE_ACTIVE_HIGH   // VEnablePin HIGH = Vref enabled
-//#define VENABLE_ACTIVE_LOW  // VEnablePin LOW  = Vref enabled
+//#define VENABLE_ACTIVE_HIGH   // VEnablePin HIGH = Vref enabled
+#define VENABLE_ACTIVE_LOW  // VEnablePin LOW  = Vref enabled
 
 // ── Bridge MOSFET Logic: Comment/uncomment ONE of these ──────────
 //#define VBRIDGE_ACTIVE_HIGH   // VbridgePin HIGH = bridge connected

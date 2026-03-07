@@ -14,7 +14,7 @@
 #define ADC_PIN         A0        // Analog input pin
 #define VREF            3.307       // Reference voltage (3.3 or 5.0)
 #define ANALOG_OFFSET   1.65159       // DC offset at 0V input (e.g. 1.65692 for AMC0330)
-#define PROBE_SCALE_INIT 34.5451      // Voltage divider ratio (1.0 = no divider)
+#define PROBE_SCALE_INIT 35.5681      // Voltage divider ratio (1.0 = no divider)
 // ---- Current channel (AMC1200B differential) ----
 #define CUR_PIN_POS     A1        // AMC1200B positive output
 #define CUR_PIN_NEG     A2        // AMC1200B negative output
@@ -244,7 +244,26 @@ void setup() {
   analogReadResolution(ADC_BITS);
 #endif
 
-analogReference(AR_EXTERNAL);
+
+
+//Space for attention...
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+//The below line must be uncommented for proper function on the R4 Nano when using a 3.3V rail as the analog reference. 
+//analogReference(AR_EXTERNAL);
 
   // Initialize DMM state
   dmmAvg    = 0;

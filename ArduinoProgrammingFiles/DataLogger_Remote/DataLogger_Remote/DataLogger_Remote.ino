@@ -26,11 +26,12 @@
   !VTHRES,<float>   Voltage trigger threshold (V)
   !ITHRES,<float>   Current trigger threshold (A)
   !ATHRES,<float>   Accelerometer trigger threshold (g)
+  !SHUNT,<float>    Shunt resistor value (Ohms, default 0.1)
   !MARK             Insert a manual mark in the next log flush
 
   ── Replies (Arduino → host) ───────────────────────────────────────────────
   $MODE,REMOTE / $MODE,LOCAL
-  $STATUS,MODE,SD,CH2,VOLT,ACCEL,CUR,AUTO,SLOW,SCREEN,VTHRES,ITHRES,ATHRES
+  $STATUS,MODE,SD,CH2,VOLT,ACCEL,CUR,AUTO,SLOW,SCREEN,VTHRES,ITHRES,ATHRES,SHUNTR,VSCALE
   $LOG,V01,V23,I,AX,AY,AZ,AXPK,AYPK,AZPK,TEMP,BATT,LOGS
     (sent ~every 500 ms while connected)
   $SDSTATUS,0/1       1 = SD hardware present and initialised at startup
@@ -99,6 +100,7 @@ float multiplier = 1.0F;
 int16_t ads0_results23 = 0, ads1_results23 = 0, results23 = 0;
 float voltage01 = 0.0f, voltage01actual = 0.0f, voltage23 = 0.0f;
 float vScale = 14.319f;
+float shuntR  = 0.1f;    // shunt resistor for current measurement (Ohms)
 float current = 0.0f;
 float voltageTrigRaw = 0.0f, accelThresRaw = 0.0f;
 int   tempF = 0;
@@ -217,6 +219,11 @@ inline bool effMark() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void sendStatus() {
+  // Re-send $SDSTATUS alongside every $STATUS so the host always has the
+  // correct hardware-availability flag, even if it connected after the
+  // one-shot message emitted in setup().
+  Serial.print(F("$SDSTATUS,"));
+  Serial.println(sdHwOK ? "1" : "0");
   Serial.print(F("$STATUS,"));
   Serial.print(remoteMode ? "1" : "0");      // MODE: 0=LOCAL, 1=REMOTE
   Serial.print(','); Serial.print(effSD()        ? "1" : "0");
@@ -229,7 +236,9 @@ void sendStatus() {
   Serial.print(','); Serial.print(effScreen()    ? "1" : "0");
   Serial.print(','); Serial.print(vStep,    3);
   Serial.print(','); Serial.print(iStep,    3);
-  Serial.print(','); Serial.println(accelThres, 2);
+  Serial.print(','); Serial.print(accelThres, 2);
+  Serial.print(','); Serial.print(shuntR,    4);
+  Serial.print(','); Serial.println(vScale,   4);
 }
 
 void sendLog() {
@@ -334,6 +343,10 @@ void handleCommand(const String& cmd) {
   } else if (cmd.startsWith(F("!ATHRES,"))) {
     remoteAThres = cmd.substring(8).toFloat();
     accelThres = remoteAThres;
+    sendStatus();
+  } else if (cmd.startsWith(F("!SHUNT,"))) {
+    float v = cmd.substring(7).toFloat();
+    if (v >= 0.0001f) shuntR = v;   // reject nonsensical values
     sendStatus();
   }
 }
@@ -915,7 +928,7 @@ void loop() {
   // ── 10. Current ──
   if (effCurrent()) {
     ads1_results23 = ads2.getLastConversionResults();
-    current = ((ads1_results23 * -kGainFactors[gainIndexCurrent]) / 1000.0f) * 10.0f;
+    current = ((ads1_results23 * -kGainFactors[gainIndexCurrent]) / 1000.0f) / shuntR;
   } else {
     current = 0.0f;
   }

@@ -97,7 +97,7 @@ float prevOutVoltage    = 0.0;
 float vActual           = 0.0;
 int16_t countV          = 0;
 
-const float VOLTAGE_SCALE_full = 69.6023;
+const float VOLTAGE_SCALE_full = 72.05; // seperate boards version:69.6023;
 const float VOLTAGE_SCALE_low  = 3.51108;
 float vScale = 0.0;
 
@@ -166,7 +166,7 @@ const float GAIN_FACTOR_8         = 0.25;      // +/-0.512 V
 const float GAIN_FACTOR_16        = 0.125;     // +/-0.256 V
 static const int ADC_COUNT_LOW_THRESH  = 600;
 static const int ADC_COUNT_HIGH_THRESH = 1800;
-float vClosedThres     = 0.15;
+float vClosedThres     = 0.15; 
 #define ADS_RATE_FAST  RATE_ADS1015_3300SPS
 #define ADS_RATE_SLOW  RATE_ADS1015_250SPS
 #endif
@@ -448,7 +448,7 @@ void measureVoltage() {
   displayVoltage = cfSuppress ? newVoltageReading : medianVoltage;
 
   // Zero-threshold pot  (ESP32 12-bit: 0-4095)
-  CorFTrig = 0.25;
+  CorFTrig = 0.5; //this was 0.25 for the unit that has distinct boards
   //CorFTrig = (analogRead(zeroThreshold) / 4095.0f) * 0.2f;
 
   prevVzero = Vzero;
