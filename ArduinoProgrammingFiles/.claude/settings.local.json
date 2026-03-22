@@ -12,7 +12,8 @@
       "WebFetch(domain:jumperlessv5.readthedocs.io)",
       "WebFetch(domain:jumperless-docs.readthedocs.io)",
       "WebFetch(domain:docs.jumperless.org)",
-      "WebFetch(domain:api.github.com)"
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:learn.adafruit.com)"
     ]
   }
 }

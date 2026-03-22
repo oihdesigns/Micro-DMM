@@ -115,6 +115,26 @@ bool cfBtnPrev       = true;    // previous boot button state (HIGH = released)
 bool alarm1       = false;
 bool alarmFlag   = false;
 
+// ── AC mode ───────────────────────────────────────────────────────
+bool  acMode              = false;  // long-press boot btn toggles AC/DC
+float vrmsVoltage         = 0.0;   // most recent computed VRMS
+
+// VRMS accumulation window (reset each time window fills)
+float acSumSq             = 0.0;
+int   acSampleCount       = 0;
+const int AC_VRMS_SAMPLES = 32;    // ~2 cycles at 60 Hz (est. ~16 samples/cycle)
+
+// Zero-crossing debounce: signal must stay below threshold for this long
+// before ClosedOrFloat() is called in AC mode.  A genuine mains zero crossing
+// at 120 Vrms passes through ±0.5 V in ≈8 µs; 4 ms catches only true zero.
+unsigned long acBelowThreshStart  = 0;
+bool          acBelowThreshActive = false;
+const unsigned long AC_ZERO_DEBOUNCE_MS = 4;  // ≈ quarter cycle at 60 Hz
+
+// Long-press timing for boot button
+unsigned long btnPressStart = 0;
+const unsigned long LONG_PRESS_MS = 600;
+
 // ── Lead-detection state ──────────────────────────────────────────
 bool  vFloating        = false;
 float bridgeV          = 0.0;
@@ -141,6 +161,8 @@ const unsigned long CLOSED_BLINK_MIN_MS  = 500;  // max 2 green blinks/sec
 bool prevVoltageHigh    = false;
 bool prevClosedForBlink = false;
 unsigned long lastClosedBlinkTime = 0;
+unsigned long lastRedBlinkTime    = 0;
+const unsigned long RED_BLINK_MIN_MS_AC = 500;  // max 2 Hz red blink in AC mode
 
 // ── ADC auto-ranging (values differ for ADS1115 vs ADS1015) ───────
 #ifdef USE_ADS1115
@@ -316,12 +338,28 @@ void loop() {
 #else
   digitalWrite(VEnablePin, vRefEnable ? LOW : HIGH);
 #endif
-  // Boot button toggle (falling edge = press)
+  // Boot button:
+  //   Short press (<600 ms release) → toggle cfSuppress (volt-only mode)
+  //   Long press  (≥600 ms release) → toggle AC mode (VRMS + debounced lead detect)
   bool cfBtnNow = digitalRead(cfSuppressBtn);
-  if (cfBtnNow == LOW && cfBtnPrev == HIGH) {
-    cfSuppress = !cfSuppress;                 // toggle on press
-    Serial.print("CF suppress: ");
-    Serial.println(cfSuppress ? "ON" : "OFF");
+  if (cfBtnNow == LOW && cfBtnPrev == HIGH) {       // falling edge: press start
+    btnPressStart = currentMillis;
+  }
+  if (cfBtnNow == HIGH && cfBtnPrev == LOW) {       // rising edge: evaluate hold
+    unsigned long heldMs = currentMillis - btnPressStart;
+    if (heldMs >= LONG_PRESS_MS) {
+      acMode = !acMode;
+      acSumSq = 0.0;  acSampleCount = 0;
+      vrmsVoltage = 0.0;
+      acBelowThreshActive = false;
+      firstVoltRun = true;
+      Serial.print("AC mode: ");
+      Serial.println(acMode ? "ON" : "OFF");
+    } else {
+      cfSuppress = !cfSuppress;
+      Serial.print("CF suppress: ");
+      Serial.println(cfSuppress ? "ON" : "OFF");
+    }
   }
   cfBtnPrev = cfBtnNow;
 
@@ -339,9 +377,13 @@ void loop() {
   bool voltageHigh = (fabs(medianVoltage) > VOLTAGE_ALARM_THRESH);
   bool closedNow   = (vRefEnable && Vzero && ClosedConfidence > 5);
 
-  // Red blink the instant voltage first crosses above threshold
+  // Red blink the instant voltage first crosses above threshold.
+  // In AC mode, rate-limited to 2 Hz to avoid rapid flicker.
   if (voltageHigh && !prevVoltageHigh) {
-    blinkPixel(250, 0, 0);
+    if (!acMode || (currentMillis - lastRedBlinkTime >= RED_BLINK_MIN_MS_AC)) {
+      blinkPixel(250, 0, 0);
+      lastRedBlinkTime = currentMillis;
+    }
   }
   prevVoltageHigh = voltageHigh;
 
@@ -372,9 +414,12 @@ void loop() {
     lastDisplayTime = currentMillis;
     updateDisplay();
 
-    // Periodic blinks at screen refresh rate (1 Hz)
-    if (voltageHigh) {
+    // Periodic blinks at screen refresh rate (1 Hz).
+    // In AC mode the red blink is additionally rate-limited to 2 Hz.
+    if (voltageHigh &&
+        (!acMode || (currentMillis - lastRedBlinkTime >= RED_BLINK_MIN_MS_AC))) {
       blinkPixel(200, 0, 0);
+      lastRedBlinkTime = currentMillis;
     } else if (closedNow &&
                (currentMillis - lastClosedBlinkTime >= CLOSED_BLINK_MIN_MS)) {
       blinkPixel(0, 200, 0);
@@ -406,7 +451,7 @@ void measureVoltage() {
     firstVoltRun = false;
   }
 
-  if(prevcfSuppress != cfSuppress){
+  if(prevcfSuppress != cfSuppress && !acMode){  // AC mode always uses FAST rate
 
     if(cfSuppress){
       ads.setDataRate(ADS_RATE_SLOW);
@@ -444,23 +489,62 @@ void measureVoltage() {
   // Note: both branches are the same -- simple EMA with alpha=0.1
   // Keeping structure parallel to bridgeAvg for consistency
 
-  // Display value: raw when suppressed, smoothed otherwise
-  displayVoltage = cfSuppress ? newVoltageReading : medianVoltage;
-
-  // Zero-threshold pot  (ESP32 12-bit: 0-4095)
+  // Zero-threshold (fixed; pot line retained but commented out)
   CorFTrig = 0.5; //this was 0.25 for the unit that has distinct boards
   //CorFTrig = (analogRead(zeroThreshold) / 4095.0f) * 0.2f;
 
   prevVzero = Vzero;
 
-  if (fabs(medianVoltage) < CorFTrig && !manual && vRefEnable && !cfSuppress) {
-    Vzero = true;
-    VzeroFlag = (prevVzero != Vzero);
-    ClosedOrFloat();
+  if (acMode) {
+    // ── AC mode: accumulate VRMS ──────────────────────────────────
+    acSumSq += newVoltageReading * newVoltageReading;
+    if (++acSampleCount >= AC_VRMS_SAMPLES) {
+      vrmsVoltage   = sqrt(acSumSq / (float)acSampleCount);
+      acSumSq       = 0.0;
+      acSampleCount = 0;
+    }
+    displayVoltage = vrmsVoltage;
+
+    // Zero-crossing debounce for open-lead detect.
+    // The instantaneous reading must stay below CorFTrig for a full quarter
+    // cycle (AC_ZERO_DEBOUNCE_MS ≈ 4 ms at 60 Hz) before ClosedOrFloat() is
+    // called.  A real mains zero crossing passes the threshold in microseconds,
+    // so it will never accumulate enough time to trigger.
+    if (!manual && vRefEnable && !cfSuppress &&
+        fabs(newVoltageReading) < CorFTrig) {
+      if (!acBelowThreshActive) {
+        acBelowThreshActive = true;
+        acBelowThreshStart  = currentMillis;
+      }
+      if (currentMillis - acBelowThreshStart >= AC_ZERO_DEBOUNCE_MS) {
+        Vzero     = true;
+        VzeroFlag = (prevVzero != Vzero);
+        ClosedOrFloat();
+      } else {
+        Vzero     = false;
+        vFloating = false;
+        VzeroFlag = false;
+      }
+    } else {
+      acBelowThreshActive = false;
+      Vzero     = false;
+      vFloating = false;
+      VzeroFlag = false;
+    }
+
   } else {
-    Vzero     = false;
-    vFloating = false;
-    VzeroFlag = false;
+    // ── DC mode: original behaviour ───────────────────────────────
+    displayVoltage = cfSuppress ? newVoltageReading : medianVoltage;
+
+    if (fabs(medianVoltage) < CorFTrig && !manual && vRefEnable && !cfSuppress) {
+      Vzero     = true;
+      VzeroFlag = (prevVzero != Vzero);
+      ClosedOrFloat();
+    } else {
+      Vzero     = false;
+      vFloating = false;
+      VzeroFlag = false;
+    }
   }
 }
 
@@ -561,6 +645,7 @@ void updateDisplay() {
   static int  prevSt      = -1;     // forces first-call draw
   static bool prevVRef    = true;
   static bool prevVzDisp  = false;
+  static bool prevAcMode  = false;
   static bool firstUpdate = true;
 
   // ── Determine current states ──
@@ -574,8 +659,9 @@ void updateDisplay() {
   bool statusChanged = (st != prevSt)           || firstUpdate;
   bool vzeroChanged  = (Vzero != prevVzDisp)    || firstUpdate;
   bool vrefChanged   = (vRefEnable != prevVRef) || firstUpdate;
+  bool acChanged     = (acMode != prevAcMode)   || firstUpdate;
 
-  // ── VRef indicator (header) -- only on change ──
+  // ── VRef indicator (header, right side) -- only on change ──
   if (vrefChanged) {
     tft.fillRect(160, 0, 80, 16, COL_HEADER);
     tft.setTextSize(1);
@@ -587,6 +673,26 @@ void updateDisplay() {
       tft.setTextColor(0xFDA0, COL_HEADER);   // orange
       tft.print("VRef: OFF");
     }
+  }
+
+  // ── AC mode badge (header, centre) -- only on change ──
+  if (acChanged) {
+    tft.fillRect(100, 0, 58, 16, COL_HEADER);   // clear badge area
+    if (acMode) {
+      tft.setTextSize(1);
+      tft.setTextColor(ST77XX_YELLOW, COL_HEADER);
+      tft.setCursor(104, 4);
+      tft.print("[AC MODE]");
+    }
+  }
+
+  // ── Voltage section label (VOLTAGE / VRMS) -- only on change ──
+  if (acChanged) {
+    tft.fillRect(0, 18, 72, 10, COL_BG);
+    tft.setTextSize(1);
+    tft.setTextColor(COL_LABEL, COL_BG);
+    tft.setCursor(4, 20);
+    tft.print(acMode ? "VRMS   " : "VOLTAGE");
   }
 
   // ── Voltage value ──
@@ -734,9 +840,10 @@ void updateDisplay() {
   }
 
   // ── Update tracked state ──
-  prevSt     = st;
-  prevVRef   = vRefEnable;
-  prevVzDisp = Vzero;
+  prevSt      = st;
+  prevVRef    = vRefEnable;
+  prevVzDisp  = Vzero;
+  prevAcMode  = acMode;
   firstUpdate = false;
 }
 
@@ -756,7 +863,8 @@ void statusUpdate() {
     Serial.print(" / V !0");
   }
 
-  Serial.print(" / VDC:");   Serial.print(displayVoltage, 4);
+  Serial.print(acMode ? " / VRMS:" : " / VDC:");
+  Serial.print(displayVoltage, 4);
   Serial.print(" Actual(mV):");   Serial.print((vActual*1000), 2);
   Serial.print(" Count:");    Serial.print(countV);
   if (battFound) {
