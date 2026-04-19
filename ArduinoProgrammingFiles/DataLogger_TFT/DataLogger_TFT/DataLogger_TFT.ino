@@ -160,6 +160,10 @@
 #define DP_ST1_Y    114   // size-1 status row 1      ends at 122
 #define DP_ST2_Y    124   // size-1 status row 2      ends at 132
 #define DP_PIL_Y    137   // pills (14 px tall)       ends at 151
+#define DP_RST_X     80   // RESET button (centred in 320 px wide screen)
+#define DP_RST_Y    157   // RESET button top
+#define DP_RST_W    160   // RESET button width
+#define DP_RST_H     24   // RESET button height
 
 // ─── Peripheral objects ──────────────────────────────────────────────────────
 Adafruit_ILI9341  tft(TFT_CS, TFT_DC);
@@ -261,6 +265,7 @@ bool localCurrent   = false;
 bool localAutorange = true;
 bool localSlowLog   = false;
 bool localMark      = false;
+bool localACMode    = false;
 
 // ─── Remote control state ────────────────────────────────────────────────────
 bool  remoteMode      = false;
@@ -272,9 +277,37 @@ bool  remoteCurrent   = false;
 bool  remoteAutorange = true;
 bool  remoteSlowLog   = false;
 bool  remoteMark      = false;
+bool  remoteACMode    = false;
 float remoteVThres    = 0.25f;
 float remoteIThres    = 0.10f;
 float remoteAThres    = 4.00f;
+float acBlipThresh    = 0.15f;
+
+// ─── AC mode state ────────────────────────────────────────────────────────────
+const uint16_t AC_RING = 512;
+struct ACSample { float v, i; uint32_t t_us; };
+ACSample  acRing[AC_RING];
+uint16_t  acRingHead  = 0;
+uint16_t  acRingCount = 0;
+
+bool     acLastSignV    = false;
+uint32_t acLastRiseUS   = 0;
+float    acSumSqV       = 0.0f, acSumSqI      = 0.0f;
+float    acCyclePeakV   = 0.0f, acCyclePeakI  = 0.0f;
+int      acCycleSamples = 0;
+
+float    acFreq   = 0.0f;
+float    acRMS_V  = 0.0f, acPeak_V = 0.0f;
+float    acRMS_I  = 0.0f, acPeak_I = 0.0f;
+bool     acBlipPending   = false;
+int      acSettlingCycles = 0;
+
+float    acFreqHist[4] = {}, acRMSHist[4] = {};
+uint8_t  acHistIdx     = 0;
+float    acAvgFreq     = 0.0f, acAvgRMS = 0.0f;
+
+unsigned long lastACStatusSend = 0;
+char     acFilename[44];
 
 String serialInputBuf = "";
 
@@ -287,6 +320,7 @@ inline bool effCurrent()   { return remoteMode ? remoteCurrent   : localCurrent;
 inline bool effAutorange() { return remoteMode ? remoteAutorange : localAutorange; }
 inline bool effSlowLog()   { return remoteMode ? remoteSlowLog   : localSlowLog;   }
 inline bool effScreen()    { return true; }
+inline bool effACMode()    { return remoteMode ? remoteACMode : localACMode; }
 
 inline bool effMark() {
   if (remoteMode) { bool m = remoteMark; remoteMark = false; return m; }
@@ -313,7 +347,8 @@ void sendStatus() {
   Serial.print(','); Serial.print(iStep,    3);
   Serial.print(','); Serial.print(accelThres, 2);
   Serial.print(','); Serial.print(shuntR,    4);
-  Serial.print(','); Serial.println(vScale,  4);
+  Serial.print(','); Serial.print(vScale,    4);
+  Serial.print(','); Serial.println(effACMode() ? "1" : "0");
 }
 
 void sendLog() {
@@ -338,7 +373,7 @@ void handleCommand(const String& cmd) {
     remoteSD        = localSD;        remoteCH2       = localCH2;
     remoteVolt      = localVolt;      remoteAccel     = localAccel;
     remoteCurrent   = localCurrent;   remoteAutorange = localAutorange;
-    remoteSlowLog   = localSlowLog;
+    remoteSlowLog   = localSlowLog;   remoteACMode    = localACMode;
     remoteVThres    = vStep;          remoteIThres    = iStep;
     remoteAThres    = accelThres;
     Serial.println(F("$MODE,REMOTE")); sendStatus();
@@ -360,6 +395,30 @@ void handleCommand(const String& cmd) {
   else if (cmd.startsWith(F("!ITHRES,"))) { remoteIThres = cmd.substring(8).toFloat(); iStep = remoteIThres; sendStatus(); }
   else if (cmd.startsWith(F("!ATHRES,"))) { remoteAThres = cmd.substring(8).toFloat(); accelThres = remoteAThres; sendStatus(); }
   else if (cmd.startsWith(F("!SHUNT,")))  { float v = cmd.substring(7).toFloat(); if (v >= 0.0001f) shuntR = v; sendStatus(); }
+  else if (cmd.startsWith(F("!ACMODE,"))) {
+    remoteACMode = (bool)cmd.substring(8).toInt();
+    if (!remoteMode) localACMode = remoteACMode;
+    acRingHead = 0; acRingCount = 0; acLastRiseUS = 0; acCycleSamples = 0;
+    acLastSignV = false; acBlipPending = false; acHistIdx = 0; acSettlingCycles = 0;
+    acFreq = 0.0f; acRMS_V = 0.0f; acPeak_V = 0.0f;
+    acAvgFreq = 0.0f; acAvgRMS = 0.0f;
+    memset(acFreqHist, 0, sizeof(acFreqHist));
+    memset(acRMSHist,  0, sizeof(acRMSHist));
+    if (effACMode()) {
+      ads.setGain(GAIN_ONE);
+      ads.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3, true);
+      if (effCurrent()) {
+        ads2.setGain(kGainLevels[gainIndexCurrent]);
+        ads2.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3, true);
+      }
+    }
+    sendStatus(); needFullRedraw = true;
+  }
+  else if (cmd.startsWith(F("!ABLIP,"))) {
+    float v = cmd.substring(7).toFloat();
+    if (v >= 0.01f && v <= 0.9f) acBlipThresh = v;
+    sendStatus();
+  }
 }
 
 void processSerial() {
@@ -506,9 +565,160 @@ void flushBufferToSD() {
   sampleCount = 0;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+//  AC MODE — FUNCTIONS  (same logic as DataLogger_Remote)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void sendACStatus() {
+  Serial.print(F("$ACSTATUS,"));
+  Serial.print(acFreq,   3); Serial.print(',');
+  Serial.print(acRMS_V,  4); Serial.print(',');
+  Serial.print(acPeak_V, 4); Serial.print(',');
+  Serial.print(acRMS_I * 1000.0f, 2); Serial.print(',');
+  Serial.println(acPeak_I * 1000.0f, 2);
+}
+
+void flushACEvent(uint8_t evtType) {
+  File32 f = SD.open(acFilename, FILE_WRITE);
+  if (!f) { logError = true; return; }
+  logError = false;
+
+  DateTime now = rtc.now();
+  const char* typeStr = (evtType == 2) ? "BLIP"
+                      : (evtType == 0) ? "FREQ_CHANGE" : "AMP_CHANGE";
+
+  f.print(F("AC_EVENT,")); f.print(now.timestamp());
+  f.print(','); f.print(typeStr);
+  f.print(F(",Hz="));     f.print(acFreq,   3);
+  f.print(F(",Vrms="));   f.print(acRMS_V,  4);
+  f.print(F(",Vpeak="));  f.print(acPeak_V, 4);
+  f.print(F(",mArms="));  f.print(acRMS_I  * 1000.0f, 2);
+  f.print(F(",mApeak=")); f.println(acPeak_I * 1000.0f, 2);
+
+  uint16_t sampsPerCycle = (acFreq > 0) ? (uint16_t)(3300.0f / acFreq + 0.5f) : 165;
+  uint16_t nWrite = min(acRingCount, (uint16_t)min((uint16_t)(sampsPerCycle * 3), AC_RING));
+  uint16_t startIdx = (acRingHead + AC_RING - nWrite) % AC_RING;
+  uint32_t t0 = acRing[startIdx].t_us;
+  f.println(F("t_us_rel,V,I"));
+  for (uint16_t k = 0; k < nWrite; k++) {
+    uint16_t idx = (startIdx + k) % AC_RING;
+    f.print(acRing[idx].t_us - t0); f.print(',');
+    f.print(acRing[idx].v,  4);     f.print(',');
+    f.println(acRing[idx].i, 5);
+  }
+  f.flush(); f.close();
+  pixel.setPixelColor(0, pixel.Color(0, 0, 255)); pixel.show(); delay(10);
+  pixel.clear(); pixel.show();
+  logCount++;
+
+  Serial.print(F("$ACEVENT,"));
+  Serial.print(typeStr);     Serial.print(',');
+  Serial.print(acFreq,   3); Serial.print(',');
+  Serial.print(acRMS_V,  4); Serial.print(',');
+  Serial.println(acPeak_V, 4);
+}
+
+void runACMode() {
+  uint32_t now_us = micros();
+
+  int16_t rawV = ads.getLastConversionResults();
+  float v = (rawV * 2.0f / 1000.0f) * vScale;
+
+  float i_val = 0.0f;
+  if (effCurrent()) {
+    int16_t rawI = ads2.getLastConversionResults();
+    i_val = ((rawI * -kGainFactors[gainIndexCurrent]) / 1000.0f) / shuntR;
+  }
+
+  acRing[acRingHead] = { v, i_val, now_us };
+  acRingHead  = (acRingHead + 1) % AC_RING;
+  if (acRingCount < AC_RING) acRingCount++;
+
+  acSumSqV += v * v;
+  acSumSqI += i_val * i_val;
+  if (fabsf(v)     > acCyclePeakV) acCyclePeakV = fabsf(v);
+  if (fabsf(i_val) > acCyclePeakI) acCyclePeakI = fabsf(i_val);
+  acCycleSamples++;
+
+  bool signV = (v >= 0.0f);
+  if (signV && !acLastSignV && acCycleSamples > 5) {
+    if (acLastRiseUS > 0) {
+      uint32_t period_us = now_us - acLastRiseUS;
+      if (period_us > 4000UL && period_us < 500000UL) {
+        float newFreq  = 1e6f / (float)period_us;
+        float newRMS_V = sqrtf(acSumSqV / (float)acCycleSamples);
+        float newRMS_I = effCurrent() ? sqrtf(acSumSqI / (float)acCycleSamples) : 0.0f;
+
+        acFreq   = newFreq;
+        acRMS_V  = newRMS_V;  acPeak_V = acCyclePeakV;
+        acRMS_I  = newRMS_I;  acPeak_I = acCyclePeakI;
+        voltage01 = newRMS_V;
+        current   = newRMS_I;
+
+        bool freqEvent = false, ampEvent = false, bigStep = false;
+        if (acAvgFreq > 0.0f) {
+          float ampDiff = fabsf(newRMS_V - acAvgRMS);
+          freqEvent = fabsf(newFreq - acAvgFreq) > acAvgFreq * 0.02f;
+          ampEvent  = ampDiff > acAvgRMS * 0.05f + 0.01f;
+          bigStep   = ampDiff > acAvgRMS * 0.5f || freqEvent;
+        }
+
+        if ((freqEvent || ampEvent || acBlipPending) && logON) {
+          uint8_t evtType = acBlipPending ? 2 : (freqEvent ? 0 : 1);
+          flushACEvent(evtType);
+          acBlipPending = false;
+        }
+
+        if (bigStep) {
+          for (int k = 0; k < 4; k++) { acFreqHist[k] = newFreq; acRMSHist[k] = newRMS_V; }
+          acAvgFreq = newFreq;  acAvgRMS = newRMS_V;  acHistIdx = 0;
+          acSettlingCycles = 3;
+        } else {
+          acFreqHist[acHistIdx] = newFreq;
+          acRMSHist[acHistIdx]  = newRMS_V;
+          acHistIdx = (acHistIdx + 1) % 4;
+          float sf = 0.0f, sr = 0.0f;
+          for (int k = 0; k < 4; k++) { sf += acFreqHist[k]; sr += acRMSHist[k]; }
+          acAvgFreq = sf / 4.0f;
+          acAvgRMS  = sr / 4.0f;
+        }
+      }
+    }
+    acLastRiseUS   = now_us;
+    acSumSqV       = 0.0f;  acSumSqI      = 0.0f;
+    acCyclePeakV   = 0.0f;  acCyclePeakI  = 0.0f;
+    acCycleSamples = 0;
+  }
+  acLastSignV = signV;
+
+  if (acSettlingCycles > 0) {
+    acSettlingCycles--;
+  } else if (acPeak_V > 0.05f && acFreq > 0.0f && acLastRiseUS > 0) {
+    float t_s    = (float)(now_us - acLastRiseUS) / 1e6f;
+    float expect = acPeak_V * sinf(2.0f * PI * acFreq * t_s);
+    if (fabsf(v - expect) > acBlipThresh * acPeak_V) {
+      acBlipPending = true;
+    }
+  }
+}
+
 void blinkPixel(uint8_t r, uint8_t g, uint8_t b, int dur = 5) {
   pixel.setPixelColor(0, pixel.Color(r, g, b)); pixel.show(); delay(dur);
   pixel.clear(); pixel.show();
+}
+
+void resetRollingData() {
+  vMax01 = 0.0f; vMin01 = 0.0f;
+  iMax   = 0.0f; iMin   = 0.0f;
+  vMax23 = 0.0f; vMin23 = 0.0f;
+  lastLoggedV01 = 0.25f; lastLoggedV23 = 0.25f; lastLoggedI = 0.25f;
+  accelXMax = 0.0f; accelYMax = 0.0f; accelZMax = 0.0f;
+  accelLastLoggedX = 0.0f; accelLastLoggedY = 0.0f; accelLastLoggedZ = 0.0f;
+  if (effACMode() && acAvgFreq > 0.0f) {
+    for (int k = 0; k < 4; k++) { acFreqHist[k] = acFreq; acRMSHist[k] = acRMS_V; }
+    acAvgFreq = acFreq; acAvgRMS = acRMS_V; acHistIdx = 0;
+    acBlipPending = false; acSettlingCycles = 0;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -581,6 +791,7 @@ void drawTabBar() {
 // drawDataPageFrame: initial fill — call once on page entry (or full redraw).
 void drawDataPageFrame() {
   tft.fillRect(0, CONTENT_Y, DISP_W, CONTENT_H, COL_BG);
+  drawToggleBtn(DP_RST_X, DP_RST_Y, DP_RST_W, DP_RST_H, "RESET DATA", false);
 }
 
 // updateDataDynamics: overdraw all changing values using setTextColor(fg, COL_BG).
@@ -588,20 +799,34 @@ void drawDataPageFrame() {
 void updateDataDynamics() {
   char buf[16];
 
-  // ── V1 (size 3, fixed-width) ────────────────────────────────────────────────
+  // ── V1 row (size 3) — shows RMS if AC mode, instantaneous if DC ─────────────
   tft.setTextSize(3);
-  tft.setTextColor(effVolt() ? COL_GREEN : COL_DKGRAY, COL_BG);
-  tft.setCursor(4, DP_V1_Y);
-  tft.print(F("V1:"));
-  dtostrf(voltage01, 7, 3, buf); tft.print(buf); tft.print(F("V "));
+  if (effACMode()) {
+    tft.setTextColor(COL_CYAN, COL_BG);
+    tft.setCursor(4, DP_V1_Y);
+    tft.print(F("AC:"));
+    dtostrf(acRMS_V, 7, 3, buf); tft.print(buf); tft.print(F("r "));
+  } else {
+    tft.setTextColor(effVolt() ? COL_GREEN : COL_DKGRAY, COL_BG);
+    tft.setCursor(4, DP_V1_Y);
+    tft.print(F("V1:"));
+    dtostrf(voltage01, 7, 3, buf); tft.print(buf); tft.print(F("V "));
+  }
 
-  // ── V2 (size 2) ─────────────────────────────────────────────────────────────
+  // ── V2 row (size 2) — shows AC frequency in AC mode, CH2 voltage in DC ─────
   tft.setTextSize(2);
-  tft.setTextColor(effCH2() ? COL_CYAN : COL_DKGRAY, COL_BG);
-  tft.setCursor(4, DP_V2_Y);
-  tft.print(F("V2:"));
-  if (effCH2()) { dtostrf(voltage23, 7, 3, buf); tft.print(buf); tft.print(F("V       ")); }
-  else          { tft.print(F("        (off)  ")); }
+  if (effACMode()) {
+    tft.setTextColor(COL_CYAN, COL_BG);
+    tft.setCursor(4, DP_V2_Y);
+    tft.print(F("Hz:"));
+    dtostrf(acFreq, 7, 2, buf); tft.print(buf); tft.print(F("       "));
+  } else {
+    tft.setTextColor(effCH2() ? COL_CYAN : COL_DKGRAY, COL_BG);
+    tft.setCursor(4, DP_V2_Y);
+    tft.print(F("V2:"));
+    if (effCH2()) { dtostrf(voltage23, 7, 3, buf); tft.print(buf); tft.print(F("V       ")); }
+    else          { tft.print(F("        (off)  ")); }
+  }
 
   // ── Current (size 2) ────────────────────────────────────────────────────────
   tft.setTextColor(effCurrent() ? COL_YELLOW : COL_DKGRAY, COL_BG);
@@ -668,10 +893,10 @@ void drawSettingsPage() {
   drawToggleBtn(c1, row1y, bw, bh, "CH2",   effCH2());
   drawToggleBtn(c2, row1y, bw, bh, "VOLT",  effVolt());
   drawToggleBtn(c3, row1y, bw, bh, "ACCEL", effAccelEn());
-  drawToggleBtn(c0, row2y, bw, bh, "CUR",   effCurrent());
-  drawToggleBtn(c1, row2y, bw, bh, "AUTO",  effAutorange());
-  drawToggleBtn(c2, row2y, bw, bh, "SLOW",  effSlowLog());
-  drawToggleBtn(c3, row2y, bw, bh, "MARK",  false);
+  drawToggleBtn(c0, row2y, bw, bh, "CUR",    effCurrent());
+  drawToggleBtn(c1, row2y, bw, bh, "AUTO",   effAutorange());
+  drawToggleBtn(c2, row2y, bw, bh, "SLOW",   effSlowLog());
+  drawToggleBtn(c3, row2y, bw, bh, "AC MODE",effACMode());
 
   int16_t divY = CONTENT_Y + 62;
   tft.drawFastHLine(4, divY, DISP_W - 8, COL_DKGRAY);
@@ -739,6 +964,14 @@ void handleTouch(int16_t sx, int16_t sy) {
     localMark = true; drawToggleBtn(282, 4, 34, 20, "MARK", true); return;
   }
 
+  if (currentPage == PAGE_DATA) {
+    if (inRect(sx, sy, DP_RST_X, DP_RST_Y, DP_RST_W, DP_RST_H)) {
+      resetRollingData();
+      drawToggleBtn(DP_RST_X, DP_RST_Y, DP_RST_W, DP_RST_H, "RESET DATA", true);
+      return;
+    }
+  }
+
   if (currentPage == PAGE_SETTINGS) {
     int16_t row1y = CONTENT_Y + 4, row2y = CONTENT_Y + 32;
     int16_t bw = 72, bh = 24, gap = 4;
@@ -752,10 +985,22 @@ void handleTouch(int16_t sx, int16_t sy) {
       if (inRect(sx, sy, c3, row1y, bw, bh)) { localAccel     = !localAccel;     needFullRedraw = true; return; }
       if (inRect(sx, sy, c0, row2y, bw, bh)) { localCurrent   = !localCurrent;   needFullRedraw = true; return; }
       if (inRect(sx, sy, c1, row2y, bw, bh)) { localAutorange = !localAutorange; firstVoltRunAuto = true; firstVoltRunMan = true; needFullRedraw = true; return; }
-      if (inRect(sx, sy, c2, row2y, bw, bh)) { localSlowLog   = !localSlowLog;   needFullRedraw = true; return; }
-    }
-    if (inRect(sx, sy, c3, row2y, bw, bh)) {
-      localMark = true; drawToggleBtn(c3, row2y, bw, bh, "MARK", true); return;
+      if (inRect(sx, sy, c2, row2y, bw, bh)) { localSlowLog = !localSlowLog; needFullRedraw = true; return; }
+      if (inRect(sx, sy, c3, row2y, bw, bh)) {
+        // Toggle AC mode — reset analysis state on change
+        localACMode = !localACMode;
+        acRingHead = 0; acRingCount = 0; acLastRiseUS = 0; acCycleSamples = 0;
+        acLastSignV = false; acBlipPending = false; acHistIdx = 0;
+        acFreq = 0.0f; acRMS_V = 0.0f; acPeak_V = 0.0f;
+        acAvgFreq = 0.0f; acAvgRMS = 0.0f;
+        memset(acFreqHist, 0, sizeof(acFreqHist));
+        memset(acRMSHist,  0, sizeof(acRMSHist));
+        if (localACMode) {
+          ads.setGain(GAIN_ONE);
+          ads.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3, true);
+        }
+        needFullRedraw = true; return;
+      }
     }
 
     // Threshold ± rows
@@ -900,6 +1145,8 @@ void setup() {
       logfile.print(F("Log Start Time,")); logfile.println(now.timestamp());
       logfile.println(F("Delta uS,V Ch1,V Ch2,I,X,Y,Z,Temp,RTC Stamp"));
       logfile.flush(); logfile.close();
+      sprintf(acFilename, "ac_%04d%02d%02d_%02d%02d%02d.csv",
+              now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second());
       sdHwOK = true;
       Serial.print(F("SD OK: ")); Serial.println(filename);
     } else { Serial.println(F("SD: could not create log file")); }
@@ -970,69 +1217,77 @@ void loop() {
   if (effAccelEn() && accelHwOK) readAccel();
   else { accelX = 0.0f; accelY = 0.0f; accelZ = 0.0f; }
 
-  // 9. Voltage
-  if (effVolt()) measureVoltage(); else voltage01 = 0.0f;
-
-  // 10. Current
-  if (effCurrent()) {
-    ads1_results23 = ads2.getLastConversionResults();
-    current = ((ads1_results23 * -kGainFactors[gainIndexCurrent]) / 1000.0f) / shuntR;
-  } else { current = 0.0f; }
-
-  // 11. Trigger evaluation
-  if (voltage01 > vMax01) { vMax01 = voltage01; trigFlag = true; }
-  if (voltage01 < vMin01) { vMin01 = voltage01; trigFlag = true; }
-  if (current   > iMax)   { iMax   = current;   trigFlag = true; }
-  if (current   < iMin)   { iMin   = current;   trigFlag = true; }
-  if (abs(voltage01) > noiseThreshold) {
-    if (voltage01 > lastLoggedV01 + vStep) trigFlag = true;
-    if (voltage01 < lastLoggedV01 - vStep) trigFlag = true;
-  }
-  if (abs(current) > 0.025f) {
-    if (current > lastLoggedI + iStep) trigFlag = true;
-    if (current < lastLoggedI - iStep) trigFlag = true;
-  }
-  if (ch2on) {
-    if (voltage23 > vMax23) { vMax23 = voltage23; trigFlag = true; }
-    if (voltage23 < vMin23) { vMin23 = voltage23; trigFlag = true; }
-    if (abs(voltage23) > noiseThreshold) {
-      if (voltage23 > lastLoggedV23 + 0.1f) trigFlag = true;
-      if (voltage23 < lastLoggedV23 - 0.1f) trigFlag = true;
-    }
-  }
-
-  if (trigFlag) {
-    writeTrigger = true;
-    lastLoggedV01 = voltage01; lastLoggedV23 = voltage23; lastLoggedI = current;
-    accelLastLoggedX = accelX; accelLastLoggedY = accelY; accelLastLoggedZ = accelZ;
-    trigFlag = false;
-  } else { writeTrigger = false; }
-
-  // 12. Capture / periodic log
-  if (writeTrigger && logON) {
-    captureSample(voltage01, voltage23, current, accelX, accelY, accelZ);
-    logCount++;
+  if (effACMode()) {
+    // 9–13. AC mode: continuous waveform sampling + per-cycle analysis
+    runACMode();
   } else {
-    if ((millis() - lastLog > (unsigned long)logInterval) || manualLog) {
-      if (!manualLog) lastLog = millis();
-      captureSample(voltage01, voltage23, current, accelX, accelY, accelZ);
-      if (logON) { flushBufferToSD(); logCount++; manualLog = false; }
-    }
-    writeTrigger = false;
-  }
+    // 9. Voltage (DC)
+    if (effVolt()) measureVoltage(); else voltage01 = 0.0f;
 
-  // 13. Flush on trigger falling edge
-  if (((triggerPrev && !writeTrigger) || manualLog) && logON) flushBufferToSD();
-  triggerPrev = writeTrigger;
+    // 10. Current (DC)
+    if (effCurrent()) {
+      ads1_results23 = ads2.getLastConversionResults();
+      current = ((ads1_results23 * -kGainFactors[gainIndexCurrent]) / 1000.0f) / shuntR;
+    } else { current = 0.0f; }
+
+    // 11. Trigger evaluation
+    if (voltage01 > vMax01) { vMax01 = voltage01; trigFlag = true; }
+    if (voltage01 < vMin01) { vMin01 = voltage01; trigFlag = true; }
+    if (current   > iMax)   { iMax   = current;   trigFlag = true; }
+    if (current   < iMin)   { iMin   = current;   trigFlag = true; }
+    if (abs(voltage01) > noiseThreshold) {
+      if (voltage01 > lastLoggedV01 + vStep) trigFlag = true;
+      if (voltage01 < lastLoggedV01 - vStep) trigFlag = true;
+    }
+    if (abs(current) > 0.025f) {
+      if (current > lastLoggedI + iStep) trigFlag = true;
+      if (current < lastLoggedI - iStep) trigFlag = true;
+    }
+    if (ch2on) {
+      if (voltage23 > vMax23) { vMax23 = voltage23; trigFlag = true; }
+      if (voltage23 < vMin23) { vMin23 = voltage23; trigFlag = true; }
+      if (abs(voltage23) > noiseThreshold) {
+        if (voltage23 > lastLoggedV23 + 0.1f) trigFlag = true;
+        if (voltage23 < lastLoggedV23 - 0.1f) trigFlag = true;
+      }
+    }
+
+    if (trigFlag) {
+      writeTrigger = true;
+      lastLoggedV01 = voltage01; lastLoggedV23 = voltage23; lastLoggedI = current;
+      accelLastLoggedX = accelX; accelLastLoggedY = accelY; accelLastLoggedZ = accelZ;
+      trigFlag = false;
+    } else { writeTrigger = false; }
+
+    // 12. Capture / periodic log
+    if (writeTrigger && logON) {
+      captureSample(voltage01, voltage23, current, accelX, accelY, accelZ);
+      logCount++;
+    } else {
+      if ((millis() - lastLog > (unsigned long)logInterval) || manualLog) {
+        if (!manualLog) lastLog = millis();
+        captureSample(voltage01, voltage23, current, accelX, accelY, accelZ);
+        if (logON) { flushBufferToSD(); logCount++; manualLog = false; }
+      }
+      writeTrigger = false;
+    }
+
+    // 13. Flush on trigger falling edge
+    if (((triggerPrev && !writeTrigger) || manualLog) && logON) flushBufferToSD();
+    triggerPrev = writeTrigger;
+  }
 
   // 14. Periodic $LOG (~500 ms)
   unsigned long nowMs = millis();
-  if (nowMs - lastLogSend >= 500)    { lastLogSend    = nowMs; sendLog(); }
+  if (nowMs - lastLogSend >= 500)      { lastLogSend    = nowMs; sendLog(); }
 
   // 15. Periodic $STATUS (~10 s)
   if (nowMs - lastStatusSend >= 10000) { lastStatusSend = nowMs; sendStatus(); }
 
-  // 16. Display update (~500 ms or on interaction)
+  // 16. Periodic $ACSTATUS (~500 ms, AC mode only)
+  if (effACMode() && nowMs - lastACStatusSend >= 500) { lastACStatusSend = nowMs; sendACStatus(); }
+
+  // 17. Display update (~500 ms or on interaction)
   if (needFullRedraw) {
     drawFullScreen();
   } else if (nowMs - lastDisplayUpdate >= 500) {

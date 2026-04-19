@@ -27,11 +27,13 @@
   !ITHRES,<float>   Current trigger threshold (A)
   !ATHRES,<float>   Accelerometer trigger threshold (g)
   !SHUNT,<float>    Shunt resistor value (Ohms, default 0.1)
+  !VGAIN,<n>        Force voltage ADC gain index (0=±6.1V … 5=±0.25V); -1 = auto (threshold-based)
+  !IGAIN,<n>        Force current ADC gain index (0=±6.1V … 5=±0.25V); -1 = auto (threshold-based)
   !MARK             Insert a manual mark in the next log flush
 
   ── Replies (Arduino → host) ───────────────────────────────────────────────
   $MODE,REMOTE / $MODE,LOCAL
-  $STATUS,MODE,SD,CH2,VOLT,ACCEL,CUR,AUTO,SLOW,SCREEN,VTHRES,ITHRES,ATHRES,SHUNTR,VSCALE
+  $STATUS,MODE,SD,CH2,VOLT,ACCEL,CUR,AUTO,SLOW,SCREEN,VTHRES,ITHRES,ATHRES,SHUNTR,VSCALE,ACMODE,VGAIN,IGAIN
   $LOG,V01,V23,I,AX,AY,AZ,AXPK,AYPK,AZPK,TEMP,BATT,LOGS
     (sent ~every 500 ms while connected)
   $SDSTATUS,0/1       1 = SD hardware present and initialised at startup
@@ -189,6 +191,40 @@ float remoteVThres    = 0.25f;
 float remoteIThres    = 0.10f;
 float remoteAThres    = 4.00f;
 bool  remoteMark      = false;
+bool  remoteACMode    = false;   // !ACMODE command
+int   remoteVGainOverride = -1;  // -1 = threshold-based auto; 0-5 = fixed gain index
+int   remoteIGainOverride = -1;  // -1 = threshold-based auto; 0-5 = fixed gain index
+float acBlipThresh    = 0.15f;   // blip threshold (fraction of peak amplitude)
+
+// ─── AC mode state ────────────────────────────────────────────────────────────
+// Rolling ring buffer — 512 × 12 B = 6 KB, captures ~9 cycles at 60 Hz / 3300 SPS
+const uint16_t AC_RING = 512;
+struct ACSample { float v, i; uint32_t t_us; };
+ACSample  acRing[AC_RING];
+uint16_t  acRingHead  = 0;
+uint16_t  acRingCount = 0;
+
+// Per-cycle accumulators (reset at each rising zero crossing)
+bool     acLastSignV    = false;
+uint32_t acLastRiseUS   = 0;
+float    acSumSqV       = 0.0f, acSumSqI      = 0.0f;
+float    acCyclePeakV   = 0.0f, acCyclePeakI  = 0.0f;
+int      acCycleSamples = 0;
+
+// Results (updated each full cycle)
+float    acFreq   = 0.0f;
+float    acRMS_V  = 0.0f, acPeak_V = 0.0f;
+float    acRMS_I  = 0.0f, acPeak_I = 0.0f;
+bool     acBlipPending   = false;
+int      acSettlingCycles = 0;   // cycles to suppress blip detection after a large step change
+
+// Rolling 4-cycle average for change detection
+float    acFreqHist[4] = {}, acRMSHist[4] = {};
+uint8_t  acHistIdx     = 0;
+float    acAvgFreq     = 0.0f, acAvgRMS = 0.0f;
+
+unsigned long lastACStatusSend = 0;
+char     acFilename[44];
 
 String serialInputBuf = "";
 
@@ -214,6 +250,10 @@ inline bool effMark() {
   return !(bool)digitalRead(markButton);
 }
 
+// AC mode is independent of remote/local: only activatable via !ACMODE command.
+// In local (switch) mode there is no DIP for AC, so local AC is always false.
+inline bool effACMode() { return remoteACMode; }
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  SERIAL OUTPUT HELPERS
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -238,7 +278,10 @@ void sendStatus() {
   Serial.print(','); Serial.print(iStep,    3);
   Serial.print(','); Serial.print(accelThres, 2);
   Serial.print(','); Serial.print(shuntR,    4);
-  Serial.print(','); Serial.println(vScale,   4);
+  Serial.print(','); Serial.print(vScale,    4);
+  Serial.print(','); Serial.print(remoteACMode ? "1" : "0");
+  Serial.print(','); Serial.print(remoteVGainOverride);
+  Serial.print(','); Serial.println(remoteIGainOverride);
 }
 
 void sendLog() {
@@ -285,6 +328,8 @@ void handleCommand(const String& cmd) {
 
   if (cmd == F("!LOCAL")) {
     remoteMode = false;
+    remoteVGainOverride = -1;   // restore auto gain on local mode
+    remoteIGainOverride = -1;
     Serial.println(F("$MODE,LOCAL"));
     sendStatus();
     return;
@@ -347,6 +392,38 @@ void handleCommand(const String& cmd) {
   } else if (cmd.startsWith(F("!SHUNT,"))) {
     float v = cmd.substring(7).toFloat();
     if (v >= 0.0001f) shuntR = v;   // reject nonsensical values
+    sendStatus();
+  } else if (cmd.startsWith(F("!ACMODE,"))) {
+    remoteACMode = (bool)cmd.substring(8).toInt();
+    // Reset all AC state so the next signal starts fresh
+    acRingHead = 0; acRingCount = 0; acLastRiseUS = 0; acCycleSamples = 0;
+    acLastSignV = false; acBlipPending = false; acHistIdx = 0; acSettlingCycles = 0;
+    acFreq = 0.0f; acRMS_V = 0.0f; acPeak_V = 0.0f;
+    acAvgFreq = 0.0f; acAvgRMS = 0.0f;
+    memset(acFreqHist, 0, sizeof(acFreqHist));
+    memset(acRMSHist,  0, sizeof(acRMSHist));
+    if (remoteACMode) {
+      // Fixed gain GAIN_ONE (±4.096V) for AC — no autorange during waveform capture
+      ads.setGain(GAIN_ONE);
+      ads.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3, true);
+      if (effCurrent()) {
+        ads2.setGain(kGainLevels[gainIndexCurrent]);
+        ads2.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_2_3, true);
+      }
+    }
+    sendStatus();
+  } else if (cmd.startsWith(F("!ABLIP,"))) {
+    float v = cmd.substring(7).toFloat();
+    if (v >= 0.01f && v <= 0.9f) acBlipThresh = v;
+    sendStatus();
+  } else if (cmd.startsWith(F("!VGAIN,"))) {
+    int n = cmd.substring(7).toInt();
+    remoteVGainOverride = (n >= 0 && n < kNumGainLevels) ? n : -1;
+    thresholdSuggestedGainVolt = 255;   // force gain re-evaluation
+    sendStatus();
+  } else if (cmd.startsWith(F("!IGAIN,"))) {
+    int n = cmd.substring(7).toInt();
+    remoteIGainOverride = (n >= 0 && n < kNumGainLevels) ? n : -1;
     sendStatus();
   }
 }
@@ -413,7 +490,10 @@ void updateGainsFromThresholds() {
   // Voltage gain
   if (effVolt() && autorange) {
     size_t suggestedGain;
-    if      (vStep > 6.0f)   suggestedGain = 0;
+    if (remoteVGainOverride >= 0) {
+      // Fixed gain override from remote command
+      suggestedGain = (size_t)constrain(remoteVGainOverride, 0, kNumGainLevels - 1);
+    } else if (vStep > 6.0f)   suggestedGain = 0;
     else if (vStep > 3.0f)   suggestedGain = 1;
     else if (vStep > 1.5f)   suggestedGain = 2;
     else if (vStep > 0.75f)  suggestedGain = 3;
@@ -430,7 +510,10 @@ void updateGainsFromThresholds() {
   // Current gain
   if (effCurrent()) {
     size_t newCurrentGain;
-    if      (iStep > 1.0f)  newCurrentGain = 0;
+    if (remoteIGainOverride >= 0) {
+      // Fixed gain override from remote command
+      newCurrentGain = (size_t)constrain(remoteIGainOverride, 0, kNumGainLevels - 1);
+    } else if (iStep > 1.0f)  newCurrentGain = 0;
     else if (iStep > 0.5f)  newCurrentGain = 1;
     else if (iStep > 0.25f) newCurrentGain = 2;
     else if (iStep > 0.1f)  newCurrentGain = 3;
@@ -564,6 +647,162 @@ void flushBufferToSD() {
   sampleCount = 0;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+//  AC MODE — FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void sendACStatus() {
+  Serial.print(F("$ACSTATUS,"));
+  Serial.print(acFreq,   3); Serial.print(',');
+  Serial.print(acRMS_V,  4); Serial.print(',');
+  Serial.print(acPeak_V, 4); Serial.print(',');
+  Serial.print(acRMS_I * 1000.0f, 2); Serial.print(',');
+  Serial.println(acPeak_I * 1000.0f, 2);
+}
+
+// Write an AC event (header + raw sample window) to the AC log file.
+// evtType: 0 = FREQ_CHANGE, 1 = AMP_CHANGE, 2 = BLIP
+void flushACEvent(uint8_t evtType) {
+  File32 f = SD.open(acFilename, FILE_WRITE);
+  if (!f) { logError = true; return; }
+  logError = false;
+
+  DateTime now = rtc.now();
+  const char* typeStr = (evtType == 2) ? "BLIP"
+                      : (evtType == 0) ? "FREQ_CHANGE" : "AMP_CHANGE";
+
+  f.print(F("AC_EVENT,")); f.print(now.timestamp());
+  f.print(','); f.print(typeStr);
+  f.print(F(",Hz="));     f.print(acFreq,   3);
+  f.print(F(",Vrms="));   f.print(acRMS_V,  4);
+  f.print(F(",Vpeak="));  f.print(acPeak_V, 4);
+  f.print(F(",mArms="));  f.print(acRMS_I  * 1000.0f, 2);
+  f.print(F(",mApeak=")); f.println(acPeak_I * 1000.0f, 2);
+
+  // Write last 3 cycles of raw samples from ring buffer
+  uint16_t sampsPerCycle = (acFreq > 0) ? (uint16_t)(3300.0f / acFreq + 0.5f) : 165;
+  uint16_t nWrite = min(acRingCount, (uint16_t)min((uint16_t)(sampsPerCycle * 3), AC_RING));
+  uint16_t startIdx = (acRingHead + AC_RING - nWrite) % AC_RING;
+  uint32_t t0 = acRing[startIdx].t_us;
+  f.println(F("t_us_rel,V,I"));
+  for (uint16_t k = 0; k < nWrite; k++) {
+    uint16_t idx = (startIdx + k) % AC_RING;
+    f.print(acRing[idx].t_us - t0); f.print(',');
+    f.print(acRing[idx].v,  4);     f.print(',');
+    f.println(acRing[idx].i, 5);
+  }
+  f.flush(); f.close();
+  blinkPixel(0, 0, 255, 10);   // blue = AC event written
+  logCount++;
+
+  Serial.print(F("$ACEVENT,"));
+  Serial.print(typeStr);     Serial.print(',');
+  Serial.print(acFreq,   3); Serial.print(',');
+  Serial.print(acRMS_V,  4); Serial.print(',');
+  Serial.println(acPeak_V, 4);
+}
+
+// Called every loop() iteration when AC mode is active.
+// Grabs the latest ADS1015 result, feeds the ring buffer, runs per-cycle analysis,
+// and fires flushACEvent() whenever a meaningful change or blip is detected.
+void runACMode() {
+  uint32_t now_us = micros();
+
+  // ADS1015 is in continuous mode with GAIN_ONE (factor = 2.0 mV/count)
+  int16_t rawV = ads.getLastConversionResults();
+  float v = (rawV * 2.0f / 1000.0f) * vScale;   // real volts after divider
+
+  float i_val = 0.0f;
+  if (effCurrent()) {
+    int16_t rawI = ads2.getLastConversionResults();
+    i_val = ((rawI * -kGainFactors[gainIndexCurrent]) / 1000.0f) / shuntR;
+  }
+
+  // Store in ring buffer
+  acRing[acRingHead] = { v, i_val, now_us };
+  acRingHead  = (acRingHead + 1) % AC_RING;
+  if (acRingCount < AC_RING) acRingCount++;
+
+  // Cycle accumulation
+  acSumSqV += v * v;
+  acSumSqI += i_val * i_val;
+  if (fabsf(v)     > acCyclePeakV) acCyclePeakV = fabsf(v);
+  if (fabsf(i_val) > acCyclePeakI) acCyclePeakI = fabsf(i_val);
+  acCycleSamples++;
+
+  // ── Rising zero crossing ──────────────────────────────────────────────────
+  bool signV = (v >= 0.0f);
+  if (signV && !acLastSignV && acCycleSamples > 5) {
+    if (acLastRiseUS > 0) {
+      uint32_t period_us = now_us - acLastRiseUS;
+      if (period_us > 4000UL && period_us < 500000UL) {  // 2–250 Hz
+        float newFreq  = 1e6f / (float)period_us;
+        float newRMS_V = sqrtf(acSumSqV / (float)acCycleSamples);
+        float newRMS_I = effCurrent() ? sqrtf(acSumSqI / (float)acCycleSamples) : 0.0f;
+
+        acFreq   = newFreq;
+        acRMS_V  = newRMS_V;  acPeak_V = acCyclePeakV;
+        acRMS_I  = newRMS_I;  acPeak_I = acCyclePeakI;
+
+        // Update $LOG values with per-cycle RMS
+        voltage01 = newRMS_V;
+        current   = newRMS_I;
+
+        // Change detection against rolling average
+        bool freqEvent = false, ampEvent = false, bigStep = false;
+        if (acAvgFreq > 0.0f) {
+          float ampDiff = fabsf(newRMS_V - acAvgRMS);
+          freqEvent = fabsf(newFreq - acAvgFreq) > acAvgFreq * 0.02f;    // >2% freq drift
+          ampEvent  = ampDiff > acAvgRMS * 0.05f + 0.01f;                // >5% amp shift
+          bigStep   = ampDiff > acAvgRMS * 0.5f || freqEvent;            // >50% = step change
+        }
+
+        if ((freqEvent || ampEvent || acBlipPending) && logON) {
+          uint8_t evtType = acBlipPending ? 2 : (freqEvent ? 0 : 1);
+          flushACEvent(evtType);
+          acBlipPending = false;
+        }
+
+        if (bigStep) {
+          // Large step: instantly re-baseline so the next cycle measures against the
+          // new steady-state and does not re-trigger the change detector.
+          for (int k = 0; k < 4; k++) { acFreqHist[k] = newFreq; acRMSHist[k] = newRMS_V; }
+          acAvgFreq = newFreq;  acAvgRMS = newRMS_V;  acHistIdx = 0;
+          acSettlingCycles = 3;   // blip detection suppressed while acPeak_V catches up
+        } else {
+          // Normal rolling average update
+          acFreqHist[acHistIdx] = newFreq;
+          acRMSHist[acHistIdx]  = newRMS_V;
+          acHistIdx = (acHistIdx + 1) % 4;
+          float sf = 0.0f, sr = 0.0f;
+          for (int k = 0; k < 4; k++) { sf += acFreqHist[k]; sr += acRMSHist[k]; }
+          acAvgFreq = sf / 4.0f;
+          acAvgRMS  = sr / 4.0f;
+        }
+      }
+    }
+    // Reset cycle accumulators on each rising zero crossing
+    acLastRiseUS   = now_us;
+    acSumSqV       = 0.0f;  acSumSqI      = 0.0f;
+    acCyclePeakV   = 0.0f;  acCyclePeakI  = 0.0f;
+    acCycleSamples = 0;
+  }
+  acLastSignV = signV;
+
+  // ── Blip detection ────────────────────────────────────────────────────────
+  // Suppressed for acSettlingCycles cycles after a large step change, while
+  // acPeak_V (updated each zero-crossing) converges to the new amplitude.
+  if (acSettlingCycles > 0) {
+    acSettlingCycles--;
+  } else if (acPeak_V > 0.05f && acFreq > 0.0f && acLastRiseUS > 0) {
+    float t_s    = (float)(now_us - acLastRiseUS) / 1e6f;
+    float expect = acPeak_V * sinf(2.0f * PI * acFreq * t_s);
+    if (fabsf(v - expect) > acBlipThresh * acPeak_V) {
+      acBlipPending = true;
+    }
+  }
+}
+
 // ─── Local display + human-readable serial output ────────────────────────────
 void outputs(float data1, float data2) {
   unsigned long currentmillis = millis();
@@ -661,6 +900,28 @@ void measureVoltage() {
 void updateDisplay() {
   display.clearDisplay();
   display.setTextSize(2);
+
+  if (effACMode()) {
+    // AC mode: show frequency and RMS voltage prominently
+    display.setCursor(0, 0);
+    display.print(acFreq, 1); display.print(F("Hz"));
+    display.setCursor(0, 16);
+    display.print(acRMS_V, 3); display.print(F("Vr"));
+    display.setTextSize(1);
+    display.setCursor(0, 32);
+    display.print(F("Vrms I:")); display.print(acRMS_I * 1000.0f, 1); display.print(F("mA"));
+    display.setCursor(0, 40);
+    display.print(F("Vpk:")); display.print(acPeak_V, 3);
+    display.setCursor(64, 40);
+    display.print(F("Evt:")); display.print(logCount);
+    display.setCursor(0, 48);
+    display.print(F("AC blipT:")); display.print(acBlipThresh, 2);
+    display.setCursor(0, 56);
+    display.print(remoteMode ? F("REM ") : F("LOC "));
+    display.print(F("AC MODE"));
+    display.display();
+    return;
+  }
 
   display.setCursor(0, 0);
   display.print(F("V:"));
@@ -817,6 +1078,10 @@ void setup() {
       logfile.println(F("Delta uS,V Ch1,V Ch2,I,X,Y,Z,Temp,RTC Stamp"));
       logfile.flush();
       logfile.close();
+      // Create a companion AC log file (written only when AC events occur)
+      sprintf(acFilename, "ac_%04d%02d%02d_%02d%02d%02d.csv",
+              now.year(), now.month(), now.day(),
+              now.hour(), now.minute(), now.second());
       Serial.print(F("SD OK, logging to: "));
       Serial.println(filename);
     } else {
@@ -917,82 +1182,87 @@ void loop() {
     accelX = 0.0f; accelY = 0.0f; accelZ = 0.0f;
   }
 
-  // ── 9. Voltage ──
-  prevVoltage = voltage01;
-  if (effVolt()) {
-    measureVoltage();
+  if (effACMode()) {
+    // ── 9–13. AC mode: continuous waveform sampling and analysis ──────────────
+    // runACMode() grabs the latest ADS1015 result, accumulates per-cycle stats,
+    // detects freq/amplitude changes and blips, and calls flushACEvent() as needed.
+    runACMode();
+
   } else {
-    voltage01 = 0.0f;
-  }
-
-  // ── 10. Current ──
-  if (effCurrent()) {
-    ads1_results23 = ads2.getLastConversionResults();
-    current = ((ads1_results23 * -kGainFactors[gainIndexCurrent]) / 1000.0f) / shuntR;
-  } else {
-    current = 0.0f;
-  }
-
-  // ── 11. Trigger evaluation ──
-  if (voltage01 > vMax01) { vMax01 = voltage01; trigFlag = true; }
-  if (voltage01 < vMin01) { vMin01 = voltage01; trigFlag = true; }
-  if (current   > iMax)   { iMax   = current;   trigFlag = true; }
-  if (current   < iMin)   { iMin   = current;   trigFlag = true; }
-
-  if (abs(voltage01) > noiseThreshold) {
-    if (voltage01 > lastLoggedV01 + vStep) trigFlag = true;
-    if (voltage01 < lastLoggedV01 - vStep) trigFlag = true;
-  }
-  if (abs(current) > 0.025f) {
-    if (current > lastLoggedI + iStep) trigFlag = true;
-    if (current < lastLoggedI - iStep) trigFlag = true;
-  }
-
-  if (ch2on) {
-    if (voltage23 > vMax23) { vMax23 = voltage23; trigFlag = true; }
-    if (voltage23 < vMin23) { vMin23 = voltage23; trigFlag = true; }
-    if (abs(voltage23) > noiseThreshold) {
-      if (voltage23 > lastLoggedV23 + 0.1f) trigFlag = true;
-      if (voltage23 < lastLoggedV23 - 0.1f) trigFlag = true;
+    // ── 9. Voltage (DC) ───────────────────────────────────────────────────────
+    prevVoltage = voltage01;
+    if (effVolt()) {
+      measureVoltage();
+    } else {
+      voltage01 = 0.0f;
     }
-  }
 
-  if (trigFlag) {
-    writeTrigger        = true;
-    lastLoggedV01       = voltage01;
-    lastLoggedV23       = voltage23;
-    lastLoggedI         = current;
-    accelLastLoggedX    = accelX;
-    accelLastLoggedY    = accelY;
-    accelLastLoggedZ    = accelZ;
-    trigFlag            = false;
-  } else {
-    writeTrigger = false;
-  }
+    // ── 10. Current (DC) ──────────────────────────────────────────────────────
+    if (effCurrent()) {
+      ads1_results23 = ads2.getLastConversionResults();
+      current = ((ads1_results23 * -kGainFactors[gainIndexCurrent]) / 1000.0f) / shuntR;
+    } else {
+      current = 0.0f;
+    }
 
-  // ── 12. Capture / periodic log ──
-  if (writeTrigger && logON) {
-    captureSample(voltage01, voltage23, current, accelX, accelY, accelZ);
-    logCount++;
-  } else {
-    outputs(voltage01, voltage23);
-    if ((millis() - lastLog > (unsigned long)logInterval) || manualLog) {
-      if (!manualLog) lastLog = millis();
-      captureSample(voltage01, voltage23, current, accelX, accelY, accelZ);
-      if (logON) {
-        flushBufferToSD();
-        logCount++;
-        manualLog = false;
+    // ── 11. Trigger evaluation ────────────────────────────────────────────────
+    if (voltage01 > vMax01) { vMax01 = voltage01; trigFlag = true; }
+    if (voltage01 < vMin01) { vMin01 = voltage01; trigFlag = true; }
+    if (current   > iMax)   { iMax   = current;   trigFlag = true; }
+    if (current   < iMin)   { iMin   = current;   trigFlag = true; }
+
+    if (abs(voltage01) > noiseThreshold) {
+      if (voltage01 > lastLoggedV01 + vStep) trigFlag = true;
+      if (voltage01 < lastLoggedV01 - vStep) trigFlag = true;
+    }
+    if (abs(current) > 0.025f) {
+      if (current > lastLoggedI + iStep) trigFlag = true;
+      if (current < lastLoggedI - iStep) trigFlag = true;
+    }
+
+    if (ch2on) {
+      if (voltage23 > vMax23) { vMax23 = voltage23; trigFlag = true; }
+      if (voltage23 < vMin23) { vMin23 = voltage23; trigFlag = true; }
+      if (abs(voltage23) > noiseThreshold) {
+        if (voltage23 > lastLoggedV23 + 0.1f) trigFlag = true;
+        if (voltage23 < lastLoggedV23 - 0.1f) trigFlag = true;
       }
     }
-    writeTrigger = false;
-  }
 
-  // ── 13. Flush on trigger falling edge ──
-  if (((triggerPrev && !writeTrigger) || manualLog) && logON) {
-    flushBufferToSD();
+    if (trigFlag) {
+      writeTrigger     = true;
+      lastLoggedV01    = voltage01;  lastLoggedV23 = voltage23;
+      lastLoggedI      = current;
+      accelLastLoggedX = accelX;     accelLastLoggedY = accelY;  accelLastLoggedZ = accelZ;
+      trigFlag         = false;
+    } else {
+      writeTrigger = false;
+    }
+
+    // ── 12. Capture / periodic log ────────────────────────────────────────────
+    if (writeTrigger && logON) {
+      captureSample(voltage01, voltage23, current, accelX, accelY, accelZ);
+      logCount++;
+    } else {
+      outputs(voltage01, voltage23);
+      if ((millis() - lastLog > (unsigned long)logInterval) || manualLog) {
+        if (!manualLog) lastLog = millis();
+        captureSample(voltage01, voltage23, current, accelX, accelY, accelZ);
+        if (logON) {
+          flushBufferToSD();
+          logCount++;
+          manualLog = false;
+        }
+      }
+      writeTrigger = false;
+    }
+
+    // ── 13. Flush on trigger falling edge ─────────────────────────────────────
+    if (((triggerPrev && !writeTrigger) || manualLog) && logON) {
+      flushBufferToSD();
+    }
+    triggerPrev = writeTrigger;
   }
-  triggerPrev = writeTrigger;
 
   // ── 14. Periodic $LOG output (~500 ms) ──
   unsigned long now = millis();
@@ -1005,5 +1275,11 @@ void loop() {
   if (now - lastStatusSend >= 10000) {
     lastStatusSend = now;
     sendStatus();
+  }
+
+  // ── 16. Periodic $ACSTATUS output (~500 ms, AC mode only) ──
+  if (effACMode() && now - lastACStatusSend >= 500) {
+    lastACStatusSend = now;
+    sendACStatus();
   }
 }

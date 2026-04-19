@@ -97,8 +97,8 @@ float prevOutVoltage    = 0.0;
 float vActual           = 0.0;
 int16_t countV          = 0;
 
-const float VOLTAGE_SCALE_full = 72.05; // seperate boards version:69.6023;
-const float VOLTAGE_SCALE_low  = 3.51108;
+const float VOLTAGE_SCALE_full = -69.95; // seperate boards version:69.6023;
+const float VOLTAGE_SCALE_low  = -3.51108;
 float vScale = 0.0;
 
 bool vClimb      = false;
@@ -503,7 +503,7 @@ void measureVoltage() {
       acSumSq       = 0.0;
       acSampleCount = 0;
     }
-    displayVoltage = vrmsVoltage;
+    displayVoltage = vrmsVoltage - 0.35;
 
     // Zero-crossing debounce for open-lead detect.
     // The instantaneous reading must stay below CorFTrig for a full quarter
@@ -519,7 +519,7 @@ void measureVoltage() {
       if (currentMillis - acBelowThreshStart >= AC_ZERO_DEBOUNCE_MS) {
         Vzero     = true;
         VzeroFlag = (prevVzero != Vzero);
-        ClosedOrFloat();
+        ClosedOrFloat();        
       } else {
         Vzero     = false;
         vFloating = false;
@@ -534,8 +534,8 @@ void measureVoltage() {
 
   } else {
     // ── DC mode: original behaviour ───────────────────────────────
-    displayVoltage = cfSuppress ? newVoltageReading : medianVoltage;
-
+    displayVoltage = cfSuppress ? newVoltageReading : (medianVoltage - 0.35);
+    
     if (fabs(medianVoltage) < CorFTrig && !manual && vRefEnable && !cfSuppress) {
       Vzero     = true;
       VzeroFlag = (prevVzero != Vzero);
@@ -622,7 +622,7 @@ void ClosedOrFloat() {
     else            vFloating = true;
   }
 
-  delay(2); //this allows settling before we resume  
+  delay(1); //this allows settling before we resume  
 
 }
 
