@@ -1,0 +1,76 @@
+VERSION ""
+
+NS_ :
+
+BS_:
+
+BU_: AMC_METER
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  AMC Precision Meter — CAN bus signal database
+//
+//  Transmitter : AMC_METER (Adafruit Feather RP2040 CAN Bus)
+//  Bus speed   : 500 kbps  (change CAN_BAUDRATE in sketch if different)
+//  Byte order  : Intel (little-endian) for all signals  (@1)
+//  Encoding    : signed integer with linear factor+offset  (value = raw * factor + offset)
+//
+//  Quick-decode cheat sheet
+//  ────────────────────────
+//  Current_A  (A)  = raw_int32 * 0.000001          (1 µA / count)
+//  Voltage_V  (V)  = raw_int32 * 0.0001            (0.1 mV / count)
+//  Current_Min/Max (A) = raw_int16 * 0.001         (1 mA / count,  range ±32.767 A)
+//  Voltage_Min/Max (V) = raw_int16 * 0.01          (10 mV / count, range ±327.67 V)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── 0x100  AMC_LIVE ─────────────────────────────────────────────────────────
+//
+//  Byte layout:
+//  ┌──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
+//  │  B0  │  B1  │  B2  │  B3  │  B4  │  B5  │  B6  │  B7  │
+//  ├────────────────────────────┼───────────────────────────┤
+//  │   Current_A  (int32 LE)   │   Voltage_V  (int32 LE)   │
+//  └────────────────────────────┴───────────────────────────┘
+//
+//  Transmitted at CAN_RATE_MS (default 100 ms = 10 Hz)
+
+BO_ 256 AMC_LIVE: 8 AMC_METER
+ SG_ Current_A : 0|32@1- (0.000001,0) [-2147.483647|2147.483647] "A" Vector__XXX
+ SG_ Voltage_V : 32|32@1- (0.0001,0) [-214748.3647|214748.3647] "V" Vector__XXX
+
+// ─── 0x101  AMC_MINMAX ───────────────────────────────────────────────────────
+//
+//  Byte layout:
+//  ┌──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
+//  │  B0  │  B1  │  B2  │  B3  │  B4  │  B5  │  B6  │  B7  │
+//  ├──────────────┼──────────────┼──────────────┼──────────────┤
+//  │ Current_Min  │ Current_Max  │ Voltage_Min  │ Voltage_Max  │
+//  │  (int16 LE)  │  (int16 LE)  │  (int16 LE)  │  (int16 LE)  │
+//  └──────────────┴──────────────┴──────────────┴──────────────┘
+//
+//  Min/max reset via Button C on the OLED FeatherWing, or serial !RST command.
+//  Transmitted at CAN_RATE_MS (default 100 ms = 10 Hz)
+
+BO_ 257 AMC_MINMAX: 8 AMC_METER
+ SG_ Current_Min : 0|16@1- (0.001,0) [-32.767|32.767] "A" Vector__XXX
+ SG_ Current_Max : 16|16@1- (0.001,0) [-32.767|32.767] "A" Vector__XXX
+ SG_ Voltage_Min : 32|16@1- (0.01,0) [-327.67|327.67] "V" Vector__XXX
+ SG_ Voltage_Max : 48|16@1- (0.01,0) [-327.67|327.67] "V" Vector__XXX
+
+// ─── Signal comments ─────────────────────────────────────────────────────────
+
+CM_ BO_ 256 "Live current and voltage readings from AMC3301/AMC3330 isolated amplifiers. Transmitted at 10 Hz.";
+CM_ SG_ 256 Current_A "Measured current in Amperes. int32 little-endian, 1 uA per count. Tare offset applied if ZERO command was issued.";
+CM_ SG_ 256 Voltage_V "Measured bus voltage in Volts. int32 little-endian, 0.1 mV per count. Scaled by external 50.5:1 resistor divider.";
+
+CM_ BO_ 257 "Running min/max since last reset. Transmitted at 10 Hz. Reset via Button C or serial !RST.";
+CM_ SG_ 257 Current_Min "Minimum current seen since last reset. int16 little-endian, 1 mA per count.";
+CM_ SG_ 257 Current_Max "Maximum current seen since last reset. int16 little-endian, 1 mA per count.";
+CM_ SG_ 257 Voltage_Min "Minimum voltage seen since last reset. int16 little-endian, 10 mV per count.";
+CM_ SG_ 257 Voltage_Max "Maximum voltage seen since last reset. int16 little-endian, 10 mV per count.";
+
+// ─── Transmit rate attributes ─────────────────────────────────────────────────
+
+BA_DEF_ BO_ "GenMsgCycleTime" INT 0 10000;
+BA_DEF_DEF_ "GenMsgCycleTime" 0;
+BA_ "GenMsgCycleTime" BO_ 256 100;
+BA_ "GenMsgCycleTime" BO_ 257 100;
