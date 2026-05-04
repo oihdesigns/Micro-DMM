@@ -534,6 +534,15 @@ class App(tk.Tk):
         elif line.startswith("$CFG,"):
             self._apply_cfg_readback(line[5:].split(","))
 
+        elif line.startswith("$READY"):
+            if self._in_burst:
+                self._in_burst = False
+                self._burst_btn.config(state="normal")
+                self._burst_status.config(text="Board restarted", fg=RED)
+            if self._streaming:
+                self._streaming = False
+                self._stream_btn.config(text="▶  Start Stream", bg="#224422")
+
         elif line.startswith("$ERR,"):
             self._volt_lbl.config(text="ERROR")
             if self._in_burst:
@@ -598,9 +607,14 @@ class App(tk.Tk):
         self._ymin_entry.config(state=state)
         self._ymax_entry.config(state=state)
 
-    def _apply_y_range(self):
+    def _apply_y_range(self, visible_ys=None):
         if not hasattr(self, "_autoscale_var") or self._autoscale_var.get():
-            self._ax.autoscale_view()
+            if visible_ys:
+                lo, hi = min(visible_ys), max(visible_ys)
+                pad = (hi - lo) * 0.05 if hi != lo else 0.01
+                self._ax.set_ylim(lo - pad, hi + pad)
+            else:
+                self._ax.autoscale_view()
         else:
             try:
                 ymin = float(self._ymin_var.get())
@@ -613,6 +627,11 @@ class App(tk.Tk):
                 self._ax.autoscale_view()
 
     def _update_stream_plot(self):
+        now = time.monotonic()
+        if now - self._last_stream_plot < 1 / 30:
+            return
+        self._last_stream_plot = now
+
         if not self._timestamps:
             return
         ts = list(self._timestamps)
@@ -623,7 +642,8 @@ class App(tk.Tk):
             hist_s = max(float(self._history_var.get() or "5"), 0.1)
         except (ValueError, AttributeError):
             hist_s = 5.0
-        cutoff = ts[-1] - hist_s
+        t_end  = ts[-1]
+        cutoff = t_end - hist_s
         idx = bisect.bisect_left(ts, cutoff)
         xs = ts[idx:]
         ys = vs[idx:]
@@ -639,8 +659,8 @@ class App(tk.Tk):
         self._plot_title.set_text("Streaming")
         self._plot_title.set_color(DIM)
         self._ax.set_xlabel("Time (s)", color=DIM)
-        self._ax.relim()
-        self._apply_y_range()
+        self._ax.set_xlim(cutoff, t_end)   # explicit x-range keeps rolling effect
+        self._apply_y_range(ys)
         self._canvas.draw_idle()
 
     def _update_burst_plot(self):
@@ -656,7 +676,7 @@ class App(tk.Tk):
         self._plot_title.set_color(AMBER)
         self._ax.set_xlabel("Time (s)", color=DIM)
         self._ax.relim()
-        self._apply_y_range()
+        self._apply_y_range(self._burst_volts)
         self._canvas.draw_idle()
 
     def _log(self, text: str):
