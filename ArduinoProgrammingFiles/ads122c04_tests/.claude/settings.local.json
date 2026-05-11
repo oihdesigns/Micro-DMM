@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Start-Sleep -Seconds 10)",
+      "Bash(Get-Content \"C:\\\\Users\\\\Nick\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Nick-Documents-GitHub-Micro-DMM-ArduinoProgrammingFiles-ads122c04-tests\\\\32aedc6b-aeec-4bd4-a0da-20e9ea1127f2\\\\tasks\\\\b6759de8q.output\" -Raw)",
+      "PowerShell(cd \"C:\\\\Users\\\\Nick\\\\Documents\\\\GitHub\\\\Micro-DMM\"; git push origin main 2>&1; Write-Host \"Exit: $LASTEXITCODE\")"
+    ]
+  }
+}

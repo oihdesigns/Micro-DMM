@@ -1,0 +1,60 @@
+Designator ,Val,Package,Mid X,Mid Y,Rotation Side,Layer
+C1,100nF,C_0603_1608Metric_Pad1.08x0.95mm_HandSolder,131.9475,-89.916,0,top
+C2,1uF,C_0603_1608Metric_Pad1.08x0.95mm_HandSolder,131.97,-85.09,0,top
+C3,1nF,C_0603_1608Metric_Pad1.08x0.95mm_HandSolder,131.8945,-87.376,0,top
+C4,100nF,C_0603_1608Metric_Pad1.08x0.95mm_HandSolder,149.066,-87.376,90,top
+C5,100nF,C_1206_3216Metric_Pad1.33x1.80mm_HandSolder,131.032,-92.456,0,top
+C6,1nF,C_1206_3216Metric_Pad1.33x1.80mm_HandSolder,131.032,-94.996,0,top
+C7,1uF,C_0603_1608Metric_Pad1.08x0.95mm_HandSolder,132.002,-99.997,0,top
+C8,1nF,C_1206_3216Metric_Pad1.33x1.80mm_HandSolder,149.701,-93.98,90,top
+C9,1uF,C_1206_3216Metric_Pad1.33x1.80mm_HandSolder,152.876,-93.98,90,top
+C10,10nF,C_0805_2012Metric_Pad1.18x1.45mm_HandSolder,127.222,-88.9,90,top
+C11,10nF,C_0805_2012Metric_Pad1.18x1.45mm_HandSolder,125.984,-103.807,90,top
+C12,1nF,C_0603_1608Metric_Pad1.08x0.95mm_HandSolder,131.9265,-102.283,0,top
+C13,100nF,C_0603_1608Metric_Pad1.08x0.95mm_HandSolder,131.9795,-104.823,0,top
+C14,100nF,C_1206_3216Metric_Pad1.33x1.80mm_HandSolder,131.064,-107.363,0,top
+C15,1nF,C_1206_3216Metric_Pad1.33x1.80mm_HandSolder,131.064,-109.903,0,top
+C16,100nF,C_0603_1608Metric_Pad1.08x0.95mm_HandSolder,149.117121,-102.201648,90,top
+C17,1nF,C_1206_3216Metric_Pad1.33x1.80mm_HandSolder,149.752121,-108.805648,90,top
+C18,1uF,C_1206_3216Metric_Pad1.33x1.80mm_HandSolder,152.927121,-108.805648,90,top
+Cs1,330pF,C_0603_1608Metric_Pad1.08x0.95mm_HandSolder,163.703,-87.314,-90,top
+Cs2,330pF,C_0603_1608Metric_Pad1.08x0.95mm_HandSolder,160.909,-88.076,0,top
+Cs3,10nF,C_0805_2012Metric_Pad1.18x1.45mm_HandSolder,167.513,-84.074,-90,top
+Cs4,330pF,C_0603_1608Metric_Pad1.08x0.95mm_HandSolder,158.115,-96.8655,90,top
+Cs5,330pF,C_0603_1608Metric_Pad1.08x0.95mm_HandSolder,161.925,-97.728,180,top
+Cs6,10nF,C_0805_2012Metric_Pad1.18x1.45mm_HandSolder,170.053,-97.79,90,top
+FB1,FerriteBead_Small,L_0402_1005Metric_Pad0.77x0.64mm_HandSolder,124.6175,-87.884,0,top
+FB2,FerriteBead_Small,L_0402_1005Metric_Pad0.77x0.64mm_HandSolder,124.6175,-90.17,0,top
+FB3,FerriteBead_Small,L_0402_1005Metric_Pad0.77x0.64mm_HandSolder,121.888,-94.234,0,top
+FB4,FerriteBead_Small,L_0402_1005Metric_Pad0.77x0.64mm_HandSolder,123.19,-102.791,0,top
+FB5,FerriteBead_Small,L_0402_1005Metric_Pad0.77x0.64mm_HandSolder,123.19,-105.077,0,top
+FB6,FerriteBead_Small,L_0402_1005Metric_Pad0.77x0.64mm_HandSolder,124.968,-107.871,0,top
+H1,MountingHole,MountingHole_2.2mm_M2_DIN965_Pad_TopBottom,110.49,-80.01,0,top
+H2,MountingHole,MountingHole_2.2mm_M2_DIN965_Pad_TopBottom,110.49,-112.522,0,top
+H3,MountingHole,MountingHole_2.2mm_M2_DIN965_Pad_TopBottom,171.9475,-79.962,0,top
+H4,MountingHole,MountingHole_2.2mm_M2_DIN965_Pad_TopBottom,171.958,-112.522,0,top
+J1,Screw_Terminal_01x02,TerminalBlock_RND_205-00232_1x02_P5.08mm_Horizontal,113.2095,-86.355,-90,top
+J6,Screw_Terminal_01x02,TerminalBlock_RND_205-00232_1x02_P5.08mm_Horizontal,113.2415,-100.754,-90,top
+J7,Power Input,"TerminalBlock_Phoenix_MPT-0,5-2-2.54_1x02_P2.54mm_Horizontal",169.672,-107.442,90,top
+J8,Differential Out,"TerminalBlock_Phoenix_MPT-0,5-2-2.54_1x02_P2.54mm_Horizontal",154.813,-82.042,180,top
+J9,SE Out,"TerminalBlock_Phoenix_MPT-0,5-2-2.54_1x02_P2.54mm_Horizontal",169.672,-92.202,90,top
+J11,Differential Out,"TerminalBlock_Phoenix_MPT-0,5-2-2.54_1x02_P2.54mm_Horizontal",158.369,-110.3095,0,top
+R1,47k,R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,150.082,-90.17,180,top
+R2,47k,R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,150.133121,-104.995648,180,top
+RN3,R_Pack04_Split,R_Array_Convex_4x0612,156.845,-92.648,0,top
+RN4,R_Pack04_Split,R_Array_Convex_4x0612,155.259,-102.343,0,top
+Ri2,10,R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,124.936,-85.598,0,top
+Ri3,Shunt,R_2010_5025Metric_Pad1.40x2.65mm_HandSolder,121.126,-89.154,90,top
+Ri4,10,R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,124.936,-92.202,0,top
+Rs5,10K,R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,159.385,-83.201,-90,top
+Rs6,10K,R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,161.798,-83.201,90,top
+Rs7,120,R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,169.799,-84.074,90,top
+Rs8,10K,R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,159.623,-102.251,180,top
+Rs9,10K,R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,159.639,-104.775,0,top
+Rs10,120,R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,167.513,-97.79,-90,top
+Rv1,499K,R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,121.412,-99.743,0,top
+Rv2,499K,R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,121.412,-108.379,180,top
+Rv3,10K,R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,120.65,-103.553,-90,top
+U1,OPA2197xD,SOIC-8_3.9x4.9mm_P1.27mm,161.798,-92.837,-90,top
+Ui1,AMC3301,SOIC-16W_7.5x10.3mm_P1.27mm,140.938,-91.44,0,top
+Uv1,AMC3330,SOIC-16W_7.5x10.3mm_P1.27mm,140.997,-106.299,0,top
