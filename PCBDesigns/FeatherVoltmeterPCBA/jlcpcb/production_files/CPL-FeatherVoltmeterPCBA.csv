@@ -1,0 +1,32 @@
+Designator,Val,Package,Mid X,Mid Y,Rotation,Layer
+A2,TestPoint_Small,TestPoint_Pad_D1.0mm,133.35,-104.775,180.0,bottom
+A3,TestPoint_Small,TestPoint_Pad_D1.0mm,131.064,-104.775,180.0,bottom
+C10,0.1uF,C_0603_1608Metric,129.667,-92.075,-90.0,top
+C17,0.1uF,C_0603_1608Metric,126.5195,-101.346,-90.0,top
+C4,0.1uF,C_0603_1608Metric,130.556,-99.06,0.0,top
+C9,0.1uF,C_0603_1608Metric,120.142,-91.694,-90.0,top
+D4,D_Schottky,D_SOD-123,132.842,-112.776,90.0,top
+D5,D_Schottky,D_SOD-123,132.918,-107.631,90.0,top
+H1,MountingHole,MountingHole_2.2mm_M2_Pad,116.792764,-73.820386,0.0,top
+H2,MountingHole,MountingHole_2.2mm_M2_Pad,134.5692,-73.8124,0.0,top
+H3,MountingHole,MountingHole_2.2mm_M2_Pad,116.805302,-119.502302,0.0,top
+J1,Conn_01x16_Pin,PinSocket_1x16_P2.54mm_Vertical,115.5505,-96.647,0.0,top
+J2,Conn_01x12_Pin,PinSocket_1x12_P2.54mm_Vertical,135.8705,-101.727,0.0,top
+J5,Screw_Terminal_01x02,TerminalBlock_CUI_TB007-508-02_1x02_P5.08mm_Horizontal,124.922,-115.9745,0.0,top
+PS1,MEE1S0305SC,Converter_DCDC_Murata_MEE1SxxxxSC_THT,125.6785,-81.7255,90.0,top
+Q8,AO3400A MOSFET,SOT-23,120.904,-102.87,270.0,top
+R1,4.7K,R_0603_1608Metric_Pad0.98x0.95mm_HandSolder,120.015,-97.0045,90.0,top
+R10,75K,R_0402_1005Metric,120.6015,-105.217,180.0,top
+R12,0,R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,131.445,-85.471,90.0,top
+R14,1M,R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,124.536,-106.553,0.0,top
+R17,499.0K,R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,128.6785,-108.458,90.0,top
+R18,499.0K,R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,121.3125,-108.458,90.0,top
+R2,4.7K,R_0603_1608Metric_Pad0.98x0.95mm_HandSolder,118.237,-97.028,90.0,top
+R24,15K,R_0805_2012Metric_Pad1.20x1.40mm_HandSolder,124.774,-104.013,0.0,top
+R27,4.7K,R_0603_1608Metric,123.9795,-101.346,-90.0,top
+RN1,R_Pack04_Split,R_Array_Convex_4x0603,131.826,-96.404,180.0,top
+SW1,SSSS811101,SW4_SSSS811101_ALPS,125.45568,-73.37425,-90.0,top
+U1,ADuM1200AR,SOIC-8_3.9x4.9mm_P1.27mm,124.968,-86.233,270.0,top
+U10,LM4040DBZ-2.5,SOT-23,125.476,-97.757,0.0,top
+U13,ISO1540,SOIC-8_3.9x4.9mm_P1.27mm,124.968,-91.948,270.0,top
+U3,ADS1015,TSSOP-10_3x3mm_P0.5mm,130.850201,-101.854,270.0,top
