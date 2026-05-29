@@ -211,6 +211,7 @@ class GigaTestGUI:
         self.ax.set_title("Captured Signal")
         self.ax.set_xlabel("Time (ms)")
         self.ax.set_ylabel("Calibrated Value")
+        self.ax.grid(True, color="gray", linewidth=0.4, alpha=0.5)
         for pin, values in self.captured_data.items():
             n = len(values)
             t = [i * self.capture_time_ms / n for i in range(n)]
