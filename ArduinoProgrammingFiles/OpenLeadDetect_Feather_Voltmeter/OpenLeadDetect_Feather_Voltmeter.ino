@@ -69,7 +69,7 @@ bool  battFound    = false;
 float battPct      = 0.0;
 float battVoltage  = 0.0;
 unsigned long lastBattRead = 0;
-const unsigned long battReadInterval = 10000;  // 10 s between reads
+const unsigned long battReadInterval = 5000;  // 5 s between reads
 
 // ── Pin assignments (adjust for your wiring) ─────────────────────
 const int VbridgePin     = 5;    // MOSFET gate for bridge measurement
@@ -177,6 +177,7 @@ static const int ADC_COUNT_LOW_THRESH  = 10000;
 static const int ADC_COUNT_HIGH_THRESH = 30000;
 float vClosedThres     = 0.07;
 #define ADS_RATE_FAST  RATE_ADS1115_860SPS
+#define ADS_RATE_MID  RATE_ADS1115_250SPS
 #define ADS_RATE_SLOW  RATE_ADS1115_64SPS
 #else
 // ADS1015: 12-bit, gain factors in mV/bit (16x larger than ADS1115)
@@ -190,6 +191,7 @@ static const int ADC_COUNT_LOW_THRESH  = 600;
 static const int ADC_COUNT_HIGH_THRESH = 1800;
 float vClosedThres     = 0.15; 
 #define ADS_RATE_FAST  RATE_ADS1015_3300SPS
+#define ADS_RATE_MID  RATE_ADS1015_490SPS
 #define ADS_RATE_SLOW  RATE_ADS1015_250SPS
 #endif
 
@@ -455,10 +457,10 @@ void measureVoltage() {
 
     if(cfSuppress){
       ads.setDataRate(ADS_RATE_SLOW);
-      Serial.print("64sps");
+      //Serial.print("64sps / 250 (1015)");
     }else{
-      ads.setDataRate(ADS_RATE_FAST);
-      Serial.print("860sps");
+      ads.setDataRate(ADS_RATE_MID);
+      //Serial.print("860sps / 3300 (1015)"); //Out of date
     }
     prevcfSuppress = cfSuppress;
   }
@@ -480,17 +482,12 @@ void measureVoltage() {
   vActual           = countV * kGainFactors[gainIndexVolt] / 1000.0f;
   newVoltageReading = (vActual * vScale);// - 0.023;
 
-  // Exponential rolling average (same style as bridgeAvg)
-  if (fabs(newVoltageReading) > fabs(medianVoltage)) {
-    medianVoltage = medianVoltage + (newVoltageReading - medianVoltage) / 10.0f;
-  } else {
-    medianVoltage = medianVoltage + (newVoltageReading - medianVoltage) / 10.0f;
-  }
-  // Note: both branches are the same -- simple EMA with alpha=0.1
-  // Keeping structure parallel to bridgeAvg for consistency
+  //The below line tests using the straight reading instead of an EMA
+  //medianVoltage = newVoltageReading;
+  medianVoltage += (newVoltageReading - medianVoltage) / 10.0f;
 
   // Zero-threshold (fixed; pot line retained but commented out)
-  CorFTrig = 0.5; //this was 0.25 for the unit that has distinct boards
+  CorFTrig = 0.3; //this was 0.25 for the unit that has distinct boards
   //CorFTrig = (analogRead(zeroThreshold) / 4095.0f) * 0.2f;
 
   prevVzero = Vzero;
@@ -503,7 +500,7 @@ void measureVoltage() {
       acSumSq       = 0.0;
       acSampleCount = 0;
     }
-    displayVoltage = vrmsVoltage - 0.35;
+    displayVoltage = vrmsVoltage;
 
     // Zero-crossing debounce for open-lead detect.
     // The instantaneous reading must stay below CorFTrig for a full quarter
@@ -534,7 +531,7 @@ void measureVoltage() {
 
   } else {
     // ── DC mode: original behaviour ───────────────────────────────
-    displayVoltage = cfSuppress ? newVoltageReading : (medianVoltage - 0.35);
+    displayVoltage = cfSuppress ? newVoltageReading : medianVoltage;
     
     if (fabs(medianVoltage) < CorFTrig && !manual && vRefEnable && !cfSuppress) {
       Vzero     = true;
@@ -564,34 +561,31 @@ void ClosedOrFloat() {
   // First bridge sample
   digitalWrite(VbridgePin, BRIDGE_ON);
   delay(1);
-  //ads.setDataRate(ADS_RATE_FAST);
+  ads.setDataRate(ADS_RATE_FAST);
   ads.setGain(GAIN_EIGHT);
   float bv1 = ads.readADC_Differential_0_1()
               * (GAIN_FACTOR_8 / 1000.0f);
   digitalWrite(VbridgePin, BRIDGE_OFF);
-/*
-  // Second bridge sample
-  digitalWrite(VbridgePin, BRIDGE_ON);
-  float bv2 = ads.readADC_Differential_0_1()
-              * (0.0078125f / 1000.0f);
-  digitalWrite(VbridgePin, BRIDGE_OFF);
+  ads.setDataRate(ADS_RATE_MID);
+  /*
+    // Second bridge sample
+    digitalWrite(VbridgePin, BRIDGE_ON);
+    float bv2 = ads.readADC_Differential_0_1()
+                * (0.0078125f / 1000.0f);
+    digitalWrite(VbridgePin, BRIDGE_OFF);
 
-  bridgeV = (fabs(bv1) + fabs(bv2)) / 2.0f;
-*/
-  bridgeV = bv1;
-  if(fabs(bridgeV)>fabs(bridgeAvg)){
-      bridgeAvg = bridgeAvg - (fabs(bridgeV)/10);      
+    bridgeV = (fabs(bv1) + fabs(bv2)) / 2.0f;
+  */
+    bridgeV = bv1;
+    bridgeAvg += (fabs(bridgeV) - bridgeAvg) / 10.0f;
+
+  /*
+    if(fabs(bridgeV)-fabs(bridgeAvg)>bridgeAvgDiff){
+      bridgeAvgDiff=bridgeAvgDiff-((fabs(bridgeV)-fabs(bridgeAvg))/10);
     }else{
-      bridgeAvg = bridgeAvg + (fabs(bridgeV)/10);
-  }
-
-/*
-  if(fabs(bridgeV)-fabs(bridgeAvg)>bridgeAvgDiff){
-    bridgeAvgDiff=bridgeAvgDiff-((fabs(bridgeV)-fabs(bridgeAvg))/10);
-  }else{
-    bridgeAvgDiff=bridgeAvgDiff+((fabs(bridgeV)-fabs(bridgeAvg))/10);
-  }
-*/
+      bridgeAvgDiff=bridgeAvgDiff+((fabs(bridgeV)-fabs(bridgeAvg))/10);
+    }
+  */
 
   // ── Classification ──
   if (fabs(bridgeV) < vClosedThres) {
@@ -780,9 +774,9 @@ void updateDisplay() {
     const int barY      = 98;
     const int barTotal  = 200;
     const int barH      = 6;
-    const int thresh100 = barTotal / 3;   // 100% mark at 67px
+    const int thresh100 = barTotal / 2;   // 100% mark at 67px
 
-    float pct = fabs(bridgeAvg) / (vClosedThres * 3.0f);
+    float pct = fabs(bridgeAvg) / (vClosedThres * 2.0f);
     int barW  = constrain((int)(pct * barTotal), 0, barTotal);
 
     if (barW <= thresh100) {
