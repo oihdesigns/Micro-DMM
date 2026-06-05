@@ -17,11 +17,23 @@ class GigaTestGUI:
         self.root = root
         self.root.title("Giga ADC Performance - Plotting & Export")
         
+        # Default bit depth paired with each sample rate (STM32H747 ADC limits)
+        self.RATE_BIT_DEFAULTS = {
+            "8000":    "16",
+            "16000":   "16",
+            "44100":   "16",
+            "100000":  "14",
+            "250000":  "12",
+            "500000":  "12",
+            "1000000": "10",
+        }
+
         self.port_var = tk.StringVar()
         self.bit_var = tk.StringVar(value="12")
         self.time_var = tk.StringVar(value="1000")
         self.smooth_var = tk.StringVar(value="7")
         self.log_var = tk.StringVar(value="1000")
+        self.rate_var = tk.StringVar(value="500000")
         
         self.captured_data = {} # Stores {pin_name: [calibrated_values]}
         self.capture_time_ms = 1000
@@ -52,8 +64,16 @@ class GigaTestGUI:
         self.port_combo = ttk.Combobox(top_frame, textvariable=self.port_var, values=ports, width=12)
         self.port_combo.pack(side="left", padx=5)
         
-        for label, var, w in [("Bits:", self.bit_var, 4), ("MS:", self.time_var, 6), 
-                             ("Smooth:", self.smooth_var, 4), ("Points:", self.log_var, 5)]:
+        ttk.Label(top_frame, text="Rate (Hz):").pack(side="left", padx=2)
+        self.rate_combo = ttk.Combobox(
+            top_frame, textvariable=self.rate_var,
+            values=list(self.RATE_BIT_DEFAULTS.keys()), width=9, state="readonly"
+        )
+        self.rate_combo.pack(side="left", padx=5)
+        self.rate_combo.bind("<<ComboboxSelected>>", self._on_rate_change)
+
+        for label, var, w in [("Bits:", self.bit_var, 4), ("MS:", self.time_var, 6),
+                               ("Smooth:", self.smooth_var, 4), ("Points:", self.log_var, 5)]:
             ttk.Label(top_frame, text=label).pack(side="left", padx=2)
             ttk.Entry(top_frame, textvariable=var, width=w).pack(side="left", padx=5)
 
@@ -118,6 +138,11 @@ class GigaTestGUI:
         self.fit_result_label = ttk.Label(fit_frame, text="No fit yet.", anchor="w")
         self.fit_result_label.pack(fill="x", padx=6, pady=3)
 
+    def _on_rate_change(self, _event=None):
+        paired = self.RATE_BIT_DEFAULTS.get(self.rate_var.get())
+        if paired:
+            self.bit_var.set(paired)
+
     def start_test_thread(self):
         threading.Thread(target=self.run_test, daemon=True).start()
 
@@ -143,13 +168,18 @@ class GigaTestGUI:
         
         try:
             with serial.Serial(self.port_var.get(), 115200, timeout=15) as ser:
-                cmd = f"PINS:{','.join(active_pins)}|BITS:{self.bit_var.get()}|TIME:{self.time_var.get()}|SMOOTH:{self.smooth_var.get()}|LOG:{self.log_var.get()}\n"
+                cmd = f"PINS:{','.join(active_pins)}|BITS:{self.bit_var.get()}|TIME:{self.time_var.get()}|SMOOTH:{self.smooth_var.get()}|LOG:{self.log_var.get()}|RATE:{self.rate_var.get()}\n"
                 ser.write(cmd.encode())
                 self.tree.delete(*self.tree.get_children())
                 
                 while True:
                     line = ser.readline().decode().strip()
                     if not line: continue
+                    if line.startswith("ERR:ADC_BEGIN_FAILED"):
+                        messagebox.showerror("ADC Error",
+                            f"Board rejected {self.rate_var.get()} Hz at {self.bit_var.get()}-bit.\n"
+                            "Try a lower rate or fewer bits.")
+                        return
                     if "DONE" in line: break
                     
                     # Handle Summary Stats
