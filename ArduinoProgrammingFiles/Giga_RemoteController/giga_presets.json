@@ -1,0 +1,67 @@
+{
+  "Board1": {
+    "rate": "500000",
+    "bits": "12",
+    "time": "1000",
+    "smooth": "7",
+    "log": "1000",
+    "pins": {
+      "A0": {
+        "active": true,
+        "type": "V",
+        "offset": "1.612407",
+        "scale": "45.013545",
+        "true_val": "40"
+      },
+      "A1": {
+        "active": true,
+        "type": "I",
+        "offset": "1.613423",
+        "scale": "10.899719",
+        "true_val": "3.0"
+      },
+      "A2": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A3": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A4": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A5": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A6": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A7": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      }
+    }
+  }
+}
