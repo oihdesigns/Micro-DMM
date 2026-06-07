@@ -55,6 +55,10 @@ class GigaTestGUI:
         self.diff_neg_var    = tk.StringVar(value="A5")
         self._plot_lines     = {}   # {pin: (Line2D, axes)}
 
+        self.trig_enable   = tk.BooleanVar(value=False)
+        self.trig_mode_var = tk.StringVar(value="Normal")
+        self._active_ser   = None
+
         self.preset_var  = tk.StringVar()
         self.preset_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "giga_presets.json")
         self.presets     = {}
@@ -65,11 +69,12 @@ class GigaTestGUI:
             s_val = "44.77" if name == "A0" else ("10.74" if name == "A1" else "1.0")
             o_val = "1.6204" if name in ("A0", "A1") else "0.0"
             self.pin_configs[name] = {
-                "active":   tk.BooleanVar(value=(name == "A0")),
-                "type":     tk.StringVar(value="V"),
-                "offset":   tk.StringVar(value=o_val),
-                "scale":    tk.StringVar(value=s_val),
-                "true_val": tk.StringVar(value="1.0"),
+                "active":      tk.BooleanVar(value=(name == "A0")),
+                "type":        tk.StringVar(value="V"),
+                "offset":      tk.StringVar(value=o_val),
+                "scale":       tk.StringVar(value=s_val),
+                "true_val":    tk.StringVar(value="1.0"),
+                "trig_thresh": tk.StringVar(value="0.5"),
             }
 
         self._load_presets_file()
@@ -150,6 +155,40 @@ class GigaTestGUI:
                   text="(pins auto-captured; check both above to also see them individually)",
                   foreground="gray").pack(side="left", padx=10)
 
+        # ── Trigger logging ───────────────────────────────────────────
+        trig_frame = ttk.LabelFrame(self.root, text="Trigger Logging  (engineering units, OR logic)")
+        trig_frame.pack(fill="x", padx=10, pady=(0, 5))
+
+        left_trig = ttk.Frame(trig_frame)
+        left_trig.pack(side="left", padx=8, pady=3)
+        mode_row = ttk.Frame(left_trig)
+        mode_row.pack(anchor="w")
+        ttk.Checkbutton(mode_row, text="Enable", variable=self.trig_enable).pack(side="left")
+        ttk.Combobox(mode_row, textvariable=self.trig_mode_var,
+                     values=["Normal", "Midpoint"], width=9,
+                     state="readonly").pack(side="left", padx=(6, 0))
+        self.trig_hint_label = ttk.Label(left_trig, text="", foreground="gray")
+        self.trig_hint_label.pack(anchor="w", pady=(2, 0))
+
+        ttk.Separator(trig_frame, orient="vertical").pack(side="left", fill="y", padx=6, pady=4)
+
+        thresh_grid = ttk.Frame(trig_frame)
+        thresh_grid.pack(side="left", pady=3)
+        for i in range(8):
+            name = f"A{i}"
+            row, col = divmod(i, 4)
+            ttk.Label(thresh_grid, text=f"{name}:").grid(
+                row=row, column=col * 2, padx=(8, 1), pady=2, sticky="e")
+            ttk.Entry(thresh_grid, textvariable=self.pin_configs[name]["trig_thresh"], width=7).grid(
+                row=row, column=col * 2 + 1, padx=(0, 4), pady=2)
+
+        self.trig_enable.trace_add("write",   lambda *_: self._update_trig_hint())
+        self.trig_mode_var.trace_add("write", lambda *_: self._update_trig_hint())
+        self.bit_var.trace_add("write",       lambda *_: self._update_trig_hint())
+        for _n in [f"A{i}" for i in range(8)]:
+            self.pin_configs[_n]["trig_thresh"].trace_add("write", lambda *_: self._update_trig_hint())
+        self._update_trig_hint()
+
         # ── Presets ───────────────────────────────────────────────────
         preset_frame = ttk.LabelFrame(self.root, text="Presets")
         preset_frame.pack(fill="x", padx=10, pady=(0, 5))
@@ -168,9 +207,11 @@ class GigaTestGUI:
         self.run_btn    = ttk.Button(btn_frame, text="Run Test",   command=self.start_test_thread)
         self.export_btn = ttk.Button(btn_frame, text="Export CSV", command=self.export_csv,  state="disabled")
         self.fit_btn    = ttk.Button(btn_frame, text="Fit",        command=self.run_fit,      state="disabled")
+        self.abort_btn  = ttk.Button(btn_frame, text="Abort",      command=self._abort_capture, state="disabled")
         self.run_btn.pack(side="left", pady=5)
         self.export_btn.pack(side="left", padx=10)
         ttk.Button(btn_frame, text="Reset Cal", command=self._reset_cal).pack(side="left", padx=10)
+        self.abort_btn.pack(side="left", padx=10)
         ttk.Separator(btn_frame, orient="vertical").pack(side="left", fill="y", padx=10, pady=4)
         ttk.Label(btn_frame, text="Waveform:").pack(side="left")
         ttk.Combobox(btn_frame, textvariable=self.fit_var, values=["DC", "Square", "Sine"],
@@ -178,11 +219,11 @@ class GigaTestGUI:
         self.fit_btn.pack(side="left")
 
         # ── Results table ─────────────────────────────────────────────
-        cols = ("Pin", "Samples", "Min", "Max", "Mean", "RMS", "StdDev_S")
+        cols = ("Pin", "Samples", "Triggers", "Min", "Max", "Mean", "RMS", "StdDev_S")
         self.tree = ttk.Treeview(self.root, columns=cols, show="headings", height=5)
         for col in cols:
             self.tree.heading(col, text=col)
-            self.tree.column(col, width=90, anchor="center")
+            self.tree.column(col, width=80, anchor="center")
         self.tree.pack(padx=10, pady=5, fill="x")
 
         # ── Plot ──────────────────────────────────────────────────────
@@ -214,6 +255,45 @@ class GigaTestGUI:
             self.port_var.set(ports[0] if ports else "")
 
     # ------------------------------------------------------------------
+    # Trigger logging helpers
+    # ------------------------------------------------------------------
+    def _trig_raw_counts(self):
+        """Return list of 8 raw-count thresholds (0 = disabled) for A0–A7."""
+        if not self.trig_enable.get():
+            return [0] * 8
+        try:
+            bits   = int(self.bit_var.get())
+            v_step = 3.3 / (2 ** bits - 1)
+        except (ValueError, ZeroDivisionError):
+            return [0] * 8
+        result = []
+        for name in [f"A{i}" for i in range(8)]:
+            cfg = self.pin_configs[name]
+            try:
+                eng   = float(cfg["trig_thresh"].get())
+                scale = float(cfg["scale"].get())
+                result.append(max(1, round(eng / abs(scale) / v_step)) if eng > 0 and scale != 0 else 0)
+            except (ValueError, ZeroDivisionError):
+                result.append(0)
+        return result
+
+    def _update_trig_hint(self):
+        if not self.trig_enable.get():
+            self.trig_hint_label.config(text="disabled — evenly-spaced points")
+            return
+        raws  = self._trig_raw_counts()
+        armed = [f"A{i}:{raws[i]}cts" for i in range(8) if raws[i] > 0]
+        mode  = self.trig_mode_var.get()
+        try:
+            pts = int(self.log_var.get())
+            mid_note = f"  |  pre={pts//2} post={pts-pts//2}" if mode == "Midpoint" else ""
+        except ValueError:
+            mid_note = ""
+        self.trig_hint_label.config(
+            text=(f"{mode} — {len(armed)} channel(s) armed: {', '.join(armed)}{mid_note}"
+                  if armed else f"{mode} — no thresholds > 0"))
+
+    # ------------------------------------------------------------------
     # Presets
     # ------------------------------------------------------------------
     def _load_presets_file(self):
@@ -240,11 +320,14 @@ class GigaTestGUI:
             messagebox.showwarning("Presets", "Maximum 10 presets reached — delete one first.")
             return
         self.presets[name] = {
-            "rate":   self.rate_var.get(),
-            "bits":   self.bit_var.get(),
-            "time":   self.time_var.get(),
-            "smooth": self.smooth_var.get(),
-            "log":    self.log_var.get(),
+            "rate":         self.rate_var.get(),
+            "bits":         self.bit_var.get(),
+            "time":         self.time_var.get(),
+            "smooth":       self.smooth_var.get(),
+            "log":          self.log_var.get(),
+            "trig_enable":  self.trig_enable.get(),
+            "trig_mode":    self.trig_mode_var.get(),
+            "trig_thresh":  {n: cfg["trig_thresh"].get() for n, cfg in self.pin_configs.items()},
             "pins": {
                 n: {
                     "active":   cfg["active"].get(),
@@ -265,11 +348,16 @@ class GigaTestGUI:
             messagebox.showwarning("Presets", f"No preset named '{name}'.")
             return
         p = self.presets[name]
-        self.rate_var.set(p.get("rate",   "500000"))
+        self.rate_var.set(p.get("rate",    "500000"))
         self.bit_var.set(p.get("bits",    "12"))
         self.time_var.set(p.get("time",   "1000"))
         self.smooth_var.set(p.get("smooth", "7"))
         self.log_var.set(p.get("log",     "1000"))
+        self.trig_enable.set(p.get("trig_enable", False))
+        self.trig_mode_var.set(p.get("trig_mode", "Normal"))
+        saved_thresh = p.get("trig_thresh", {})
+        for n, cfg in self.pin_configs.items():
+            cfg["trig_thresh"].set(saved_thresh.get(n, "0.5") if isinstance(saved_thresh, dict) else "0.5")
         for n, vals in p.get("pins", {}).items():
             if n in self.pin_configs:
                 self.pin_configs[n]["active"].set(vals.get("active",   False))
@@ -305,6 +393,14 @@ class GigaTestGUI:
         for cfg in self.pin_configs.values():
             cfg["offset"].set("0.0")
             cfg["scale"].set("1.0")
+
+    def _abort_capture(self):
+        ser = self._active_ser
+        if ser and ser.is_open:
+            try:
+                ser.write(b"!ABORT\n")
+            except Exception:
+                pass
 
     def _set_zero(self, pin_name):
         raw = self._mean_raw_voltage(pin_name)
@@ -367,15 +463,23 @@ class GigaTestGUI:
         self.capture_time_ms = int(self.time_var.get())
 
         try:
-            with serial.Serial(self.port_var.get(), 115200, timeout=15) as ser:
+            with serial.Serial(self.port_var.get(), 115200, timeout=60) as ser:
+                trig_raws = self._trig_raw_counts()
+                mid_flag  = 1 if (self.trig_enable.get() and self.trig_mode_var.get() == "Midpoint") else 0
+                if mid_flag:
+                    self._active_ser = ser
+                    self.abort_btn.config(state="normal")
                 cmd = (f"PINS:{','.join(active_pins)}"
                        f"|BITS:{self.bit_var.get()}"
                        f"|TIME:{self.time_var.get()}"
                        f"|SMOOTH:{self.smooth_var.get()}"
                        f"|LOG:{self.log_var.get()}"
-                       f"|RATE:{self.rate_var.get()}\n")
+                       f"|RATE:{self.rate_var.get()}"
+                       f"|TRIG:{','.join(str(t) for t in trig_raws)}"
+                       f"|MID:{mid_flag}\n")
                 ser.write(cmd.encode())
                 self.tree.delete(*self.tree.get_children())
+                effective_time_ms = self.capture_time_ms
 
                 while True:
                     line = ser.readline().decode().strip()
@@ -387,6 +491,10 @@ class GigaTestGUI:
                             "Try a lower rate or fewer bits.")
                         return
                     if "DONE" in line:
+                        try:
+                            effective_time_ms = int(line.split("|ELAPSED:")[1])
+                        except (IndexError, ValueError):
+                            pass
                         break
 
                     if "PIN:" in line:
@@ -397,7 +505,7 @@ class GigaTestGUI:
                         v_step = 3.3 / (math.pow(2, int(p['BITS'])) - 1)
                         cal    = lambda v: (float(v) * v_step - offset) * scale
                         self.tree.insert("", "end", values=(
-                            pn, p['COUNT'],
+                            pn, p['COUNT'], p.get('LOGGED', '—'),
                             f"{cal(p['MIN']):.4f}", f"{cal(p['MAX']):.4f}",
                             f"{cal(p['MEAN']):.4f}", f"{cal(p['RMS']):.4f}",
                             f"{float(p['STD']) * v_step * scale:.4f}",
@@ -425,7 +533,7 @@ class GigaTestGUI:
                         ]
                         arr = np.array(self.captured_data[diff_key])
                         self.tree.insert("", "end", values=(
-                            diff_key, len(arr),
+                            diff_key, len(arr), len(arr),
                             f"{arr.min():.4f}", f"{arr.max():.4f}",
                             f"{arr.mean():.4f}", f"{np.sqrt(np.mean(arr**2)):.4f}",
                             f"{arr.std(ddof=1):.4f}",
@@ -433,12 +541,15 @@ class GigaTestGUI:
                     for p in diff_auto:
                         self.captured_data.pop(p, None)
 
+                self.capture_time_ms = effective_time_ms
                 self.update_plot()
                 self.export_btn.config(state="normal")
                 self.fit_btn.config(state="normal")
         except Exception as e:
             messagebox.showerror("Error", str(e))
         finally:
+            self._active_ser = None
+            self.abort_btn.config(state="disabled")
             self.run_btn.config(state="normal")
 
     # ------------------------------------------------------------------
