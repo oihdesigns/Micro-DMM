@@ -53,6 +53,18 @@ class GigaTestGUI:
         self.diff_enable     = tk.BooleanVar(value=False)
         self.diff_pos_var    = tk.StringVar(value="A4")
         self.diff_neg_var    = tk.StringVar(value="A5")
+        self.diff_type_var   = tk.StringVar(value="V")
+        self.diff_offset_var = tk.StringVar(value="0.0")
+        self.diff_scale_var  = tk.StringVar(value="1.0")
+        self.diff_true_var   = tk.StringVar(value="1.0")
+
+        self.diff2_enable     = tk.BooleanVar(value=False)
+        self.diff2_pos_var    = tk.StringVar(value="A2")
+        self.diff2_neg_var    = tk.StringVar(value="A3")
+        self.diff2_type_var   = tk.StringVar(value="V")
+        self.diff2_offset_var = tk.StringVar(value="0.0")
+        self.diff2_scale_var  = tk.StringVar(value="1.0")
+        self.diff2_true_var   = tk.StringVar(value="1.0")
         self._plot_lines     = {}   # {pin: (Line2D, axes)}
 
         self.trig_enable   = tk.BooleanVar(value=False)
@@ -107,53 +119,72 @@ class GigaTestGUI:
             ttk.Entry(top, textvariable=var, width=w).pack(side="left", padx=5)
 
         # ── Calibration grid ──────────────────────────────────────────
-        # Per group (7 cols): [Pin/chk] [Type] [Offset] [Scale] [Zero] [True Val] [Scale btn]
-        # Left group cols 0-6 | gap col 7 | Right group cols 8-14
+        # Channels as columns (A0-A7), fields as rows — 8×7 transposed layout
         pin_frame = ttk.LabelFrame(self.root, text="Calibration: (Raw_V − Offset) × Scale")
         pin_frame.pack(fill="x", padx=10, pady=5)
 
-        hdr = ["Pin", "Type", "Offset", "Scale", "", "True Val", ""]
-        for c, txt in enumerate(hdr):
-            ttk.Label(pin_frame, text=txt, foreground="gray").grid(row=0, column=c,     padx=2)
-            ttk.Label(pin_frame, text=txt, foreground="gray").grid(row=0, column=c + 8, padx=2)
+        for r, lbl in enumerate(["", "Type", "Offset", "Scale", "", "True Val", ""]):
+            ttk.Label(pin_frame, text=lbl, foreground="gray").grid(
+                row=r, column=0, padx=(6, 3), sticky="e")
 
         for i in range(8):
-            name    = f"A{i}"
-            col_off = 8 if i > 3 else 0
-            row     = (i % 4) + 1
-            cfg     = self.pin_configs[name]
-
+            name = f"A{i}"
+            col  = i + 1
+            cfg  = self.pin_configs[name]
             ttk.Checkbutton(pin_frame, text=name, variable=cfg["active"]).grid(
-                row=row, column=0 + col_off, padx=5, sticky="w")
+                row=0, column=col, padx=4, pady=(3, 1))
             ttk.Combobox(pin_frame, textvariable=cfg["type"], values=["V", "I"],
-                         width=3, state="readonly").grid(
-                row=row, column=1 + col_off, padx=2)
-            ttk.Entry(pin_frame, textvariable=cfg["offset"], width=8).grid(
-                row=row, column=2 + col_off, padx=2)
-            ttk.Entry(pin_frame, textvariable=cfg["scale"], width=8).grid(
-                row=row, column=3 + col_off, padx=2)
+                         width=3, state="readonly").grid(row=1, column=col, padx=3, pady=1)
+            ttk.Entry(pin_frame, textvariable=cfg["offset"], width=7).grid(
+                row=2, column=col, padx=3, pady=1)
+            ttk.Entry(pin_frame, textvariable=cfg["scale"], width=7).grid(
+                row=3, column=col, padx=3, pady=1)
             ttk.Button(pin_frame, text="Zero", width=5,
                        command=lambda n=name: self._set_zero(n)).grid(
-                row=row, column=4 + col_off, padx=2)
-            ttk.Entry(pin_frame, textvariable=cfg["true_val"], width=6).grid(
-                row=row, column=5 + col_off, padx=2)
+                row=4, column=col, padx=3, pady=1)
+            ttk.Entry(pin_frame, textvariable=cfg["true_val"], width=5).grid(
+                row=5, column=col, padx=3, pady=1)
             ttk.Button(pin_frame, text="Scale", width=5,
                        command=lambda n=name: self._set_scale(n)).grid(
-                row=row, column=6 + col_off, padx=2)
+                row=6, column=col, padx=3, pady=(1, 3))
 
         # ── Pseudo-differential ───────────────────────────────────────
         diff_frame = ttk.LabelFrame(self.root, text="Pseudo-Differential")
         diff_frame.pack(fill="x", padx=10, pady=(0, 5))
-        ttk.Checkbutton(diff_frame, text="Enable", variable=self.diff_enable).pack(side="left", padx=5, pady=3)
-        ttk.Label(diff_frame, text="(+)").pack(side="left")
-        ttk.Combobox(diff_frame, textvariable=self.diff_pos_var,
-                     values=[f"A{i}" for i in range(8)], width=5, state="readonly").pack(side="left", padx=3)
-        ttk.Label(diff_frame, text=" − ").pack(side="left")
-        ttk.Combobox(diff_frame, textvariable=self.diff_neg_var,
-                     values=[f"A{i}" for i in range(8)], width=5, state="readonly").pack(side="left", padx=3)
+
+        for c, txt in enumerate(["", "(+)", "−", "(−)", "Type", "Offset", "Scale", "True Val", ""]):
+            ttk.Label(diff_frame, text=txt, foreground="gray").grid(
+                row=0, column=c, padx=4, pady=(3, 0))
+
+        def _diff_row(row, en, pv, nv, tv, ov, sv, trv, scale_cmd):
+            ttk.Checkbutton(diff_frame, text=f"Diff {row}", variable=en).grid(
+                row=row, column=0, padx=5, pady=2, sticky="w")
+            ttk.Combobox(diff_frame, textvariable=pv,
+                         values=[f"A{i}" for i in range(8)], width=5,
+                         state="readonly").grid(row=row, column=1, padx=3)
+            ttk.Label(diff_frame, text="−").grid(row=row, column=2)
+            ttk.Combobox(diff_frame, textvariable=nv,
+                         values=[f"A{i}" for i in range(8)], width=5,
+                         state="readonly").grid(row=row, column=3, padx=3)
+            ttk.Combobox(diff_frame, textvariable=tv, values=["V", "I"],
+                         width=3, state="readonly").grid(row=row, column=4, padx=3)
+            ttk.Entry(diff_frame, textvariable=ov, width=8).grid(row=row, column=5, padx=3)
+            ttk.Entry(diff_frame, textvariable=sv, width=8).grid(row=row, column=6, padx=3)
+            ttk.Entry(diff_frame, textvariable=trv, width=6).grid(row=row, column=7, padx=3)
+            ttk.Button(diff_frame, text="Scale", width=5,
+                       command=scale_cmd).grid(row=row, column=8, padx=3)
+
+        _diff_row(1, self.diff_enable,  self.diff_pos_var,  self.diff_neg_var,
+                  self.diff_type_var,  self.diff_offset_var,  self.diff_scale_var,
+                  self.diff_true_var,  self._set_diff_scale)
+        _diff_row(2, self.diff2_enable, self.diff2_pos_var, self.diff2_neg_var,
+                  self.diff2_type_var, self.diff2_offset_var, self.diff2_scale_var,
+                  self.diff2_true_var, self._set_diff2_scale)
+
         ttk.Label(diff_frame,
                   text="(pins auto-captured; check both above to also see them individually)",
-                  foreground="gray").pack(side="left", padx=10)
+                  foreground="gray").grid(row=3, column=0, columnspan=9,
+                                          sticky="w", padx=5, pady=(1, 3))
 
         # ── Trigger logging ───────────────────────────────────────────
         trig_frame = ttk.LabelFrame(self.root, text="Trigger Logging  (engineering units, OR logic)")
@@ -325,6 +356,20 @@ class GigaTestGUI:
             "time":         self.time_var.get(),
             "smooth":       self.smooth_var.get(),
             "log":          self.log_var.get(),
+            "diff_enable":  self.diff_enable.get(),
+            "diff_pos":     self.diff_pos_var.get(),
+            "diff_neg":     self.diff_neg_var.get(),
+            "diff_type":    self.diff_type_var.get(),
+            "diff_offset":  self.diff_offset_var.get(),
+            "diff_scale":   self.diff_scale_var.get(),
+            "diff_true":    self.diff_true_var.get(),
+            "diff2_enable": self.diff2_enable.get(),
+            "diff2_pos":    self.diff2_pos_var.get(),
+            "diff2_neg":    self.diff2_neg_var.get(),
+            "diff2_type":   self.diff2_type_var.get(),
+            "diff2_offset": self.diff2_offset_var.get(),
+            "diff2_scale":  self.diff2_scale_var.get(),
+            "diff2_true":   self.diff2_true_var.get(),
             "trig_enable":  self.trig_enable.get(),
             "trig_mode":    self.trig_mode_var.get(),
             "trig_thresh":  {n: cfg["trig_thresh"].get() for n, cfg in self.pin_configs.items()},
@@ -353,6 +398,20 @@ class GigaTestGUI:
         self.time_var.set(p.get("time",   "1000"))
         self.smooth_var.set(p.get("smooth", "7"))
         self.log_var.set(p.get("log",     "1000"))
+        self.diff_enable.set(p.get("diff_enable",  False))
+        self.diff_pos_var.set(p.get("diff_pos",    "A4"))
+        self.diff_neg_var.set(p.get("diff_neg",    "A5"))
+        self.diff_type_var.set(p.get("diff_type",   "V"))
+        self.diff_offset_var.set(p.get("diff_offset", "0.0"))
+        self.diff_scale_var.set(p.get("diff_scale",  "1.0"))
+        self.diff_true_var.set(p.get("diff_true",   "1.0"))
+        self.diff2_enable.set(p.get("diff2_enable", False))
+        self.diff2_pos_var.set(p.get("diff2_pos",   "A2"))
+        self.diff2_neg_var.set(p.get("diff2_neg",   "A3"))
+        self.diff2_type_var.set(p.get("diff2_type",  "V"))
+        self.diff2_offset_var.set(p.get("diff2_offset", "0.0"))
+        self.diff2_scale_var.set(p.get("diff2_scale",  "1.0"))
+        self.diff2_true_var.set(p.get("diff2_true",  "1.0"))
         self.trig_enable.set(p.get("trig_enable", False))
         self.trig_mode_var.set(p.get("trig_mode", "Normal"))
         saved_thresh = p.get("trig_thresh", {})
@@ -388,6 +447,34 @@ class GigaTestGUI:
         offset = float(cfg["offset"].get())
         # Reverse: cal = (raw - offset) * scale  →  raw = cal/scale + offset
         return float(np.mean(data)) / scale + offset
+
+    def _set_diff2_scale(self):
+        self._do_diff_scale(self.diff2_pos_var, self.diff2_neg_var,
+                            self.diff2_scale_var, self.diff2_true_var)
+
+    def _do_diff_scale(self, pos_var, neg_var, scale_var, true_var):
+        diff_key = f"{pos_var.get()}-{neg_var.get()}"
+        data = self.captured_data.get(diff_key)
+        if not data:
+            messagebox.showwarning("No Data", "Run a capture first to scale the diff channel.")
+            return
+        try:
+            d_scale  = float(scale_var.get())
+            true_val = float(true_var.get())
+        except ValueError:
+            return
+        if abs(d_scale) < 1e-12:
+            return
+        mean_unscaled = float(np.mean(data)) / d_scale
+        if abs(mean_unscaled) < 1e-12:
+            messagebox.showerror("Scale Error",
+                "Diff signal is at zero — capture a non-zero reference first.")
+            return
+        scale_var.set(f"{true_val / mean_unscaled:.6f}")
+
+    def _set_diff_scale(self):
+        self._do_diff_scale(self.diff_pos_var, self.diff_neg_var,
+                            self.diff_scale_var, self.diff_true_var)
 
     def _reset_cal(self):
         for cfg in self.pin_configs.values():
@@ -425,14 +512,22 @@ class GigaTestGUI:
         cfg["scale"].set(f"{true_val / unscaled:.6f}")
 
     def _get_pin_type(self, pin_name):
-        """Returns 'V' or 'I'; derived channels (e.g. diff) default to 'V'."""
         cfg = self.pin_configs.get(pin_name)
-        return cfg["type"].get() if cfg else "V"
+        if cfg:
+            return cfg["type"].get()
+        if pin_name == f"{self.diff_pos_var.get()}-{self.diff_neg_var.get()}":
+            return self.diff_type_var.get()
+        if pin_name == f"{self.diff2_pos_var.get()}-{self.diff2_neg_var.get()}":
+            return self.diff2_type_var.get()
+        return "V"
 
     def _channel_color(self, pin_name):
         if pin_name in self.CHANNEL_COLORS:
             return self.CHANNEL_COLORS[pin_name]
-        # stable color for derived channels (e.g. "A4-A5") via name hash
+        if pin_name == f"{self.diff_pos_var.get()}-{self.diff_neg_var.get()}":
+            return "#FF0000"          # diff 1 — red
+        if pin_name == f"{self.diff2_pos_var.get()}-{self.diff2_neg_var.get()}":
+            return "#FF00FF"          # diff 2 — magenta
         import hashlib
         h = int(hashlib.md5(pin_name.encode()).hexdigest()[:6], 16)
         return f"#{(h >> 16) & 0xFF:02x}{(h >> 8) & 0xFF:02x}{h & 0xFF:02x}"
@@ -447,11 +542,15 @@ class GigaTestGUI:
         active_pins = [n for n, v in self.pin_configs.items() if v["active"].get()]
 
         diff_auto = set()
-        if self.diff_enable.get():
-            for p in [self.diff_pos_var.get(), self.diff_neg_var.get()]:
-                if p not in active_pins:
-                    active_pins.append(p)
-                    diff_auto.add(p)
+        for en, pv, nv in [
+            (self.diff_enable.get(),  self.diff_pos_var.get(),  self.diff_neg_var.get()),
+            (self.diff2_enable.get(), self.diff2_pos_var.get(), self.diff2_neg_var.get()),
+        ]:
+            if en:
+                for p in [pv, nv]:
+                    if p not in active_pins:
+                        active_pins.append(p)
+                        diff_auto.add(p)
 
         if not active_pins or not self.port_var.get():
             messagebox.showwarning("Error", "Check Port/Pins.")
@@ -522,24 +621,36 @@ class GigaTestGUI:
                             (float(v) * v_step - offset) * scale for v in raw_vals if v
                         ]
 
-                if self.diff_enable.get():
-                    pos = self.diff_pos_var.get()
-                    neg = self.diff_neg_var.get()
-                    if pos in self.captured_data and neg in self.captured_data:
-                        n        = min(len(self.captured_data[pos]), len(self.captured_data[neg]))
-                        diff_key = f"{pos}-{neg}"
-                        self.captured_data[diff_key] = [
-                            self.captured_data[pos][i] - self.captured_data[neg][i] for i in range(n)
-                        ]
-                        arr = np.array(self.captured_data[diff_key])
-                        self.tree.insert("", "end", values=(
-                            diff_key, len(arr), len(arr),
-                            f"{arr.min():.4f}", f"{arr.max():.4f}",
-                            f"{arr.mean():.4f}", f"{np.sqrt(np.mean(arr**2)):.4f}",
-                            f"{arr.std(ddof=1):.4f}",
-                        ))
-                    for p in diff_auto:
-                        self.captured_data.pop(p, None)
+                def _compute_diff(en, pos, neg, off_var, scale_var):
+                    if not en:
+                        return
+                    if pos not in self.captured_data or neg not in self.captured_data:
+                        return
+                    n        = min(len(self.captured_data[pos]), len(self.captured_data[neg]))
+                    diff_key = f"{pos}-{neg}"
+                    try:
+                        d_off   = float(off_var.get())
+                        d_scale = float(scale_var.get())
+                    except ValueError:
+                        d_off, d_scale = 0.0, 1.0
+                    self.captured_data[diff_key] = [
+                        (self.captured_data[pos][i] - self.captured_data[neg][i] - d_off) * d_scale
+                        for i in range(n)
+                    ]
+                    arr = np.array(self.captured_data[diff_key])
+                    self.tree.insert("", "end", values=(
+                        diff_key, len(arr), len(arr),
+                        f"{arr.min():.4f}", f"{arr.max():.4f}",
+                        f"{arr.mean():.4f}", f"{np.sqrt(np.mean(arr**2)):.4f}",
+                        f"{arr.std(ddof=1):.4f}",
+                    ))
+
+                _compute_diff(self.diff_enable.get(),  self.diff_pos_var.get(),  self.diff_neg_var.get(),
+                              self.diff_offset_var,  self.diff_scale_var)
+                _compute_diff(self.diff2_enable.get(), self.diff2_pos_var.get(), self.diff2_neg_var.get(),
+                              self.diff2_offset_var, self.diff2_scale_var)
+                for p in diff_auto:
+                    self.captured_data.pop(p, None)
 
                 self.capture_time_ms = effective_time_ms
                 self.update_plot()
@@ -577,7 +688,8 @@ class GigaTestGUI:
             n   = len(values)
             t   = [i * self.capture_time_ms / n for i in range(n)]
             ax  = self.ax2 if (self._get_pin_type(pin) == "I" and self.ax2) else self.ax
-            ln, = ax.plot(t, values, label=pin, color=self._channel_color(pin))
+            ln, = ax.plot(t, values, label=f"{pin} ({self._get_pin_type(pin)})",
+                          color=self._channel_color(pin))
             self._plot_lines[pin] = (ln, ax)
 
         self._refresh_legend()
@@ -685,16 +797,19 @@ class GigaTestGUI:
         if not path:
             return
         try:
-            max_len = max(len(v) for v in self.captured_data.values())
             pins    = list(self.captured_data.keys())
+            max_len = max(len(self.captured_data[p]) for p in pins)
+            headers = ["Time (ms)"] + [f"{p} ({self._get_pin_type(p)})" for p in pins]
             with open(path, "w", newline="") as f:
                 writer = csv.writer(f)
-                writer.writerow(pins)
+                writer.writerow(headers)
                 for i in range(max_len):
-                    writer.writerow([
-                        self.captured_data[p][i] if i < len(self.captured_data[p]) else ""
+                    t_ms = f"{i * self.capture_time_ms / max_len:.5g}"
+                    row  = [t_ms] + [
+                        f"{self.captured_data[p][i]:.5g}" if i < len(self.captured_data[p]) else ""
                         for p in pins
-                    ])
+                    ]
+                    writer.writerow(row)
             messagebox.showinfo("Success", "Data exported successfully.")
         except Exception as e:
             messagebox.showerror("Export Error", str(e))
