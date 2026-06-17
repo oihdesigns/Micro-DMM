@@ -65,45 +65,45 @@ static const uint32_t RATE_OPTIONS[] =
     {10000UL,44100UL,50000UL,100000UL,250000UL,500000UL,1000000UL};
 static const int N_RATE_OPT = 7;
 
+// Generated from giga_presets.json — 7 preset(s)
 static const Preset PRESETS[] = {
   { "Board1",
     1,16,25,1,5000,
-    { {true,1,1.612548f,44.462994f}, {true,2,1.613425f,10.900730f},
-      {false,1,0,1},{false,1,0,1},{false,1,0,1},{false,1,0,1},
-      {false,1,0,1},{false,1,0,1} },
-    {false,4,5,2,0,1}, {false,2,3,1,0,1} },
-
+    { {true,1,1.612548f,44.462994f},{true,2,1.613425f,10.900730f},{false,1,0.0f,1.0f},{false,1,0.0f,1.0f},
+      {false,1,0.0f,1.0f},{false,1,0.0f,1.0f},{false,1,0.0f,1.0f},{false,1,0.0f,1.0f} },
+    {false,4,5,1,0,1}, {false,2,3,1,0,1} },
   { "Board1 DiffA",
     1,16,25,1,5000,
-    { {true,1,1.612548f,44.462994f}, {true,2,1.613425f,10.900730f},
-      {false,1,0,1},{false,1,0,1},{false,1,0,1},{false,1,0,1},
-      {false,1,0,1},{false,1,0,1} },
+    { {true,1,1.612548f,44.462994f},{true,2,1.613425f,10.900730f},{false,1,0.0f,1.0f},{false,1,0.0f,1.0f},
+      {false,1,0.0f,1.0f},{false,1,0.0f,1.0f},{false,1,0.0f,1.0f},{false,1,0.0f,1.0f} },
     {false,4,5,2,0.0f,11.8f}, {false,2,3,1,0,1} },
-
-  { "Board1 5mOhm",
+  { "Board1 DiffA 5mOhm",
     3,14,30,2,2000,
-    { {true,1,1.612548f,44.462994f}, {false,2,1.613425f,41.124543f},
-      {false,1,0,1},{false,1,0,1},{false,1,0,1},{false,1,0,1},
-      {false,1,0,1},{false,1,0,1} },
-    {true,4,5,2,0.0f,44.107620f}, {false,2,3,1,0,1} },
-
+    { {true,1,1.612548f,44.462994f},{false,2,1.613425f,41.124543f},{false,1,0.0f,1.0f},{false,1,0.0f,1.0f},
+      {false,1,0.0f,1.0f},{false,1,0.0f,1.0f},{false,1,0.0f,1.0f},{false,1,0.0f,1.0f} },
+    {true,4,5,2,0.0f,44.107620f}, {false,2,3,1,0.0f,1.0f} },
   { "120VAC Board",
     3,14,50,1,4000,
-    { {false,2,0.0f,1.0f}, {false,2,1.613425f,41.124543f},
-      {false,1,0,1},{false,1,0,1},{false,1,0,1},{false,1,0,1},
-      {false,1,0,1},{false,1,0,1} },
-    {true,4,5,2,0.0f,1.181836f}, {true,3,2,1,0.0f,102.779803f} },
-
-  { "120VAC R4Nano",
-    1,16,50,1,1000,
-    { {false,2,0,1},{false,2,0,1},{false,1,0,1},{false,1,0,1},
-      {false,1,0,1},{false,1,0,1},{false,1,0,1},{false,1,0,1} },
-    {true,4,5,2,0.0f,1.623f}, {true,7,6,1,0.0f,166.2f} },
+    { {true,2,0,1},{false,2,1.613425f,41.124543f},{false,1,0.0f,1.0f},{false,1,0.0f,1.0f},
+      {false,1,0.0f,1.0f},{false,1,0.0f,1.0f},{false,1,0.0f,1.0f},{false,1,0.0f,1.0f} },
+    {true,4,5,2,0.0f,1.181836f}, {true,2,3,1,0.0f,102.779803f} },
+  { "120VAC Board 25A",
+    0,16,100,5,4000,
+    { {false,2,0,1},{false,2,1.613425f,41.124543f},{false,1,0.0f,1.0f},{false,1,0.0f,1.0f},
+      {false,1,0.0f,1.0f},{false,1,0.0f,1.0f},{false,1,0.0f,1.0f},{false,1,0.0f,1.0f} },
+    {true,3,2,2,0.0f,11.917674f}, {true,5,4,1,0.0f,102.508232f} },
+  { "47V board",
+    1,16,50,3,4000,
+    { {false,2,0,1},{false,2,1.613425f,41.124543f},{false,1,0.0f,1.0f},{false,1,0.0f,1.0f},
+      {false,1,0.0f,1.0f},{false,1,0.0f,1.0f},{false,1,0.0f,1.0f},{false,1,0.0f,1.0f} },
+    {true,3,2,2,0.0f,10.603871f}, {true,5,4,1,0.0f,22.550535f} },
 };
-static const int N_PRESETS = 5;
+static const int N_PRESETS = 6;
+
+
 
 // ── Screen state ──────────────────────────────────────────────────────────────
-enum Screen { SCR_SETTINGS, SCR_CAPTURING, SCR_PLOT, SCR_PRESETS, SCR_DIFF };
+enum Screen { SCR_SETTINGS, SCR_CAPTURING, SCR_PLOT, SCR_PRESETS, SCR_DIFF, SCR_LOGGER, SCR_LOGGING };
 static Screen currentScreen = SCR_SETTINGS;
 
 // ── GUI parameters ────────────────────────────────────────────────────────────
@@ -137,6 +137,31 @@ static int      lastMidRingHead=0, lastMidRingFill=0, lastMidPostCount=0, lastMi
 static bool     contMode   = false;
 static uint32_t lastContMs = 0;
 
+// ── Datalogger state ──────────────────────────────────────────────────────────
+static float    logThresh[N_CHANNELS]    = {};
+static float    logDiffThresh[2]         = {};
+static int      logIntervalMs            = 1000;
+static bool     logRunning               = false;
+static FILE*    logFile                  = nullptr;
+static int      logFileNum               = 0;
+static int      logRowCount              = 0;
+static uint32_t logStartMs               = 0;
+static uint32_t logStartUs               = 0;
+static uint32_t logLastWriteMs           = 0;
+static float    logLastCh[N_CHANNELS]    = {};
+static float    logLastDiff[2]           = {};
+static long     logSmoothBuf[N_CHANNELS] = {};
+static int      logSmoothTick            = 0;
+static float    logCurCh[N_CHANNELS]     = {};
+static float    logCurDiff[2]            = {};
+static uint32_t logLastDispMs            = 0;
+
+// ── Numpad overlay state ──────────────────────────────────────────────────────
+static bool  numpadActive = false;
+static char  numpadBuf[12] = "";
+static int   numpadTarget  = -1;   // 0-7=logThresh[ch], 8-9=logDiffThresh[d], 10=logIntervalMs
+static char  numpadTitle[24] = "";
+
 // ── Touch debounce ────────────────────────────────────────────────────────────
 static uint32_t       lastTouchMs        = 0;
 static const uint32_t TOUCH_DEBOUNCE_MS  = 250;
@@ -168,11 +193,10 @@ static const char* PARAM_LABELS[N_PARAMS] =
     {"Rate (Hz)","Bits","Time (ms)","Smooth","Log Points","Trig Thresh"};
 
 // Plot area — narrower to leave room for right axis labels
-static const int PLT_X = 62;
-static const int PLT_Y = HDR_H + 4;
-static const int PLT_W = DISP_W - PLT_X - 54;
-static const int PLT_H = DISP_H - HDR_H - 50;
-static const int LEG_Y = PLT_Y + PLT_H + 4;
+static const int PLT_X      = 62;
+static const int PLT_Y      = HDR_H + 4;
+static const int PLT_W      = DISP_W - PLT_X - 54;
+static const int STAT_ROW_H = 11;  // px per stats row below the plot
 
 // ── Calibration math ──────────────────────────────────────────────────────────
 static float vStep(int bits) { return 3.3f / (float)((1 << bits) - 1); }
@@ -249,7 +273,8 @@ static void drawSettingsScreen() {
     gfx.fillRect(0,0,DISP_W,HDR_H,C_PANEL);
     gfx.setTextColor(C_CYAN); gfx.setTextSize(3);
     gfx.setCursor(12,8); gfx.print("Giga ADC Capture");
-    drawBtn(DISP_W-160,2,156,HDR_H-4,C_BORDER,C_TEXT,"Presets",2);
+    drawBtn(DISP_W-164,2,78,HDR_H-4,C_BORDER,C_TEXT,"Presets",2);
+    drawBtn(DISP_W-82,2,78,HDR_H-4,C_BORDER,C_TEXT,"Logger",2);
 
     // Channel toggles — label shows type
     int cbw = DISP_W/N_CHANNELS;
@@ -299,14 +324,25 @@ static void drawSettingsScreen() {
 }
 
 // ── Presets screen ────────────────────────────────────────────────────────────
+static const int PRE_COLS  = 5;
+static const int PRE_ROWS  = 5;
+static const int PRE_CW    = DISP_W / PRE_COLS;          // 160 px per cell
+static const int PRE_RH    = (DISP_H - HDR_H) / PRE_ROWS; // 87 px per cell
+static const int PRE_BTN_W = PRE_CW - 4;                 // 156 px
+static const int PRE_BTN_H = PRE_RH - 3;                 // 84 px
+
 static void drawPresetsScreen() {
     gfx.fillScreen(C_BG);
     gfx.fillRect(0,0,DISP_W,HDR_H,C_PANEL);
     gfx.setTextColor(C_CYAN); gfx.setTextSize(3);
     gfx.setCursor(12,8); gfx.print("Select Preset");
     drawBtn(DISP_W-114,2,110,HDR_H-4,C_BORDER,C_TEXT,"< Back",2);
-    for(int i=0;i<N_PRESETS;i++) {
-        drawBtn(4,50+i*82,DISP_W-8,78,C_PANEL,C_TEXT,PRESETS[i].name,2);
+    int n = min(N_PRESETS, PRE_COLS * PRE_ROWS);
+    for(int i=0;i<n;i++) {
+        int bx = (i % PRE_COLS) * PRE_CW + 2;
+        int by = HDR_H + (i / PRE_COLS) * PRE_RH + 1;
+        int ts = (strlen(PRESETS[i].name) * 12 <= PRE_BTN_W) ? 2 : 1;
+        drawBtn(bx, by, PRE_BTN_W, PRE_BTN_H, C_PANEL, C_TEXT, PRESETS[i].name, ts);
     }
 }
 
@@ -378,6 +414,8 @@ static void updateProgress(uint32_t elapsed, uint32_t total) {
 }
 
 // ── Plot screen ───────────────────────────────────────────────────────────────
+struct ChanSt { float mn, mx, sum, ssq; int cnt; };
+
 static int getRawVal(int ch, int j) {
     if(lastMidMode && j<lastMidRingFill) {
         int si=(lastMidRingFill<lastMidPreSize)?0:lastMidRingHead;
@@ -400,33 +438,50 @@ static void drawPlotScreen() {
     drawBtn(DISP_W-114,2,110,HDR_H-4,usbMounted?C_GREEN:C_BORDER,C_TEXT,
             usbMounted?"Export":"No USB",2);
 
-    // ── Determine Y ranges for V and I separately ─────────────────────────
-    float vMin=1e30f, vMax=-1e30f, iMin=1e30f, iMax=-1e30f;
-    bool hasV=false, hasI=false;
+    // ── Count active channels → dynamic plot height ───────────────────────
+    int nActive = 0;
+    for(int ch=0;ch<N_CHANNELS;ch++)
+        if(lastPinReq[ch]&&lastChanType[ch]!=0&&lastLogCnt[ch]>0) nActive++;
+    for(int d=0;d<2;d++) {
+        const DiffCfg& dc=lastDiff[d];
+        if(dc.en&&lastLogCnt[dc.pos]>0&&lastLogCnt[dc.neg]>0) nActive++;
+    }
+    int pltH = DISP_H - PLT_Y - 4 - nActive * STAT_ROW_H - 2;
+    if(pltH < 180) pltH = 180;
+    int statY = PLT_Y + pltH + 2;
 
-    // Standalone channels
+    // ── Determine Y ranges AND accumulate per-channel stats ───────────────
+    ChanSt chSt[N_CHANNELS], dSt[2];
+    for(int i=0;i<N_CHANNELS;i++) chSt[i]={1e30f,-1e30f,0.0f,0.0f,0};
+    for(int i=0;i<2;i++)           dSt[i]={1e30f,-1e30f,0.0f,0.0f,0};
+
+    float vMin=1e30f,vMax=-1e30f,iMin=1e30f,iMax=-1e30f;
+    bool hasV=false,hasI=false;
+
     for(int ch=0;ch<N_CHANNELS;ch++) {
         if(!lastPinReq[ch]||lastChanType[ch]==0||lastLogCnt[ch]==0) continue;
         bool isI=(lastChanType[ch]==2);
+        ChanSt& st=chSt[ch];
         for(int j=0;j<lastLogCnt[ch];j++) {
             float v=calChan(getRawVal(ch,j),lastChanOffset[ch],lastChanScale[ch],lastBitRes);
+            if(v<st.mn)st.mn=v; if(v>st.mx)st.mx=v; st.sum+=v; st.ssq+=v*v; st.cnt++;
             if(isI){if(v<iMin)iMin=v;if(v>iMax)iMax=v;hasI=true;}
             else   {if(v<vMin)vMin=v;if(v>vMax)vMax=v;hasV=true;}
         }
     }
-    // Diff channels
     for(int d=0;d<2;d++) {
         const DiffCfg& dc=lastDiff[d];
         if(!dc.en||lastLogCnt[dc.pos]==0||lastLogCnt[dc.neg]==0) continue;
         bool isI=(dc.typ==2);
         int cnt=min(lastLogCnt[dc.pos],lastLogCnt[dc.neg]);
+        ChanSt& st=dSt[d];
         for(int j=0;j<cnt;j++) {
             float v=calDiff(getRawVal(dc.pos,j),getRawVal(dc.neg,j),dc.off,dc.scl,lastBitRes);
+            if(v<st.mn)st.mn=v; if(v>st.mx)st.mx=v; st.sum+=v; st.ssq+=v*v; st.cnt++;
             if(isI){if(v<iMin)iMin=v;if(v>iMax)iMax=v;hasI=true;}
             else   {if(v<vMin)vMin=v;if(v>vMax)vMax=v;hasV=true;}
         }
     }
-    // Fallback / guard against flat lines
     if(!hasV&&!hasI){ vMin=0;vMax=1;hasV=true; }
     if(hasV&&vMax-vMin<1e-6f){ float m=(vMin+vMax)/2; vMin=m-1;vMax=m+1; }
     if(hasI&&iMax-iMin<1e-6f){ float m=(iMin+iMax)/2; iMin=m-1;iMax=m+1; }
@@ -434,22 +489,22 @@ static void drawPlotScreen() {
     if(!hasI){ iMin=vMin;iMax=vMax; }
 
     // ── Draw plot area ────────────────────────────────────────────────────
-    gfx.fillRect(PLT_X,PLT_Y,PLT_W,PLT_H,0x0821u);
-    gfx.drawRect(PLT_X,PLT_Y,PLT_W,PLT_H,C_BORDER);
+    gfx.fillRect(PLT_X,PLT_Y,PLT_W,pltH,0x0821u);
+    gfx.drawRect(PLT_X,PLT_Y,PLT_W,pltH,C_BORDER);
     for(int g=1;g<4;g++) {
-        int gy=PLT_Y+g*PLT_H/4;
+        int gy=PLT_Y+g*pltH/4;
         for(int x=PLT_X;x<PLT_X+PLT_W;x+=6) gfx.drawPixel(x,gy,C_BORDER);
     }
 
     // Y axis labels — V left, I right
     gfx.setTextColor(C_TEXT); gfx.setTextSize(1);
     char lbuf[12];
-    snprintf(lbuf,sizeof(lbuf),"%.3g",vMax); gfx.setCursor(2,PLT_Y+2);         gfx.print(lbuf);
-    snprintf(lbuf,sizeof(lbuf),"%.3g",vMin); gfx.setCursor(2,PLT_Y+PLT_H-10); gfx.print(lbuf);
+    snprintf(lbuf,sizeof(lbuf),"%.3g",vMax); gfx.setCursor(2,PLT_Y+2);          gfx.print(lbuf);
+    snprintf(lbuf,sizeof(lbuf),"%.3g",vMin); gfx.setCursor(2,PLT_Y+pltH-10);   gfx.print(lbuf);
     if(hasI) {
         int rx=PLT_X+PLT_W+4;
         snprintf(lbuf,sizeof(lbuf),"%.3g",iMax); gfx.setCursor(rx,PLT_Y+2);         gfx.print(lbuf);
-        snprintf(lbuf,sizeof(lbuf),"%.3g",iMin); gfx.setCursor(rx,PLT_Y+PLT_H-10); gfx.print(lbuf);
+        snprintf(lbuf,sizeof(lbuf),"%.3g",iMin); gfx.setCursor(rx,PLT_Y+pltH-10);  gfx.print(lbuf);
     }
 
     // Find max log count for X scaling
@@ -461,8 +516,8 @@ static void drawPlotScreen() {
     }
 
     auto mapY = [&](float v, float mn, float mx) -> int {
-        int py = PLT_Y+PLT_H-1-(int)((v-mn)*(PLT_H-2)/(mx-mn));
-        return constrain(py, PLT_Y, PLT_Y+PLT_H-1);
+        int py = PLT_Y+pltH-1-(int)((v-mn)*(pltH-2)/(mx-mn));
+        return constrain(py, PLT_Y, PLT_Y+pltH-1);
     };
 
     // Draw standalone channels
@@ -497,25 +552,413 @@ static void drawPlotScreen() {
         }
     }
 
-    // Legend
-    int lx=PLT_X;
+    // ── Stats rows ────────────────────────────────────────────────────────
+    int ry = statY;
+    auto drawStat = [&](uint16_t col, const char* lbl,
+                        float mn, float mx, float sum, float ssq, int cnt) {
+        if(cnt == 0) return;
+        float avg = sum / cnt;
+        float rms = sqrtf(ssq / cnt);
+        gfx.fillRect(4, ry, 10, 8, col);
+        gfx.setTextColor(C_TEXT); gfx.setTextSize(1);
+        gfx.setCursor(17, ry); gfx.print(lbl);
+        char buf[64];
+        snprintf(buf,sizeof(buf),"Min:%.4g  Max:%.4g  Avg:%.4g  RMS:%.4g",mn,mx,avg,rms);
+        gfx.setCursor(80, ry); gfx.print(buf);
+        ry += STAT_ROW_H;
+    };
     for(int ch=0;ch<N_CHANNELS;ch++) {
         if(!lastPinReq[ch]||lastChanType[ch]==0) continue;
-        gfx.fillRect(lx,LEG_Y,14,10,CH_COLORS[ch]);
-        gfx.setTextColor(C_TEXT); gfx.setTextSize(1);
-        char lb[8]; snprintf(lb,sizeof(lb),"%s(%s)",CH_NAMES[ch],lastChanType[ch]==1?"V":"I");
-        gfx.setCursor(lx+17,LEG_Y+1); gfx.print(lb);
-        lx+=70; if(lx>DISP_W-70) break;
+        char lb[10]; snprintf(lb,sizeof(lb),"%s(%s)",CH_NAMES[ch],lastChanType[ch]==1?"V":"I");
+        ChanSt& st=chSt[ch];
+        drawStat(CH_COLORS[ch], lb, st.mn, st.mx, st.sum, st.ssq, st.cnt);
     }
     for(int d=0;d<2;d++) {
         const DiffCfg& dc=lastDiff[d];
-        if(!dc.en||lx>DISP_W-90) continue;
-        gfx.fillRect(lx,LEG_Y,14,10,DIFF_COLORS[d]);
-        gfx.setTextColor(C_TEXT); gfx.setTextSize(1);
-        char lb[16]; snprintf(lb,sizeof(lb),"D%d(%s)",d+1,dc.typ==1?"V":"I");
-        gfx.setCursor(lx+17,LEG_Y+1); gfx.print(lb);
-        lx+=70;
+        if(!dc.en) continue;
+        char lb[10]; snprintf(lb,sizeof(lb),"D%d(%s)",d+1,dc.typ==1?"V":"I");
+        ChanSt& st=dSt[d];
+        drawStat(DIFF_COLORS[d], lb, st.mn, st.mx, st.sum, st.ssq, st.cnt);
     }
+}
+
+// ── Datalogger screens & logic ────────────────────────────────────────────────
+static int nextLogFileNum() {
+    for(int n=0;n<1000;n++){
+        char fn[32]; snprintf(fn,sizeof(fn),"/usb/logger_%03d.csv",n);
+        FILE* f=fopen(fn,"r"); if(!f) return n; fclose(f);
+    }
+    return 999;
+}
+static float adjThreshDn(float v) {
+    if(v<=0) return 0;
+    if(v>10)    return v-1.0f;
+    if(v>1)     return v-0.1f;
+    if(v>0.1f)  return v-0.01f;
+    return (v<=0.001f)?0.0f:v-0.001f;
+}
+static float adjThreshUp(float v) {
+    if(v<0.001f) return 0.001f;
+    if(v<0.1f)   return v+0.001f;
+    if(v<1)      return v+0.01f;
+    if(v<10)     return v+0.1f;
+    return v+1.0f;
+}
+
+static const int LG_ROW_H = 36;
+static const int LG_ROW0  = HDR_H + 2;
+
+// Fills rowMap[] with channel index (0-7) or diff index+8 (8=d0, 9=d1); returns count.
+static int buildLogRowMap(int* rowMap) {
+    int n=0;
+    for(int ch=0;ch<N_CHANNELS;ch++){
+        if(!dChanType[ch]) continue;
+        if(rowMap) rowMap[n]=ch; n++;
+    }
+    for(int d=0;d<2;d++){
+        if(!dDiff[d].en) continue;
+        if(rowMap) rowMap[n]=8+d; n++;
+    }
+    return n;
+}
+
+// ── Numpad popup ──────────────────────────────────────────────────────────────
+static const int NP_X     = 160;
+static const int NP_Y     = 44;
+static const int NP_W     = 480;
+static const int NP_BTN_W = 144;
+static const int NP_BTN_H = 52;
+static const int NP_COL0  = NP_X + 16;
+static const int NP_COL1  = NP_COL0 + NP_BTN_W + 8;
+static const int NP_COL2  = NP_COL1 + NP_BTN_W + 8;
+static const int NP_ROW0  = NP_Y + 92;
+static const int NP_ROW1  = NP_ROW0 + 58;
+static const int NP_ROW2  = NP_ROW1 + 58;
+static const int NP_ROW3  = NP_ROW2 + 58;
+static const int NP_ROWOK = NP_ROW3 + 58;
+
+static void drawNumpad() {
+    int h = NP_ROWOK + NP_BTN_H + 8 - NP_Y;
+    gfx.fillRoundRect(NP_X+4, NP_Y+4, NP_W, h, 8, C_BORDER);
+    gfx.fillRoundRect(NP_X,   NP_Y,   NP_W, h, 8, C_PANEL);
+    gfx.drawRoundRect(NP_X,   NP_Y,   NP_W, h, 8, C_CYAN);
+    gfx.setTextColor(C_CYAN); gfx.setTextSize(2);
+    gfx.setCursor(NP_X+16, NP_Y+10); gfx.print(numpadTitle);
+    gfx.fillRoundRect(NP_X+16, NP_Y+36, NP_W-32, 44, 4, C_BG);
+    gfx.drawRoundRect(NP_X+16, NP_Y+36, NP_W-32, 44, 4, C_CYAN);
+    gfx.setTextColor(C_YELLOW); gfx.setTextSize(3);
+    const char* disp = numpadBuf[0] ? numpadBuf : "0";
+    int vw = strlen(disp)*18;
+    gfx.setCursor(NP_X+16+(NP_W-32-vw)/2, NP_Y+48); gfx.print(disp);
+    static const char* NP_LABELS[12] = {"7","8","9","4","5","6","1","2","3",".","0","<-"};
+    for(int r=0;r<4;r++){
+        int ry = NP_ROW0 + r*58;
+        for(int c=0;c<3;c++){
+            bool isDec = (r==3 && c==0);
+            bool disabled = isDec && (numpadTarget==10 || strchr(numpadBuf,'.')!=nullptr);
+            drawBtn(NP_COL0+c*(NP_BTN_W+8), ry, NP_BTN_W, NP_BTN_H,
+                    disabled ? C_BORDER : 0x3186u, C_TEXT, NP_LABELS[r*3+c], 3);
+        }
+    }
+    drawBtn(NP_COL0, NP_ROWOK, NP_BTN_W,           NP_BTN_H, C_RED,   C_TEXT, "Cancel", 2);
+    drawBtn(NP_COL1, NP_ROWOK, 2*NP_BTN_W+8,       NP_BTN_H, C_GREEN, C_TEXT, "OK",     3);
+}
+
+static void openNumpad(int target, const char* title, float curVal) {
+    numpadTarget = target;
+    strncpy(numpadTitle, title, sizeof(numpadTitle)-1);
+    numpadTitle[sizeof(numpadTitle)-1] = '\0';
+    if(target == 10)
+        snprintf(numpadBuf, sizeof(numpadBuf), "%d", (int)(curVal+0.5f));
+    else {
+        if(curVal <= 0) numpadBuf[0] = '\0';
+        else snprintf(numpadBuf, sizeof(numpadBuf), "%.5g", (double)curVal);
+    }
+    numpadActive = true;
+    drawNumpad();
+}
+
+static void handleNumpadTouch(int tx, int ty) {
+    if(hit(NP_COL0, NP_ROWOK, NP_BTN_W, NP_BTN_H, tx, ty)){
+        numpadActive = false; drawLoggerScreen(); return;
+    }
+    if(hit(NP_COL1, NP_ROWOK, 2*NP_BTN_W+8, NP_BTN_H, tx, ty)){
+        float v = numpadBuf[0] ? (float)atof(numpadBuf) : 0.0f;
+        if(numpadTarget == 10)
+            logIntervalMs = constrain((int)(v+0.5f), 100, 60000);
+        else if(numpadTarget >= 8)
+            logDiffThresh[numpadTarget-8] = max(0.0f, v);
+        else
+            logThresh[numpadTarget] = max(0.0f, v);
+        numpadActive = false; drawLoggerScreen(); return;
+    }
+    static const char NP_KEYS[12] = {'7','8','9','4','5','6','1','2','3','.','0','\x08'};
+    for(int r=0;r<4;r++){
+        int ry = NP_ROW0 + r*58;
+        for(int c=0;c<3;c++){
+            if(!hit(NP_COL0+c*(NP_BTN_W+8), ry, NP_BTN_W, NP_BTN_H, tx, ty)) continue;
+            char k = NP_KEYS[r*3+c];
+            int n = strlen(numpadBuf);
+            if(k == '\x08'){
+                if(n > 0) numpadBuf[n-1] = '\0';
+            } else if(k == '.'){
+                if(numpadTarget==10 || strchr(numpadBuf,'.')!=nullptr) return;
+                if(n < 11){ numpadBuf[n]='.'; numpadBuf[n+1]='\0'; }
+            } else {
+                if(n < 11){ numpadBuf[n]=k; numpadBuf[n+1]='\0'; }
+            }
+            // Refresh input field + decimal button (enabled state may change)
+            gfx.fillRoundRect(NP_X+16, NP_Y+36, NP_W-32, 44, 4, C_BG);
+            gfx.drawRoundRect(NP_X+16, NP_Y+36, NP_W-32, 44, 4, C_CYAN);
+            gfx.setTextColor(C_YELLOW); gfx.setTextSize(3);
+            const char* disp = numpadBuf[0] ? numpadBuf : "0";
+            int vw = strlen(disp)*18;
+            gfx.setCursor(NP_X+16+(NP_W-32-vw)/2, NP_Y+48); gfx.print(disp);
+            bool disabled = (numpadTarget==10 || strchr(numpadBuf,'.')!=nullptr);
+            drawBtn(NP_COL0, NP_ROW3, NP_BTN_W, NP_BTN_H,
+                    disabled ? C_BORDER : 0x3186u, C_TEXT, ".", 3);
+            return;
+        }
+    }
+}
+
+static void drawLoggerScreen() {
+    gfx.fillScreen(C_BG);
+    gfx.fillRect(0,0,DISP_W,HDR_H,C_PANEL);
+    gfx.setTextColor(C_CYAN); gfx.setTextSize(3);
+    gfx.setCursor(12,8); gfx.print("Datalogger Setup");
+    drawBtn(DISP_W-114,2,110,HDR_H-4,C_BORDER,C_TEXT,"< Back",2);
+
+    int rowMap[10]; int nRows=buildLogRowMap(rowMap);
+    for(int row=0;row<nRows;row++){
+        int ry=LG_ROW0+row*LG_ROW_H;
+        gfx.fillRect(0,ry,DISP_W,LG_ROW_H,(row&1)?C_PANEL:C_BG);
+        int idx=rowMap[row]; bool isDiff=(idx>=8); int didx=idx-8;
+        uint16_t col = isDiff ? DIFF_COLORS[didx] : CH_COLORS[idx];
+        const char* unit = isDiff ? (dDiff[didx].typ==1?"V":"A") : (dChanType[idx]==1?"V":"A");
+        float thresh = isDiff ? logDiffThresh[didx] : logThresh[idx];
+        char lb[20];
+        if(isDiff)
+            snprintf(lb,sizeof(lb),"D%d %s-%s(%s)",didx+1,CH_NAMES[dDiff[didx].pos],CH_NAMES[dDiff[didx].neg],dDiff[didx].typ==1?"V":"A");
+        else
+            snprintf(lb,sizeof(lb),"%s(%s)",CH_NAMES[idx],dChanType[idx]==1?"V":"A");
+        gfx.fillRect(4,ry+8,12,20,col);
+        gfx.setTextColor(C_TEXT); gfx.setTextSize(2);
+        gfx.setCursor(20,ry+(LG_ROW_H-16)/2); gfx.print(lb);
+        drawBtn(244,ry+3,44,LG_ROW_H-6,C_BORDER,C_TEXT,"-",3);
+        char vb[16];
+        if(thresh<=0) snprintf(vb,sizeof(vb),"always"); else snprintf(vb,sizeof(vb),"%.4g",thresh);
+        gfx.fillRoundRect(292,ry+3,130,LG_ROW_H-6,3,C_BG);
+        gfx.drawRoundRect(292,ry+3,130,LG_ROW_H-6,3,C_BORDER);
+        gfx.setTextColor(C_YELLOW); gfx.setTextSize(2);
+        int vw=strlen(vb)*12; gfx.setCursor(292+(130-vw)/2,ry+(LG_ROW_H-16)/2); gfx.print(vb);
+        drawBtn(426,ry+3,44,LG_ROW_H-6,C_BORDER,C_TEXT,"+",3);
+        gfx.setTextColor(C_BORDER); gfx.setTextSize(1);
+        gfx.setCursor(476,ry+(LG_ROW_H-8)/2); gfx.print(unit);
+    }
+    // Interval row
+    int iry=LG_ROW0+nRows*LG_ROW_H+4;
+    gfx.fillRect(0,iry,DISP_W,LG_ROW_H,(nRows&1)?C_PANEL:C_BG);
+    gfx.setTextColor(C_TEXT); gfx.setTextSize(2);
+    gfx.setCursor(20,iry+(LG_ROW_H-16)/2); gfx.print("Max interval (ms)");
+    drawBtn(244,iry+3,44,LG_ROW_H-6,C_BORDER,C_TEXT,"-",3);
+    char ib[16]; snprintf(ib,sizeof(ib),"%d",logIntervalMs);
+    gfx.fillRoundRect(292,iry+3,130,LG_ROW_H-6,3,C_BG);
+    gfx.drawRoundRect(292,iry+3,130,LG_ROW_H-6,3,C_BORDER);
+    gfx.setTextColor(C_YELLOW); gfx.setTextSize(2);
+    int iw=strlen(ib)*12; gfx.setCursor(292+(130-iw)/2,iry+(LG_ROW_H-16)/2); gfx.print(ib);
+    drawBtn(426,iry+3,44,LG_ROW_H-6,C_BORDER,C_TEXT,"+",3);
+    gfx.setTextColor(C_BORDER); gfx.setTextSize(1);
+    gfx.setCursor(476,iry+(LG_ROW_H-8)/2); gfx.print("ms (fallback)");
+    // Start button
+    char sbuf[52];
+    if(nRows==0)
+        snprintf(sbuf,sizeof(sbuf),"Select channels on main screen");
+    else if(usbMounted){
+        int n=nextLogFileNum();
+        snprintf(sbuf,sizeof(sbuf),"START -> logger_%03d.csv",n);
+    } else
+        snprintf(sbuf,sizeof(sbuf),"START (mount USB first)");
+    drawBtn(4,DISP_H-52,DISP_W-8,48,(nRows>0&&usbMounted)?C_GREEN:C_BORDER,C_TEXT,sbuf,2);
+}
+
+static void updateLoggingDisplay() {
+    int rx=DISP_W/2+8;
+    char buf[48];
+    gfx.fillRect(rx,HDR_H+20,360,24,C_BG);
+    gfx.setTextColor(C_GREEN); gfx.setTextSize(2);
+    snprintf(buf,sizeof(buf),"%d rows",logRowCount);
+    gfx.setCursor(rx,HDR_H+20); gfx.print(buf);
+    gfx.fillRect(rx,HDR_H+60,360,24,C_BG);
+    uint32_t eSec=(millis()-logStartMs)/1000;
+    snprintf(buf,sizeof(buf),"%02lu:%02lu:%02lu",(unsigned long)(eSec/3600),
+             (unsigned long)((eSec%3600)/60),(unsigned long)(eSec%60));
+    gfx.setTextColor(C_CYAN); gfx.setTextSize(2);
+    gfx.setCursor(rx,HDR_H+60); gfx.print(buf);
+    int ry=HDR_H+10;
+    for(int ch=0;ch<N_CHANNELS;ch++){
+        if(!dChanType[ch]) continue;
+        gfx.fillRect(160,ry,180,20,C_BG);
+        gfx.setTextColor(C_YELLOW); gfx.setTextSize(2);
+        snprintf(buf,sizeof(buf),"%.5g",(double)logCurCh[ch]);
+        gfx.setCursor(160,ry); gfx.print(buf);
+        ry+=28;
+    }
+    for(int d=0;d<2;d++){
+        if(!dDiff[d].en) continue;
+        gfx.fillRect(160,ry,180,20,C_BG);
+        gfx.setTextColor(C_YELLOW); gfx.setTextSize(2);
+        snprintf(buf,sizeof(buf),"%.5g",(double)logCurDiff[d]);
+        gfx.setCursor(160,ry); gfx.print(buf);
+        ry+=28;
+    }
+}
+
+static void drawLoggingScreen() {
+    gfx.fillScreen(C_BG);
+    gfx.fillRect(0,0,DISP_W,HDR_H,0x0360u);  // dark green header
+    gfx.setTextColor(C_TEXT); gfx.setTextSize(3);
+    gfx.setCursor(12,8); gfx.print("Logging...");
+    drawBtn(DISP_W-114,2,110,HDR_H-4,C_RED,C_TEXT,"STOP",3);
+    gfx.drawFastVLine(DISP_W/2,HDR_H,DISP_H-HDR_H,C_BORDER);
+    int rx=DISP_W/2+8;
+    gfx.setTextColor(C_BORDER); gfx.setTextSize(1);
+    gfx.setCursor(rx,HDR_H+8);  gfx.print("ROWS WRITTEN");
+    gfx.setCursor(rx,HDR_H+48); gfx.print("ELAPSED");
+    gfx.setCursor(rx,HDR_H+88); gfx.print("FILE");
+    gfx.setTextColor(C_CYAN); gfx.setTextSize(2);
+    char fnbuf[32]; snprintf(fnbuf,sizeof(fnbuf),"logger_%03d.csv",logFileNum);
+    gfx.setCursor(rx,HDR_H+100); gfx.print(fnbuf);
+    gfx.setTextColor(C_TEXT); gfx.setTextSize(1);
+    char sbuf[64];
+    snprintf(sbuf,sizeof(sbuf),"%lu Hz  %d-bit  smooth:%d",
+             (unsigned long)RATE_OPTIONS[dRateIdx],dBits,max(1,dSmooth));
+    gfx.setCursor(rx,HDR_H+130); gfx.print(sbuf);
+    gfx.setTextColor(C_BORDER); gfx.setTextSize(1);
+    snprintf(sbuf,sizeof(sbuf),"Interval fallback: %d ms",logIntervalMs);
+    gfx.setCursor(rx,HDR_H+145); gfx.print(sbuf);
+    // Channel labels (left column)
+    int ry=HDR_H+10;
+    for(int ch=0;ch<N_CHANNELS;ch++){
+        if(!dChanType[ch]) continue;
+        gfx.fillRect(4,ry,12,16,CH_COLORS[ch]);
+        gfx.setTextColor(C_TEXT); gfx.setTextSize(2);
+        char lb[16]; snprintf(lb,sizeof(lb),"%s(%s):",CH_NAMES[ch],dChanType[ch]==1?"V":"A");
+        gfx.setCursor(20,ry); gfx.print(lb);
+        ry+=28;
+    }
+    for(int d=0;d<2;d++){
+        if(!dDiff[d].en) continue;
+        gfx.fillRect(4,ry,12,16,DIFF_COLORS[d]);
+        gfx.setTextColor(C_TEXT); gfx.setTextSize(2);
+        char lb[16]; snprintf(lb,sizeof(lb),"D%d(%s):",d+1,dDiff[d].typ==1?"V":"A");
+        gfx.setCursor(20,ry); gfx.print(lb);
+        ry+=28;
+    }
+    updateLoggingDisplay();
+}
+
+static void startLogger() {
+    if(!usbMounted){
+        showOverlay(C_YELLOW,"Mounting USB...");
+        tryMountUSB();
+    }
+    if(!usbMounted){ showOverlay(C_RED,"USB not found!"); delay(2000); drawLoggerScreen(); return; }
+    logFileNum=nextLogFileNum();
+    char fname[32]; snprintf(fname,sizeof(fname),"/usb/logger_%03d.csv",logFileNum);
+    logFile=fopen(fname,"w");
+    if(!logFile){ showOverlay(C_RED,"File open failed!"); delay(1500); drawLoggerScreen(); return; }
+    fprintf(logFile,"time_us");
+    for(int ch=0;ch<N_CHANNELS;ch++){
+        if(!dChanType[ch]) continue;
+        fprintf(logFile,",%s(%s)",CH_NAMES[ch],dChanType[ch]==1?"V":"A");
+    }
+    for(int d=0;d<2;d++){
+        if(!dDiff[d].en) continue;
+        fprintf(logFile,",D%d=%s-%s(%s)",d+1,CH_NAMES[dDiff[d].pos],CH_NAMES[dDiff[d].neg],dDiff[d].typ==1?"V":"A");
+    }
+    fprintf(logFile,"\n");
+    logRowCount=0; logStartMs=millis(); logStartUs=micros(); logLastWriteMs=0;
+    memset(logSmoothBuf,0,sizeof(logSmoothBuf)); logSmoothTick=0;
+    for(int ch=0;ch<N_CHANNELS;ch++){logLastCh[ch]=1e30f;logCurCh[ch]=0;}
+    for(int d=0;d<2;d++){logLastDiff[d]=1e30f;logCurDiff[d]=0;}
+    logLastDispMs=0;
+    uint32_t sr=RATE_OPTIONS[dRateIdx];
+    int ns=(int)((sr/1000UL)*(uint32_t)max(dTime/4,1));
+    if(ns<16) ns=16; if(ns>N_SAMPLES_MAX) ns=N_SAMPLES_MAX;
+    if(adcRunning) adc.stop();
+    if(!adc.begin(toResolution(dBits),sr,ns,QUEUE_DEPTH)){
+        fclose(logFile); logFile=nullptr;
+        showOverlay(C_RED,"ADC start failed!"); delay(2000);
+        drawLoggerScreen(); return;
+    }
+    adcRunning=true; logRunning=true;
+    currentScreen=SCR_LOGGING; drawLoggingScreen();
+}
+
+static void stopLogger() {
+    logRunning=false;
+    if(adcRunning){ adc.stop(); adcRunning=false; }
+    if(logFile){ fflush(logFile); fclose(logFile); logFile=nullptr; }
+    usbFs.unmount(); usbMounted=false;
+    currentScreen=SCR_SETTINGS; drawSettingsScreen();
+}
+
+static void loggerStep() {
+    if(!logRunning||!adcRunning||!adc.available()) return;
+    SampleBuffer buf=adc.read();
+    int ns=buf.size()/N_CHANNELS;
+    int sc=max(1,dSmooth);
+    for(int s=0;s<ns;s++){
+        for(int ch=0;ch<N_CHANNELS;ch++) logSmoothBuf[ch]+=buf[s*N_CHANNELS+ch];
+        if(++logSmoothTick>=sc){
+            logSmoothTick=0;
+            int sv[N_CHANNELS];
+            for(int ch=0;ch<N_CHANNELS;ch++){sv[ch]=logSmoothBuf[ch]/sc;logSmoothBuf[ch]=0;}
+            float ev[N_CHANNELS];
+            for(int ch=0;ch<N_CHANNELS;ch++)
+                ev[ch]=dChanType[ch]?calChan(sv[ch],dChanOffset[ch],dChanScale[ch],dBits):0.0f;
+            float ed[2];
+            for(int d=0;d<2;d++)
+                ed[d]=dDiff[d].en?calDiff(sv[dDiff[d].pos],sv[dDiff[d].neg],dDiff[d].off,dDiff[d].scl,dBits):0.0f;
+            for(int ch=0;ch<N_CHANNELS;ch++) if(dChanType[ch]) logCurCh[ch]=ev[ch];
+            for(int d=0;d<2;d++) if(dDiff[d].en) logCurDiff[d]=ed[d];
+            uint32_t now=millis();
+            bool doLog=(now-logLastWriteMs>=(uint32_t)logIntervalMs);
+            if(!doLog){
+                for(int ch=0;ch<N_CHANNELS&&!doLog;ch++){
+                    if(!dChanType[ch]) continue;
+                    if(logThresh[ch]<=0||fabsf(ev[ch]-logLastCh[ch])>=logThresh[ch]) doLog=true;
+                }
+            }
+            if(!doLog){
+                for(int d=0;d<2&&!doLog;d++){
+                    if(!dDiff[d].en) continue;
+                    if(logDiffThresh[d]<=0||fabsf(ed[d]-logLastDiff[d])>=logDiffThresh[d]) doLog=true;
+                }
+            }
+            if(doLog&&logFile){
+                fprintf(logFile,"%lu",(unsigned long)(micros()-logStartUs));
+                for(int ch=0;ch<N_CHANNELS;ch++){
+                    if(!dChanType[ch]) continue;
+                    fprintf(logFile,",%.5g",(double)ev[ch]);
+                    logLastCh[ch]=ev[ch];
+                }
+                for(int d=0;d<2;d++){
+                    if(!dDiff[d].en) continue;
+                    fprintf(logFile,",%.5g",(double)ed[d]);
+                    logLastDiff[d]=ed[d];
+                }
+                fprintf(logFile,"\n");
+                logRowCount++;
+                logLastWriteMs=now;
+                if(logRowCount%50==0) fflush(logFile);
+            }
+        }
+    }
+    buf.release();
+    uint32_t now2=millis();
+    if(now2-logLastDispMs>=500){logLastDispMs=now2;updateLoggingDisplay();}
 }
 
 // ── USB export ────────────────────────────────────────────────────────────────
@@ -709,9 +1152,13 @@ static void runDisplayCapture() {
 
 // ── Touch handlers ────────────────────────────────────────────────────────────
 static void handleSettingsTouch(int tx,int ty) {
-    // Presets button
-    if(hit(DISP_W-160,2,156,HDR_H-4,tx,ty)){
+    // Presets / Logger buttons
+    if(hit(DISP_W-164,2,78,HDR_H-4,tx,ty)){
         currentScreen=SCR_PRESETS; drawPresetsScreen(); return;
+    }
+    if(hit(DISP_W-82,2,78,HDR_H-4,tx,ty)){
+        contMode=false;
+        currentScreen=SCR_LOGGER; drawLoggerScreen(); return;
     }
     // Channel type cycle (off→V→I→off)
     int cbw=DISP_W/N_CHANNELS;
@@ -776,8 +1223,11 @@ static void handlePresetsTouch(int tx,int ty) {
     if(hit(DISP_W-114,2,110,HDR_H-4,tx,ty)){
         currentScreen=SCR_SETTINGS; drawSettingsScreen(); return;
     }
-    for(int i=0;i<N_PRESETS;i++) {
-        if(hit(4,50+i*82,DISP_W-8,78,tx,ty)){
+    int n = min(N_PRESETS, PRE_COLS * PRE_ROWS);
+    for(int i=0;i<n;i++) {
+        int bx = (i % PRE_COLS) * PRE_CW + 2;
+        int by = HDR_H + (i / PRE_COLS) * PRE_RH + 1;
+        if(hit(bx, by, PRE_BTN_W, PRE_BTN_H, tx, ty)){
             applyPreset(i);
             currentScreen=SCR_SETTINGS; drawSettingsScreen(); return;
         }
@@ -807,6 +1257,54 @@ static void handlePlotTouch(int tx,int ty) {
     if(hit(DISP_W-114,2,110,HDR_H-4,tx,ty)) exportToUSB();
 }
 
+static void handleLoggerTouch(int tx,int ty) {
+    if(numpadActive){ handleNumpadTouch(tx,ty); return; }
+    if(hit(DISP_W-114,2,110,HDR_H-4,tx,ty)){
+        currentScreen=SCR_SETTINGS; drawSettingsScreen(); return;
+    }
+    int rowMap[10]; int nRows=buildLogRowMap(rowMap);
+    for(int row=0;row<nRows;row++){
+        int ry=LG_ROW0+row*LG_ROW_H;
+        int idx=rowMap[row]; bool isDiff=(idx>=8); int didx=idx-8;
+        if(hit(244,ry+3,44,LG_ROW_H-6,tx,ty)){
+            if(isDiff) logDiffThresh[didx]=adjThreshDn(logDiffThresh[didx]);
+            else       logThresh[idx]=adjThreshDn(logThresh[idx]);
+            drawLoggerScreen(); return;
+        }
+        if(hit(426,ry+3,44,LG_ROW_H-6,tx,ty)){
+            if(isDiff) logDiffThresh[didx]=adjThreshUp(logDiffThresh[didx]);
+            else       logThresh[idx]=adjThreshUp(logThresh[idx]);
+            drawLoggerScreen(); return;
+        }
+        if(hit(292,ry,130,LG_ROW_H,tx,ty)){
+            char title[24];
+            if(isDiff) snprintf(title,sizeof(title),"D%d delta thresh",didx+1);
+            else       snprintf(title,sizeof(title),"%s delta thresh",CH_NAMES[idx]);
+            openNumpad(isDiff?8+didx:idx, title, isDiff?logDiffThresh[didx]:logThresh[idx]);
+            return;
+        }
+    }
+    int iry=LG_ROW0+nRows*LG_ROW_H+4;
+    if(hit(244,iry+3,44,LG_ROW_H-6,tx,ty)){
+        logIntervalMs=max(100,logIntervalMs-(logIntervalMs>5000?1000:logIntervalMs>1000?500:100));
+        drawLoggerScreen(); return;
+    }
+    if(hit(426,iry+3,44,LG_ROW_H-6,tx,ty)){
+        logIntervalMs=min(60000,logIntervalMs+(logIntervalMs>=5000?1000:logIntervalMs>=1000?500:100));
+        drawLoggerScreen(); return;
+    }
+    if(hit(292,iry,130,LG_ROW_H,tx,ty)){
+        openNumpad(10,"Max interval (ms)",(float)logIntervalMs); return;
+    }
+    if(hit(4,DISP_H-52,DISP_W-8,48,tx,ty)){
+        if(nRows>0) startLogger();
+    }
+}
+
+static void handleLoggingTouch(int tx,int ty) {
+    if(hit(DISP_W-114,2,110,HDR_H-4,tx,ty)) stopLogger();
+}
+
 // ── setup / loop ──────────────────────────────────────────────────────────────
 void setup() {
     Serial.begin(115200);
@@ -816,6 +1314,7 @@ void setup() {
 }
 
 void loop() {
+    if(logRunning) loggerStep();
     if(displayPresent) {
         // ── Continuous mode: fire next capture when interval has elapsed ──
         if(contMode && currentScreen==SCR_PLOT) {
@@ -839,6 +1338,8 @@ void loop() {
                     case SCR_PRESETS:  handlePresetsTouch(tx,ty);  break;
                     case SCR_DIFF:     handleDiffTouch(tx,ty);     break;
                     case SCR_PLOT:     handlePlotTouch(tx,ty);     break;
+                    case SCR_LOGGER:   handleLoggerTouch(tx,ty);   break;
+                    case SCR_LOGGING:  handleLoggingTouch(tx,ty);  break;
                     default: break;
                 }
             }
@@ -848,6 +1349,11 @@ void loop() {
     // ── Serial: works in both display and non-display mode ───────────────────
     if(!Serial.available()) return;
     contMode=false;  // any incoming command stops continuous view
+    if(logRunning){
+        logRunning=false;
+        if(logFile){ fflush(logFile); fclose(logFile); logFile=nullptr; }
+        usbFs.unmount(); usbMounted=false;
+    }
     if(displayPresent){ currentScreen=SCR_CAPTURING; drawCaptureScreen(); }
     String cmd=Serial.readStringUntil('\n'); cmd.trim();
 

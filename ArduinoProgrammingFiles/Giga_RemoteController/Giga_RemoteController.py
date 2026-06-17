@@ -71,6 +71,11 @@ class GigaTestGUI:
         self.trig_mode_var = tk.StringVar(value="Normal")
         self._active_ser   = None
 
+        self.diff_trig_thresh  = tk.StringVar(value="0")
+        self.diff2_trig_thresh = tk.StringVar(value="0")
+        self._diff_trig_lbl    = tk.StringVar(value="D1:")
+        self._diff2_trig_lbl   = tk.StringVar(value="D2:")
+
         self.preset_var  = tk.StringVar()
         self.preset_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "giga_presets.json")
         self.presets     = {}
@@ -213,11 +218,27 @@ class GigaTestGUI:
             ttk.Entry(thresh_grid, textvariable=self.pin_configs[name]["trig_thresh"], width=7).grid(
                 row=row, column=col * 2 + 1, padx=(0, 4), pady=2)
 
+        ttk.Separator(thresh_grid, orient="horizontal").grid(
+            row=2, column=0, columnspan=8, sticky="ew", pady=(3, 0))
+        ttk.Label(thresh_grid, textvariable=self._diff_trig_lbl).grid(
+            row=3, column=0, padx=(8, 1), pady=2, sticky="e")
+        ttk.Entry(thresh_grid, textvariable=self.diff_trig_thresh, width=7).grid(
+            row=3, column=1, padx=(0, 4), pady=2)
+        ttk.Label(thresh_grid, textvariable=self._diff2_trig_lbl).grid(
+            row=3, column=2, padx=(8, 1), pady=2, sticky="e")
+        ttk.Entry(thresh_grid, textvariable=self.diff2_trig_thresh, width=7).grid(
+            row=3, column=3, padx=(0, 4), pady=2)
+
         self.trig_enable.trace_add("write",   lambda *_: self._update_trig_hint())
         self.trig_mode_var.trace_add("write", lambda *_: self._update_trig_hint())
         self.bit_var.trace_add("write",       lambda *_: self._update_trig_hint())
         for _n in [f"A{i}" for i in range(8)]:
             self.pin_configs[_n]["trig_thresh"].trace_add("write", lambda *_: self._update_trig_hint())
+        for _v in (self.diff_trig_thresh, self.diff2_trig_thresh,
+                   self.diff_pos_var, self.diff_neg_var,
+                   self.diff2_pos_var, self.diff2_neg_var,
+                   self.diff_enable, self.diff2_enable):
+            _v.trace_add("write", lambda *_: self._update_trig_hint())
         self._update_trig_hint()
 
         # ── Presets ───────────────────────────────────────────────────
@@ -306,9 +327,38 @@ class GigaTestGUI:
                 result.append(max(1, round(eng / abs(scale) / v_step)) if eng > 0 and scale != 0 else 0)
             except (ValueError, ZeroDivisionError):
                 result.append(0)
+
+        # Overlay differential channel thresholds onto both component channels.
+        # T_raw = eng_threshold / (diff_scale * v_step); applied to pos AND neg via OR logic.
+        for en, pos_name, neg_name, scale_str, thresh_var in [
+            (self.diff_enable.get(),  self.diff_pos_var.get(),  self.diff_neg_var.get(),
+             self.diff_scale_var.get(),  self.diff_trig_thresh),
+            (self.diff2_enable.get(), self.diff2_pos_var.get(), self.diff2_neg_var.get(),
+             self.diff2_scale_var.get(), self.diff2_trig_thresh),
+        ]:
+            if not en:
+                continue
+            try:
+                eng     = float(thresh_var.get())
+                d_scale = float(scale_str)
+            except (ValueError, ZeroDivisionError):
+                continue
+            if eng <= 0 or abs(d_scale) < 1e-12:
+                continue
+            T_raw = max(1, round(eng / abs(d_scale) / v_step))
+            for pin_name in [pos_name, neg_name]:
+                idx = int(pin_name[1:])
+                result[idx] = T_raw if result[idx] == 0 else min(result[idx], T_raw)
         return result
 
+    def _update_diff_labels(self):
+        p1, n1 = self.diff_pos_var.get(), self.diff_neg_var.get()
+        p2, n2 = self.diff2_pos_var.get(), self.diff2_neg_var.get()
+        self._diff_trig_lbl.set(f"D1 ({p1}−{n1}):")
+        self._diff2_trig_lbl.set(f"D2 ({p2}−{n2}):")
+
     def _update_trig_hint(self):
+        self._update_diff_labels()
         if not self.trig_enable.get():
             self.trig_hint_label.config(text="disabled — evenly-spaced points")
             return
@@ -320,9 +370,31 @@ class GigaTestGUI:
             mid_note = f"  |  pre={pts//2} post={pts-pts//2}" if mode == "Midpoint" else ""
         except ValueError:
             mid_note = ""
+
+        # Note any active diff thresholds in the hint
+        diff_notes = []
+        try:
+            bits   = int(self.bit_var.get())
+            v_step = 3.3 / (2 ** bits - 1)
+            for en, pos, neg, scale_str, thresh_var, lbl in [
+                (self.diff_enable.get(),  self.diff_pos_var.get(),  self.diff_neg_var.get(),
+                 self.diff_scale_var.get(), self.diff_trig_thresh,  "D1"),
+                (self.diff2_enable.get(), self.diff2_pos_var.get(), self.diff2_neg_var.get(),
+                 self.diff2_scale_var.get(), self.diff2_trig_thresh, "D2"),
+            ]:
+                if not en:
+                    continue
+                val = float(thresh_var.get())
+                if val > 0:
+                    T_raw = max(1, round(val / abs(float(scale_str)) / v_step))
+                    diff_notes.append(f"{lbl}({pos}-{neg}):{val}→{T_raw}cts ea")
+        except (ValueError, ZeroDivisionError):
+            pass
+        diff_hint = ("  [" + ", ".join(diff_notes) + "]") if diff_notes else ""
+
         self.trig_hint_label.config(
-            text=(f"{mode} — {len(armed)} channel(s) armed: {', '.join(armed)}{mid_note}"
-                  if armed else f"{mode} — no thresholds > 0"))
+            text=(f"{mode} — {len(armed)} channel(s) armed: {', '.join(armed)}{diff_hint}{mid_note}"
+                  if armed else f"{mode} — no thresholds > 0{diff_hint}"))
 
     # ------------------------------------------------------------------
     # Presets
@@ -347,8 +419,8 @@ class GigaTestGUI:
         if not name:
             messagebox.showwarning("Presets", "Enter a preset name first.")
             return
-        if name not in self.presets and len(self.presets) >= 10:
-            messagebox.showwarning("Presets", "Maximum 10 presets reached — delete one first.")
+        if name not in self.presets and len(self.presets) >= 100:
+            messagebox.showwarning("Presets", "Maximum 100 presets reached — delete one first.")
             return
         self.presets[name] = {
             "rate":         self.rate_var.get(),
@@ -370,9 +442,11 @@ class GigaTestGUI:
             "diff2_offset": self.diff2_offset_var.get(),
             "diff2_scale":  self.diff2_scale_var.get(),
             "diff2_true":   self.diff2_true_var.get(),
-            "trig_enable":  self.trig_enable.get(),
-            "trig_mode":    self.trig_mode_var.get(),
-            "trig_thresh":  {n: cfg["trig_thresh"].get() for n, cfg in self.pin_configs.items()},
+            "trig_enable":       self.trig_enable.get(),
+            "trig_mode":         self.trig_mode_var.get(),
+            "trig_thresh":       {n: cfg["trig_thresh"].get() for n, cfg in self.pin_configs.items()},
+            "diff_trig_thresh":  self.diff_trig_thresh.get(),
+            "diff2_trig_thresh": self.diff2_trig_thresh.get(),
             "pins": {
                 n: {
                     "active":   cfg["active"].get(),
@@ -414,6 +488,8 @@ class GigaTestGUI:
         self.diff2_true_var.set(p.get("diff2_true",  "1.0"))
         self.trig_enable.set(p.get("trig_enable", False))
         self.trig_mode_var.set(p.get("trig_mode", "Normal"))
+        self.diff_trig_thresh.set(p.get("diff_trig_thresh",   "0"))
+        self.diff2_trig_thresh.set(p.get("diff2_trig_thresh", "0"))
         saved_thresh = p.get("trig_thresh", {})
         for n, cfg in self.pin_configs.items():
             cfg["trig_thresh"].set(saved_thresh.get(n, "0.5") if isinstance(saved_thresh, dict) else "0.5")

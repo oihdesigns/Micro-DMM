@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Giga Logger Viewer</title>
+<script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────────── */
+header {
+  background: #16213e;
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid #0f3460;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+header h1 { font-size:17px; font-weight:600; color:#00b4d8; white-space:nowrap; }
+.file-btn {
+  background: #0f3460;
+  color: #e0e0e0;
+  border: 1px solid #00b4d8;
+  padding: 5px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background .15s;
+}
+.file-btn:hover { background: #00b4d8; color: #1a1a2e; }
+.file-name { font-size:12px; color:#8899aa; max-width:360px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.log-meta { margin-left:auto; font-size:12px; color:#8899aa; text-align:right; white-space:nowrap; }
+
+/* ── Toggle bar ─────────────────────────────────────────────────────────────── */
+.toggle-bar {
+  background: #16213e;
+  padding: 6px 20px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  border-bottom: 1px solid #0f3460;
+  flex-shrink: 0;
+}
+.bar-lbl { font-size:11px; color:#8899aa; font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-right:4px; }
+.ch-btn {
+  padding: 3px 11px;
+  border-radius: 3px;
+  border: 1px solid #333;
+  background: #1a1a2e;
+  color: #666;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all .15s;
+  user-select: none;
+}
+.ch-btn.on { border-color:var(--c); color:var(--c); background:rgba(255,255,255,.05); }
+
+.xunit-group { margin-left:auto; display:flex; align-items:center; gap:4px; }
+.xu-radio { display:none; }
+.xu-lbl {
+  padding: 3px 9px; border-radius:3px; border:1px solid #333;
+  background: #1a1a2e; color:#777; cursor:pointer; font-size:12px; transition:all .15s;
+}
+.xu-radio:checked + .xu-lbl { border-color:#00b4d8; color:#00b4d8; background:rgba(0,180,216,.1); }
+
+/* ── Drop zone ──────────────────────────────────────────────────────────────── */
+#drop-zone {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+#drop-zone.hidden { display: none; }
+.drop-inner {
+  border: 2px dashed #0f3460;
+  border-radius: 12px;
+  padding: 60px 80px;
+  text-align: center;
+  max-width: 480px;
+  transition: border-color .2s, background .2s;
+}
+.drop-inner.over { border-color:#00b4d8; background:rgba(0,180,216,.05); }
+.drop-inner .big { font-size:18px; color:#e0e0e0; margin-bottom:8px; }
+.drop-inner p { color:#8899aa; font-size:14px; }
+
+/* ── Main (plot + stats) ────────────────────────────────────────────────────── */
+#main { display:none; flex-direction:column; flex:1; min-height:0; }
+#main.visible { display:flex; }
+
+#warn-row {
+  display: none;
+  background: #7a3000;
+  color: #ffd0a0;
+  padding: 4px 20px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+#plot { width:100%; flex-shrink:0; }
+
+/* ── Stats panel ────────────────────────────────────────────────────────────── */
+.stats-panel {
+  background: #16213e;
+  border-top: 1px solid #0f3460;
+  padding: 10px 20px 16px;
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+.stats-panel h3 { font-size:11px; color:#8899aa; text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; }
+.stats-tbl { border-collapse:collapse; font-size:12px; min-width:600px; }
+.stats-tbl th {
+  color: #8899aa; font-weight:600; text-align:right; padding:3px 14px;
+  border-bottom: 1px solid #0f3460; white-space:nowrap;
+}
+.stats-tbl th:first-child { text-align:left; }
+.stats-tbl td {
+  padding: 3px 14px; text-align:right;
+  border-bottom: 1px solid rgba(15,52,96,.4);
+  font-family: 'Consolas', 'Menlo', monospace; font-size:11px; white-space:nowrap;
+}
+.stats-tbl td:first-child { text-align:left; font-family:inherit; font-size:12px; }
+.stats-tbl tr:last-child td { border-bottom:none; }
+.swatch { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:6px; vertical-align:middle; }
+
+input[type=file] { display:none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Giga Logger Viewer</h1>
+  <button class="file-btn" onclick="fileInput.click()">Open CSV</button>
+  <input type="file" id="fileInput" accept=".csv,.txt">
+  <span class="file-name" id="fileName"></span>
+  <div class="log-meta" id="logMeta"></div>
+</header>
+
+<div class="toggle-bar" id="toggleBar" style="display:none">
+  <span class="bar-lbl">Channels:</span>
+  <div id="chToggles"></div>
+  <div class="xunit-group">
+    <span class="bar-lbl">Time:</span>
+    <input type="radio" name="xu" id="xu_s"  value="s"  class="xu-radio" checked>
+    <label for="xu_s"  class="xu-lbl">s</label>
+    <input type="radio" name="xu" id="xu_ms" value="ms" class="xu-radio">
+    <label for="xu_ms" class="xu-lbl">ms</label>
+    <input type="radio" name="xu" id="xu_us" value="us" class="xu-radio">
+    <label for="xu_us" class="xu-lbl">µs</label>
+  </div>
+</div>
+
+<div id="drop-zone">
+  <div class="drop-inner" id="dropInner">
+    <p class="big">Drop a logger CSV here</p>
+    <p>or click <strong>Open CSV</strong> above</p>
+    <p style="margin-top:16px;font-size:12px;color:#556">Expects <code>time_us</code> column + channels named like <code>A0(V)</code>, <code>D1=A4-A5(I)</code></p>
+  </div>
+</div>
+
+<div id="main">
+  <div id="warn-row"></div>
+  <div id="plot"></div>
+  <div class="stats-panel">
+    <h3>Statistics</h3>
+    <table class="stats-tbl">
+      <thead>
+        <tr>
+          <th>Channel</th><th>Min</th><th>Max</th>
+          <th>Avg</th><th>RMS</th><th>Samples</th>
+        </tr>
+      </thead>
+      <tbody id="statsBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+// ── Channel colors (approximate Giga on-screen CH_COLORS / DIFF_COLORS) ───────
+const CH_COLORS   = ['#27B6FF','#FFB060','#2FD8A0','#D050FF',
+                     '#90D8FF','#9040C0','#E8A030','#A8A8C0'];
+const DIFF_COLORS = ['#FF4040','#FF40FF'];
+
+function chanColor(name) {
+  const dm = name.match(/^D(\d+)/i);
+  if (dm) return DIFF_COLORS[(parseInt(dm[1]) - 1) % DIFF_COLORS.length];
+  const am = name.match(/^A(\d)/);
+  if (am) return CH_COLORS[parseInt(am[1]) % CH_COLORS.length];
+  return '#CCCCCC';
+}
+function chanType(name) {
+  return /\(I\)$/.test(name) ? 'I' : 'V';
+}
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let parsed  = null;
+let active  = new Set();
+const MAX_PTS = 50000;  // per channel; downsamples above this
+
+// ── DOM refs ──────────────────────────────────────────────────────────────────
+const fileInput = document.getElementById('fileInput');
+const dropInner = document.getElementById('dropInner');
+const dropZone  = document.getElementById('drop-zone');
+const mainDiv   = document.getElementById('main');
+const toggleBar = document.getElementById('toggleBar');
+const warnRow   = document.getElementById('warn-row');
+
+// ── File / drop events ────────────────────────────────────────────────────────
+fileInput.addEventListener('change', e => {
+  if (e.target.files.length) loadFile(e.target.files[0]);
+});
+document.addEventListener('dragover', e => {
+  e.preventDefault(); dropInner.classList.add('over');
+});
+document.addEventListener('dragleave', e => {
+  if (!e.relatedTarget) dropInner.classList.remove('over');
+});
+document.addEventListener('drop', e => {
+  e.preventDefault(); dropInner.classList.remove('over');
+  if (e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]);
+});
+document.querySelectorAll('input[name="xu"]').forEach(r =>
+  r.addEventListener('change', () => { if (parsed) renderPlot(); })
+);
+
+function loadFile(file) {
+  document.getElementById('fileName').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = e => {
+    parsed = parseCSV(e.target.result);
+    if (!parsed) return;
+    dropZone.classList.add('hidden');
+    mainDiv.classList.add('visible');
+    toggleBar.style.display = 'flex';
+    buildToggles();
+    buildStats();
+    renderPlot();
+  };
+  reader.readAsText(file);
+}
+
+// ── CSV parser ────────────────────────────────────────────────────────────────
+function fixWraps(arr) {
+  // Compensate for uint32 micros() rollover at ~71 min (4,294,967,296 µs)
+  const WRAP = 4294967296;
+  const out = new Array(arr.length);
+  out[0] = arr[0];
+  let offset = 0;
+  for (let i = 1; i < arr.length; i++) {
+    if (arr[i] < arr[i - 1] - 1000000) offset += WRAP;  // >1s backward jump → wrap
+    out[i] = arr[i] + offset;
+  }
+  return out;
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return null;
+
+  const headers = lines[0].split(',').map(h => h.trim());
+  const timeIdx = headers.indexOf('time_us');
+  if (timeIdx === -1) {
+    alert('Not a Giga logger CSV — missing "time_us" column.');
+    return null;
+  }
+
+  const chCols  = headers.filter((_, i) => i !== timeIdx);
+  const chIdx   = {};
+  chCols.forEach(h => { chIdx[h] = headers.indexOf(h); });
+
+  const timeRaw = [];
+  const chData  = {};
+  chCols.forEach(h => { chData[h] = []; });
+
+  for (let i = 1; i < lines.length; i++) {
+    const vals = lines[i].split(',');
+    if (vals.length < headers.length) continue;
+    const t = parseFloat(vals[timeIdx]);
+    if (isNaN(t)) continue;
+    timeRaw.push(t);
+    chCols.forEach(h => chData[h].push(parseFloat(vals[chIdx[h]])));
+  }
+
+  if (!timeRaw.length) return null;
+
+  // Elapsed µs from session start (handles uint32 wrap)
+  const tAbsolute = fixWraps(timeRaw);
+  const t0  = tAbsolute[0];
+  const tUs = tAbsolute.map(v => v - t0);
+
+  const n   = tUs.length;
+  const dur = tUs[n - 1] / 1e6;
+  document.getElementById('logMeta').innerHTML =
+    `${n.toLocaleString()} rows &nbsp;|&nbsp; ${fmtDur(dur)}`;
+
+  active = new Set(chCols);
+  return { tUs, chCols, chData };
+}
+
+function fmtDur(sec) {
+  if (sec < 0.001) return (sec * 1e6).toFixed(0) + ' µs';
+  if (sec < 1)     return (sec * 1000).toFixed(2) + ' ms';
+  if (sec < 60)    return sec.toFixed(3) + ' s';
+  const m = Math.floor(sec / 60), s = (sec % 60).toFixed(1);
+  return `${m}m ${s}s`;
+}
+
+// ── Toggle buttons ────────────────────────────────────────────────────────────
+function buildToggles() {
+  const cont = document.getElementById('chToggles');
+  cont.innerHTML = '';
+  parsed.chCols.forEach(ch => {
+    const col = chanColor(ch);
+    const btn = document.createElement('span');
+    btn.className = 'ch-btn on';
+    btn.style.setProperty('--c', col);
+    btn.textContent = ch;
+    btn.addEventListener('click', () => {
+      if (active.has(ch)) { active.delete(ch); btn.classList.remove('on'); }
+      else                { active.add(ch);    btn.classList.add('on');    }
+      renderPlot();
+    });
+    cont.appendChild(btn);
+  });
+}
+
+// ── Plot ──────────────────────────────────────────────────────────────────────
+function timeScale() {
+  const u = document.querySelector('input[name="xu"]:checked').value;
+  if (u === 'us') return { div: 1,   label: 'Time (µs)' };
+  if (u === 'ms') return { div: 1e3, label: 'Time (ms)' };
+  return              { div: 1e6, label: 'Time (s)'  };
+}
+
+function downsample(arr, n) {
+  if (arr.length <= n) return arr;
+  const out  = new Array(n);
+  const step = (arr.length - 1) / (n - 1);
+  for (let i = 0; i < n; i++) out[i] = arr[Math.round(i * step)];
+  return out;
+}
+
+function renderPlot() {
+  if (!parsed) return;
+  const vis = parsed.chCols.filter(ch => active.has(ch));
+  if (!vis.length) { Plotly.purge('plot'); return; }
+
+  const ts   = timeScale();
+  const hasV = vis.some(ch => chanType(ch) === 'V');
+  const hasI = vis.some(ch => chanType(ch) === 'I');
+  const dual = hasV && hasI;
+
+  let downsampled = false;
+  const traces = vis.map(ch => {
+    const color = chanColor(ch);
+    const isI   = chanType(ch) === 'I';
+    const yaxis = dual && isI ? 'y2' : 'y';
+
+    let xs = parsed.tUs;
+    let ys = parsed.chData[ch];
+    if (xs.length > MAX_PTS) {
+      xs = downsample(xs, MAX_PTS);
+      ys = downsample(ys, MAX_PTS);
+      downsampled = true;
+    }
+    xs = xs.map(v => v / ts.div);
+
+    return {
+      x: xs, y: ys,
+      name: ch,
+      type: 'scattergl',
+      mode: 'lines',
+      line: { width: 1.5, color },
+      yaxis,
+    };
+  });
+
+  if (downsampled) {
+    warnRow.style.display = 'block';
+    warnRow.textContent   = `Large file — downsampled to ${MAX_PTS.toLocaleString()} pts/channel for display. Stats use full data.`;
+  } else {
+    warnRow.style.display = 'none';
+  }
+
+  const plotH = Math.min(Math.max(Math.round(window.innerHeight * 0.56), 300), 560);
+
+  const layout = {
+    height: plotH,
+    paper_bgcolor: '#1a1a2e',
+    plot_bgcolor:  '#16213e',
+    font:  { color: '#ccc', size: 11 },
+    margin: { l: 72, r: dual ? 72 : 24, t: 24, b: 52 },
+    showlegend: true,
+    legend: { orientation: 'h', y: 1.06, x: 0.5, xanchor: 'center', font: { size: 11 } },
+    xaxis: {
+      title: ts.label,
+      gridcolor:     '#0f3460',
+      zerolinecolor: '#0f3460',
+      rangeslider:   { bgcolor: '#16213e', bordercolor: '#0f3460', thickness: 0.06 },
+    },
+    yaxis: {
+      title:         hasV ? 'Voltage (V)' : 'Current (A)',
+      side:          'left',
+      gridcolor:     '#0f3460',
+      zerolinecolor: '#0f3460',
+    },
+    dragmode: 'zoom',
+  };
+
+  if (dual) {
+    layout.yaxis2 = {
+      title:         'Current (A)',
+      side:          'right',
+      overlaying:    'y',
+      showgrid:      false,        // avoid double grid lines
+      zerolinecolor: 'rgba(15,52,96,0.5)',
+    };
+  }
+
+  Plotly.react('plot', traces, layout, {
+    responsive: true,
+    scrollZoom: true,
+    displayModeBar: true,
+    modeBarButtonsToAdd: ['toggleSpikelines'],
+  });
+}
+
+window.addEventListener('resize', () => { if (parsed) renderPlot(); });
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+function computeStats(arr) {
+  let min = Infinity, max = -Infinity, sum = 0, ssq = 0, n = 0;
+  for (let v of arr) {
+    if (isNaN(v)) continue;
+    if (v < min) min = v;
+    if (v > max) max = v;
+    sum += v; ssq += v * v; n++;
+  }
+  if (!n) return null;
+  const avg = sum / n;
+  const rms = Math.sqrt(ssq / n);
+  return { min, max, avg, rms, n };
+}
+
+function fmt(v) {
+  // 5 significant figures, trimmed
+  if (!isFinite(v)) return '—';
+  const s = v.toPrecision(5);
+  // Remove trailing zeros after decimal but keep at least one decimal
+  return s.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+}
+
+function buildStats() {
+  const tbody = document.getElementById('statsBody');
+  tbody.innerHTML = '';
+  parsed.chCols.forEach(ch => {
+    const st = computeStats(parsed.chData[ch]);
+    if (!st) return;
+    const col = chanColor(ch);
+    const typ = chanType(ch);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="swatch" style="background:${col}"></span>${ch}</td>
+      <td>${fmt(st.min)} ${typ}</td>
+      <td>${fmt(st.max)} ${typ}</td>
+      <td>${fmt(st.avg)} ${typ}</td>
+      <td>${fmt(st.rms)} ${typ}</td>
+      <td>${st.n.toLocaleString()}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+</script>
+</body>
+</html>

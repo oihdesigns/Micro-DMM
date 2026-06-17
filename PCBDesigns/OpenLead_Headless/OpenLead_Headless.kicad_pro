@@ -54,7 +54,24 @@
         }
       },
       "diff_pair_dimensions": [],
-      "drc_exclusions": [],
+      "drc_exclusions": [
+        [
+          "lib_footprint_mismatch|150724000|75291000|901320e6-86a7-45cc-a7ad-95813bbc3288|00000000-0000-0000-0000-000000000000",
+          ""
+        ],
+        [
+          "lib_footprint_mismatch|165964000|75291000|17f843a6-1c18-46da-b1bb-2cb641a4519a|00000000-0000-0000-0000-000000000000",
+          ""
+        ],
+        [
+          "starved_thermal|165989000|70231000|6e7a1814-9309-4786-8732-654173c73efc|b00430e2-3bc2-4aa2-8cbb-6dd1251e70b2|In1.Cu",
+          ""
+        ],
+        [
+          "starved_thermal|165989000|72771000|894eed8c-2ec5-4264-835a-b4eeed48cbac|eb93c38d-cdd8-48ab-b59c-34eb83e7eb65|In2.Cu",
+          ""
+        ]
+      ],
       "meta": {
         "version": 2
       },
@@ -473,7 +490,7 @@
     "pinned_symbol_libs": []
   },
   "meta": {
-    "filename": "SimplifiedOpenLeadVoltmeter.kicad_pro",
+    "filename": "OpenLead_Headless.kicad_pro",
     "version": 3
   },
   "net_settings": {
@@ -676,18 +693,18 @@
     "subpart_id_separator": 0,
     "top_level_sheets": [
       {
-        "filename": "SimplifiedOpenLeadVoltmeter.kicad_sch",
-        "name": "SimplifiedOpenLeadVoltmeter",
+        "filename": "OpenLead_Headless.kicad_sch",
+        "name": "OpenLead_Headless",
         "uuid": "62275b9a-5659-49ae-82ec-4456e0d78504"
       }
     ],
-    "used_designators": "",
+    "used_designators": "R15-16,R18-23,R25-26,R28-29,J1-6,#PWR7,#PWR74-76,U6,H4",
     "variants": []
   },
   "sheets": [
     [
       "62275b9a-5659-49ae-82ec-4456e0d78504",
-      "SimplifiedOpenLeadVoltmeter"
+      "OpenLead_Headless"
     ]
   ],
   "text_variables": {},

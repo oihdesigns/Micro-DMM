@@ -32,7 +32,7 @@ static const int      N_CHANNELS     = 8;      // ← adjust for your board
 static const int      MAX_LOG        = 511;     // ← reduce for Uno/Nano, raise for ARM
 static const uint32_t ANALOG_RATE_HZ = 50000;  // ← raw analogRead rate for your board
 
-static const int   ANALOG_PINS[8]  = {A0, A1, A2, A3, A4, A5, A6, A7}; // last 2 unused if N_CHANNELS≤6
+static const int   ANALOG_PINS[8]  = {A0, A1, A2, A3};//, A4, A5, A6, A7}; // last 2 unused if N_CHANNELS≤6
 static const char* CH_NAMES[8]     = {"A0","A1","A2","A3","A4","A5","A6","A7"};
 
 static int logData[N_CHANNELS][MAX_LOG];
