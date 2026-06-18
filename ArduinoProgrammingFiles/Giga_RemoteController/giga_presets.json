@@ -901,8 +901,8 @@
     "diff_neg": "A0",
     "diff_type": "V",
     "diff_offset": "0",
-    "diff_scale": "1",
-    "diff_true": "5",
+    "diff_scale": "0.082658",
+    "diff_true": "2",
     "diff2_enable": false,
     "diff2_pos": "A5",
     "diff2_neg": "A4",
@@ -926,14 +926,14 @@
     "diff2_trig_thresh": "0",
     "pins": {
       "A0": {
-        "active": true,
+        "active": false,
         "type": "V",
         "offset": "1.468491",
         "scale": "4.886244",
         "true_val": "1.0"
       },
       "A1": {
-        "active": true,
+        "active": false,
         "type": "V",
         "offset": "1.6204",
         "scale": "10.74",

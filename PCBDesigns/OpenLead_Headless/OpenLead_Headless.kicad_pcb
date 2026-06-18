@@ -3105,7 +3105,7 @@
 				(pins "1" "2")
 			)
 		)
-		(attr through_hole)
+		(attr through_hole dnp)
 		(duplicate_pad_numbers_are_jumpers no)
 		(fp_line
 			(start -1.33 3.87)
@@ -8228,14 +8228,6 @@
 		(layer "F.Cu")
 		(net "Net-(Q8-D)")
 		(uuid "5ba135f0-5c04-49b6-8d28-a27a48bf0a44")
-	)
-	(segment
-		(start 162.068 92.567)
-		(end 161.798 92.837)
-		(width 0.2)
-		(layer "F.Cu")
-		(net "Net-(Q8-D)")
-		(uuid "944f0385-df22-46ce-9c7f-bc7efd769297")
 	)
 	(segment
 		(start 154.432 90.804)

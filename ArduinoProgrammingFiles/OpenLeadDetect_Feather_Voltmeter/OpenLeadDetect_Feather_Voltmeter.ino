@@ -227,6 +227,7 @@ void drawStaticUI();
 void measureVoltage();
 void ClosedOrFloat();
 void updateDisplay();
+const char* bridgeResistanceLabel(float v);
 void statusUpdate();
 void handleSerialCommands(char cmd);
 void blinkPixel(uint8_t r, uint8_t g, uint8_t b, unsigned long duration = BLINK_DURATION_MS);
@@ -632,6 +633,31 @@ void blinkPixel(uint8_t r, uint8_t g, uint8_t b, unsigned long duration) {
 }
 
 // ==================================================================
+//  BRIDGE RESISTANCE ESTIMATE
+//  Maps a bridge voltage reading (as shown on the "Bridge:" line) to
+//  an estimated resistance bin using nearest-neighbour matching against
+//  the measured calibration points below.  Readings below the 10K point
+//  read "<10K"; readings above the 11.2M point read ">11.2M".
+// ==================================================================
+const char* bridgeResistanceLabel(float v) {
+  v = fabs(v);
+  if (v < 0.0605f) return "<10K";
+  if (v > 0.229f)  return ">11.2M";
+
+  static const float kBinV[]    = { 0.0605f, 0.068f,  0.095f,  0.125f, 0.206f,  0.229f  };
+  static const char* kBinName[] = { "~10K",  "~100K", "~470K", "~1M",  "~5.6M", "~11.2M" };
+  const int n = sizeof(kBinV) / sizeof(kBinV[0]);
+
+  int   best     = 0;
+  float bestDiff = fabs(v - kBinV[0]);
+  for (int i = 1; i < n; i++) {
+    float d = fabs(v - kBinV[i]);
+    if (d < bestDiff) { bestDiff = d; best = i; }
+  }
+  return kBinName[best];
+}
+
+// ==================================================================
 //  TFT DISPLAY UPDATE
 // ==================================================================
 void updateDisplay() {
@@ -716,22 +742,27 @@ void updateDisplay() {
   tft.setCursor(222, 38);
   tft.print("V");
 
-  // ── Lead-status badge -- only on change ──
-  if (statusChanged) {
+  // ── Resistance-bin label for closed/floating states ──
+  const char* rLabel = bridgeResistanceLabel(bridgeAvg);
+  static char prevLabel[10] = "";
+  bool labelChanged = (strcmp(rLabel, prevLabel) != 0);
+
+  // ── Lead-status badge -- redraw on state change or bin change ──
+  if (statusChanged || ((st == 0 || st == 1) && labelChanged)) {
     tft.fillRect(0, 70, 168, 26, COL_BG);      // clear badge zone
     tft.setTextSize(2);
     switch (st) {
       case 0:
         tft.fillRoundRect(4, 72, 130, 22, 4, COL_CLOSED_BG);
         tft.setTextColor(COL_CLOSED_FG, COL_CLOSED_BG);
-        tft.setCursor(20, 75);
-        tft.print("CLOSED");
+        tft.setCursor(14, 75);
+        tft.print(rLabel);
         break;
       case 1:
         tft.fillRoundRect(4, 72, 154, 22, 4, COL_FLOAT_BG);
         tft.setTextColor(COL_FLOAT_FG, COL_FLOAT_BG);
         tft.setCursor(14, 75);
-        tft.print("FLOATING");
+        tft.print(rLabel);
         break;
       case 2:
         tft.setTextColor(COL_VNONZERO, COL_BG);
@@ -834,6 +865,8 @@ void updateDisplay() {
   }
 
   // ── Update tracked state ──
+  strncpy(prevLabel, rLabel, sizeof(prevLabel) - 1);
+  prevLabel[sizeof(prevLabel) - 1] = '\0';
   prevSt      = st;
   prevVRef    = vRefEnable;
   prevVzDisp  = Vzero;
