@@ -25,18 +25,35 @@
  *      Repeat the test until the same result appears TEST_AGREE_COUNT
  *      times in a row, then return the MOSFET HIGH and repeat.
  *
- * NeoPixel states:
- *   off            = floating (open lead, no indication)
- *   green flash    = closed (rate-limited to ~2 Hz)
- *   blinking red   = voltage present (test bypassed)
+ * NeoPixel states (all rate-limited flashes; on-time + max rate per state):
+ *   dim-blue flash = floating (open lead)
+ *   green flash    = closed
+ *   red flash      = voltage present (test bypassed)
+ *
+ * ── Serial diagnostic protocol (115200 baud, line based) ──────────
+ * Commands in  (each terminated with newline):
+ *   !DIAG[,0|1]      enter/exit diagnostic mode (bare = toggle)
+ *   !STREAM[,0|1]    continuous raw streaming on/off (diag only)
+ *   !RATE,<ms>       stream interval in ms
+ *   !VMODE,<0|1|2>   voltage mode: 0=auto  1=lock ON  2=disable
+ *   !MOSFET,<-1|0|1> MOSFET: -1=auto(run detection) 0=hold off 1=hold on
+ *   !CAP[,<ms>]      capture ADC across a MOSFET toggle, then dump
+ *   !STATUS  / !?    print current status
+ * Data out:
+ *   $STATUS,diag=..,vmode=..,mosfet=..,stream=..,rate=..,capms=..,res=..,vref=..
+ *   $DIAG,<ms>,<rawPos>,<rawNeg>,<posV>,<negV>,<diffV>      (streaming)
+ *   $CAPSTART,<n>,<toggleUs>,<durMs>,<fullScale>,<vref>     (capture header)
+ *   $CAP,<t_us>,<rawPos>,<rawNeg>                           (capture rows)
+ *   $CAPEND
  */
 
 #include <Adafruit_NeoPixel.h>
+#include <ctype.h>
 
 // ── ADC reference ────────────────────────────────────────────────
 // The 2.46 V resting band is ~Vcc/2 for a 5 V supply.  Change to 3.3
 // here if this board runs the ADC against a 3.3 V reference.
-const float ADC_REF_VOLTAGE = 5.0f;
+const float ADC_REF_VOLTAGE = 3.3f; //Apparently VREFH0 is connected to the 3.3rail.
 const int   ADC_RESOLUTION   = 14;          // RA4M1 14-bit
 const float ADC_FULL_SCALE   = 16383.0f;    // 2^14 - 1
 
@@ -44,11 +61,11 @@ const float ADC_FULL_SCALE   = 16383.0f;    // 2^14 - 1
 // Differential (A0 - A2) rests near 0 V, so the band is centred on 0
 // and detection looks at the magnitude of the deviation.  Retune
 // OPEN_THRESH_V against real closed/open readings on the bench.
-const float REF_CENTER_V   = -0.51f;   // resting differential (~0 V)
-const float REF_BAND_V      = 0.06f;  // |A0-A2| within this -> run the test
+const float REF_CENTER_V   = -0.2f;   // resting differential (~0 V)
+const float REF_BAND_V      = 0.1f;  // |A0-A2| within this -> run the test
 const float OPEN_THRESH_V   = 0.9f;  // |deviation| below = open, at/above = closed
 const unsigned long SETTLE_Post_MS = 1;     // MOSFET-off settle before test read
-const unsigned long SETTLE_Pre_uS = 200;
+const unsigned long SETTLE_Pre_uS = 100;
 
 // ── Noise / averaging ────────────────────────────────────────────
 // Voltage-present decision:
@@ -81,26 +98,34 @@ const int MOSFET_PIN = D1;   // bridge MOSFET gate (HIGH = on/resting)
 Adafruit_NeoPixel pixel(NUM_PIXELS, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 // ── Status colours ───────────────────────────────────────────────
+const uint8_t COL_FLOAT_R = 0,   COL_FLOAT_G = 0,   COL_FLOAT_B = 28;   // dim blue
 const uint8_t COL_CLOSED_R = 0,  COL_CLOSED_G = 128, COL_CLOSED_B = 0;   // green
 const uint8_t COL_VOLT_R = 80,   COL_VOLT_G = 0,    COL_VOLT_B = 0;     // red
 
 // ── Blink behaviour ──────────────────────────────────────────────
-// Floating  -> LED off (no indication).
-// Voltage   -> symmetric on/off blink.
-// Closed    -> brief flash, rate-limited (max ~2 Hz) like the big version.
-const unsigned long VOLT_BLINK_PERIOD_MS = 150;  // red toggles every 150 ms (~3 Hz)
-const unsigned long CLOSED_FLASH_MS      = 200;   // green on-time per flash
-const unsigned long CLOSED_BLINK_MIN_MS  = 500;  // min gap between flashes (2 Hz cap)
+// Every state is driven the same way: a brief flash of its colour for
+// <STATE>_FLASH_MS, rate-limited so a new flash can't begin until at least
+// <STATE>_MIN_MS after the previous one started.  Max blink rate is
+// 1000 / <STATE>_MIN_MS  Hz; keep FLASH_MS < MIN_MS so the LED returns to
+// off between flashes.
+const unsigned long FLOAT_FLASH_MS  = 150;   // dim-blue on-time per flash
+const unsigned long FLOAT_MIN_MS    = 1000;  // min gap (1 Hz cap)
+const unsigned long CLOSED_FLASH_MS = 200;   // green on-time per flash
+const unsigned long CLOSED_MIN_MS   = 500;   // min gap (2 Hz cap)
+const unsigned long VOLT_FLASH_MS   = 200;   // red on-time per flash
+const unsigned long VOLT_MIN_MS     = 500;   // min gap (2 Hz cap)
 
 // ── State ────────────────────────────────────────────────────────
 enum LeadState { STATE_FLOAT, STATE_CLOSED, STATE_VOLTAGE };
 LeadState leadState = STATE_VOLTAGE;
 
-// Non-blocking blink state
-unsigned long lastVoltToggle  = 0;
-bool          voltLedOn       = false;
-unsigned long lastClosedFlash = 0;
+// Non-blocking blink state (one flashing flag + last-flash timestamp per state)
+bool          floatFlashing   = false;
+unsigned long lastFloatFlash  = 0;
 bool          closedFlashing  = false;
+unsigned long lastClosedFlash = 0;
+bool          voltFlashing    = false;
+unsigned long lastVoltFlash   = 0;
 
 unsigned long lastSerialTime = 0;
 const unsigned long serialInterval = 250;   // ms between debug prints
@@ -109,6 +134,30 @@ const unsigned long generalDelay = 10;
 // Most recent values, kept for serial debug
 float lastRestV = 0.0f;
 float lastTestV = 0.0f;
+
+// ── Diagnostic mode ───────────────────────────────────────────────
+bool diagMode = false;                 // suppresses human debug, enables $ protocol
+bool streamOn = false;                 // continuous raw streaming
+unsigned long streamIntervalMs = 20;   // streaming period (~50 Hz default)
+unsigned long lastStreamMs = 0;
+
+enum VoltOverride { VOLT_AUTO, VOLT_FORCE_ON, VOLT_DISABLED };
+VoltOverride voltOverride = VOLT_AUTO; // applies whenever detection runs
+
+int mosfetHold = -1;                    // -1 auto (run detection), 0 hold off, 1 hold on
+
+// Transient capture buffer (raw counts; volts computed by the host)
+const int CAP_MAX_SAMPLES   = 600;      // ~4.8 KB of RAM
+const unsigned long CAP_PRE_US = 500;   // baseline sampled before the toggle
+unsigned long capDurationMs = 5;        // total capture window
+uint32_t capT[CAP_MAX_SAMPLES];
+uint16_t capPos[CAP_MAX_SAMPLES];
+uint16_t capNeg[CAP_MAX_SAMPLES];
+int capCount = 0;
+
+// Serial command line buffer
+char cmdBuf[48];
+int  cmdLen = 0;
 
 // ── Helpers ──────────────────────────────────────────────────────
 // Pseudo-differential read: sample both pins vs. GND and subtract.
@@ -169,50 +218,206 @@ void setPixel(uint8_t r, uint8_t g, uint8_t b) {
   pixel.show();
 }
 
-// Non-blocking NeoPixel driver.
-//   FLOAT   -> off (no indication)
-//   VOLTAGE -> blinking red (symmetric on/off)
-//   CLOSED  -> brief green flashes, rate-limited to ~2 Hz
+// Generic rate-limited flash for one state.  Turns the pixel on for onMs,
+// then off, and won't start another flash until minGapMs after the last one
+// began (max rate = 1000 / minGapMs Hz).  The flashing flag and lastFlash
+// timestamp are owned by the caller so each state keeps its own cadence.
+void flashState(unsigned long now,
+                uint8_t r, uint8_t g, uint8_t b,
+                unsigned long onMs, unsigned long minGapMs,
+                bool &flashing, unsigned long &lastFlash) {
+  if (!flashing && (now - lastFlash >= minGapMs)) {
+    flashing  = true;
+    lastFlash = now;
+    setPixel(r, g, b);                 // flash on
+  } else if (flashing && (now - lastFlash >= onMs)) {
+    flashing = false;
+    setPixel(0, 0, 0);                 // flash off
+  }
+}
+
+// Non-blocking NeoPixel driver.  All three states use the same flash model:
+//   FLOAT   -> dim-blue flashes, rate-limited
+//   CLOSED  -> green flashes, rate-limited
+//   VOLTAGE -> red flashes, rate-limited
 void updateLed() {
   static LeadState prevState = STATE_VOLTAGE;
   unsigned long now = millis();
 
-  // On a state change, end any in-progress flash and reset the (symmetric)
-  // voltage blink.  Deliberately DO NOT reset lastClosedFlash: the green
-  // 2 Hz rate limit must persist across transitions, otherwise a state that
-  // briefly bounces out of CLOSED and back would re-fire green every time.
+  // On a state change, end any in-progress flash so the LED returns to off.
+  // Deliberately DO NOT reset the lastXFlash timestamps: each state's rate
+  // limit must persist across transitions, otherwise a state that briefly
+  // bounces out and back would re-fire immediately.
   if (leadState != prevState) {
-    prevState       = leadState;
-    voltLedOn       = false;
-    closedFlashing  = false;
-    lastVoltToggle  = now;
+    prevState      = leadState;
+    floatFlashing  = false;
+    closedFlashing = false;
+    voltFlashing   = false;
     setPixel(0, 0, 0);
   }
 
   switch (leadState) {
     case STATE_FLOAT:
-      setPixel(0, 0, 0);   // floating -> no indication
-      break;
-
-    case STATE_VOLTAGE:
-      if (now - lastVoltToggle >= VOLT_BLINK_PERIOD_MS) {
-        lastVoltToggle = now;
-        voltLedOn = !voltLedOn;
-        if (voltLedOn) setPixel(COL_VOLT_R, COL_VOLT_G, COL_VOLT_B);
-        else           setPixel(0, 0, 0);
-      }
+      flashState(now, COL_FLOAT_R, COL_FLOAT_G, COL_FLOAT_B,
+                 FLOAT_FLASH_MS, FLOAT_MIN_MS, floatFlashing, lastFloatFlash);
       break;
 
     case STATE_CLOSED:
-      if (!closedFlashing && (now - lastClosedFlash >= CLOSED_BLINK_MIN_MS)) {
-        closedFlashing  = true;
-        lastClosedFlash = now;
-        setPixel(COL_CLOSED_R, COL_CLOSED_G, COL_CLOSED_B);   // flash on
-      } else if (closedFlashing && (now - lastClosedFlash >= CLOSED_FLASH_MS)) {
-        closedFlashing = false;
-        setPixel(0, 0, 0);                                    // flash off
-      }
+      flashState(now, COL_CLOSED_R, COL_CLOSED_G, COL_CLOSED_B,
+                 CLOSED_FLASH_MS, CLOSED_MIN_MS, closedFlashing, lastClosedFlash);
       break;
+
+    case STATE_VOLTAGE:
+      flashState(now, COL_VOLT_R, COL_VOLT_G, COL_VOLT_B,
+                 VOLT_FLASH_MS, VOLT_MIN_MS, voltFlashing, lastVoltFlash);
+      break;
+  }
+}
+
+// ==================================================================
+//  DETECTION (one pass) -- sets leadState, honouring voltOverride
+// ==================================================================
+void runDetection() {
+  digitalWrite(MOSFET_PIN, MOSFET_ON);   // resting state
+
+  bool present;
+  if (voltOverride == VOLT_FORCE_ON) {
+    lastRestV = readVoltage();           // keep a fresh reading for debug
+    present = true;
+  } else if (voltOverride == VOLT_DISABLED) {
+    present = false;
+  } else {
+    present = voltagePresent();
+  }
+
+  if (present) {
+    leadState = STATE_VOLTAGE;
+  } else {
+    leadState = runMosfetTestStable();
+  }
+}
+
+// ==================================================================
+//  DIAGNOSTIC: streaming, capture, command handling
+// ==================================================================
+void printStatus() {
+  Serial.print("$STATUS,diag=");  Serial.print(diagMode ? 1 : 0);
+  Serial.print(",vmode=");        Serial.print((int)voltOverride);
+  Serial.print(",mosfet=");       Serial.print(mosfetHold);
+  Serial.print(",stream=");       Serial.print(streamOn ? 1 : 0);
+  Serial.print(",rate=");         Serial.print(streamIntervalMs);
+  Serial.print(",capms=");        Serial.print(capDurationMs);
+  Serial.print(",res=");          Serial.print(ADC_RESOLUTION);
+  Serial.print(",vref=");         Serial.println(ADC_REF_VOLTAGE, 3);
+}
+
+// One streamed sample: both pins independently + computed differential.
+void streamSample() {
+  int rawPos = analogRead(SENSE_POS);
+  int rawNeg = analogRead(SENSE_NEG);
+  float pv = (rawPos / ADC_FULL_SCALE) * ADC_REF_VOLTAGE;
+  float nv = (rawNeg / ADC_FULL_SCALE) * ADC_REF_VOLTAGE;
+  Serial.print("$DIAG,");
+  Serial.print(millis()); Serial.print(",");
+  Serial.print(rawPos);   Serial.print(",");
+  Serial.print(rawNeg);   Serial.print(",");
+  Serial.print(pv, 4);    Serial.print(",");
+  Serial.print(nv, 4);    Serial.print(",");
+  Serial.println(pv - nv, 4);
+}
+
+// Capture both ADC pins as fast as possible (no settling delays) across a
+// MOSFET toggle: hold ON, sample a short baseline, toggle OFF at CAP_PRE_US,
+// keep sampling until durationMs elapses or the buffer fills, restore ON,
+// then dump the raw buffer to the host.
+void runCapture(unsigned long durationMs) {
+  digitalWrite(MOSFET_PIN, MOSFET_ON);
+  delay(2);                              // settle to resting before baseline
+
+  capCount = 0;
+  unsigned long durUs    = durationMs * 1000UL;
+  unsigned long toggleUs = 0;
+  bool toggled = false;
+  unsigned long t0 = micros();
+
+  while (capCount < CAP_MAX_SAMPLES) {
+    unsigned long t = micros() - t0;
+    if (!toggled && t >= CAP_PRE_US) {
+      digitalWrite(MOSFET_PIN, MOSFET_OFF);
+      toggleUs = micros() - t0;
+      toggled = true;
+    }
+    if (t >= durUs) break;
+    capT[capCount]   = t;
+    capPos[capCount] = analogRead(SENSE_POS);
+    capNeg[capCount] = analogRead(SENSE_NEG);
+    capCount++;
+  }
+
+  digitalWrite(MOSFET_PIN, MOSFET_ON);   // restore resting state
+
+  Serial.print("$CAPSTART,");
+  Serial.print(capCount);        Serial.print(",");
+  Serial.print(toggleUs);        Serial.print(",");
+  Serial.print(durationMs);      Serial.print(",");
+  Serial.print(ADC_FULL_SCALE, 0); Serial.print(",");
+  Serial.println(ADC_REF_VOLTAGE, 3);
+  for (int i = 0; i < capCount; i++) {
+    Serial.print("$CAP,");
+    Serial.print(capT[i]);   Serial.print(",");
+    Serial.print(capPos[i]); Serial.print(",");
+    Serial.println(capNeg[i]);
+  }
+  Serial.println("$CAPEND");
+}
+
+// Parse one received command line (must start with '!').
+void handleLine(char *line) {
+  if (line[0] != '!') return;
+  char *cmd = line + 1;
+  char *arg = strchr(cmd, ',');
+  if (arg) { *arg = '\0'; arg++; }
+  for (char *p = cmd; *p; ++p) *p = toupper(*p);
+
+  if (strcmp(cmd, "DIAG") == 0) {
+    diagMode = arg ? (atoi(arg) != 0) : !diagMode;
+    if (!diagMode) { streamOn = false; mosfetHold = -1; }
+    printStatus();
+  } else if (strcmp(cmd, "STREAM") == 0) {
+    streamOn = arg ? (atoi(arg) != 0) : !streamOn;
+    printStatus();
+  } else if (strcmp(cmd, "RATE") == 0) {
+    if (arg) { long r = atol(arg); streamIntervalMs = (r < 1) ? 1 : r; }
+    printStatus();
+  } else if (strcmp(cmd, "VMODE") == 0) {
+    int v = arg ? atoi(arg) : 0;
+    voltOverride = (VoltOverride)constrain(v, 0, 2);
+    printStatus();
+  } else if (strcmp(cmd, "MOSFET") == 0) {
+    int m = arg ? atoi(arg) : -1;
+    mosfetHold = (m < 0) ? -1 : (m ? 1 : 0);
+    printStatus();
+  } else if (strcmp(cmd, "CAP") == 0) {
+    unsigned long d = arg ? atol(arg) : capDurationMs;
+    if (d < 1) d = 1;
+    capDurationMs = d;
+    runCapture(d);
+  } else if (strcmp(cmd, "STATUS") == 0 || strcmp(cmd, "?") == 0) {
+    printStatus();
+  } else {
+    Serial.print("$ERR,unknown,"); Serial.println(cmd);
+  }
+}
+
+// Accumulate serial bytes into cmdBuf; dispatch on newline.
+void pollSerial() {
+  while (Serial.available()) {
+    char c = Serial.read();
+    if (c == '\n' || c == '\r') {
+      if (cmdLen > 0) { cmdBuf[cmdLen] = '\0'; handleLine(cmdBuf); cmdLen = 0; }
+    } else if (cmdLen < (int)sizeof(cmdBuf) - 1) {
+      cmdBuf[cmdLen++] = c;
+    }
   }
 }
 
@@ -245,18 +450,29 @@ void setup() {
 //  MAIN LOOP
 // ==================================================================
 void loop() {
-  // 1. MOSFET resting high, decide whether a real voltage is present
-  //    (fast single-read shortcut, else averaged).
-  digitalWrite(MOSFET_PIN, MOSFET_ON);
+  pollSerial();
 
-  if (voltagePresent()) {
-    leadState = STATE_VOLTAGE;
-  } else {
-    // 2 + 3. No voltage -- run the open/closed test until it agrees with itself.
-    leadState = runMosfetTestStable();
+  // ── Diagnostic mode ──────────────────────────────────────────────
+  if (diagMode) {
+    if (mosfetHold >= 0) {
+      // Manual MOSFET hold: detection paused, pin parked for observation.
+      digitalWrite(MOSFET_PIN, mosfetHold ? MOSFET_ON : MOSFET_OFF);
+    } else {
+      runDetection();          // detection still runs (LED stays meaningful)
+    }
+
+    if (streamOn && (millis() - lastStreamMs >= streamIntervalMs)) {
+      lastStreamMs = millis();
+      streamSample();
+    }
+
+    updateLed();
+    delay(1);                  // light idle; capture/streaming set their own pace
+    return;
   }
 
-  // ── Drive the NeoPixel ──
+  // ── Normal mode ──────────────────────────────────────────────────
+  runDetection();
   updateLed();
 
   // ── Periodic serial debug ──
@@ -274,5 +490,6 @@ void loop() {
       Serial.println(leadState == STATE_FLOAT ? "FLOATING" : "CLOSED");
     }
   }
-delay(generalDelay); //Limit Overall Frequency
+
+  delay(generalDelay); //Limit Overall Frequency
 }
