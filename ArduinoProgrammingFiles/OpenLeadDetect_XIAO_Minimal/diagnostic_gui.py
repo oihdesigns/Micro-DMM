@@ -101,6 +101,7 @@ class App(tk.Tk):
 
         # live rolling data
         self.t0 = None
+        self.has_se = True         # device sends separate single-ended channels?
         self.live_t = deque(maxlen=LIVE_MAXLEN)
         self.live_pos = deque(maxlen=LIVE_MAXLEN)
         self.live_neg = deque(maxlen=LIVE_MAXLEN)
@@ -315,14 +316,21 @@ class App(tk.Tk):
             self._log(f"<< {line}")
 
     def _handle_diag(self, line):
-        # $DIAG,<ms>,<rawPos>,<rawNeg>,<posV>,<negV>,<diffV>
+        # two-channel: $DIAG,<ms>,<rawPos>,<rawNeg>,<posV>,<negV>,<diffV>
+        # diff-only:   $DIAG,<ms>,<rawDiff>,<diffV>
         f = line.split(",")
-        if len(f) < 7:
-            return
         try:
             ms = int(f[1])
-            pv, nv, dv = float(f[4]), float(f[5]), float(f[6])
-        except ValueError:
+            if len(f) >= 7:
+                pv, nv, dv = float(f[4]), float(f[5]), float(f[6])
+                self.has_se = True
+            elif len(f) >= 4:
+                dv = float(f[3])
+                pv = nv = float("nan")
+                self.has_se = False
+            else:
+                return
+        except (ValueError, IndexError):
             return
         if self.t0 is None:
             self.t0 = ms
@@ -331,8 +339,11 @@ class App(tk.Tk):
         self.live_pos.append(pv)
         self.live_neg.append(nv)
         self.live_diff.append(dv)
-        self.read_lbl.config(
-            text=f"pos: {pv:+.4f} V   neg: {nv:+.4f} V   diff: {dv:+.4f} V")
+        if self.has_se:
+            self.read_lbl.config(
+                text=f"pos: {pv:+.4f} V   neg: {nv:+.4f} V   diff: {dv:+.4f} V")
+        else:
+            self.read_lbl.config(text=f"diff: {dv:+.4f} V")
 
     def _handle_status(self, line):
         # reflect device state back into the controls without re-sending
@@ -367,8 +378,9 @@ class App(tk.Tk):
         self.live_ax.set_title("Live stream")
         self.live_ax.set_xlabel("time (s)")
         self.live_ax.set_ylabel("volts")
-        self.live_ax.plot(self.live_t, self.live_pos, label="pos (A0)", lw=0.9)
-        self.live_ax.plot(self.live_t, self.live_neg, label="neg (A2)", lw=0.9)
+        if self.has_se:
+            self.live_ax.plot(self.live_t, self.live_pos, label="pos (A0)", lw=0.9)
+            self.live_ax.plot(self.live_t, self.live_neg, label="neg (A2)", lw=0.9)
         self.live_ax.plot(self.live_t, self.live_diff, label="diff", lw=1.2)
         self.live_ax.legend(loc="upper left", fontsize=8)
         self.live_ax.grid(True, alpha=0.3)
@@ -385,29 +397,45 @@ class App(tk.Tk):
         except (IndexError, ValueError):
             return
 
+        # Row formats:
+        #   two-channel: $CAP,<t_us>,<rawPos>,<rawNeg>
+        #   diff-only:   $CAP,<t_us>,<rawDiff>
+        se = None
         rows = []          # full per-sample records for CSV export
         t_ms, pos_v, neg_v, diff_v = [], [], [], []
         for row in self.cap_rows:
             f = row.split(",")
-            if len(f) < 4:
-                continue
             try:
                 t = float(f[1])
-                rp = int(f[2])
-                rn = int(f[3])
-            except ValueError:
+                if len(f) >= 4:
+                    rp = int(f[2])
+                    rn = int(f[3])
+                    pv = rp / full_scale * vref
+                    nv = rn / full_scale * vref
+                    dv = pv - nv
+                    if se is None:
+                        se = True
+                    t_rel = (t - toggle_us) / 1000.0
+                    pos_v.append(pv)
+                    neg_v.append(nv)
+                    rows.append((t, t_rel, rp, rn, pv, nv, dv))
+                elif len(f) >= 3:
+                    rd = int(f[2])
+                    dv = rd / full_scale * vref
+                    if se is None:
+                        se = False
+                    t_rel = (t - toggle_us) / 1000.0
+                    rows.append((t, t_rel, rd, dv))
+                else:
+                    continue
+            except (ValueError, IndexError):
                 continue
-            t_rel = (t - toggle_us) / 1000.0
-            pv = rp / full_scale * vref
-            nv = rn / full_scale * vref
             t_ms.append(t_rel)
-            pos_v.append(pv)
-            neg_v.append(nv)
-            diff_v.append(pv - nv)
-            rows.append((t, t_rel, rp, rn, pv, nv, pv - nv))
+            diff_v.append(dv)
 
+        se = bool(se)
         # retain for CSV export and enable the save button
-        self.last_capture = {"toggle_us": toggle_us, "rows": rows}
+        self.last_capture = {"toggle_us": toggle_us, "se": se, "rows": rows}
         self.save_btn.config(state=("normal" if rows else "disabled"))
 
         self.cap_ax.clear()
@@ -415,8 +443,9 @@ class App(tk.Tk):
         self.cap_ax.set_xlabel("time from toggle (ms)")
         self.cap_ax.set_ylabel("volts")
         if t_ms:
-            self.cap_ax.plot(t_ms, pos_v, ".-", ms=2, lw=0.8, label="pos (A0)")
-            self.cap_ax.plot(t_ms, neg_v, ".-", ms=2, lw=0.8, label="neg (A2)")
+            if se:
+                self.cap_ax.plot(t_ms, pos_v, ".-", ms=2, lw=0.8, label="pos (A0)")
+                self.cap_ax.plot(t_ms, neg_v, ".-", ms=2, lw=0.8, label="neg (A2)")
             self.cap_ax.plot(t_ms, diff_v, ".-", ms=2, lw=1.0, label="diff")
             self.cap_ax.axvline(0.0, color="k", ls="--", lw=0.8, label="toggle")
             self.cap_ax.legend(loc="upper right", fontsize=8)
@@ -438,11 +467,16 @@ class App(tk.Tk):
         try:
             with open(path, "w", newline="") as fh:
                 w = csv.writer(fh)
-                w.writerow(["t_us", "t_ms_from_toggle",
-                            "rawPos", "rawNeg", "posV", "negV", "diffV"])
-                for (t, t_rel, rp, rn, pv, nv, dv) in self.last_capture["rows"]:
-                    w.writerow([f"{t:.0f}", f"{t_rel:.4f}", rp, rn,
-                                f"{pv:.6f}", f"{nv:.6f}", f"{dv:.6f}"])
+                if self.last_capture["se"]:
+                    w.writerow(["t_us", "t_ms_from_toggle",
+                                "rawPos", "rawNeg", "posV", "negV", "diffV"])
+                    for (t, t_rel, rp, rn, pv, nv, dv) in self.last_capture["rows"]:
+                        w.writerow([f"{t:.0f}", f"{t_rel:.4f}", rp, rn,
+                                    f"{pv:.6f}", f"{nv:.6f}", f"{dv:.6f}"])
+                else:
+                    w.writerow(["t_us", "t_ms_from_toggle", "rawDiff", "diffV"])
+                    for (t, t_rel, rd, dv) in self.last_capture["rows"]:
+                        w.writerow([f"{t:.0f}", f"{t_rel:.4f}", rd, f"{dv:.6f}"])
         except OSError as exc:
             messagebox.showerror("Save capture", f"Could not write file:\n{exc}")
             return

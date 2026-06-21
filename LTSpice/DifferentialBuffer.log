@@ -1,6 +1,6 @@
 LTspice 24.0.12 for Windows
 Circuit: * C:\Users\Nick\Documents\GitHub\Micro-DMM\LTSpice\DifferentialBuffer.asc
-Start Time: Tue Jun 16 11:00:20 2026
+Start Time: Sat Jun 20 19:49:48 2026
 r7: both pins shorted together -- ignoring.
 r9: both pins shorted together -- ignoring.
 solver = Normal
@@ -9,7 +9,7 @@ tnom = 27
 temp = 27
 method = modified trap
 WARNING: Less than two connections to node n001.  This node is used by r8.
-WARNING: Less than two connections to node n006.  This node is used by r10.
+WARNING: Less than two connections to node n005.  This node is used by r10.
 Direct Newton iteration failed to find .op point.  (Use ".option noopiter" to skip.)
 Starting Gmin stepping
 Gmin = 10
@@ -30,5 +30,5 @@ Gmin = 2.70769e-13
 Gmin = 0
 Gmin stepping succeeded in finding the operating point.
 
-Total elapsed time: 0.371 seconds.
+Total elapsed time: 0.957 seconds.
 

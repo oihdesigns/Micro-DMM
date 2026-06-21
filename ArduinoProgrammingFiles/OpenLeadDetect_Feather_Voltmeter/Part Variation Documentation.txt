@@ -1,0 +1,37 @@
+Headless Open Lead Detect
+
+With 5vdc logic
+
+Decay to flat when closed takes 500uS
+
+No Decay (Open): Signal is 1.3V
+
+Full Decay (Closed): Signal is 1.67V
+
+Normal board (ESP32 Based) sees
+
+
+1Meg bridge:
+~rest -0.836V
+DMM reads 1.07V off the board
+
+500k bridge:
+~rest -0.7
+DMM reads 0.7V off the board
+-1.2 (float) vs 0.9 (closed)
+
+200k bridge:
+~rest -0.55
+DMM reads 0.407V off the board
+-0.59 (float) vs 0.5 (closed)
+
+
+75k bridge:
+~rest -0.25
+DMM reads 0.176V off the board
+-0.26 (float) vs -0.23 (closed)
+! This is really too small with this circuit. Lots of false results. No good threshold in-between.
+
+
+
+ 

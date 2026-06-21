@@ -15,8 +15,28 @@
  *   - Pot on zeroThreshold for zero-voltage threshold      (optional)
  *
  * Serial commands (115200 baud):
- *   S  Force Stop    G  Go    U  Toggle updates
- *   M  Manual mode   R  Range toggle   D  Debug   ?  Help
+ *   Legacy single-char (send with newline): S G U M R D ?
+ *
+ * ── Diagnostic protocol (compatible with diagnostic_gui.py) ───────
+ * Commands in (each terminated with newline):
+ *   !DIAG[,0|1]      enter/exit diagnostic mode (bare = toggle)
+ *   !STREAM[,0|1]    continuous raw streaming on/off
+ *   !RATE,<ms>       stream interval in ms
+ *   !VMODE,<0|1|2>   voltage mode: 0=auto  1=lock ON  2=disable
+ *   !MOSFET,<-1|0|1> bridge: -1=auto(run detection) 0=hold off 1=hold on
+ *   !CAP[,<ms>]      capture ADC across the bridge-MOSFET toggle, then dump
+ *   !STATUS  / !?    print current status
+ * Data out:
+ *   $STATUS,diag=..,vmode=..,mosfet=..,stream=..,rate=..,capms=..,res=..,vref=..
+ *   $DIAG,<ms>,<rawDiff>,<diffV>                           (streaming)
+ *   $CAPSTART,<n>,<toggleUs>,<durMs>,<fullScale>,<vref>    (capture header)
+ *   $CAP,<t_us>,<rawDiff>                                  (capture rows)
+ *   $CAPEND
+ * This board only reads the ADC's internal differential (A0-A1); there are
+ * no separate single-ended readings.  Capture reports counts with a
+ * fixed-gain scale (fullScale=1000, vref=gain factor in mV/bit) so the host
+ * recovers volts as count/1000*gain.  ADS conversions are slow, so a few-ms
+ * capture yields only a handful of samples; lengthen the window for more.
  */
 
 #include <Wire.h>
@@ -26,6 +46,7 @@
 #include <Adafruit_ST7789.h>
 #include <Adafruit_NeoPixel.h>
 #include <Adafruit_MAX1704X.h>
+#include <ctype.h>
 
 // ── ADC Selection: Comment/uncomment ONE of these ────────────────
 //#define USE_ADS1115    // 16-bit ADC
@@ -164,6 +185,29 @@ unsigned long lastClosedBlinkTime = 0;
 unsigned long lastRedBlinkTime    = 0;
 const unsigned long RED_BLINK_MIN_MS_AC = 500;  // max 2 Hz red blink in AC mode
 
+// ── Diagnostic mode ───────────────────────────────────────────────
+bool diagMode = false;                 // suppresses TFT/human serial, enables $ protocol
+bool streamOn = false;                 // continuous raw streaming
+unsigned long streamIntervalMs = 50;   // streaming period (ADS is slow; ~20 Hz default)
+unsigned long lastStreamMs = 0;
+
+enum VoltOverride { VOLT_AUTO, VOLT_FORCE_ON, VOLT_DISABLED };
+VoltOverride voltOverride = VOLT_AUTO; // applies wherever Vzero is decided
+
+int mosfetHold = -1;                    // -1 auto (run detection), 0 hold off, 1 hold on
+
+// Transient capture buffer (raw differential counts; volts recovered by host)
+const int CAP_MAX_SAMPLES   = 600;
+const unsigned long CAP_PRE_US = 500;   // baseline sampled before the toggle
+unsigned long capDurationMs = 5;        // total capture window
+uint32_t capT[CAP_MAX_SAMPLES];
+int16_t  capDiff[CAP_MAX_SAMPLES];
+int capCount = 0;
+
+// Serial command line buffer
+char cmdBuf[48];
+int  cmdLen = 0;
+
 // ── ADC auto-ranging (values differ for ADS1115 vs ADS1015) ───────
 #ifdef USE_ADS1115
 // ADS1115: 16-bit, gain factors in mV/bit
@@ -231,6 +275,11 @@ const char* bridgeResistanceLabel(float v);
 void statusUpdate();
 void handleSerialCommands(char cmd);
 void blinkPixel(uint8_t r, uint8_t g, uint8_t b, unsigned long duration = BLINK_DURATION_MS);
+void pollSerial();
+void handleLine(char *line);
+void printStatus();
+void streamSample();
+void runCapture(unsigned long durationMs);
 
 // ==================================================================
 //  SETUP
@@ -341,6 +390,25 @@ void loop() {
 #else
   digitalWrite(VEnablePin, vRefEnable ? LOW : HIGH);
 #endif
+
+  // ── Serial (! diagnostic lines + legacy single chars) ──
+  pollSerial();
+
+  // ── Diagnostic mode takes over the loop ──
+  if (diagMode) {
+    if (mosfetHold >= 0) {
+      // Manual bridge hold: detection paused, MOSFET parked for observation.
+      digitalWrite(VbridgePin, mosfetHold ? BRIDGE_ON : BRIDGE_OFF);
+    } else {
+      measureVoltage();        // keep detection alive (honours voltOverride)
+    }
+    if (streamOn && (currentMillis - lastStreamMs >= streamIntervalMs)) {
+      lastStreamMs = currentMillis;
+      streamSample();
+    }
+    return;                    // skip TFT + human-readable status
+  }
+
   // Boot button:
   //   Short press (<600 ms release) → toggle cfSuppress (volt-only mode)
   //   Long press  (≥600 ms release) → toggle AC mode (VRMS + debounced lead detect)
@@ -365,11 +433,6 @@ void loop() {
     }
   }
   cfBtnPrev = cfBtnNow;
-
-  // ── Serial commands ──
-  if (Serial.available()) {
-    handleSerialCommands(Serial.read());
-  }
 
   // ── Measure ──
   float prev = newVoltageReading;
@@ -508,8 +571,10 @@ void measureVoltage() {
     // cycle (AC_ZERO_DEBOUNCE_MS ≈ 4 ms at 60 Hz) before ClosedOrFloat() is
     // called.  A real mains zero crossing passes the threshold in microseconds,
     // so it will never accumulate enough time to trigger.
-    if (!manual && vRefEnable && !cfSuppress &&
-        fabs(newVoltageReading) < CorFTrig) {
+    bool acZeroCond = (fabs(newVoltageReading) < CorFTrig);
+    if (voltOverride == VOLT_DISABLED) acZeroCond = true;    // force lead test
+    if (voltOverride == VOLT_FORCE_ON) acZeroCond = false;   // force voltage-present
+    if (!manual && vRefEnable && !cfSuppress && acZeroCond) {
       if (!acBelowThreshActive) {
         acBelowThreshActive = true;
         acBelowThreshStart  = currentMillis;
@@ -533,8 +598,11 @@ void measureVoltage() {
   } else {
     // ── DC mode: original behaviour ───────────────────────────────
     displayVoltage = cfSuppress ? newVoltageReading : medianVoltage;
-    
-    if (fabs(medianVoltage) < CorFTrig && !manual && vRefEnable && !cfSuppress) {
+
+    bool dcZeroCond = (fabs(medianVoltage) < CorFTrig);
+    if (voltOverride == VOLT_DISABLED) dcZeroCond = true;     // force lead test
+    if (voltOverride == VOLT_FORCE_ON) dcZeroCond = false;    // force voltage-present
+    if (dcZeroCond && !manual && vRefEnable && !cfSuppress) {
       Vzero     = true;
       VzeroFlag = (prevVzero != Vzero);
       ClosedOrFloat();
@@ -630,6 +698,137 @@ void blinkPixel(uint8_t r, uint8_t g, uint8_t b, unsigned long duration) {
   delay(duration);
   pixel.clear();
   pixel.show();
+}
+
+// ==================================================================
+//  DIAGNOSTIC: streaming, capture, command handling
+// ==================================================================
+void printStatus() {
+  Serial.print("$STATUS,diag=");  Serial.print(diagMode ? 1 : 0);
+  Serial.print(",vmode=");        Serial.print((int)voltOverride);
+  Serial.print(",mosfet=");       Serial.print(mosfetHold);
+  Serial.print(",stream=");       Serial.print(streamOn ? 1 : 0);
+  Serial.print(",rate=");         Serial.print(streamIntervalMs);
+  Serial.print(",capms=");        Serial.print(capDurationMs);
+#ifdef USE_ADS1115
+  Serial.print(",res=");          Serial.print(16);
+#else
+  Serial.print(",res=");          Serial.print(12);
+#endif
+  Serial.print(",vref=");         Serial.println(4.096, 3);  // GAIN_ONE full-scale
+}
+
+// One streamed sample: the ADC's internal differential (A0-A1) only.
+void streamSample() {
+  ads.setGain(GAIN_ONE);                 // fixed gain -> constant host scaling
+  int16_t rawDif = ads.readADC_Differential_0_1();
+  float dv = rawDif * GAIN_FACTOR_1 / 1000.0f;
+  Serial.print("$DIAG,");
+  Serial.print(millis()); Serial.print(",");
+  Serial.print(rawDif);   Serial.print(",");
+  Serial.println(dv, 4);
+}
+
+// Capture the ADC differential (A0-A1) across the bridge-MOSFET toggle.
+// Holds the bridge OFF (resting voltage-measure state), samples a baseline,
+// engages the bridge (BRIDGE_ON, the lead-test edge) at CAP_PRE_US, keeps
+// sampling until durationMs elapses or the buffer fills, then restores OFF.
+// Fixed gain (GAIN_ONE) so the host's count/1000*gain conversion is constant.
+void runCapture(unsigned long durationMs) {
+  ads.setGain(GAIN_ONE);
+  ads.setDataRate(ADS_RATE_FAST);
+  digitalWrite(VbridgePin, BRIDGE_OFF);  // resting (bridge disconnected)
+  delay(2);
+
+  capCount = 0;
+  unsigned long durUs    = durationMs * 1000UL;
+  unsigned long toggleUs = 0;
+  bool toggled = false;
+  unsigned long t0 = micros();
+
+  while (capCount < CAP_MAX_SAMPLES) {
+    unsigned long t = micros() - t0;
+    if (!toggled && t >= CAP_PRE_US) {
+      digitalWrite(VbridgePin, BRIDGE_ON);   // engage bridge (lead-test edge)
+      toggleUs = micros() - t0;
+      toggled = true;
+    }
+    if (t >= durUs) break;
+    capT[capCount]    = t;
+    capDiff[capCount] = ads.readADC_Differential_0_1();
+    capCount++;
+  }
+
+  digitalWrite(VbridgePin, BRIDGE_OFF);  // restore resting state
+
+  Serial.print("$CAPSTART,");
+  Serial.print(capCount);      Serial.print(",");
+  Serial.print(toggleUs);      Serial.print(",");
+  Serial.print(durationMs);    Serial.print(",");
+  Serial.print(1000.0, 0);     Serial.print(",");      // fullScale
+  Serial.println(GAIN_FACTOR_1, 6);                    // vref = gain factor (mV/bit)
+  for (int i = 0; i < capCount; i++) {
+    Serial.print("$CAP,");
+    Serial.print(capT[i]);    Serial.print(",");
+    Serial.println(capDiff[i]);
+  }
+  Serial.println("$CAPEND");
+
+  ads.setDataRate(ADS_RATE_MID);         // restore a sane rate for detection
+}
+
+// Parse one received command line.  '!' lines are diagnostic commands;
+// any other line is treated as a sequence of legacy single-char commands.
+void handleLine(char *line) {
+  if (line[0] != '!') {
+    for (char *p = line; *p; ++p) handleSerialCommands(*p);
+    return;
+  }
+  char *cmd = line + 1;
+  char *arg = strchr(cmd, ',');
+  if (arg) { *arg = '\0'; arg++; }
+  for (char *p = cmd; *p; ++p) *p = toupper(*p);
+
+  if (strcmp(cmd, "DIAG") == 0) {
+    diagMode = arg ? (atoi(arg) != 0) : !diagMode;
+    if (!diagMode) { streamOn = false; mosfetHold = -1; }
+    printStatus();
+  } else if (strcmp(cmd, "STREAM") == 0) {
+    streamOn = arg ? (atoi(arg) != 0) : !streamOn;
+    printStatus();
+  } else if (strcmp(cmd, "RATE") == 0) {
+    if (arg) { long r = atol(arg); streamIntervalMs = (r < 1) ? 1 : r; }
+    printStatus();
+  } else if (strcmp(cmd, "VMODE") == 0) {
+    int v = arg ? atoi(arg) : 0;
+    voltOverride = (VoltOverride)constrain(v, 0, 2);
+    printStatus();
+  } else if (strcmp(cmd, "MOSFET") == 0) {
+    int m = arg ? atoi(arg) : -1;
+    mosfetHold = (m < 0) ? -1 : (m ? 1 : 0);
+    printStatus();
+  } else if (strcmp(cmd, "CAP") == 0) {
+    unsigned long d = arg ? atol(arg) : capDurationMs;
+    if (d < 1) d = 1;
+    capDurationMs = d;
+    runCapture(d);
+  } else if (strcmp(cmd, "STATUS") == 0 || strcmp(cmd, "?") == 0) {
+    printStatus();
+  } else {
+    Serial.print("$ERR,unknown,"); Serial.println(cmd);
+  }
+}
+
+// Accumulate serial bytes into cmdBuf; dispatch on newline.
+void pollSerial() {
+  while (Serial.available()) {
+    char c = Serial.read();
+    if (c == '\n' || c == '\r') {
+      if (cmdLen > 0) { cmdBuf[cmdLen] = '\0'; handleLine(cmdBuf); cmdLen = 0; }
+    } else if (cmdLen < (int)sizeof(cmdBuf) - 1) {
+      cmdBuf[cmdLen++] = c;
+    }
+  }
 }
 
 // ==================================================================
