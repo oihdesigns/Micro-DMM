@@ -800,8 +800,8 @@
   "OpAmpBuffer_12vboard": {
     "rate": "44100",
     "bits": "16",
-    "time": "30",
-    "smooth": "0",
+    "time": "40",
+    "smooth": "3",
     "log": "4000",
     "diff_enable": true,
     "diff_pos": "A2",

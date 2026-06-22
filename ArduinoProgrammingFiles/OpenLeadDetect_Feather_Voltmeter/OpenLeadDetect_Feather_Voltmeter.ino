@@ -233,7 +233,7 @@ const float GAIN_FACTOR_8         = 0.25;      // +/-0.512 V
 const float GAIN_FACTOR_16        = 0.125;     // +/-0.256 V
 static const int ADC_COUNT_LOW_THRESH  = 600;
 static const int ADC_COUNT_HIGH_THRESH = 1800;
-float vClosedThres     = 0.15; 
+float vClosedThres     = 1.34; 
 #define ADS_RATE_FAST  RATE_ADS1015_3300SPS
 #define ADS_RATE_MID  RATE_ADS1015_490SPS
 #define ADS_RATE_SLOW  RATE_ADS1015_250SPS
@@ -314,6 +314,10 @@ void setup() {
 
   // ── I2C + ADC ──
   Wire.begin();
+  Wire.setClock(1000000);           // 400 kHz fast-mode I2C: each ADS read is
+                                   // several register transactions, so the bus
+                                   // clock dominates throughput. ADS1015 also
+                                   // supports 1 MHz if the bus wiring is clean.
   analogReadResolution(12);        // ESP32 12-bit ADC (0-4095)
 
   while (!ads.begin(0x48, &Wire)) {
@@ -629,11 +633,11 @@ void ClosedOrFloat() {
 
   // First bridge sample
   digitalWrite(VbridgePin, BRIDGE_ON);
-  delay(1);
+  //delay(1); //I don't think I need this, or it should be in micro seconds, not millis.
   ads.setDataRate(ADS_RATE_FAST);
-  ads.setGain(GAIN_EIGHT);
+  ads.setGain(GAIN_TWO);
   float bv1 = ads.readADC_Differential_0_1()
-              * (GAIN_FACTOR_8 / 1000.0f);
+              * (GAIN_FACTOR_2 / 1000.0f);
   digitalWrite(VbridgePin, BRIDGE_OFF);
   ads.setDataRate(ADS_RATE_MID);
   /*
@@ -720,9 +724,9 @@ void printStatus() {
 
 // One streamed sample: the ADC's internal differential (A0-A1) only.
 void streamSample() {
-  ads.setGain(GAIN_ONE);                 // fixed gain -> constant host scaling
+  ads.setGain(GAIN_TWO);                 // fixed gain -> constant host scaling
   int16_t rawDif = ads.readADC_Differential_0_1();
-  float dv = rawDif * GAIN_FACTOR_1 / 1000.0f;
+  float dv = rawDif * GAIN_FACTOR_2 / 1000.0f;
   Serial.print("$DIAG,");
   Serial.print(millis()); Serial.print(",");
   Serial.print(rawDif);   Serial.print(",");
@@ -735,16 +739,26 @@ void streamSample() {
 // sampling until durationMs elapses or the buffer fills, then restores OFF.
 // Fixed gain (GAIN_ONE) so the host's count/1000*gain conversion is constant.
 void runCapture(unsigned long durationMs) {
-  ads.setGain(GAIN_ONE);
+  ads.setGain(GAIN_TWO);
   ads.setDataRate(ADS_RATE_FAST);
   digitalWrite(VbridgePin, BRIDGE_OFF);  // resting (bridge disconnected)
   delay(2);
+
+  // Start ONE continuous conversion stream on the A0-A1 differential. In
+  // continuous mode each loop iteration is a single conversion-register read
+  // (getLastConversionResults) instead of the single-shot sequence of
+  // start-conversion + busy-poll + read that readADC_Differential_0_1() does.
+  ads.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_0_1, /*continuous=*/true);
 
   capCount = 0;
   unsigned long durUs    = durationMs * 1000UL;
   unsigned long toggleUs = 0;
   bool toggled = false;
   unsigned long t0 = micros();
+  unsigned long nextSampleUs = 0;
+  // ADS1015 @ 3300 SPS converts every ~303 us. Pace the loop to that so every
+  // stored sample is a fresh conversion rather than a re-read of the same one.
+  const unsigned long sampleStepUs = 305;
 
   while (capCount < CAP_MAX_SAMPLES) {
     unsigned long t = micros() - t0;
@@ -754,8 +768,10 @@ void runCapture(unsigned long durationMs) {
       toggled = true;
     }
     if (t >= durUs) break;
+    if (t < nextSampleUs) continue;          // pace to the conversion rate
+    nextSampleUs = t + sampleStepUs;
     capT[capCount]    = t;
-    capDiff[capCount] = ads.readADC_Differential_0_1();
+    capDiff[capCount] = ads.getLastConversionResults();
     capCount++;
   }
 
@@ -766,7 +782,7 @@ void runCapture(unsigned long durationMs) {
   Serial.print(toggleUs);      Serial.print(",");
   Serial.print(durationMs);    Serial.print(",");
   Serial.print(1000.0, 0);     Serial.print(",");      // fullScale
-  Serial.println(GAIN_FACTOR_1, 6);                    // vref = gain factor (mV/bit)
+  Serial.println(GAIN_FACTOR_2, 6);                    // vref = gain factor (mV/bit)
   for (int i = 0; i < capCount; i++) {
     Serial.print("$CAP,");
     Serial.print(capT[i]);    Serial.print(",");
@@ -831,6 +847,13 @@ void pollSerial() {
   }
 }
 
+// Baseline bridge voltage at the lowest characterized point (~10K).  The
+// confidence bar/percent are expressed relative to this baseline, so a
+// near-short (<10K) reads ~0% and the open/closed threshold (vClosedThres,
+// ~330K) reads 100%.  Must match the ~10K entry (kBinV[0]) in
+// bridgeResistanceLabel().
+const float BRIDGE_BASELINE_V = 1.262f;
+
 // ==================================================================
 //  BRIDGE RESISTANCE ESTIMATE
 //  Maps a bridge voltage reading (as shown on the "Bridge:" line) to
@@ -840,11 +863,11 @@ void pollSerial() {
 // ==================================================================
 const char* bridgeResistanceLabel(float v) {
   v = fabs(v);
-  if (v < 0.0605f) return "<10K";
-  if (v > 0.229f)  return ">11.2M";
+  if (v < 1.2605f) return "<10K";
+  if (v > 1.64f)  return ">50M";
 
-  static const float kBinV[]    = { 0.0605f, 0.068f,  0.095f,  0.125f, 0.206f,  0.229f  };
-  static const char* kBinName[] = { "~10K",  "~100K", "~470K", "~1M",  "~5.6M", "~11.2M" };
+  static const float kBinV[]    = { 1.262f, 1.268f, 1.288f,  1.339f,  1.431f, 1.547f, 1.578f, 1.633f  };
+  static const char* kBinName[] = { "~10K", "~33K",  "~100K", "~330K", "~1M",  "~4.7M", "~10M", "~50M" };
   const int n = sizeof(kBinV) / sizeof(kBinV[0]);
 
   int   best     = 0;
@@ -987,8 +1010,14 @@ void updateDisplay() {
   }
 
   // ── Confidence percentage (dynamic, overwrites in place) ──
+  // Baseline-subtracted: 0% at the <10K baseline, 100% at the open/closed
+  // threshold (~330K).  Readings above the threshold exceed 100%.
   if (vRefEnable && Vzero && !cfSuppress) {
-    float pct = (abs(bridgeAvg) / (vClosedThres))*100;
+    float span = vClosedThres - BRIDGE_BASELINE_V;
+    float pct  = (span > 0.0f)
+                 ? ((fabs(bridgeAvg) - BRIDGE_BASELINE_V) / span) * 100.0f
+                 : 0.0f;
+    if (pct < 0.0f) pct = 0.0f;
     tft.setTextSize(2);
     tft.setTextColor(COL_TEXT, COL_BG);
     tft.setCursor(174, 75);
@@ -1004,10 +1033,17 @@ void updateDisplay() {
     const int barY      = 98;
     const int barTotal  = 200;
     const int barH      = 6;
-    const int thresh100 = barTotal / 2;   // 100% mark at 67px
+    const int thresh100 = barTotal / 5;   // 100% mark at 67px
 
-    float pct = fabs(bridgeAvg) / (vClosedThres * 2.0f);
-    int barW  = constrain((int)(pct * barTotal), 0, barTotal);
+    // Baseline-subtracted, same visual scale as before: the open/closed
+    // threshold (frac = 1.0) lands on the midpoint marker, and the bar fills
+    // completely at twice the (threshold - baseline) span.
+    float span = vClosedThres - BRIDGE_BASELINE_V;
+    float frac = (span > 0.0f)
+                 ? (fabs(bridgeAvg) - BRIDGE_BASELINE_V) / span
+                 : 0.0f;
+    float pct  = frac / 5.0f;
+    int barW   = constrain((int)(pct * barTotal), 0, barTotal);
 
     if (barW <= thresh100) {
       // All green, nothing over threshold

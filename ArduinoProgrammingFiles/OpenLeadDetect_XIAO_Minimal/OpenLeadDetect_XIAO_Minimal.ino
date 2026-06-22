@@ -61,11 +61,11 @@ const float ADC_FULL_SCALE   = 16383.0f;    // 2^14 - 1
 // Differential (A0 - A2) rests near 0 V, so the band is centred on 0
 // and detection looks at the magnitude of the deviation.  Retune
 // OPEN_THRESH_V against real closed/open readings on the bench.
-const float REF_CENTER_V   = -0.2f;   // resting differential (~0 V)
+const float REF_CENTER_V   = -0.1f;   // resting differential (~0 V)
 const float REF_BAND_V      = 0.1f;  // |A0-A2| within this -> run the test
-const float OPEN_THRESH_V   = 0.9f;  // |deviation| below = open, at/above = closed
+const float OPEN_THRESH_V   = 0.3f;  // |deviation| below = open, at/above = closed
 const unsigned long SETTLE_Post_MS = 1;     // MOSFET-off settle before test read
-const unsigned long SETTLE_Pre_uS = 100;
+const unsigned long SETTLE_Pre_uS = 300;
 
 // ── Noise / averaging ────────────────────────────────────────────
 // Voltage-present decision:
@@ -76,9 +76,16 @@ const unsigned long SETTLE_Pre_uS = 100;
 //   TEST_AGREE_COUNT times in a row (capped by TEST_MAX_ATTEMPTS so a
 //   noisy boundary can never hang the loop).
 int          VOLT_AVG_SAMPLES = 10;     // reads averaged for voltage-present decision
-int          TEST_AGREE_COUNT = 2;     // consecutive matching MOSFET tests required
+int          TEST_AGREE_COUNT = 1;     // consecutive matching MOSFET tests required (1 = single test)
 const float  VOLT_FAST_MULT   = 1.5f;  // single-read "voltage present" shortcut
 const int    TEST_MAX_ATTEMPTS = 30;   // safety cap on MOSFET test repeats
+
+// Display/alert debounce: a newly detected state must repeat for this many
+// detection passes in a row before the LED switches to it.  This is what keeps
+// the alert steady, independent of TEST_AGREE_COUNT -- so TEST_AGREE_COUNT can
+// be lowered to 1 (single fast test) without the LED bouncing at a noisy
+// open/closed boundary.  Set to 1 for no display debounce.
+const int    STATE_STABLE_COUNT = 2;   // detection passes a new state must repeat
 
 // ── Pin assignments ──────────────────────────────────────────────
 const int SENSE_POS  = A0;   // pseudo-differential positive input
@@ -290,10 +297,24 @@ void runDetection() {
     present = voltagePresent();
   }
 
-  if (present) {
-    leadState = STATE_VOLTAGE;
+  LeadState rawState = present ? STATE_VOLTAGE : runMosfetTestStable();
+
+  // Display debounce: commit the raw detection result to leadState (and thus
+  // the LED/alert) only after it has repeated STATE_STABLE_COUNT passes in a
+  // row.  Without this, a single noisy test (TEST_AGREE_COUNT = 1) could flip
+  // leadState every pass, and updateLed() cancels each in-progress flash on a
+  // state change -- so the alert LED would never finish a blink.
+  static LeadState candidate   = STATE_VOLTAGE;
+  static int       stableCount = 0;
+  if (rawState == leadState) {
+    candidate   = rawState;     // already displayed; nothing pending
+    stableCount = 0;
   } else {
-    leadState = runMosfetTestStable();
+    if (rawState != candidate) { candidate = rawState; stableCount = 0; }
+    if (++stableCount >= STATE_STABLE_COUNT) {
+      leadState   = rawState;
+      stableCount = 0;
+    }
   }
 }
 

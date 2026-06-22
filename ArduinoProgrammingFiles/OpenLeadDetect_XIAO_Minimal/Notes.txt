@@ -1,0 +1,3 @@
+The first enclosed version (200K constant bridge, 2Meg each from ADCs to Gnd, 2.5V ref) presents a constant 0.2239V on the DMM display.
+
+Revised to the LM4060 (1.25V), there's a constant 0.086V on the DMM display
