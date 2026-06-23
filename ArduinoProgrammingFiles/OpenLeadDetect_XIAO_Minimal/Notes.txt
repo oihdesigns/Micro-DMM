@@ -1,3 +1,13 @@
-The first enclosed version (200K constant bridge, 2Meg each from ADCs to Gnd, 2.5V ref) presents a constant 0.2239V on the DMM display.
+The first enclosed version (200K constant bridge, 2Meg each from ADCs to Gnd, LM4040 2.5V ref) presents a constant 0.2239V on the DMM display.
 
 Revised to the LM4060 (1.25V), there's a constant 0.086V on the DMM display
+
+No pulldown resistor from A0/A2 to gnd with LM4040 (2.5V): 0.027V on DMM. Rises back to ~0.3V with pulldowns put back on. Confirmed proper function USB or battery powered.
+
+Placing the PCB into diagnostic mode ups the ghost voltage to ~100mV. Not sure why. 
+
+Swapping the LM4060 1.25V onto the breadboard version drops the ghost voltage down to 10mV.
+
+Bumping the output impedance on the board to ~11MOhm (pair of 4.7M in front of the pair of 0.5M) drops the ghost voltage on the meter to 5.4mV, but kills the signal to barely visible.
+
+Adjusting the bridge so that I have the 11M input with a 1M as the permanent part, and 200K as the switching part also kills the signal. Ghost voltage 12.8mV. 

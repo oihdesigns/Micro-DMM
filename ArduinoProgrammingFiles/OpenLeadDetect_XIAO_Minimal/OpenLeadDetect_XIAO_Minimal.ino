@@ -61,11 +61,22 @@ const float ADC_FULL_SCALE   = 16383.0f;    // 2^14 - 1
 // Differential (A0 - A2) rests near 0 V, so the band is centred on 0
 // and detection looks at the magnitude of the deviation.  Retune
 // OPEN_THRESH_V against real closed/open readings on the bench.
-const float REF_CENTER_V   = -0.1f;   // resting differential (~0 V)
-const float REF_BAND_V      = 0.1f;  // |A0-A2| within this -> run the test
-const float OPEN_THRESH_V   = 0.3f;  // |deviation| below = open, at/above = closed
+
+
+const float REF_CENTER_V   = 0.0f;   // resting differential (~0 V)
+const float REF_BAND_V      = 0.05f;  // |A0-A2| within this -> run the test
 const unsigned long SETTLE_Post_MS = 1;     // MOSFET-off settle before test read
 const unsigned long SETTLE_Pre_uS = 300;
+
+//Self-contained prototype
+
+const float OPEN_THRESH_V   = 0.250f;  // |deviation| below = open, at/above = closed
+
+
+//Breadboard prototype
+//const float OPEN_THRESH_V   = 0.1f;  // |deviation| below = open, at/above = closed
+
+
 
 // ── Noise / averaging ────────────────────────────────────────────
 // Voltage-present decision:
@@ -98,6 +109,7 @@ const int MOSFET_PIN = D1;   // bridge MOSFET gate (HIGH = on/resting)
 
 // ── NeoPixel (Seeed XIAO mapping) ────────────────────────────────
 //Uncomment one of the two following lines to define PCB vs. external NeoPixel
+
 //#define LED_PIN  RGB_BUILTIN  // Define the pin for the built-in RGB LED
 #define LED_PIN  10 //
 #define NUM_PIXELS 1         // Number of WS2812 LEDs
@@ -136,7 +148,7 @@ unsigned long lastVoltFlash   = 0;
 
 unsigned long lastSerialTime = 0;
 const unsigned long serialInterval = 250;   // ms between debug prints
-const unsigned long generalDelay = 10;
+const unsigned long generalDelay = 50;
 
 // Most recent values, kept for serial debug
 float lastRestV = 0.0f;
