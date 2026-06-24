@@ -5,13 +5,17 @@
  * No ADS1X15, no display -- pseudo-differential measurement (A0 - A2),
  * status shown only on the onboard NeoPixel.
  *
- * "Pseudo-differential": the RA4M1 analogRead() API has no native
- * differential mode, so A0 and A2 are each sampled vs. GND and
- * subtracted in software.  Resting differential is ~0 V, so detection
- * works on the magnitude of the deviation from zero.
+ * "Pseudo-differential": analogRead() has no native differential mode, so
+ * A0 and A2 are each sampled vs. GND and subtracted in software.  Resting
+ * differential is ~0 V, so detection works on the magnitude of the deviation
+ * from zero.
  *
- * Target ADC:  Renesas RA4M1 (14-bit, analogReadResolution(14) -> 0..16383)
- * Board pinout: Seeed Studio XIAO (for NeoPixel mapping)
+ * Multi-board: builds for three Seeed XIAO chips from a single source -- pick
+ * one BOARD_XIAO_* define at the top (and match it in Tools > Board):
+ *   - XIAO RA4M1  (Renesas, 14-bit ADC, onboard RGB on RGB_BUILTIN/PIN_RGB_EN)
+ *   - XIAO SAMD21 (12-bit ADC, onboard NeoPixel on PIN_NEOPIXEL)
+ *   - XIAO RP2040 (12-bit ADC, onboard WS2812 data=12 / power=11)
+ * All board-specific values live in the BOARD SELECT block; the rest is shared.
  *
  * Measurement logic (repeated continuously):
  *   1. MOSFET held HIGH (resting / bridge connected), read A0 - A2.
@@ -50,12 +54,76 @@
 #include <Adafruit_NeoPixel.h>
 #include <ctype.h>
 
+// ══════════════════════════════════════════════════════════════════
+//  BOARD SELECT  —  uncomment EXACTLY ONE line for the chip you build
+// ══════════════════════════════════════════════════════════════════
+//#define BOARD_XIAO_RA4M1
+#define BOARD_XIAO_SAMD21
+//#define BOARD_XIAO_RP2040
+
+// ── Per-board configuration ───────────────────────────────────────
+// Everything that differs between the three XIAO chips lives in this block;
+// the rest of the sketch is board-agnostic and reads these CFG_* / LED_PIN /
+// RGB_POWER_PIN values.  Each block also cross-checks the architecture macro
+// so picking the wrong "Tools > Board" gives a clear error instead of a
+// mysterious runtime fault.
+#if defined(BOARD_XIAO_RA4M1)
+  #if !defined(ARDUINO_ARCH_RENESAS)
+    #error "BOARD_XIAO_RA4M1 selected, but Tools>Board is not a Renesas/RA4M1 board."
+  #endif
+  #define CFG_ADC_RESOLUTION  14
+  #define CFG_ADC_FULL_SCALE  16383.0f
+  #define CFG_MOSFET_PIN      D1
+  #define LED_PIN             RGB_BUILTIN     // onboard RGB
+  #define RGB_POWER_PIN       PIN_RGB_EN      // onboard RGB power enable
+  #define CFG_OPEN_THRESH_V   0.250f          // self-contained proto
+  #define CFG_REF_BAND_V      0.05f
+  //#define CFG_OPEN_THRESH_V 0.1f            // <- breadboard proto alt (then comment the line above)
+  #define CFG_SLEEP_WFI       1               // Cortex-M4 WFI idle
+
+#elif defined(BOARD_XIAO_SAMD21)
+  #if !defined(ARDUINO_ARCH_SAMD)
+    #error "BOARD_XIAO_SAMD21 selected, but Tools>Board is not a SAMD board."
+  #endif
+  #define CFG_ADC_RESOLUTION  12
+  #define CFG_ADC_FULL_SCALE  4095.0f
+  #define CFG_MOSFET_PIN      1               // D1 isn't defined on this core
+  #define LED_PIN             PIN_NEOPIXEL    // onboard NeoPixel
+  // (no separate RGB power-enable pin on this board)
+  #define CFG_OPEN_THRESH_V   0.1f
+  #define CFG_REF_BAND_V      0.01f
+  #define CFG_SLEEP_WFI       1               // Cortex-M0+ WFI idle
+
+#elif defined(BOARD_XIAO_RP2040)
+  #if !defined(ARDUINO_ARCH_RP2040)
+    #error "BOARD_XIAO_RP2040 selected, but Tools>Board is not a Pico/RP2040 board."
+  #endif
+  #define CFG_ADC_RESOLUTION  12
+  #define CFG_ADC_FULL_SCALE  4095.0f
+  #define CFG_MOSFET_PIN      D1
+  #define LED_PIN             12              // onboard WS2812 data
+  #define RGB_POWER_PIN       11              // onboard WS2812 power enable
+  #define CFG_OPEN_THRESH_V   0.11f
+  #define CFG_REF_BAND_V      0.01f
+  #define CFG_SLEEP_RP2040    1               // timer-alarm + WFI idle
+
+#else
+  #error "No board selected: uncomment one BOARD_XIAO_* line above."
+#endif
+
+// Optional: external NeoPixel on the custom PCB (data on D10, no power pin).
+// Uncomment all three to override the onboard-LED mapping above.
+//#undef  LED_PIN
+//#undef  RGB_POWER_PIN
+//#define LED_PIN  10
+
+void sleepMs(unsigned long ms);   // defined per-board further down
+
 // ── ADC reference ────────────────────────────────────────────────
-// The 2.46 V resting band is ~Vcc/2 for a 5 V supply.  Change to 3.3
-// here if this board runs the ADC against a 3.3 V reference.
-const float ADC_REF_VOLTAGE = 3.3f; //Apparently VREFH0 is connected to the 3.3rail.
-const int   ADC_RESOLUTION   = 14;          // RA4M1 14-bit
-const float ADC_FULL_SCALE   = 16383.0f;    // 2^14 - 1
+// VREFH/AREF is tied to the 3.3 V rail on all three boards.
+const float ADC_REF_VOLTAGE = 3.3f;
+//const int   ADC_RESOLUTION  = CFG_ADC_RESOLUTION; //This line still has to be commented out for the RP2040 and SAMD21
+const float ADC_FULL_SCALE  = CFG_ADC_FULL_SCALE;
 
 // ── Detection thresholds ─────────────────────────────────────────
 // Differential (A0 - A2) rests near 0 V, so the band is centred on 0
@@ -64,18 +132,12 @@ const float ADC_FULL_SCALE   = 16383.0f;    // 2^14 - 1
 
 
 const float REF_CENTER_V   = 0.0f;   // resting differential (~0 V)
-const float REF_BAND_V      = 0.05f;  // |A0-A2| within this -> run the test
+
 const unsigned long SETTLE_Post_MS = 1;     // MOSFET-off settle before test read
 const unsigned long SETTLE_Pre_uS = 300;
 
-//Self-contained prototype
-
-const float OPEN_THRESH_V   = 0.250f;  // |deviation| below = open, at/above = closed
-
-
-//Breadboard prototype
-//const float OPEN_THRESH_V   = 0.1f;  // |deviation| below = open, at/above = closed
-
+const float OPEN_THRESH_V = CFG_OPEN_THRESH_V;  // |dev| below = open, at/above = closed
+const float REF_BAND_V    = CFG_REF_BAND_V;     // |A0-A2| within this -> run the test
 
 
 // ── Noise / averaging ────────────────────────────────────────────
@@ -101,17 +163,14 @@ const int    STATE_STABLE_COUNT = 2;   // detection passes a new state must repe
 // ── Pin assignments ──────────────────────────────────────────────
 const int SENSE_POS  = A0;   // pseudo-differential positive input
 const int SENSE_NEG  = A2;   // pseudo-differential negative input
-const int MOSFET_PIN = D1;   // bridge MOSFET gate (HIGH = on/resting)
+const int MOSFET_PIN = CFG_MOSFET_PIN;   // bridge MOSFET gate (HIGH = on/resting)
 
 // MOSFET drive polarity (resting = HIGH per spec)
 #define MOSFET_ON   HIGH
 #define MOSFET_OFF  LOW
 
-// ── NeoPixel (Seeed XIAO mapping) ────────────────────────────────
-//Uncomment one of the two following lines to define PCB vs. external NeoPixel
-
-//#define LED_PIN  RGB_BUILTIN  // Define the pin for the built-in RGB LED
-#define LED_PIN  10 //
+// ── NeoPixel ──────────────────────────────────────────────────────
+// LED_PIN (and any RGB_POWER_PIN) come from the BOARD SELECT block above.
 #define NUM_PIXELS 1         // Number of WS2812 LEDs
 
 Adafruit_NeoPixel pixel(NUM_PIXELS, LED_PIN, NEO_GRB + NEO_KHZ800);
@@ -211,7 +270,7 @@ LeadState runMosfetTest() {
   digitalWrite(MOSFET_PIN, MOSFET_OFF);
   delayMicroseconds(SETTLE_Pre_uS);
   lastTestV = readVoltage();
-  delay(SETTLE_Post_MS*2);
+  sleepMs(SETTLE_Post_MS*2);            // CPU idles during settle
   digitalWrite(MOSFET_PIN, MOSFET_ON);   // return to resting state
   return (fabs(lastTestV) > OPEN_THRESH_V) ? STATE_FLOAT : STATE_CLOSED;
 }
@@ -442,6 +501,51 @@ void handleLine(char *line) {
   }
 }
 
+// ── Low-power idle (sleepMs) ──────────────────────────────────────
+// Replaces delay()'s busy-wait with a real CPU idle so the core stops
+// switching while we wait.  All variants keep millis()/Serial alive and wake
+// on schedule; only the mechanism differs by chip.
+#if defined(CFG_SLEEP_WFI)
+// Cortex-M (RA4M1, SAMD21): the 1 kHz periodic tick that drives millis()
+// (SysTick on SAMD21, an AGT timer on RA4M1) interrupts the core every ms, so a
+// plain WFI loop idles between ticks.  This is "Sleep mode" -- CPU clock gated,
+// peripheral clocks still running.  For a deeper cut (RA4M1 Software Standby)
+// the high-speed clock must be stopped and woken from a standby-capable timer;
+// that's a larger, board-specific change left out here.
+void sleepMs(unsigned long ms) {
+  unsigned long start = millis();
+  while (millis() - start < ms) {
+    __WFI();   // CMSIS intrinsic
+  }
+}
+
+#elif defined(CFG_SLEEP_RP2040)
+// RP2040 (arduino-pico): millis() is driven by the hardware timer, not SysTick,
+// so a bare WFI could stall (no periodic IRQ to wake it).  Instead arm a one-
+// shot timer alarm for the wait and WFI until that alarm IRQ fires.  The core
+// is clock-gated for the interval while clk_sys keeps running -- i.e. light
+// sleep, not DORMANT.  It wakes early on any other IRQ (e.g. USB), which is
+// harmless because the millis() bound re-checks the deadline.
+#include "pico/time.h"
+#include "hardware/sync.h"
+static volatile bool _wake;
+static int64_t _wakeAlarm(alarm_id_t, void *) { _wake = true; return 0; }
+void sleepMs(unsigned long ms) {
+  _wake = false;
+  alarm_id_t id = add_alarm_in_ms(ms, _wakeAlarm, NULL, true);
+  if (id <= 0) { delay(ms); return; }            // couldn't arm: fall back, never stall
+  unsigned long start = millis();
+  while (!_wake && (millis() - start < ms)) {
+    __wfi();
+  }
+  cancel_alarm(id);
+}
+// NOTE: for a much deeper cut the RP2040 can stop clk_sys (SLEEP) or the
+// oscillators (DORMANT) via pico/sleep.h, woken by the AON timer or a GPIO.
+// That needs clock reconfiguration + a defined wake source and must be bench-
+// verified, so it is intentionally kept out of this portable path.
+#endif
+
 // Accumulate serial bytes into cmdBuf; dispatch on newline.
 void pollSerial() {
   while (Serial.available()) {
@@ -469,8 +573,11 @@ void setup() {
   pinMode(SENSE_POS, INPUT);
   pinMode(SENSE_NEG, INPUT);
 
-  pinMode(PIN_RGB_EN, OUTPUT); // Set up the power pin
-  digitalWrite(PIN_RGB_EN, HIGH); //Turn on power to the LED
+  // Enable the onboard NeoPixel's power rail if this board has one.
+#ifdef RGB_POWER_PIN
+  pinMode(RGB_POWER_PIN, OUTPUT);
+  digitalWrite(RGB_POWER_PIN, HIGH);
+#endif
 
   pixel.begin();
   pixel.clear();
@@ -524,5 +631,5 @@ void loop() {
     }
   }
 
-  delay(generalDelay); //Limit Overall Frequency
+  sleepMs(generalDelay); // pace the loop with a real CPU idle (per-board sleep)
 }
