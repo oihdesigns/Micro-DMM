@@ -7,6 +7,9 @@ Lets you:
   - enter/exit diagnostic mode
   - lock voltage mode ON or disable it
   - park the MOSFET (auto / hold off / hold on)
+  - pin the negative input (A2) to a fixed voltage to isolate board noise
+  - re-enable the normal LED alerts while charging (RA4M1 charge lockout)
+  - show battery presence and state-of-charge percentage (RA4M1)
   - stream both ADC pins independently plus the computed differential
   - trigger a transient capture across a MOSFET toggle and plot the result
 
@@ -174,6 +177,32 @@ class App(tk.Tk):
                                    state="disabled")
         self.save_btn.pack(side="left", padx=2)
 
+        # fixed-neg override: pin A2 to a constant so the diff isolates A0 /
+        # board noise from A2-reference noise (sends !NEGFIX).
+        nf = ttk.LabelFrame(ctl, text="Fixed neg (A2)", padding=4)
+        nf.grid(row=2, column=0, columnspan=3, padx=4, pady=4, sticky="w")
+        self.negfix_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(nf, text="Pin A2", variable=self.negfix_var,
+                        command=self._on_negfix).pack(side="left", padx=4)
+        ttk.Label(nf, text="V:").pack(side="left")
+        self.negv_var = tk.StringVar(value="1.250")
+        ttk.Entry(nf, width=7, textvariable=self.negv_var).pack(side="left", padx=2)
+        ttk.Button(nf, text="Set", command=self._on_negv).pack(side="left", padx=2)
+
+        # charge lockout (RA4M1): when USB-powered the device suppresses the
+        # normal alerts and shows a slow dim-red blink.  These buttons drive
+        # !ALERTS (re-enable normal alerts / restore the charging blink).
+        cf = ttk.LabelFrame(ctl, text="Charge (RA4M1)", padding=4)
+        cf.grid(row=2, column=3, columnspan=3, padx=4, pady=4, sticky="w")
+        self.charge_lbl = ttk.Label(cf, text="charge: --", width=18)
+        self.charge_lbl.pack(side="left", padx=4)
+        self.batt_lbl = ttk.Label(cf, text="batt: --", width=18)
+        self.batt_lbl.pack(side="left", padx=4)
+        ttk.Button(cf, text="Re-enable LED alerts",
+                   command=self._on_alerts_on).pack(side="left", padx=2)
+        ttk.Button(cf, text="Restore charge blink",
+                   command=self._on_alerts_off).pack(side="left", padx=2)
+
         # --- plots ---
         plots = ttk.Frame(self)
         plots.pack(fill="both", expand=True, padx=6, pady=4)
@@ -277,6 +306,35 @@ class App(tk.Tk):
     def _on_capture(self):
         self._send(f"!CAP,{self.cap_ms_var.get().strip()}")
 
+    def _negv_str(self):
+        # always emit a decimal point so the firmware parses arg as a voltage
+        # (and thus sets the value) rather than as an on/off flag.
+        try:
+            return f"{float(self.negv_var.get().strip()):.3f}"
+        except ValueError:
+            return "1.250"
+
+    def _on_negfix(self):
+        # checkbox: ON sends the current voltage (sets value + enables),
+        # OFF sends the disable flag.
+        if self.negfix_var.get():
+            self._send(f"!NEGFIX,{self._negv_str()}")
+        else:
+            self._send("!NEGFIX,0")
+
+    def _on_negv(self):
+        # Set button: push the voltage and enable the override.
+        self.negfix_var.set(True)
+        self._send(f"!NEGFIX,{self._negv_str()}")
+
+    def _on_alerts_on(self):
+        # force the normal LED alerts back on while charging (RA4M1)
+        self._send("!ALERTS,1")
+
+    def _on_alerts_off(self):
+        # restore the default charging blink (respect the charge lockout)
+        self._send("!ALERTS,0")
+
     # ------------------------------------------------------------- loop
     def _tick(self):
         try:
@@ -367,8 +425,31 @@ class App(tk.Tk):
                 self.rate_var.set(kv["rate"])
             if "capms" in kv:
                 self.cap_ms_var.set(kv["capms"])
+            if "negfix" in kv:
+                self.negfix_var.set(kv["negfix"] == "1")
+            if "negv" in kv:
+                self.negv_var.set(kv["negv"])
         except ValueError:
             pass
+
+        # charge lockout indicator (RA4M1): show USB-power state and whether
+        # the normal alerts have been forced back on.
+        if "charge" in kv:
+            charging = kv["charge"] == "1"
+            overridden = kv.get("alertovr") == "1"
+            if not charging:
+                txt, col = "charge: on battery", "#0a0"
+            elif overridden:
+                txt, col = "charge: USB (alerts on)", "#a60"
+            else:
+                txt, col = "charge: USB (blink)", "#a00"
+            self.charge_lbl.config(text=txt, foreground=col)
+
+        # battery state-of-charge (RA4M1)
+        if "battpct" in kv:
+            pct = kv["battpct"]
+            vtxt = f" ({kv['battv']}V)" if "battv" in kv else ""
+            self.batt_lbl.config(text=f"batt: {pct}%{vtxt}", foreground="#0a0")
 
     # ------------------------------------------------------------ plots
     def _redraw_live(self):

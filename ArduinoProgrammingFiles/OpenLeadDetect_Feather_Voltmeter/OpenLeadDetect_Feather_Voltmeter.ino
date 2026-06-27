@@ -863,11 +863,11 @@ const float BRIDGE_BASELINE_V = 1.262f;
 // ==================================================================
 const char* bridgeResistanceLabel(float v) {
   v = fabs(v);
-  if (v < 1.2605f) return "<10K";
+  if (v < 1.266f) return "<33K";
   if (v > 1.64f)  return ">50M";
 
-  static const float kBinV[]    = { 1.262f, 1.268f, 1.288f,  1.339f,  1.431f, 1.547f, 1.578f, 1.633f  };
-  static const char* kBinName[] = { "~10K", "~33K",  "~100K", "~330K", "~1M",  "~4.7M", "~10M", "~50M" };
+  static const float kBinV[]    = { 1.273f, 1.288f,  1.339f,  1.431f, 1.578f, 1.633f  };
+  static const char* kBinName[] = { "~33K", "~100K", "~330K", "~1M", "~10M", "~50M" };
   const int n = sizeof(kBinV) / sizeof(kBinV[0]);
 
   int   best     = 0;

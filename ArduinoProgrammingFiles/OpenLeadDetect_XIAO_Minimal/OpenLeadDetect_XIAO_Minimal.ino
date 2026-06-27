@@ -33,6 +33,11 @@
  *   dim-blue flash = floating (open lead)
  *   green flash    = closed
  *   red flash      = voltage present (test bypassed)
+ *   slow dim-red blink (1 Hz, 25%) = charging / USB powered (RA4M1 only);
+ *     normal alerts suppressed until unplugged or re-enabled via !ALERTS,1
+ *   slow green blink = charging and battery full (>= CFG_BATT_FULL_PCT)
+ *   power-on cue (RA4M1): 1-4 green blinks = battery charge level
+ *     (0-25/25-50/50-75/75-100 %)
  *
  * ── Serial diagnostic protocol (115200 baud, line based) ──────────
  * Commands in  (each terminated with newline):
@@ -41,10 +46,12 @@
  *   !RATE,<ms>       stream interval in ms
  *   !VMODE,<0|1|2>   voltage mode: 0=auto  1=lock ON  2=disable
  *   !MOSFET,<-1|0|1> MOSFET: -1=auto(run detection) 0=hold off 1=hold on
+ *   !NEGFIX[,0|1|<v>] pin A2 to a fixed value (bare=toggle, <v>=set volts & on)
+ *   !ALERTS[,0|1]    re-enable normal LED alerts while charging (1=on,0=blink)
  *   !CAP[,<ms>]      capture ADC across a MOSFET toggle, then dump
  *   !STATUS  / !?    print current status
  * Data out:
- *   $STATUS,diag=..,vmode=..,mosfet=..,stream=..,rate=..,capms=..,res=..,vref=..
+ *   $STATUS,...,negfix=..,negv=..,charge=..,alertovr=..,battpct=..,battv=..
  *   $DIAG,<ms>,<rawPos>,<rawNeg>,<posV>,<negV>,<diffV>      (streaming)
  *   $CAPSTART,<n>,<toggleUs>,<durMs>,<fullScale>,<vref>     (capture header)
  *   $CAP,<t_us>,<rawPos>,<rawNeg>                           (capture rows)
@@ -57,8 +64,8 @@
 // ══════════════════════════════════════════════════════════════════
 //  BOARD SELECT  —  uncomment EXACTLY ONE line for the chip you build
 // ══════════════════════════════════════════════════════════════════
-//#define BOARD_XIAO_RA4M1
-#define BOARD_XIAO_SAMD21
+#define BOARD_XIAO_RA4M1
+//#define BOARD_XIAO_SAMD21
 //#define BOARD_XIAO_RP2040
 
 // ── Per-board configuration ───────────────────────────────────────
@@ -74,12 +81,33 @@
   #define CFG_ADC_RESOLUTION  14
   #define CFG_ADC_FULL_SCALE  16383.0f
   #define CFG_MOSFET_PIN      D1
-  #define LED_PIN             RGB_BUILTIN     // onboard RGB
+  #define LED_PIN             10     // onboard RGB  RGB_BUILTIN
   #define RGB_POWER_PIN       PIN_RGB_EN      // onboard RGB power enable
   #define CFG_OPEN_THRESH_V   0.250f          // self-contained proto
-  #define CFG_REF_BAND_V      0.05f
+  #define CFG_REF_BAND_V      0.007f
   //#define CFG_OPEN_THRESH_V 0.1f            // <- breadboard proto alt (then comment the line above)
   #define CFG_SLEEP_WFI       1               // Cortex-M4 WFI idle
+  // Charge / USB-power detect: A3 is tied to VBUS through a 1:1 divider, so
+  // A3 ~= VBUS/2.  Off battery VBUS ~= 0; plugged into USB VBUS ~= 5 V (A3
+  // ~= 2.5 V).  Above CFG_CHARGE_THRESH_V we treat the unit as "charging" and
+  // suppress the normal alerts.  Only the RA4M1 board has this charge circuit;
+  // the SAMD21/RP2040 protos always see high VBUS, so they leave it undefined.
+  #define CFG_CHARGE_DETECT   1
+  #define CFG_CHARGE_PIN      A3
+  #define CFG_CHARGE_THRESH_V 2.0f            // A3 volts (VBUS/2) above this = charging
+  // Battery monitor: the XIAO RA4M1 has a built-in battery-sense divider on
+  // BAT_DET_PIN (P105) that reads ~Vbatt/2.  The divider is gated by
+  // BAT_READ_EN (P400): it MUST be driven HIGH to enable a reading, otherwise
+  // BAT_DET_PIN floats.  We only track voltage/percentage (no presence test --
+  // there's no reliable way to know a cell is fitted).  Single Li cell mapped
+  // linearly EMPTY..FULL for the percentage.  RA4M1 only.
+  #define CFG_BATT_MONITOR    1
+  #define CFG_BATT_PIN        BAT_DET_PIN     // P105, onboard battery sense (Vbatt/2)
+  #define CFG_BATT_EN_PIN     BAT_READ_EN     // P400, HIGH = enable battery sense
+  #define CFG_BATT_DIV        2.0f            // BAT_DET_PIN = Vbatt/2 -> multiply back up
+  #define CFG_BATT_EMPTY_V    3.30f           // 0%
+  #define CFG_BATT_FULL_V     4.20f           // 100%
+  #define CFG_BATT_FULL_PCT   90              // >= this % while charging = green blink
 
 #elif defined(BOARD_XIAO_SAMD21)
   #if !defined(ARDUINO_ARCH_SAMD)
@@ -122,7 +150,7 @@ void sleepMs(unsigned long ms);   // defined per-board further down
 // ── ADC reference ────────────────────────────────────────────────
 // VREFH/AREF is tied to the 3.3 V rail on all three boards.
 const float ADC_REF_VOLTAGE = 3.3f;
-//const int   ADC_RESOLUTION  = CFG_ADC_RESOLUTION; //This line still has to be commented out for the RP2040 and SAMD21
+const int   ADC_RESOLUTION  = CFG_ADC_RESOLUTION; //This line still has to be commented out for the RP2040 and SAMD21
 const float ADC_FULL_SCALE  = CFG_ADC_FULL_SCALE;
 
 // ── Detection thresholds ─────────────────────────────────────────
@@ -131,9 +159,9 @@ const float ADC_FULL_SCALE  = CFG_ADC_FULL_SCALE;
 // OPEN_THRESH_V against real closed/open readings on the bench.
 
 
-const float REF_CENTER_V   = 0.0f;   // resting differential (~0 V)
+const float REF_CENTER_V   = 0.005f;   // resting differential (~0 V)
 
-const unsigned long SETTLE_Post_MS = 1;     // MOSFET-off settle before test read
+const unsigned long SETTLE_Post_MS = 3;     // MOSFET-off settle before test read
 const unsigned long SETTLE_Pre_uS = 300;
 
 const float OPEN_THRESH_V = CFG_OPEN_THRESH_V;  // |dev| below = open, at/above = closed
@@ -150,7 +178,7 @@ const float REF_BAND_V    = CFG_REF_BAND_V;     // |A0-A2| within this -> run th
 //   noisy boundary can never hang the loop).
 int          VOLT_AVG_SAMPLES = 10;     // reads averaged for voltage-present decision
 int          TEST_AGREE_COUNT = 1;     // consecutive matching MOSFET tests required (1 = single test)
-const float  VOLT_FAST_MULT   = 1.5f;  // single-read "voltage present" shortcut
+const float  VOLT_FAST_MULT   = 5.0f;  // single-read "voltage present" shortcut
 const int    TEST_MAX_ATTEMPTS = 30;   // safety cap on MOSFET test repeats
 
 // Display/alert debounce: a newly detected state must repeat for this many
@@ -205,6 +233,30 @@ unsigned long lastClosedFlash = 0;
 bool          voltFlashing    = false;
 unsigned long lastVoltFlash   = 0;
 
+// ── Charge / USB-power lockout ────────────────────────────────────
+// When charging (see CFG_CHARGE_DETECT), the normal float/closed/voltage
+// alerts are suppressed and replaced by a slow dim-red "charging" blink:
+// 1 Hz, 25% duty (250 ms on / 750 ms off), brightness 64.  The GUI can force
+// the normal alerts back on for the current session via !ALERTS,1; that
+// override auto-clears when the unit is unplugged.  These are declared on all
+// boards so the command/status path is uniform, but chargeActive only ever
+// goes true where CFG_CHARGE_DETECT reads the VBUS-sense pin.
+bool          chargeActive    = false;  // VBUS sense above threshold (USB in)
+bool          alertOverride   = false;  // user re-enabled normal alerts while charging
+bool          chargeBlinkOn   = false;
+unsigned long lastChargeBlink = 0;
+const unsigned long CHARGE_BLINK_PERIOD_MS = 2000;  // 2 Hz
+const unsigned long CHARGE_BLINK_ON_MS     = 250;   // 25% duty
+const uint8_t       CHARGE_BLINK_BRIGHT    = 25;    // red brightness while charging
+
+// ── Battery monitor ───────────────────────────────────────────────
+// Latest battery reading, refreshed each detection pass by updateChargeState()
+// (RA4M1 only -- see CFG_BATT_MONITOR).  There is no reliable way to know if a
+// cell is physically present, so we only track voltage / percentage: battPct
+// drives the green-vs-red charging blink and the power-on level cue.
+float battV   = 0.0f;   // measured battery voltage (BAT_DET_PIN * divider)
+int   battPct = 0;      // 0..100 %, linear EMPTY..FULL
+
 unsigned long lastSerialTime = 0;
 const unsigned long serialInterval = 250;   // ms between debug prints
 const unsigned long generalDelay = 50;
@@ -224,6 +276,14 @@ VoltOverride voltOverride = VOLT_AUTO; // applies whenever detection runs
 
 int mosfetHold = -1;                    // -1 auto (run detection), 0 hold off, 1 hold on
 
+// Fixed-negative override (diagnostic): replace the live A2 read with a
+// constant so the differential isolates A0 / board noise from A2-reference
+// noise.  A2 should rest near 1.250 V; pinning it to that value means any
+// remaining ripple in the diff is coming from A0 or the supply, not from the
+// reference drifting.  Applies to detection, streaming, AND capture.
+bool  negFixed  = false;     // false = read A2 normally, true = use negFixedV
+float negFixedV = 1.250f;    // fixed pseudo-reference voltage when negFixed
+
 // Transient capture buffer (raw counts; volts computed by the host)
 const int CAP_MAX_SAMPLES   = 600;      // ~4.8 KB of RAM
 const unsigned long CAP_PRE_US = 500;   // baseline sampled before the toggle
@@ -238,10 +298,21 @@ char cmdBuf[48];
 int  cmdLen = 0;
 
 // ── Helpers ──────────────────────────────────────────────────────
+// Negative-channel read.  Normally a live A2 sample, but when negFixed is on
+// it returns the raw count corresponding to negFixedV instead, so the diff
+// isolates A0 / board noise from A2-reference noise.  Centralised here so
+// detection, streaming, and capture all honour the override identically.
+int readNegRaw() {
+  if (negFixed) {
+    return (int)((negFixedV / ADC_REF_VOLTAGE) * ADC_FULL_SCALE + 0.5f);
+  }
+  return analogRead(SENSE_NEG);
+}
+
 // Pseudo-differential read: sample both pins vs. GND and subtract.
 float readVoltage() {
   int rawPos = analogRead(SENSE_POS);
-  int rawNeg = analogRead(SENSE_NEG);
+  int rawNeg = readNegRaw();
   return ((rawPos - rawNeg) / ADC_FULL_SCALE) * ADC_REF_VOLTAGE;
 }
 
@@ -270,7 +341,7 @@ LeadState runMosfetTest() {
   digitalWrite(MOSFET_PIN, MOSFET_OFF);
   delayMicroseconds(SETTLE_Pre_uS);
   lastTestV = readVoltage();
-  sleepMs(SETTLE_Post_MS*2);            // CPU idles during settle
+  sleepMs(SETTLE_Post_MS);            // CPU idles during settle
   digitalWrite(MOSFET_PIN, MOSFET_ON);   // return to resting state
   return (fabs(lastTestV) > OPEN_THRESH_V) ? STATE_FLOAT : STATE_CLOSED;
 }
@@ -352,6 +423,117 @@ void updateLed() {
   }
 }
 
+#ifdef CFG_CHARGE_DETECT
+const int   CHARGE_PIN     = CFG_CHARGE_PIN;
+const float CHARGE_THRESH_V = CFG_CHARGE_THRESH_V;
+
+// Read the VBUS-sense pin (A3 = VBUS/2) in volts.
+float readChargeV() {
+  return (analogRead(CHARGE_PIN) / ADC_FULL_SCALE) * ADC_REF_VOLTAGE;
+}
+
+#ifdef CFG_BATT_MONITOR
+const int   BATT_PIN       = CFG_BATT_PIN;
+const int   BATT_EN_PIN    = CFG_BATT_EN_PIN;
+const float BATT_DIV       = CFG_BATT_DIV;
+const float BATT_EMPTY_V   = CFG_BATT_EMPTY_V;
+const float BATT_FULL_V    = CFG_BATT_FULL_V;
+
+// Battery voltage via the onboard sense divider (BAT_DET_PIN ~= Vbatt/2, scaled
+// back up).  BAT_READ_EN must already be HIGH (set in setup) for this to read a
+// real value rather than a floating pin.
+float readBattV() {
+  return (analogRead(BATT_PIN) / ADC_FULL_SCALE) * ADC_REF_VOLTAGE * BATT_DIV;
+}
+
+// Linear state-of-charge between EMPTY (0%) and FULL (100%), clamped.
+int battPercentOf(float v) {
+  float pct = (v - BATT_EMPTY_V) / (BATT_FULL_V - BATT_EMPTY_V) * 100.0f;
+  return (int)constrain(pct, 0.0f, 100.0f);
+}
+#endif
+
+// Update chargeActive from the VBUS sense (and refresh the battery reading).
+// VBUS high = USB plugged in -> charging; VBUS low = running on battery.  When
+// the unit is unplugged the per-session alert override is cleared so the next
+// charge starts in the suppressed-alert (charging-blink) state.
+void updateChargeState() {
+  chargeActive = (readChargeV() > CHARGE_THRESH_V);
+  if (!chargeActive) alertOverride = false;
+#ifdef CFG_BATT_MONITOR
+  battV   = readBattV();
+  battPct = battPercentOf(battV);
+#endif
+}
+#endif
+
+// Slow "charging" blink: 1 Hz, 25% duty (CHARGE_BLINK_ON_MS on, the remainder
+// of CHARGE_BLINK_PERIOD_MS off), brightness CHARGE_BLINK_BRIGHT.  Red while
+// charging; green once the battery is full (>= CFG_BATT_FULL_PCT).
+void chargeBlink() {
+  unsigned long now   = millis();
+  unsigned long phase = now - lastChargeBlink;
+  if (!chargeBlinkOn && phase >= CHARGE_BLINK_PERIOD_MS) {
+    chargeBlinkOn   = true;
+    lastChargeBlink = now;
+    uint8_t r = CHARGE_BLINK_BRIGHT, g = 0;
+#ifdef CFG_BATT_MONITOR
+    if (battPct >= CFG_BATT_FULL_PCT) { r = 0; g = CHARGE_BLINK_BRIGHT; }
+#endif
+    setPixel(r, g, 0);
+  } else if (chargeBlinkOn && phase >= CHARGE_BLINK_ON_MS) {
+    chargeBlinkOn = false;
+    setPixel(0, 0, 0);
+  }
+}
+
+// LED owner: while charging (and not overridden by !ALERTS,1) show the
+// charging blink and suppress the detection alerts; otherwise run updateLed().
+// On a transition between the two modes, blank the pixel and reset both sets
+// of blink flags so neither mode inherits a half-finished flash.
+void updateAlerts() {
+  static bool prevCharging = false;
+  bool charging = (chargeActive && !alertOverride);
+  if (charging != prevCharging) {
+    prevCharging   = charging;
+    chargeBlinkOn  = false;
+    floatFlashing  = false;
+    closedFlashing = false;
+    voltFlashing   = false;
+    setPixel(0, 0, 0);
+  }
+  if (charging) chargeBlink();
+  else          updateLed();
+}
+
+#ifdef CFG_BATT_MONITOR
+// Power-on charge-level cue (RA4M1), run once from setup(): 1..4 slow green
+// blinks showing battery level (0-25%=1, 25-50%=2, 50-75%=3, 75-100%=4).
+// Always shown at boot regardless of power source -- there is no battery-
+// presence test, so this simply reflects the measured battery voltage.
+void startupBatteryIndicate() {
+  // BAT_READ_EN was only just driven HIGH in setup(), so the sense node hasn't
+  // settled and the ADC's first conversions on a freshly-selected channel read
+  // low.  Discard reads over a short settling window, THEN average -- otherwise
+  // the blink count reflects a still-rising voltage (e.g. 1 blink for a full
+  // cell that the running loop later reads correctly).
+  for (int i = 0; i < 20; i++) { readBattV(); delay(5); }   // ~100 ms settle + discard
+  float v = 0.0f;
+  for (int i = 0; i < 8; i++) { v += readBattV(); delay(2); }
+  v /= 8.0f;
+
+  int blinks = battPercentOf(v) / 25 + 1;     // 1..4 (100% -> 5, clamped below)
+  if (blinks > 4) blinks = 4;
+  sleepMs(400);                               // brief gap before the count
+  for (int i = 0; i < blinks; i++) {
+    setPixel(0, CHARGE_BLINK_BRIGHT, 0);
+    sleepMs(200);
+    setPixel(0, 0, 0);
+    sleepMs(250);
+  }
+}
+#endif
+
 // ==================================================================
 //  DETECTION (one pass) -- sets leadState, honouring voltOverride
 // ==================================================================
@@ -400,13 +582,23 @@ void printStatus() {
   Serial.print(",rate=");         Serial.print(streamIntervalMs);
   Serial.print(",capms=");        Serial.print(capDurationMs);
   Serial.print(",res=");          Serial.print(ADC_RESOLUTION);
-  Serial.print(",vref=");         Serial.println(ADC_REF_VOLTAGE, 3);
+  Serial.print(",vref=");         Serial.print(ADC_REF_VOLTAGE, 3);
+  Serial.print(",negfix=");       Serial.print(negFixed ? 1 : 0);
+  Serial.print(",negv=");         Serial.print(negFixedV, 3);
+  Serial.print(",charge=");       Serial.print(chargeActive ? 1 : 0);
+  Serial.print(",alertovr=");     Serial.print(alertOverride ? 1 : 0);
+#ifdef CFG_BATT_MONITOR
+  Serial.print(",battpct=");     Serial.print(battPct);
+  Serial.print(",battv=");       Serial.println(battV, 3);
+#else
+  Serial.println();
+#endif
 }
 
 // One streamed sample: both pins independently + computed differential.
 void streamSample() {
   int rawPos = analogRead(SENSE_POS);
-  int rawNeg = analogRead(SENSE_NEG);
+  int rawNeg = readNegRaw();
   float pv = (rawPos / ADC_FULL_SCALE) * ADC_REF_VOLTAGE;
   float nv = (rawNeg / ADC_FULL_SCALE) * ADC_REF_VOLTAGE;
   Serial.print("$DIAG,");
@@ -442,7 +634,7 @@ void runCapture(unsigned long durationMs) {
     if (t >= durUs) break;
     capT[capCount]   = t;
     capPos[capCount] = analogRead(SENSE_POS);
-    capNeg[capCount] = analogRead(SENSE_NEG);
+    capNeg[capCount] = readNegRaw();
     capCount++;
   }
 
@@ -488,6 +680,25 @@ void handleLine(char *line) {
   } else if (strcmp(cmd, "MOSFET") == 0) {
     int m = arg ? atoi(arg) : -1;
     mosfetHold = (m < 0) ? -1 : (m ? 1 : 0);
+    printStatus();
+  } else if (strcmp(cmd, "NEGFIX") == 0) {
+    // !NEGFIX        toggle fixed-neg on/off (keeps current negv)
+    // !NEGFIX,0|1    off / on (uses current negv)
+    // !NEGFIX,<v>    set the fixed voltage AND enable (e.g. !NEGFIX,1.25)
+    if (!arg) {
+      negFixed = !negFixed;
+    } else if (strchr(arg, '.') != NULL) {
+      negFixedV = atof(arg);
+      negFixed  = true;
+    } else {
+      negFixed = (atoi(arg) != 0);
+    }
+    printStatus();
+  } else if (strcmp(cmd, "ALERTS") == 0) {
+    // !ALERTS,1 re-enables the normal LED alerts while charging (override the
+    // charge lockout); !ALERTS,0 restores the charging blink; bare = toggle.
+    // The override auto-clears on unplug (see updateChargeState).
+    alertOverride = arg ? (atoi(arg) != 0) : !alertOverride;
     printStatus();
   } else if (strcmp(cmd, "CAP") == 0) {
     unsigned long d = arg ? atol(arg) : capDurationMs;
@@ -573,6 +784,16 @@ void setup() {
   pinMode(SENSE_POS, INPUT);
   pinMode(SENSE_NEG, INPUT);
 
+#ifdef CFG_CHARGE_DETECT
+  pinMode(CHARGE_PIN, INPUT);            // A3 = VBUS/2 (USB-power sense)
+#endif
+#ifdef CFG_BATT_MONITOR
+  pinMode(BATT_PIN, INPUT);              // BAT_DET_PIN (P105) = Vbatt/2 sense
+  pinMode(BATT_EN_PIN, OUTPUT);          // BAT_READ_EN (P400)
+  digitalWrite(BATT_EN_PIN, HIGH);       // enable the battery-sense divider
+  delay(2);                              // let the divider settle before first read
+#endif
+
   // Enable the onboard NeoPixel's power rail if this board has one.
 #ifdef RGB_POWER_PIN
   pinMode(RGB_POWER_PIN, OUTPUT);
@@ -582,6 +803,10 @@ void setup() {
   pixel.begin();
   pixel.clear();
   pixel.show();
+
+#ifdef CFG_BATT_MONITOR
+  startupBatteryIndicate();              // power-on battery charge-level cue
+#endif
 
   Serial.println("OpenLeadDetect_XIAO_Minimal ready.");
 }
@@ -606,14 +831,20 @@ void loop() {
       streamSample();
     }
 
-    updateLed();
+#ifdef CFG_CHARGE_DETECT
+    updateChargeState();
+#endif
+    updateAlerts();
     delay(1);                  // light idle; capture/streaming set their own pace
     return;
   }
 
   // ── Normal mode ──────────────────────────────────────────────────
   runDetection();
-  updateLed();
+#ifdef CFG_CHARGE_DETECT
+  updateChargeState();
+#endif
+  updateAlerts();
 
   // ── Periodic serial debug ──
   if (millis() - lastSerialTime >= serialInterval) {

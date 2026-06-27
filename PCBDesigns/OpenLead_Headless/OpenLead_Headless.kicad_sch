@@ -2883,12 +2883,6 @@
 		(uuid "585a6069-1bcf-4c05-b51e-eb52ad2bcc4a")
 	)
 	(junction
-		(at 182.88 93.98)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "5c08306c-377f-4921-8b51-5a7c5facbe95")
-	)
-	(junction
 		(at 189.23 93.98)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -2905,12 +2899,6 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "887de1fc-c345-44b0-863c-885866f50a07")
-	)
-	(junction
-		(at 220.98 93.98)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "891528b8-96c2-412c-afbe-7f6255ee9662")
 	)
 	(junction
 		(at 124.46 39.37)
@@ -2954,7 +2942,7 @@
 	)
 	(wire
 		(pts
-			(xy 182.88 93.98) (xy 189.23 93.98)
+			(xy 179.07 93.98) (xy 189.23 93.98)
 		)
 		(stroke
 			(width 0)
@@ -3434,16 +3422,6 @@
 	)
 	(wire
 		(pts
-			(xy 182.88 104.14) (xy 182.88 101.6)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "95fe6720-2b09-4860-bb74-b1bc1828468b")
-	)
-	(wire
-		(pts
 			(xy 86.36 81.28) (xy 93.98 81.28)
 		)
 		(stroke
@@ -3504,7 +3482,7 @@
 	)
 	(wire
 		(pts
-			(xy 214.63 93.98) (xy 220.98 93.98)
+			(xy 214.63 93.98) (xy 224.79 93.98)
 		)
 		(stroke
 			(width 0)
@@ -3531,16 +3509,6 @@
 			(type default)
 		)
 		(uuid "c51dfdaf-6ce4-4ac3-ace9-a146b355d23c")
-	)
-	(wire
-		(pts
-			(xy 220.98 104.14) (xy 220.98 101.6)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "c988b944-5dec-421f-9992-8e2223ea5ccc")
 	)
 	(wire
 		(pts
@@ -3581,16 +3549,6 @@
 			(type default)
 		)
 		(uuid "cf9976b2-5ce5-4f12-908b-b67fc23071c0")
-	)
-	(wire
-		(pts
-			(xy 179.07 93.98) (xy 182.88 93.98)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "d1cf4ebd-4de9-46dc-a554-7efda4f7d62e")
 	)
 	(wire
 		(pts
@@ -3641,16 +3599,6 @@
 			(type default)
 		)
 		(uuid "e382a6c0-3bc6-416a-8d5a-67e91e407432")
-	)
-	(wire
-		(pts
-			(xy 224.79 93.98) (xy 220.98 93.98)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "e6f92171-595b-4548-931d-4c5753161e0a")
 	)
 	(wire
 		(pts
@@ -3989,54 +3937,6 @@
 		(uuid "3acf4cae-ff09-4638-bda6-dff5d8400bae")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 173.7867 93.98 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-	)
-	(global_label "Gnd"
-		(shape input)
-		(at 220.98 104.14 0)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left)
-		)
-		(uuid "3f847501-ed13-4ec8-8b31-86ef9c445dfc")
-		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 227.5332 104.14 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-	)
-	(global_label "Gnd"
-		(shape input)
-		(at 182.88 104.14 180)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right)
-		)
-		(uuid "4015c358-ee98-4187-b6ed-5cb8eac16591")
-		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 176.3268 104.14 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -4433,129 +4333,6 @@
 		)
 	)
 	(symbol
-		(lib_id "Device:R_US")
-		(at 182.88 97.79 180)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "06ae2d71-c5d4-436c-837f-e77e2468fa5f")
-		(property "Reference" "R16"
-			(at 180.594 96.012 90)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "1M"
-			(at 185.674 97.536 90)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
-			(at 181.864 97.536 90)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 182.88 97.79 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Resistor, US symbol"
-			(at 182.88 97.79 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "ValueTemp" ""
-			(at 182.88 97.79 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Function" "V Bridge"
-			(at 182.88 97.79 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Sim.Device" ""
-			(at 182.88 97.79 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Sim.Pins" ""
-			(at 182.88 97.79 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "59ef99c2-f14f-4e1e-ab4a-b8139ff063b1")
-		)
-		(pin "2"
-			(uuid "899aa6a7-f05a-4719-a7b9-7789ff1fc4cf")
-		)
-		(instances
-			(project "OpenLead_Headless"
-				(path "/62275b9a-5659-49ae-82ec-4456e0d78504"
-					(reference "R16")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "Connector:Conn_01x07_Pin")
 		(at 17.78 43.18 0)
 		(unit 1)
@@ -4705,7 +4482,7 @@
 		(dnp no)
 		(uuid "26314dc0-2c8b-4da1-8631-8c656373727e")
 		(property "Reference" "Q8"
-			(at 203.708 88.392 90)
+			(at 198.374 86.36 90)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -4715,7 +4492,7 @@
 			)
 		)
 		(property "Value" "AO3400A MOSFET"
-			(at 214.376 88.646 90)
+			(at 205.74 88.9 90)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -6880,7 +6657,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "LM4040"
+		(property "Value" "LM4060 - 1.25V"
 			(at 191.262 134.366 90)
 			(show_name no)
 			(do_not_autoplace no)
@@ -8066,129 +7843,6 @@
 			(project "OpenLead_Headless"
 				(path "/62275b9a-5659-49ae-82ec-4456e0d78504"
 					(reference "R25")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:R_US")
-		(at 220.98 97.79 180)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "d6279968-9e4c-4c3a-87d6-eda01f7553ac")
-		(property "Reference" "R15"
-			(at 218.694 96.012 90)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "1M"
-			(at 223.774 97.536 90)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
-			(at 219.964 97.536 90)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 220.98 97.79 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Resistor, US symbol"
-			(at 220.98 97.79 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "ValueTemp" ""
-			(at 220.98 97.79 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Function" "V Bridge"
-			(at 220.98 97.79 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Sim.Device" ""
-			(at 220.98 97.79 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Sim.Pins" ""
-			(at 220.98 97.79 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "17981f7f-fcc4-450f-97d0-590d1057de1c")
-		)
-		(pin "2"
-			(uuid "dc45195d-e59c-4fdb-9da4-1605e34482bc")
-		)
-		(instances
-			(project "OpenLead_Headless"
-				(path "/62275b9a-5659-49ae-82ec-4456e0d78504"
-					(reference "R15")
 					(unit 1)
 				)
 			)
