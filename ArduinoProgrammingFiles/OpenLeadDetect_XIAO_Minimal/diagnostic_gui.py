@@ -7,6 +7,7 @@ Lets you:
   - enter/exit diagnostic mode
   - lock voltage mode ON or disable it
   - park the MOSFET (auto / hold off / hold on)
+  - set the open/closed differential threshold (CFG_OPEN_THRESH_V) live
   - pin the negative input (A2) to a fixed voltage to isolate board noise
   - re-enable the normal LED alerts while charging (RA4M1 charge lockout)
   - show battery presence and state-of-charge percentage (RA4M1)
@@ -203,6 +204,16 @@ class App(tk.Tk):
         ttk.Button(cf, text="Restore charge blink",
                    command=self._on_alerts_off).pack(side="left", padx=2)
 
+        # open/closed differential threshold (CFG_OPEN_THRESH_V): set the
+        # voltage below which |A0-A2| reads as open vs at/above as closed.
+        # Sends !THRESH,<v>; the device echoes it back as openthr= in $STATUS.
+        th = ttk.LabelFrame(ctl, text="Open threshold", padding=4)
+        th.grid(row=3, column=0, columnspan=3, padx=4, pady=4, sticky="w")
+        ttk.Label(th, text="V:").pack(side="left")
+        self.thresh_var = tk.StringVar(value="0.250")
+        ttk.Entry(th, width=7, textvariable=self.thresh_var).pack(side="left", padx=2)
+        ttk.Button(th, text="Set", command=self._on_thresh).pack(side="left", padx=2)
+
         # --- plots ---
         plots = ttk.Frame(self)
         plots.pack(fill="both", expand=True, padx=6, pady=4)
@@ -327,6 +338,15 @@ class App(tk.Tk):
         self.negfix_var.set(True)
         self._send(f"!NEGFIX,{self._negv_str()}")
 
+    def _on_thresh(self):
+        # always emit a decimal point so the firmware parses the arg as volts.
+        try:
+            v = float(self.thresh_var.get().strip())
+        except ValueError:
+            self._log("** invalid threshold value")
+            return
+        self._send(f"!THRESH,{v:.3f}")
+
     def _on_alerts_on(self):
         # force the normal LED alerts back on while charging (RA4M1)
         self._send("!ALERTS,1")
@@ -429,6 +449,8 @@ class App(tk.Tk):
                 self.negfix_var.set(kv["negfix"] == "1")
             if "negv" in kv:
                 self.negv_var.set(kv["negv"])
+            if "openthr" in kv:
+                self.thresh_var.set(kv["openthr"])
         except ValueError:
             pass
 

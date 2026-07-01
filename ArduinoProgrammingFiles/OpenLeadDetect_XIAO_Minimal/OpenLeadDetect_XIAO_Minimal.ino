@@ -47,12 +47,14 @@
  *   !VMODE,<0|1|2>   voltage mode: 0=auto  1=lock ON  2=disable
  *   !MOSFET,<-1|0|1> MOSFET: -1=auto(run detection) 0=hold off 1=hold on
  *   !NEGFIX[,0|1|<v>] pin A2 to a fixed value (bare=toggle, <v>=set volts & on)
+ *   !THRESH[,<v>]    set open/closed differential threshold in volts (bare=report)
  *   !ALERTS[,0|1]    re-enable normal LED alerts while charging (1=on,0=blink)
  *   !CAP[,<ms>]      capture ADC across a MOSFET toggle, then dump
  *   !STATUS  / !?    print current status
  * Data out:
- *   $STATUS,...,negfix=..,negv=..,charge=..,alertovr=..,battpct=..,battv=..
+ *   $STATUS,...,openthr=..,negfix=..,negv=..,charge=..,alertovr=..,battpct=..,battv=..
  *   $DIAG,<ms>,<rawPos>,<rawNeg>,<posV>,<negV>,<diffV>      (streaming)
+ *   $A5,<ms>,<volts>                                        (RA4M1 A5 monitor)
  *   $CAPSTART,<n>,<toggleUs>,<durMs>,<fullScale>,<vref>     (capture header)
  *   $CAP,<t_us>,<rawPos>,<rawNeg>                           (capture rows)
  *   $CAPEND
@@ -81,10 +83,10 @@
   #define CFG_ADC_RESOLUTION  14
   #define CFG_ADC_FULL_SCALE  16383.0f
   #define CFG_MOSFET_PIN      D1
-  #define LED_PIN             10     // onboard RGB  RGB_BUILTIN
+  #define LED_PIN             RGB_BUILTIN     // onboard RGB  "RGB_BUILTIN" or "10"
   #define RGB_POWER_PIN       PIN_RGB_EN      // onboard RGB power enable
   #define CFG_OPEN_THRESH_V   0.250f          // self-contained proto
-  #define CFG_REF_BAND_V      0.007f
+  #define CFG_REF_BAND_V      0.03f
   //#define CFG_OPEN_THRESH_V 0.1f            // <- breadboard proto alt (then comment the line above)
   #define CFG_SLEEP_WFI       1               // Cortex-M4 WFI idle
   // Charge / USB-power detect: A3 is tied to VBUS through a 1:1 divider, so
@@ -108,6 +110,10 @@
   #define CFG_BATT_EMPTY_V    3.30f           // 0%
   #define CFG_BATT_FULL_V     4.20f           // 100%
   #define CFG_BATT_FULL_PCT   90              // >= this % while charging = green blink
+  // Spare-pin monitor: continually print the voltage on A5 for bench probing.
+  // RA4M1 only (the SAMD21/RP2040 protos leave this undefined).
+  #define CFG_A5_MONITOR      1
+  #define CFG_A5_PIN          A5
 
 #elif defined(BOARD_XIAO_SAMD21)
   #if !defined(ARDUINO_ARCH_SAMD)
@@ -158,13 +164,12 @@ const float ADC_FULL_SCALE  = CFG_ADC_FULL_SCALE;
 // and detection looks at the magnitude of the deviation.  Retune
 // OPEN_THRESH_V against real closed/open readings on the bench.
 
-
-const float REF_CENTER_V   = 0.005f;   // resting differential (~0 V)
+const float REF_CENTER_V   = 0.00f;   // resting differential (~0 V)
 
 const unsigned long SETTLE_Post_MS = 3;     // MOSFET-off settle before test read
 const unsigned long SETTLE_Pre_uS = 300;
 
-const float OPEN_THRESH_V = CFG_OPEN_THRESH_V;  // |dev| below = open, at/above = closed
+float OPEN_THRESH_V = CFG_OPEN_THRESH_V;  // |dev| below = open, at/above = closed (runtime-tunable via !THRESH)
 const float REF_BAND_V    = CFG_REF_BAND_V;     // |A0-A2| within this -> run the test
 
 
@@ -189,8 +194,8 @@ const int    TEST_MAX_ATTEMPTS = 30;   // safety cap on MOSFET test repeats
 const int    STATE_STABLE_COUNT = 2;   // detection passes a new state must repeat
 
 // ── Pin assignments ──────────────────────────────────────────────
-const int SENSE_POS  = A0;   // pseudo-differential positive input
-const int SENSE_NEG  = A2;   // pseudo-differential negative input
+const int SENSE_POS  = A2;   // pseudo-differential positive input
+const int SENSE_NEG  = A0;   // pseudo-differential negative input
 const int MOSFET_PIN = CFG_MOSFET_PIN;   // bridge MOSFET gate (HIGH = on/resting)
 
 // MOSFET drive polarity (resting = HIGH per spec)
@@ -261,6 +266,11 @@ unsigned long lastSerialTime = 0;
 const unsigned long serialInterval = 250;   // ms between debug prints
 const unsigned long generalDelay = 50;
 
+#ifdef CFG_A5_MONITOR
+unsigned long lastA5Time = 0;
+const unsigned long a5Interval = 500;       // ms between A5 reads/prints (2 Hz)
+#endif
+
 // Most recent values, kept for serial debug
 float lastRestV = 0.0f;
 float lastTestV = 0.0f;
@@ -310,8 +320,16 @@ int readNegRaw() {
 }
 
 // Pseudo-differential read: sample both pins vs. GND and subtract.
+// The RA4M1 shares one ADC + sample/hold behind an input mux, so the first
+// conversion after a channel switch carries residual charge from the previous
+// channel (worst when that channel sat at a high-impedance mid-scale voltage,
+// e.g. the A5 pot monitor).  Discard one throwaway conversion per channel to
+// let the S/H cap settle before the real read.  The fast capture path keeps
+// using single reads (readNegRaw) so its cadence is unaffected.
 float readVoltage() {
+  analogRead(SENSE_POS);                 // throwaway: settle S/H after prior channel
   int rawPos = analogRead(SENSE_POS);
+  if (!negFixed) analogRead(SENSE_NEG);  // throwaway: settle after SENSE_POS
   int rawNeg = readNegRaw();
   return ((rawPos - rawNeg) / ADC_FULL_SCALE) * ADC_REF_VOLTAGE;
 }
@@ -467,6 +485,15 @@ void updateChargeState() {
 }
 #endif
 
+#ifdef CFG_A5_MONITOR
+const int A5_MONITOR_PIN = CFG_A5_PIN;
+
+// Read the spare monitor pin (A5) in volts.  RA4M1 only.
+float readA5V() {
+  return (analogRead(A5_MONITOR_PIN) / ADC_FULL_SCALE) * ADC_REF_VOLTAGE;
+}
+#endif
+
 // Slow "charging" blink: 1 Hz, 25% duty (CHARGE_BLINK_ON_MS on, the remainder
 // of CHARGE_BLINK_PERIOD_MS off), brightness CHARGE_BLINK_BRIGHT.  Red while
 // charging; green once the battery is full (>= CFG_BATT_FULL_PCT).
@@ -583,6 +610,7 @@ void printStatus() {
   Serial.print(",capms=");        Serial.print(capDurationMs);
   Serial.print(",res=");          Serial.print(ADC_RESOLUTION);
   Serial.print(",vref=");         Serial.print(ADC_REF_VOLTAGE, 3);
+  Serial.print(",openthr=");      Serial.print(OPEN_THRESH_V, 3);
   Serial.print(",negfix=");       Serial.print(negFixed ? 1 : 0);
   Serial.print(",negv=");         Serial.print(negFixedV, 3);
   Serial.print(",charge=");       Serial.print(chargeActive ? 1 : 0);
@@ -596,8 +624,12 @@ void printStatus() {
 }
 
 // One streamed sample: both pins independently + computed differential.
+// Same per-channel throwaway settle as readVoltage() (see note there) so the
+// stream isn't skewed by mux crosstalk from the A5 monitor.
 void streamSample() {
+  analogRead(SENSE_POS);                 // throwaway: settle S/H after prior channel
   int rawPos = analogRead(SENSE_POS);
+  if (!negFixed) analogRead(SENSE_NEG);  // throwaway: settle after SENSE_POS
   int rawNeg = readNegRaw();
   float pv = (rawPos / ADC_FULL_SCALE) * ADC_REF_VOLTAGE;
   float nv = (rawNeg / ADC_FULL_SCALE) * ADC_REF_VOLTAGE;
@@ -694,6 +726,14 @@ void handleLine(char *line) {
       negFixed = (atoi(arg) != 0);
     }
     printStatus();
+  } else if (strcmp(cmd, "THRESH") == 0) {
+    // !THRESH,<v>  set the open/closed differential threshold in volts
+    // (bare = just report current value).  |dev| below = open, at/above = closed.
+    if (arg) {
+      float t = atof(arg);
+      if (t > 0.0f) OPEN_THRESH_V = t;
+    }
+    printStatus();
   } else if (strcmp(cmd, "ALERTS") == 0) {
     // !ALERTS,1 re-enables the normal LED alerts while charging (override the
     // charge lockout); !ALERTS,0 restores the charging blink; bare = toggle.
@@ -787,6 +827,9 @@ void setup() {
 #ifdef CFG_CHARGE_DETECT
   pinMode(CHARGE_PIN, INPUT);            // A3 = VBUS/2 (USB-power sense)
 #endif
+#ifdef CFG_A5_MONITOR
+  pinMode(A5_MONITOR_PIN, INPUT);        // A5 spare-pin voltage monitor
+#endif
 #ifdef CFG_BATT_MONITOR
   pinMode(BATT_PIN, INPUT);              // BAT_DET_PIN (P105) = Vbatt/2 sense
   pinMode(BATT_EN_PIN, OUTPUT);          // BAT_READ_EN (P400)
@@ -816,6 +859,19 @@ void setup() {
 // ==================================================================
 void loop() {
   pollSerial();
+
+#ifdef CFG_A5_MONITOR
+  // Spare-pin monitor (RA4M1): continually report the A5 voltage, in every
+  // mode, on its own cadence.  Emitted as a structured $A5 line so a host can
+  // parse it while staying readable in a plain serial monitor.
+  if (millis() - lastA5Time >= a5Interval) {
+    lastA5Time = millis();
+    Serial.print("$A5,");
+    Serial.print(millis());
+    Serial.print(",");
+    Serial.println(readA5V(), 4);
+  }
+#endif
 
   // ── Diagnostic mode ──────────────────────────────────────────────
   if (diagMode) {
