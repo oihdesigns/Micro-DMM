@@ -8,11 +8,15 @@ Lets you:
   - lock voltage mode ON or disable it
   - park the MOSFET (auto / hold off / hold on)
   - set the open/closed differential threshold (CFG_OPEN_THRESH_V) live
+    (shown read-only as "A5 auto" when the firmware derives it from A5)
   - pin the negative input (A2) to a fixed voltage to isolate board noise
   - re-enable the normal LED alerts while charging (RA4M1 charge lockout)
   - show battery presence and state-of-charge percentage (RA4M1)
   - stream both ADC pins independently plus the computed differential
   - trigger a transient capture across a MOSFET toggle and plot the result
+  - "Calibrate A5..." window: sweep the pot and plot A5 voltage vs the
+    post-toggle differential for a known threshold resistor (builds
+    the firmware's A5_THRESH_TABLE)
 
 Dependencies:
     pip install pyserial matplotlib
@@ -117,6 +121,8 @@ class App(tk.Tk):
         self.cap_rows = []
         self.last_capture = None   # parsed rows of the most recent capture
 
+        self.cal_win = None        # open CalibrationWindow, if any
+
         self._build_ui()
         self.after(PLOT_REFRESH_MS, self._tick)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -134,6 +140,8 @@ class App(tk.Tk):
         self.connect_btn.pack(side="left", padx=4)
         self.conn_lbl = ttk.Label(top, text="disconnected", foreground="#a00")
         self.conn_lbl.pack(side="left", padx=8)
+        ttk.Button(top, text="Calibrate A5…",
+                   command=self._open_calibration).pack(side="right", padx=4)
 
         # --- controls row ---
         ctl = ttk.LabelFrame(self, text="Controls", padding=6)
@@ -211,8 +219,14 @@ class App(tk.Tk):
         th.grid(row=3, column=0, columnspan=3, padx=4, pady=4, sticky="w")
         ttk.Label(th, text="V:").pack(side="left")
         self.thresh_var = tk.StringVar(value="0.250")
-        ttk.Entry(th, width=7, textvariable=self.thresh_var).pack(side="left", padx=2)
-        ttk.Button(th, text="Set", command=self._on_thresh).pack(side="left", padx=2)
+        self.thresh_entry = ttk.Entry(th, width=7, textvariable=self.thresh_var)
+        self.thresh_entry.pack(side="left", padx=2)
+        self.thresh_set_btn = ttk.Button(th, text="Set", command=self._on_thresh)
+        self.thresh_set_btn.pack(side="left", padx=2)
+        # shown when the firmware derives the threshold from A5 (CFG_A5_THRESH):
+        # openthr becomes read-only and tracks A5 live.
+        self.thresh_mode_lbl = ttk.Label(th, text="")
+        self.thresh_mode_lbl.pack(side="left", padx=4)
 
         # --- plots ---
         plots = ttk.Frame(self)
@@ -355,6 +369,24 @@ class App(tk.Tk):
         # restore the default charging blink (respect the charge lockout)
         self._send("!ALERTS,0")
 
+    # ------------------------------------------------------- calibration
+    def _open_calibration(self):
+        if self.cal_win is not None:
+            self.cal_win.lift()
+            return
+        self.cal_win = CalibrationWindow(self)
+
+    def _handle_cal(self, line):
+        # $CAL,<ms>,<a5V>,<testV>
+        f = line.split(",")
+        try:
+            a5 = float(f[2])
+            testv = float(f[3])
+        except (ValueError, IndexError):
+            return
+        if self.cal_win is not None:
+            self.cal_win.add_point(a5, testv)
+
     # ------------------------------------------------------------- loop
     def _tick(self):
         try:
@@ -387,6 +419,8 @@ class App(tk.Tk):
             self.cap_active = False
             self._finish_capture()
             self._log(f"<< capture: {len(self.cap_rows)} samples")
+        elif line.startswith("$CAL,"):
+            self._handle_cal(line)          # streamed fast -> not logged
         elif line.startswith("$STATUS,"):
             self._handle_status(line)
             self._log(f"<< {line}")
@@ -453,6 +487,18 @@ class App(tk.Tk):
                 self.thresh_var.set(kv["openthr"])
         except ValueError:
             pass
+
+        # adaptive-threshold mode (CFG_A5_THRESH): openthr is driven from A5, so
+        # make the manual entry read-only and label it.
+        if "adaptthr" in kv:
+            if kv["adaptthr"] == "1":
+                self.thresh_entry.config(state="disabled")
+                self.thresh_set_btn.config(state="disabled")
+                self.thresh_mode_lbl.config(text="(A5 auto)", foreground="#06a")
+            else:
+                self.thresh_entry.config(state="normal")
+                self.thresh_set_btn.config(state="normal")
+                self.thresh_mode_lbl.config(text="")
 
         # charge lockout indicator (RA4M1): show USB-power state and whether
         # the normal alerts have been forced back on.
@@ -594,7 +640,197 @@ class App(tk.Tk):
             self.log.delete("1.0", "100.0")
 
     def _on_close(self):
+        if self.cal_win is not None:
+            self.cal_win._on_close()
         self.serial.disconnect()
+        self.destroy()
+
+
+class CalibrationWindow(tk.Toplevel):
+    """Sweep the A5 pot and capture A5 voltage vs the post-MOSFET-toggle
+    differential, to build the firmware's A5_THRESH_TABLE for a known resistor.
+
+    Drives the device: !DIAG,1 + !CAL,1 to start, !CAL,0 to stop.  Each incoming
+    $CAL,<ms>,<a5V>,<testV> row is one scatter point (A5 vs |post-toggle diff|).
+
+    Multiple sweeps can be overlaid: "Add sweep" freezes the current points on
+    the chart and begins a fresh set (new colour) so you can change the resistor
+    and characterise several resistances together.  Each sweep saves to its own
+    pair of CSV columns.
+    """
+
+    # distinct colours cycled per sweep
+    COLORS = ["#06a", "#c00", "#0a0", "#e08000", "#709", "#0aa", "#a06", "#556"]
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.app = app
+        self.title("A5 threshold calibration")
+        self.geometry("700x600")
+
+        self.sweeping = False
+        self._dirty = True
+
+        self._build()
+        # sweeps: list of {"res": str, "color": str, "a5": [], "testv": []}
+        self.sweeps = []
+        self._new_sweep()
+
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.after(150, self._refresh)
+
+    def _build(self):
+        top = ttk.Frame(self, padding=6)
+        top.pack(fill="x")
+        ttk.Label(top, text="Threshold resistor (ohms):").pack(side="left")
+        self.res_var = tk.StringVar(value="330000")
+        ttk.Entry(top, width=10, textvariable=self.res_var).pack(side="left", padx=4)
+        self.sweep_btn = ttk.Button(top, text="Start sweep", command=self._toggle_sweep)
+        self.sweep_btn.pack(side="left", padx=8)
+        self.add_btn = ttk.Button(top, text="Add sweep", command=self._on_add_sweep)
+        self.add_btn.pack(side="left", padx=2)
+        ttk.Button(top, text="Clear all", command=self._clear).pack(side="left", padx=2)
+        ttk.Button(top, text="Save CSV", command=self._save).pack(side="left", padx=2)
+        self.count_lbl = ttk.Label(top, text="")
+        self.count_lbl.pack(side="left", padx=8)
+
+        hint = ("Connect the threshold resistor (e.g. 330k) across the leads, "
+                "start the sweep, then rotate the pot slowly end-to-end a few "
+                "times.  Each dot is one sample: A5 control voltage vs the "
+                "post-toggle |differential| the detector compares to the "
+                "threshold.  Use 'Add sweep' to keep the current dots, change "
+                "the resistor, and lay down a new-coloured set.  Save the CSV, "
+                "then read the A5_THRESH_TABLE points off the curve.")
+        ttk.Label(self, text=hint, wraplength=670, foreground="#444",
+                  padding=(6, 0)).pack(fill="x")
+
+        self.fig = Figure(figsize=(5, 4), dpi=100)
+        self.ax = self.fig.add_subplot(111)
+        self._setup_axes()
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self)
+        self.canvas.get_tk_widget().pack(fill="both", expand=True, padx=6, pady=4)
+
+    def _setup_axes(self):
+        self.ax.set_title("A5 voltage vs post-toggle differential")
+        self.ax.set_xlabel("A5 (V)")
+        self.ax.set_ylabel("post-toggle |diff| (V)")
+        self.ax.grid(True, alpha=0.3)
+
+    # ----- sweep bookkeeping -----
+    def _new_sweep(self):
+        color = self.COLORS[len(self.sweeps) % len(self.COLORS)]
+        self.sweeps.append({"res": self.res_var.get().strip(),
+                            "color": color, "a5": [], "testv": []})
+        self._dirty = True
+
+    @property
+    def _active(self):
+        return self.sweeps[-1]
+
+    def _toggle_sweep(self):
+        if not self.app.serial.is_open:
+            messagebox.showinfo("Calibration", "Connect to the device first.")
+            return
+        self.sweeping = not self.sweeping
+        if self.sweeping:
+            # label the active sweep with the resistor in the box right now
+            self._active["res"] = self.res_var.get().strip()
+            self.app._send("!DIAG,1")
+            self.app._send("!CAL,1")
+            self.sweep_btn.config(text="Stop sweep")
+        else:
+            self.app._send("!CAL,0")
+            self.sweep_btn.config(text="Start sweep")
+
+    def _on_add_sweep(self):
+        # freeze the current sweep and open a fresh one (new colour).  Stop any
+        # in-progress capture first so points don't bleed into the new set.
+        if self.sweeping:
+            self.app._send("!CAL,0")
+            self.sweeping = False
+            self.sweep_btn.config(text="Start sweep")
+        if not self._active["a5"]:
+            return                          # active sweep is empty; nothing to freeze
+        self._new_sweep()
+
+    def add_point(self, a5, testv):
+        s = self._active
+        s["a5"].append(a5)
+        s["testv"].append(abs(testv))       # threshold table uses magnitude
+        self._dirty = True
+
+    def _clear(self):
+        self.sweeps = []
+        self._new_sweep()
+        self._dirty = True
+
+    def _refresh(self):
+        if self._dirty:
+            self._dirty = False
+            self.ax.clear()
+            self._setup_axes()
+            total = 0
+            have_data = False
+            for i, s in enumerate(self.sweeps):
+                if not s["a5"]:
+                    continue
+                have_data = True
+                total += len(s["a5"])
+                self.ax.plot(s["a5"], s["testv"], ".", ms=3, color=s["color"],
+                             label=f'{s["res"]} ohm')
+            if have_data:
+                self.ax.legend(loc="best", fontsize=8)
+            self.canvas.draw_idle()
+            self.count_lbl.config(
+                text=f"{len([s for s in self.sweeps if s['a5']])} sweeps, {total} pts")
+        self.after(150, self._refresh)
+
+    def _save(self):
+        # refresh the active sweep's label from the box, then keep non-empty sweeps
+        self._active["res"] = self.res_var.get().strip()
+        sweeps = [s for s in self.sweeps if s["a5"]]
+        if not sweeps:
+            messagebox.showinfo("Save calibration", "No points captured yet.")
+            return
+        path = filedialog.asksaveasfilename(
+            title="Save calibration CSV",
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            initialfile="a5_calibration.csv",
+        )
+        if not path:
+            return
+        # wide format: each sweep gets its own (a5, |diff|) column pair, each
+        # sorted by A5 ascending and padded to the longest sweep.
+        cols = [sorted(zip(s["a5"], s["testv"])) for s in sweeps]
+        maxlen = max(len(c) for c in cols)
+        header = []
+        for s in sweeps:
+            header += [f'a5_V_{s["res"]}ohm', f'absdiff_V_{s["res"]}ohm']
+        try:
+            with open(path, "w", newline="") as fh:
+                w = csv.writer(fh)
+                w.writerow(header)
+                for r in range(maxlen):
+                    row = []
+                    for c in cols:
+                        if r < len(c):
+                            row += [f"{c[r][0]:.4f}", f"{c[r][1]:.4f}"]
+                        else:
+                            row += ["", ""]
+                    w.writerow(row)
+        except OSError as exc:
+            messagebox.showerror("Save calibration", f"Could not write file:\n{exc}")
+            return
+        self.app._log(
+            f"** saved calibration ({len(sweeps)} sweeps, "
+            f"{sum(len(c) for c in cols)} pts) -> {path}")
+
+    def _on_close(self):
+        if self.sweeping and self.app.serial.is_open:
+            self.app._send("!CAL,0")
+        self.sweeping = False
+        self.app.cal_win = None
         self.destroy()
 
 

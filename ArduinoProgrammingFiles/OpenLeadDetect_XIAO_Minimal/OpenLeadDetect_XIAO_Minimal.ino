@@ -49,11 +49,14 @@
  *   !NEGFIX[,0|1|<v>] pin A2 to a fixed value (bare=toggle, <v>=set volts & on)
  *   !THRESH[,<v>]    set open/closed differential threshold in volts (bare=report)
  *   !ALERTS[,0|1]    re-enable normal LED alerts while charging (1=on,0=blink)
+ *   !CAL[,0|1]       A5 threshold-calibration sweep (bare=toggle; diag only)
  *   !CAP[,<ms>]      capture ADC across a MOSFET toggle, then dump
  *   !STATUS  / !?    print current status
  * Data out:
- *   $STATUS,...,openthr=..,negfix=..,negv=..,charge=..,alertovr=..,battpct=..,battv=..
+ *   $STATUS,...,stream=..,cal=..,rate=..,openthr=..,adaptthr=..,negfix=..,negv=..,charge=..,alertovr=..,battpct=..,battv=..
+ *     (adaptthr=1 -> openthr is derived live from A5, see CFG_A5_THRESH)
  *   $DIAG,<ms>,<rawPos>,<rawNeg>,<posV>,<negV>,<diffV>      (streaming)
+ *   $CAL,<ms>,<a5V>,<testV>                                 (calibration sweep)
  *   $A5,<ms>,<volts>                                        (RA4M1 A5 monitor)
  *   $CAPSTART,<n>,<toggleUs>,<durMs>,<fullScale>,<vref>     (capture header)
  *   $CAP,<t_us>,<rawPos>,<rawNeg>                           (capture rows)
@@ -83,7 +86,7 @@
   #define CFG_ADC_RESOLUTION  14
   #define CFG_ADC_FULL_SCALE  16383.0f
   #define CFG_MOSFET_PIN      D1
-  #define LED_PIN             RGB_BUILTIN     // onboard RGB  "RGB_BUILTIN" or "10"
+  #define LED_PIN             10     // onboard RGB  "RGB_BUILTIN" or "10"
   #define RGB_POWER_PIN       PIN_RGB_EN      // onboard RGB power enable
   #define CFG_OPEN_THRESH_V   0.250f          // self-contained proto
   #define CFG_REF_BAND_V      0.03f
@@ -110,10 +113,14 @@
   #define CFG_BATT_EMPTY_V    3.30f           // 0%
   #define CFG_BATT_FULL_V     4.20f           // 100%
   #define CFG_BATT_FULL_PCT   90              // >= this % while charging = green blink
-  // Spare-pin monitor: continually print the voltage on A5 for bench probing.
-  // RA4M1 only (the SAMD21/RP2040 protos leave this undefined).
-  #define CFG_A5_MONITOR      1
+  // Spare-pin (A5) features (RA4M1 only).  CFG_A5_PIN is shared by both.
   #define CFG_A5_PIN          A5
+  #define CFG_A5_MONITOR      1     // continually print $A5,<ms>,<volts> for probing
+  // Adaptive open/closed threshold: derive the differential threshold live from
+  // the A5 voltage via A5_THRESH_TABLE (piecewise-linear).  Comment this line
+  // out for a fixed threshold.  When enabled it OVERRIDES CFG_OPEN_THRESH_V and
+  // any !THRESH command (they are recomputed from A5 every detection pass).
+  #define CFG_A5_THRESH       1
 
 #elif defined(BOARD_XIAO_SAMD21)
   #if !defined(ARDUINO_ARCH_SAMD)
@@ -169,7 +176,9 @@ const float REF_CENTER_V   = 0.00f;   // resting differential (~0 V)
 const unsigned long SETTLE_Post_MS = 3;     // MOSFET-off settle before test read
 const unsigned long SETTLE_Pre_uS = 300;
 
-float OPEN_THRESH_V = CFG_OPEN_THRESH_V;  // |dev| below = open, at/above = closed (runtime-tunable via !THRESH)
+float OPEN_THRESH_V = CFG_OPEN_THRESH_V;  // |dev| below = open, at/above = closed
+                                          // (runtime-tunable via !THRESH; overwritten
+                                          //  every pass from A5 when CFG_A5_THRESH is on)
 const float REF_BAND_V    = CFG_REF_BAND_V;     // |A0-A2| within this -> run the test
 
 
@@ -280,6 +289,13 @@ bool diagMode = false;                 // suppresses human debug, enables $ prot
 bool streamOn = false;                 // continuous raw streaming
 unsigned long streamIntervalMs = 20;   // streaming period (~50 Hz default)
 unsigned long lastStreamMs = 0;
+
+// Calibration sweep (RA4M1/A5): when on, detection is paused and each cycle
+// samples the A5 control voltage plus the post-MOSFET-toggle differential,
+// emitting $CAL rows.  Sweep the pot to map A5 -> threshold for a known
+// resistor.  Uses the streamIntervalMs cadence.
+bool calMode = false;
+unsigned long lastCalMs = 0;
 
 enum VoltOverride { VOLT_AUTO, VOLT_FORCE_ON, VOLT_DISABLED };
 VoltOverride voltOverride = VOLT_AUTO; // applies whenever detection runs
@@ -485,12 +501,68 @@ void updateChargeState() {
 }
 #endif
 
-#ifdef CFG_A5_MONITOR
+#if defined(CFG_A5_MONITOR) || defined(CFG_A5_THRESH)
 const int A5_MONITOR_PIN = CFG_A5_PIN;
 
-// Read the spare monitor pin (A5) in volts.  RA4M1 only.
+// Read the spare monitor pin (A5) in volts.  RA4M1 only.  A5 is high-impedance,
+// so discard one conversion after the channel switch to let the S/H settle.
 float readA5V() {
+  analogRead(A5_MONITOR_PIN);            // throwaway: settle S/H after prior channel
   return (analogRead(A5_MONITOR_PIN) / ADC_FULL_SCALE) * ADC_REF_VOLTAGE;
+}
+#endif
+
+#ifdef CFG_A5_THRESH
+// Adaptive open/closed threshold from the A5 voltage: piecewise-linear
+// interpolation of the bench-calibrated table below.  Values below the first /
+// above the last A5 point are clamped to the end thresholds.
+//
+// Fitted from a 5-resistance A5 sweep (10M/1M/330K/10K/1R).  Goal: trigger
+// (CLOSED, |diff| <= thr) at <=330K, reject (OPEN) at >=1M.  Post-toggle |diff|
+// rises with resistance, so the threshold rides between the 330K upper envelope
+// (p95) and the 1M lower envelope (p05): midpoint where they separate, and just
+// under the 1M lower envelope where they overlap (bias to NO false positives).
+// NOTE: 330K and 1M are only cleanly separable for A5 >~ 0.85 V; below that the
+// front end can't distinguish them and some misclassification is unavoidable
+// (a hardware-revision finding, not a table-tuning one).  Recalibrate via the
+// GUI "Calibrate A5" sweep if the analog front end changes.
+struct A5ThreshPoint { float a5V; float thrV; };
+const A5ThreshPoint A5_THRESH_TABLE[] = {
+  {0.00f, 0.033f},
+  {0.15f, 0.059f},
+  {0.35f, 0.067f},
+  {0.50f, 0.139f},
+  {0.70f, 0.317f},
+  {0.85f, 0.400f},
+  {1.00f, 0.455f},
+  {1.20f, 0.504f},
+  {1.35f, 0.535f},
+  {1.55f, 0.564f},
+  {1.70f, 0.580f},
+};
+const int A5_THRESH_N = sizeof(A5_THRESH_TABLE) / sizeof(A5_THRESH_TABLE[0]);
+
+float a5ToThreshold(float a5V) {
+  if (a5V <= A5_THRESH_TABLE[0].a5V)               return A5_THRESH_TABLE[0].thrV;
+  if (a5V >= A5_THRESH_TABLE[A5_THRESH_N - 1].a5V) return A5_THRESH_TABLE[A5_THRESH_N - 1].thrV;
+  for (int i = 1; i < A5_THRESH_N; i++) {
+    if (a5V < A5_THRESH_TABLE[i].a5V) {
+      const A5ThreshPoint &lo = A5_THRESH_TABLE[i - 1];
+      const A5ThreshPoint &hi = A5_THRESH_TABLE[i];
+      float frac = (a5V - lo.a5V) / (hi.a5V - lo.a5V);
+      return lo.thrV + frac * (hi.thrV - lo.thrV);
+    }
+  }
+  return A5_THRESH_TABLE[A5_THRESH_N - 1].thrV;     // unreachable
+}
+
+// Refresh OPEN_THRESH_V from A5 (call once per detection pass).  Averages a few
+// A5 reads so a single noisy sample can't jerk the threshold around.
+void updateAdaptiveThreshold() {
+  const int N = 4;
+  float sum = 0.0f;
+  for (int i = 0; i < N; i++) sum += readA5V();
+  OPEN_THRESH_V = a5ToThreshold(sum / N);
 }
 #endif
 
@@ -565,6 +637,9 @@ void startupBatteryIndicate() {
 //  DETECTION (one pass) -- sets leadState, honouring voltOverride
 // ==================================================================
 void runDetection() {
+#ifdef CFG_A5_THRESH
+  updateAdaptiveThreshold();             // refresh OPEN_THRESH_V from A5 this pass
+#endif
   digitalWrite(MOSFET_PIN, MOSFET_ON);   // resting state
 
   bool present;
@@ -606,11 +681,17 @@ void printStatus() {
   Serial.print(",vmode=");        Serial.print((int)voltOverride);
   Serial.print(",mosfet=");       Serial.print(mosfetHold);
   Serial.print(",stream=");       Serial.print(streamOn ? 1 : 0);
+  Serial.print(",cal=");          Serial.print(calMode ? 1 : 0);
   Serial.print(",rate=");         Serial.print(streamIntervalMs);
   Serial.print(",capms=");        Serial.print(capDurationMs);
   Serial.print(",res=");          Serial.print(ADC_RESOLUTION);
   Serial.print(",vref=");         Serial.print(ADC_REF_VOLTAGE, 3);
   Serial.print(",openthr=");      Serial.print(OPEN_THRESH_V, 3);
+#ifdef CFG_A5_THRESH
+  Serial.print(",adaptthr=1");    // openthr is driven live from A5 (read-only)
+#else
+  Serial.print(",adaptthr=0");
+#endif
   Serial.print(",negfix=");       Serial.print(negFixed ? 1 : 0);
   Serial.print(",negv=");         Serial.print(negFixedV, 3);
   Serial.print(",charge=");       Serial.print(chargeActive ? 1 : 0);
@@ -641,6 +722,32 @@ void streamSample() {
   Serial.print(nv, 4);    Serial.print(",");
   Serial.println(pv - nv, 4);
 }
+
+#if defined(CFG_A5_MONITOR) || defined(CFG_A5_THRESH)
+// One calibration sample: read the A5 control voltage, then run the SAME
+// post-MOSFET-toggle differential read the detector uses to decide open/closed,
+// and emit both.  Sweeping the pot maps A5 -> post-toggle voltage for a known
+// threshold resistor, which is how the A5_THRESH_TABLE is built.
+// Emits: $CAL,<ms>,<a5V>,<testV>
+void calSample() {
+  float a5 = 0.0f;
+  for (int i = 0; i < 4; i++) a5 += readA5V();   // light average vs. wiper noise
+  a5 *= 0.25f;
+
+  // Identical toggle+settle+read to runMosfetTest(), so the captured voltage
+  // matches what detection compares against OPEN_THRESH_V.
+  digitalWrite(MOSFET_PIN, MOSFET_OFF);
+  delayMicroseconds(SETTLE_Pre_uS);
+  float testV = readVoltage();
+  sleepMs(SETTLE_Post_MS);
+  digitalWrite(MOSFET_PIN, MOSFET_ON);           // back to resting
+
+  Serial.print("$CAL,");
+  Serial.print(millis()); Serial.print(",");
+  Serial.print(a5, 4);    Serial.print(",");
+  Serial.println(testV, 4);
+}
+#endif
 
 // Capture both ADC pins as fast as possible (no settling delays) across a
 // MOSFET toggle: hold ON, sample a short baseline, toggle OFF at CAP_PRE_US,
@@ -697,7 +804,7 @@ void handleLine(char *line) {
 
   if (strcmp(cmd, "DIAG") == 0) {
     diagMode = arg ? (atoi(arg) != 0) : !diagMode;
-    if (!diagMode) { streamOn = false; mosfetHold = -1; }
+    if (!diagMode) { streamOn = false; mosfetHold = -1; calMode = false; }
     printStatus();
   } else if (strcmp(cmd, "STREAM") == 0) {
     streamOn = arg ? (atoi(arg) != 0) : !streamOn;
@@ -739,6 +846,17 @@ void handleLine(char *line) {
     // charge lockout); !ALERTS,0 restores the charging blink; bare = toggle.
     // The override auto-clears on unplug (see updateChargeState).
     alertOverride = arg ? (atoi(arg) != 0) : !alertOverride;
+    printStatus();
+  } else if (strcmp(cmd, "CAL") == 0) {
+    // !CAL[,0|1]  start/stop the A5 calibration sweep (bare = toggle).
+    // Emits $CAL,<ms>,<a5V>,<testV> rows; detection is paused while active.
+#if defined(CFG_A5_MONITOR) || defined(CFG_A5_THRESH)
+    calMode = arg ? (atoi(arg) != 0) : !calMode;
+    if (!calMode) digitalWrite(MOSFET_PIN, MOSFET_ON);   // leave resting
+#else
+    calMode = false;
+    Serial.println("$ERR,cal,no A5 pin on this board");
+#endif
     printStatus();
   } else if (strcmp(cmd, "CAP") == 0) {
     unsigned long d = arg ? atol(arg) : capDurationMs;
@@ -827,8 +945,8 @@ void setup() {
 #ifdef CFG_CHARGE_DETECT
   pinMode(CHARGE_PIN, INPUT);            // A3 = VBUS/2 (USB-power sense)
 #endif
-#ifdef CFG_A5_MONITOR
-  pinMode(A5_MONITOR_PIN, INPUT);        // A5 spare-pin voltage monitor
+#if defined(CFG_A5_MONITOR) || defined(CFG_A5_THRESH)
+  pinMode(A5_MONITOR_PIN, INPUT);        // A5: spare-pin monitor / adaptive threshold
 #endif
 #ifdef CFG_BATT_MONITOR
   pinMode(BATT_PIN, INPUT);              // BAT_DET_PIN (P105) = Vbatt/2 sense
@@ -875,6 +993,20 @@ void loop() {
 
   // ── Diagnostic mode ──────────────────────────────────────────────
   if (diagMode) {
+    // Calibration sweep takes priority: pause detection and just emit $CAL
+    // rows (A5 voltage + post-toggle differential) at the stream cadence.
+    if (calMode) {
+#if defined(CFG_A5_MONITOR) || defined(CFG_A5_THRESH)
+      if (millis() - lastCalMs >= streamIntervalMs) {
+        lastCalMs = millis();
+        calSample();
+      }
+#endif
+      updateLed();
+      delay(1);
+      return;
+    }
+
     if (mosfetHold >= 0) {
       // Manual MOSFET hold: detection paused, pin parked for observation.
       digitalWrite(MOSFET_PIN, mosfetHold ? MOSFET_ON : MOSFET_OFF);
