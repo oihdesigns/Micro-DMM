@@ -16,7 +16,8 @@ Lets you:
   - trigger a transient capture across a MOSFET toggle and plot the result
   - "Calibrate A5..." window: sweep the pot and plot A5 voltage vs the
     post-toggle differential for a known threshold resistor (builds
-    the firmware's A5_THRESH_TABLE)
+    the firmware's A5_THRESH_TABLE); includes an offline (battery) log
+    mode that records with USB unplugged and is pulled back on reconnect
 
 Dependencies:
     pip install pyserial matplotlib
@@ -122,6 +123,13 @@ class App(tk.Tk):
         self.last_capture = None   # parsed rows of the most recent capture
 
         self.cal_win = None        # open CalibrationWindow, if any
+
+        # offline-log dump assembly
+        self.off_active = False
+        self.off_fs = 16383.0
+        self.off_vref = 3.3
+        self.off_a5 = []
+        self.off_tv = []
 
         self._build_ui()
         self.after(PLOT_REFRESH_MS, self._tick)
@@ -387,6 +395,37 @@ class App(tk.Tk):
         if self.cal_win is not None:
             self.cal_win.add_point(a5, testv)
 
+    # offline log dump: $OFFSTART,<n>,<fullScale>,<vref> / $OFF,<i>,<a5raw>,<diffraw> / $OFFEND
+    def _offline_start(self, line):
+        f = line.split(",")
+        try:
+            self.off_fs = float(f[2])
+            self.off_vref = float(f[3])
+        except (ValueError, IndexError):
+            self.off_fs, self.off_vref = 16383.0, 3.3
+        self.off_active = True
+        self.off_a5 = []
+        self.off_tv = []
+
+    def _offline_row(self, line):
+        if not self.off_active:
+            return
+        f = line.split(",")
+        try:
+            a5raw = int(f[2])
+            diffraw = int(f[3])
+        except (ValueError, IndexError):
+            return
+        self.off_a5.append(a5raw / self.off_fs * self.off_vref)
+        self.off_tv.append(diffraw / self.off_fs * self.off_vref)
+
+    def _offline_end(self):
+        self.off_active = False
+        n = len(self.off_a5)
+        self._log(f"<< offline log: {n} points")
+        if self.cal_win is not None and n:
+            self.cal_win.add_offline(self.off_a5, self.off_tv)
+
     # ------------------------------------------------------------- loop
     def _tick(self):
         try:
@@ -421,6 +460,12 @@ class App(tk.Tk):
             self._log(f"<< capture: {len(self.cap_rows)} samples")
         elif line.startswith("$CAL,"):
             self._handle_cal(line)          # streamed fast -> not logged
+        elif line.startswith("$OFFSTART,"):
+            self._offline_start(line)
+        elif line.startswith("$OFF,"):
+            self._offline_row(line)
+        elif line.startswith("$OFFEND"):
+            self._offline_end()
         elif line.startswith("$STATUS,"):
             self._handle_status(line)
             self._log(f"<< {line}")
@@ -487,6 +532,10 @@ class App(tk.Tk):
                 self.thresh_var.set(kv["openthr"])
         except ValueError:
             pass
+
+        # reflect offline-log state into the calibration window, if open
+        if self.cal_win is not None and "olog" in kv:
+            self.cal_win.set_offline_state(kv.get("olog"), kv.get("ocount"))
 
         # adaptive-threshold mode (CFG_A5_THRESH): openthr is driven from A5, so
         # make the manual entry read-only and label it.
@@ -704,6 +753,18 @@ class CalibrationWindow(tk.Toplevel):
         ttk.Label(self, text=hint, wraplength=670, foreground="#444",
                   padding=(6, 0)).pack(fill="x")
 
+        # offline (battery-powered) logging: cleaner data with USB unplugged
+        off = ttk.LabelFrame(self, text="Offline log (battery)", padding=6)
+        off.pack(fill="x", padx=6, pady=2)
+        ttk.Button(off, text="Arm", command=self._offline_arm).pack(side="left", padx=2)
+        ttk.Button(off, text="Disarm", command=self._offline_disarm).pack(side="left", padx=2)
+        ttk.Button(off, text="Pull log", command=self._offline_pull).pack(side="left", padx=6)
+        self.off_lbl = ttk.Label(off, text="offline: --")
+        self.off_lbl.pack(side="left", padx=8)
+        ttk.Label(off, text="Arm -> unplug USB -> sweep the pot -> replug -> "
+                            "reconnect in the main window -> Pull log.",
+                  foreground="#444").pack(side="left", padx=8)
+
         self.fig = Figure(figsize=(5, 4), dpi=100)
         self.ax = self.fig.add_subplot(111)
         self._setup_axes()
@@ -758,6 +819,41 @@ class CalibrationWindow(tk.Toplevel):
         s["a5"].append(a5)
         s["testv"].append(abs(testv))       # threshold table uses magnitude
         self._dirty = True
+
+    # ----- offline (battery) log -----
+    def _offline_arm(self):
+        if not self.app.serial.is_open:
+            messagebox.showinfo("Offline log", "Connect to the device first.")
+            return
+        self.app._send("!OLOG,1")
+
+    def _offline_disarm(self):
+        self.app._send("!OLOG,0")
+
+    def _offline_pull(self):
+        if not self.app.serial.is_open:
+            messagebox.showinfo("Offline log", "Reconnect to the device first.")
+            return
+        self.app._send("!ODUMP")
+
+    def set_offline_state(self, olog, ocount):
+        names = {"0": "idle", "1": "armed (unplug to start)",
+                 "2": "logging on battery", "3": "ready - pull log"}
+        txt = names.get(str(olog), "?")
+        if ocount is not None:
+            txt += f", {ocount} pts"
+        self.off_lbl.config(text=f"offline: {txt}")
+
+    def add_offline(self, a5list, testvlist):
+        # drop the pulled log in as its own sweep (labelled with the box value)
+        if self._active["a5"]:
+            self._new_sweep()
+        s = self._active
+        s["res"] = self.res_var.get().strip() + " (offline)"
+        s["a5"] = list(a5list)
+        s["testv"] = [abs(t) for t in testvlist]
+        self._dirty = True
+        self._new_sweep()                   # fresh active for anything next
 
     def _clear(self):
         self.sweeps = []

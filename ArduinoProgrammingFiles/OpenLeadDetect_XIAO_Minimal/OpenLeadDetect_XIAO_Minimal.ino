@@ -39,6 +39,18 @@
  *   power-on cue (RA4M1): 1-4 green blinks = battery charge level
  *     (0-25/25-50/50-75/75-100 %)
  *
+ * Speaker (SPEAKER_PIN, on/off, HIGH = sound) -- mirrors the LED, tunable in the
+ * "Speaker / audio alert" block.  Continuity and voltage each have independent
+ * on-time, off-time, pulse count, and a *_REPEAT flag (1 = repeat while the
+ * state holds at *_REPEAT_MS, 0 = beep once).  Defaults:
+ *   closed  = single beep, repeated while continuity persists
+ *   voltage = double beep, once
+ *   both rate-capped so intermittent detections can't beep faster than 2 Hz;
+ *   silenced while charging (same lockout as the LED alerts)
+ *   boot mute: if the leads read CLOSED on the first detection at power-up, the
+ *     speaker stays silent until the next boot cycle (short leads while booting
+ *     to mute); floating or voltage present at boot leaves audio enabled
+ *
  * ── Serial diagnostic protocol (115200 baud, line based) ──────────
  * Commands in  (each terminated with newline):
  *   !DIAG[,0|1]      enter/exit diagnostic mode (bare = toggle)
@@ -50,13 +62,17 @@
  *   !THRESH[,<v>]    set open/closed differential threshold in volts (bare=report)
  *   !ALERTS[,0|1]    re-enable normal LED alerts while charging (1=on,0=blink)
  *   !CAL[,0|1]       A5 threshold-calibration sweep (bare=toggle; diag only)
+ *   !OLOG[,0|1]      arm/disarm offline battery log (unplug=start, replug=stop)
+ *   !ODUMP           stream the stored offline log
  *   !CAP[,<ms>]      capture ADC across a MOSFET toggle, then dump
  *   !STATUS  / !?    print current status
  * Data out:
- *   $STATUS,...,stream=..,cal=..,rate=..,openthr=..,adaptthr=..,negfix=..,negv=..,charge=..,alertovr=..,battpct=..,battv=..
+ *   $STATUS,...,stream=..,cal=..,rate=..,openthr=..,adaptthr=..,negfix=..,negv=..,charge=..,alertovr=..,olog=..,ocount=..,battpct=..,battv=..
  *     (adaptthr=1 -> openthr is derived live from A5, see CFG_A5_THRESH)
+ *     (olog: 0=idle 1=armed 2=logging 3=ready; ocount = points stored)
  *   $DIAG,<ms>,<rawPos>,<rawNeg>,<posV>,<negV>,<diffV>      (streaming)
  *   $CAL,<ms>,<a5V>,<testV>                                 (calibration sweep)
+ *   $OFFSTART,<n>,<fullScale>,<vref> / $OFF,<i>,<a5raw>,<diffraw> / $OFFEND
  *   $A5,<ms>,<volts>                                        (RA4M1 A5 monitor)
  *   $CAPSTART,<n>,<toggleUs>,<durMs>,<fullScale>,<vref>     (capture header)
  *   $CAP,<t_us>,<rawPos>,<rawNeg>                           (capture rows)
@@ -121,6 +137,11 @@
   // out for a fixed threshold.  When enabled it OVERRIDES CFG_OPEN_THRESH_V and
   // any !THRESH command (they are recomputed from A5 every detection pass).
   #define CFG_A5_THRESH       1
+  // Offline calibration log (RA4M1): arm over USB (!OLOG,1), unplug to run on
+  // battery -- the board then logs A5 + post-toggle diff to RAM (cleaner than
+  // sampling over the USB link).  Replug and the GUI pulls the log (!ODUMP).
+  // Needs A3 (VBUS sense) + A5; leave undefined on the other boards.
+  #define CFG_OFFLINE_LOG     1
 
 #elif defined(BOARD_XIAO_SAMD21)
   #if !defined(ARDUINO_ARCH_SAMD)
@@ -235,6 +256,56 @@ const unsigned long CLOSED_MIN_MS   = 500;   // min gap (2 Hz cap)
 const unsigned long VOLT_FLASH_MS   = 200;   // red on-time per flash
 const unsigned long VOLT_MIN_MS     = 500;   // min gap (2 Hz cap)
 
+// ── Speaker / audio alert ────────────────────────────────────────
+// Simple on/off speaker on SPEAKER_PIN (HIGH = sound, LOW = silent), driven
+// non-blocking exactly like the LED.  Each alert plays a short "beep sequence"
+// of one or more pulses, and continuity/voltage each have their own on-time,
+// off-time (gap between pulses), pulse count, and repeat behaviour:
+//   *_ON_MS / *_OFF_MS     duration of each pulse and the gap between pulses
+//   *_BEEP_PULSES          how many pulses make up one beep (1 = single, 2 = double)
+//   *_REPEAT               1 = keep re-beeping while the state holds, 0 = beep once
+//   *_REPEAT_MS            period between repeats when *_REPEAT is 1
+// A new sequence can't start until BEEP_MIN_MS after the previous one began, so
+// a bouncing / intermittent detection can never beep faster than
+// 1000/BEEP_MIN_MS Hz (2 Hz here).  Tune all behaviour from the block below.
+#define SPEAKER_PIN 9
+#define SPEAKER_ON  HIGH
+#define SPEAKER_OFF LOW
+
+const unsigned long BEEP_MIN_MS = 500;   // min gap between sequence starts (2 Hz cap, both alerts)
+
+// Continuity (CLOSED) beep -------------------------------------------------
+// The initial contact beep (leads just closed) and the ongoing "still there"
+// repeat beeps have independent on/off durations, so they can sound different.
+const int           CONT_BEEP_PULSES = 1;     // pulses per beep (1 = single beep)
+const unsigned long CONT_ON_MS       = 20;    // initial contact: on-time of each pulse
+const unsigned long CONT_OFF_MS      = 10;    // initial contact: off-time between pulses (only matters if pulses > 1)
+const int           CONT_REPEAT      = 1;     // 1 = repeat while closed, 0 = beep once
+const unsigned long CONT_REPEAT_MS   = 1000;  // repeat period when CONT_REPEAT
+const unsigned long CONT_ONGOING_ON_MS  = 50; // ongoing "still there": on-time of each pulse
+const unsigned long CONT_ONGOING_OFF_MS = 10;  // ongoing "still there": off-time between pulses
+
+// Voltage (VOLTAGE) beep ---------------------------------------------------
+const int           VOLT_BEEP_PULSES = 2;     // pulses per beep (2 = double beep)
+const unsigned long VOLT_ON_MS       = 20;    // on-time of each pulse
+const unsigned long VOLT_OFF_MS      = 10;    // off-time between pulses
+const int           VOLT_REPEAT      = 0;     // 1 = repeat while voltage, 0 = beep once
+const unsigned long VOLT_REPEAT_MS   = 1000;  // repeat period when VOLT_REPEAT
+
+// Non-blocking beep-sequence state (owned by the speaker driver further down).
+bool          beepOn           = false;  // is the speaker output currently HIGH
+int           beepPulsesLeft   = 0;      // pulses still to START in this sequence
+unsigned long beepPhaseStart   = 0;      // ms timestamp of the current on/off phase
+unsigned long lastBeepSeqStart = 0;      // ms timestamp the last sequence began
+unsigned long beepOnMs         = 20;     // on-time  for the sequence in progress
+unsigned long beepOffMs        = 10;     // off-time for the sequence in progress
+
+// Boot-time speaker mute (no dedicated input needed): if the leads read CLOSED
+// on the first detection at power-up, the speaker stays silent for the whole
+// session -- short the leads while booting to mute, then boot-cycle to restore.
+// Floating leads (or voltage present) at boot leave the speaker enabled.
+bool speakerMuted = false;
+
 // ── State ────────────────────────────────────────────────────────
 enum LeadState { STATE_FLOAT, STATE_CLOSED, STATE_VOLTAGE };
 LeadState leadState = STATE_VOLTAGE;
@@ -318,6 +389,25 @@ uint32_t capT[CAP_MAX_SAMPLES];
 uint16_t capPos[CAP_MAX_SAMPLES];
 uint16_t capNeg[CAP_MAX_SAMPLES];
 int capCount = 0;
+
+#ifdef CFG_OFFLINE_LOG
+// Offline log: filled on battery after USB is unplugged, dumped on reconnect.
+// Store raw counts (a5 + signed post-toggle diff); the host converts to volts
+// with the full-scale/vref sent in the $OFFSTART header.  No timestamps (the
+// A5-vs-diff relationship is what matters, not time).
+//   OFF_IDLE   -> disarmed
+//   OFF_ARMED  -> armed on USB, waiting for the unplug edge
+//   OFF_LOGGING-> on battery, recording (serial stays SILENT here)
+//   OFF_READY  -> replugged, data held in RAM until dumped/cleared
+enum OfflineState { OFF_IDLE, OFF_ARMED, OFF_LOGGING, OFF_READY };
+OfflineState offlineState = OFF_IDLE;
+const int OFFLINE_MAX = 1500;               // ~6 KB (uint16 + int16 per point)
+const unsigned long OFFLINE_INTERVAL_MS = 25;   // ~40 Hz while logging
+uint16_t offA5[OFFLINE_MAX];
+int16_t  offDiff[OFFLINE_MAX];
+int offCount = 0;
+unsigned long lastOfflineMs = 0;
+#endif
 
 // Serial command line buffer
 char cmdBuf[48];
@@ -457,6 +547,107 @@ void updateLed() {
   }
 }
 
+// ── Speaker driver ───────────────────────────────────────────────
+// Mirrors the LED model: startBeep() kicks off a rate-limited beep sequence,
+// updateBeep() advances its on/off phases without blocking, and updateSpeaker()
+// maps leadState -> beeps (honouring the same charge lockout as the LED).
+
+// Begin a sequence of `pulses` beeps with the given on/off timing, unless one
+// is still playing or the 2 Hz rate cap (BEEP_MIN_MS since the last start)
+// hasn't elapsed yet.  The timing is latched so the sequence keeps its own
+// cadence even if another state's constants differ.
+void startBeep(unsigned long now, int pulses, unsigned long onMs, unsigned long offMs) {
+  if (beepOn || beepPulsesLeft > 0)         return;   // a sequence is still playing
+  if (now - lastBeepSeqStart < BEEP_MIN_MS) return;   // 2 Hz cap on new sequences
+  lastBeepSeqStart = now;
+  beepPulsesLeft   = pulses;
+  beepOnMs         = onMs;
+  beepOffMs        = offMs;
+  beepPhaseStart   = now;
+  beepOn           = true;
+  digitalWrite(SPEAKER_PIN, SPEAKER_ON);              // first pulse on
+  beepPulsesLeft--;
+}
+
+// Advance the current sequence: end each pulse after beepOnMs, then start the
+// next one (if any remain) after beepOffMs.  No-op when idle.
+void updateBeep(unsigned long now) {
+  if (!beepOn && beepPulsesLeft == 0) return;         // idle
+  if (beepOn) {
+    if (now - beepPhaseStart >= beepOnMs) {
+      digitalWrite(SPEAKER_PIN, SPEAKER_OFF);
+      beepOn         = false;
+      beepPhaseStart = now;
+    }
+  } else if (beepPulsesLeft > 0 && now - beepPhaseStart >= beepOffMs) {
+    digitalWrite(SPEAKER_PIN, SPEAKER_ON);
+    beepOn         = true;
+    beepPhaseStart = now;
+    beepPulsesLeft--;
+  }
+}
+
+// Immediately silence the speaker and abandon any in-progress sequence.
+void silenceSpeaker() {
+  if (beepOn) digitalWrite(SPEAKER_PIN, SPEAKER_OFF);
+  beepOn         = false;
+  beepPulsesLeft = 0;
+}
+
+// Map the detection state to audio, mirroring updateLed().  Each state beeps
+// once on entry; if its *_REPEAT flag is set it keeps re-beeping every
+// *_REPEAT_MS while the state holds.
+//   CLOSED  -> continuity beep (CONT_* constants)
+//   VOLTAGE -> voltage beep   (VOLT_* constants)
+//   FLOAT   -> silent (any in-progress beep is left to finish naturally)
+// Suppressed while charging, matching the LED alert lockout.
+void updateSpeaker() {
+  static LeadState prevState = STATE_VOLTAGE;
+  unsigned long now = millis();
+
+  if (speakerMuted) {                     // muted for this session (see boot check)
+    silenceSpeaker();
+    prevState = leadState;
+    return;
+  }
+
+#ifdef CFG_CHARGE_DETECT
+  if (chargeActive && !alertOverride) {   // charging: stay quiet like the LED
+    silenceSpeaker();
+    prevState = leadState;                // avoid a stale beep on unplug
+    return;
+  }
+#endif
+
+  bool entered = (leadState != prevState);
+  prevState = leadState;
+
+  if (leadState == STATE_CLOSED) {
+    if (entered)                          // just made contact: initial beep
+      startBeep(now, CONT_BEEP_PULSES, CONT_ON_MS, CONT_OFF_MS);
+    else if (CONT_REPEAT && now - lastBeepSeqStart >= CONT_REPEAT_MS)
+      startBeep(now, CONT_BEEP_PULSES, CONT_ONGOING_ON_MS, CONT_ONGOING_OFF_MS);
+  } else if (leadState == STATE_VOLTAGE) {
+    if (entered || (VOLT_REPEAT && now - lastBeepSeqStart >= VOLT_REPEAT_MS))
+      startBeep(now, VOLT_BEEP_PULSES, VOLT_ON_MS, VOLT_OFF_MS);
+  }
+
+  updateBeep(now);
+}
+
+// One clean open/closed measurement at boot to decide the session mute.  Mirrors
+// runDetection()'s sequence (adaptive threshold -> voltage check -> MOSFET test)
+// but writes only speakerMuted, never leadState.  Leads shorted (CLOSED) at boot
+// -> speaker muted until the next boot; floating or voltage present -> audio on.
+void bootSpeakerMuteCheck() {
+#ifdef CFG_A5_THRESH
+  updateAdaptiveThreshold();             // threshold this pass comes from A5
+#endif
+  digitalWrite(MOSFET_PIN, MOSFET_ON);   // resting state
+  if (voltagePresent()) return;          // voltage at boot -> leave audio enabled
+  if (runMosfetTestStable() == STATE_CLOSED) speakerMuted = true;
+}
+
 #ifdef CFG_CHARGE_DETECT
 const int   CHARGE_PIN     = CFG_CHARGE_PIN;
 const float CHARGE_THRESH_V = CFG_CHARGE_THRESH_V;
@@ -591,6 +782,24 @@ void chargeBlink() {
 // On a transition between the two modes, blank the pixel and reset both sets
 // of blink flags so neither mode inherits a half-finished flash.
 void updateAlerts() {
+#ifdef CFG_OFFLINE_LOG
+  // Offline log states own the LED (on USB): slow blue = armed & waiting for
+  // unplug; slow green = data captured & ready to pull.  (Logging itself runs
+  // on battery and drives the LED from the loop's logging branch.)
+  if (offlineState == OFF_ARMED || offlineState == OFF_READY) {
+    static unsigned long last = 0;
+    static bool on = false;
+    unsigned long now = millis();
+    if (!on && now - last >= 1400) {
+      on = true; last = now;
+      if (offlineState == OFF_ARMED) setPixel(0, 0, 25);   // blue: armed
+      else                           setPixel(0, 20, 0);   // green: ready
+    } else if (on && now - last >= 80) {
+      on = false; setPixel(0, 0, 0);
+    }
+    return;
+  }
+#endif
   static bool prevCharging = false;
   bool charging = (chargeActive && !alertOverride);
   if (charging != prevCharging) {
@@ -696,6 +905,10 @@ void printStatus() {
   Serial.print(",negv=");         Serial.print(negFixedV, 3);
   Serial.print(",charge=");       Serial.print(chargeActive ? 1 : 0);
   Serial.print(",alertovr=");     Serial.print(alertOverride ? 1 : 0);
+#ifdef CFG_OFFLINE_LOG
+  Serial.print(",olog=");         Serial.print((int)offlineState);
+  Serial.print(",ocount=");       Serial.print(offCount);
+#endif
 #ifdef CFG_BATT_MONITOR
   Serial.print(",battpct=");     Serial.print(battPct);
   Serial.print(",battv=");       Serial.println(battV, 3);
@@ -746,6 +959,82 @@ void calSample() {
   Serial.print(millis()); Serial.print(",");
   Serial.print(a5, 4);    Serial.print(",");
   Serial.println(testV, 4);
+}
+#endif
+
+#ifdef CFG_OFFLINE_LOG
+// One offline log point (battery powered, NO serial): averaged A5 raw + the
+// post-toggle differential in raw counts, stored to RAM.  Mirrors calSample()'s
+// timing so the offline data lines up with USB-collected calibration data.
+void offlineSample() {
+  if (offCount >= OFFLINE_MAX) return;           // buffer full
+
+  long a5 = 0;
+  for (int i = 0; i < 4; i++) { analogRead(A5_MONITOR_PIN); a5 += analogRead(A5_MONITOR_PIN); }
+  a5 /= 4;
+
+  digitalWrite(MOSFET_PIN, MOSFET_OFF);
+  delayMicroseconds(SETTLE_Pre_uS);
+  analogRead(SENSE_POS); int rp = analogRead(SENSE_POS);   // throwaway + real
+  analogRead(SENSE_NEG); int rn = analogRead(SENSE_NEG);
+  sleepMs(SETTLE_Post_MS);
+  digitalWrite(MOSFET_PIN, MOSFET_ON);
+
+  offA5[offCount]   = (uint16_t)a5;
+  offDiff[offCount] = (int16_t)(rp - rn);
+  offCount++;
+}
+
+// State machine: refresh the VBUS/charge reading, then arm -> log -> ready on
+// the USB unplug / replug edges.  Called at the very top of loop() so LOGGING
+// can take over before any serial output happens.
+void serviceOfflineLog() {
+  updateChargeState();                           // refresh chargeActive (A3)
+  switch (offlineState) {
+    case OFF_ARMED:
+      if (!chargeActive) {                        // USB removed -> start logging
+        offCount = 0;
+        lastOfflineMs = 0;
+        offlineState = OFF_LOGGING;
+      }
+      break;
+    case OFF_LOGGING:
+      if (chargeActive) offlineState = OFF_READY; // USB back -> stop, hold data
+      break;
+    default:
+      break;
+  }
+}
+
+// LED while logging on battery: dim-green heartbeat (~1 s) so you can see it's
+// alive as you sweep; fast red once the buffer is full.  Kept brief and
+// infrequent to minimise NeoPixel supply noise during the reads.
+void offlineLoggingLed() {
+  static unsigned long last = 0;
+  static bool on = false;
+  unsigned long now = millis();
+  if (offCount >= OFFLINE_MAX) {                  // full: fast red blink
+    if (now - last >= 150) { on = !on; last = now; setPixel(on ? 30 : 0, 0, 0); }
+    return;
+  }
+  if (!on && now - last >= 1000) { on = true;  last = now; setPixel(0, 20, 0); }
+  else if (on && now - last >= 20) { on = false;             setPixel(0, 0, 0); }
+}
+
+// Dump the RAM log to the host on reconnect.  Host converts raw->volts with the
+// full-scale/vref in the header.  Emits $OFFSTART / $OFF rows / $OFFEND.
+void dumpOfflineLog() {
+  Serial.print("$OFFSTART,");
+  Serial.print(offCount);          Serial.print(",");
+  Serial.print(ADC_FULL_SCALE, 0); Serial.print(",");
+  Serial.println(ADC_REF_VOLTAGE, 3);
+  for (int i = 0; i < offCount; i++) {
+    Serial.print("$OFF,");
+    Serial.print(i);          Serial.print(",");
+    Serial.print(offA5[i]);   Serial.print(",");
+    Serial.println(offDiff[i]);
+  }
+  Serial.println("$OFFEND");
 }
 #endif
 
@@ -858,6 +1147,26 @@ void handleLine(char *line) {
     Serial.println("$ERR,cal,no A5 pin on this board");
 #endif
     printStatus();
+  } else if (strcmp(cmd, "OLOG") == 0) {
+    // !OLOG,1 arm offline logging; !OLOG,0 disarm + clear; bare = toggle.
+    // Once armed, unplug USB to start logging on battery; replug to stop.
+#ifdef CFG_OFFLINE_LOG
+    int v = arg ? atoi(arg) : -1;
+    if (v == 0)      { offlineState = OFF_IDLE;  offCount = 0; }
+    else if (v == 1) { offlineState = OFF_ARMED; }
+    else             { offlineState = (offlineState == OFF_IDLE) ? OFF_ARMED : OFF_IDLE;
+                       if (offlineState == OFF_IDLE) offCount = 0; }
+#else
+    Serial.println("$ERR,olog,unsupported on this board");
+#endif
+    printStatus();
+  } else if (strcmp(cmd, "ODUMP") == 0) {
+    // !ODUMP  stream the RAM log ($OFFSTART / $OFF rows / $OFFEND).
+#ifdef CFG_OFFLINE_LOG
+    dumpOfflineLog();
+#else
+    Serial.println("$ERR,odump,unsupported on this board");
+#endif
   } else if (strcmp(cmd, "CAP") == 0) {
     unsigned long d = arg ? atol(arg) : capDurationMs;
     if (d < 1) d = 1;
@@ -942,6 +1251,9 @@ void setup() {
   pinMode(SENSE_POS, INPUT);
   pinMode(SENSE_NEG, INPUT);
 
+  pinMode(SPEAKER_PIN, OUTPUT);
+  digitalWrite(SPEAKER_PIN, SPEAKER_OFF);   // speaker off at boot
+
 #ifdef CFG_CHARGE_DETECT
   pinMode(CHARGE_PIN, INPUT);            // A3 = VBUS/2 (USB-power sense)
 #endif
@@ -969,6 +1281,10 @@ void setup() {
   startupBatteryIndicate();              // power-on battery charge-level cue
 #endif
 
+  bootSpeakerMuteCheck();                // leads CLOSED at boot -> mute for this session
+  Serial.print("Speaker: ");
+  Serial.println(speakerMuted ? "MUTED (leads closed at boot)" : "enabled");
+
   Serial.println("OpenLeadDetect_XIAO_Minimal ready.");
 }
 
@@ -977,6 +1293,23 @@ void setup() {
 // ==================================================================
 void loop() {
   pollSerial();
+
+#ifdef CFG_OFFLINE_LOG
+  // Offline log takes priority and runs the arm/log/ready state machine.  While
+  // LOGGING (on battery) we sample to RAM and emit NO serial -- USB-CDC writes
+  // can block when unplugged, which would stall the log.
+  serviceOfflineLog();
+  if (offlineState == OFF_LOGGING) {
+    if (offCount < OFFLINE_MAX && millis() - lastOfflineMs >= OFFLINE_INTERVAL_MS) {
+      lastOfflineMs = millis();
+      offlineSample();
+    }
+    offlineLoggingLed();
+    silenceSpeaker();          // no audio while logging on battery
+    delay(1);
+    return;
+  }
+#endif
 
 #ifdef CFG_A5_MONITOR
   // Spare-pin monitor (RA4M1): continually report the A5 voltage, in every
@@ -1003,6 +1336,7 @@ void loop() {
       }
 #endif
       updateLed();
+      silenceSpeaker();        // detection paused during calibration -> quiet
       delay(1);
       return;
     }
@@ -1023,6 +1357,7 @@ void loop() {
     updateChargeState();
 #endif
     updateAlerts();
+    updateSpeaker();
     delay(1);                  // light idle; capture/streaming set their own pace
     return;
   }
@@ -1033,6 +1368,7 @@ void loop() {
   updateChargeState();
 #endif
   updateAlerts();
+  updateSpeaker();
 
   // ── Periodic serial debug ──
   if (millis() - lastSerialTime >= serialInterval) {
