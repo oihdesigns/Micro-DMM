@@ -13,6 +13,63 @@ from scipy.fft import rfft, rfftfreq
 from scipy.cluster.vq import kmeans2
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import socket
+
+
+class TcpSerial:
+    """Minimal pyserial look-alike over TCP, for the Giga_RemoteController_WiFi
+    sketch (listens on port 8080, same line protocol as USB serial).
+
+    Implements just what this GUI uses: write(bytes), readline()->bytes,
+    close(), .is_open, and the `with ... as ser:` context-manager form."""
+
+    def __init__(self, host, port=8080, timeout=60):
+        # Accept "host:port" in one string (e.g. what the sketch prints).
+        if isinstance(host, str) and ":" in host:
+            host, port_str = host.rsplit(":", 1)
+            try:
+                port = int(port_str)
+            except ValueError:
+                port = 8080
+        self._sock = socket.create_connection((host, int(port)), timeout=timeout)
+        self._sock.settimeout(timeout)
+        self._buf = bytearray()
+        self.is_open = True
+
+    def write(self, data: bytes) -> int:
+        self._sock.sendall(data)
+        return len(data)
+
+    def readline(self) -> bytes:
+        """One line incl. trailing '\\n', or b'' on timeout/close (matches pyserial)."""
+        while b"\n" not in self._buf:
+            try:
+                chunk = self._sock.recv(4096)
+            except socket.timeout:
+                return b""
+            if not chunk:                       # peer closed
+                line, self._buf = bytes(self._buf), bytearray()
+                return line
+            self._buf.extend(chunk)
+        idx = self._buf.index(b"\n") + 1
+        line = bytes(self._buf[:idx])
+        del self._buf[:idx]
+        return line
+
+    def close(self):
+        self.is_open = False
+        try:
+            self._sock.close()
+        except OSError:
+            pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+        return False
+
 
 class GigaTestGUI:
     CHANNEL_COLORS = {
@@ -106,8 +163,10 @@ class GigaTestGUI:
         top.pack(fill="x", padx=10, pady=5)
 
         ports = [p.device for p in serial.tools.list_ports.comports()]
-        ttk.Label(top, text="Port:").pack(side="left")
-        self.port_combo = ttk.Combobox(top, textvariable=self.port_var, values=ports, width=12)
+        ttk.Label(top, text="Port/IP:").pack(side="left")
+        # Editable: pick a COM port (USB sketch) or type the board's WiFi
+        # address, e.g. 192.168.1.42 (WiFi sketch, shown on the touchscreen).
+        self.port_combo = ttk.Combobox(top, textvariable=self.port_var, values=ports, width=16)
         self.port_combo.pack(side="left", padx=5)
         ttk.Button(top, text="↺", width=2, command=self._refresh_ports).pack(side="left", padx=(0, 5))
 
@@ -303,8 +362,27 @@ class GigaTestGUI:
     def _refresh_ports(self):
         ports = [p.device for p in serial.tools.list_ports.comports()]
         self.port_combo["values"] = ports
-        if self.port_var.get() not in ports:
+        cur = self.port_var.get()
+        # Keep a manually-typed WiFi address (IP / host:port); only auto-fill
+        # if the box is empty or holds a COM port that has gone away.
+        if not self._is_network_port(cur) and cur not in ports:
             self.port_var.set(ports[0] if ports else "")
+
+    @staticmethod
+    def _is_network_port(port):
+        """True if the Port box holds a WiFi target (IP, host:port, or *.local)
+        rather than a serial COM/tty device."""
+        p = (port or "").strip()
+        if not p or p.upper().startswith("COM") or p.startswith("/"):
+            return False
+        return ("." in p) or (":" in p)
+
+    def _open_connection(self, timeout=60):
+        """Open either a USB serial port or a TCP socket, chosen from the Port box."""
+        port = self.port_var.get().strip()
+        if self._is_network_port(port):
+            return TcpSerial(port, 8080, timeout=timeout)
+        return serial.Serial(port, 115200, timeout=timeout)
 
     # ------------------------------------------------------------------
     # Trigger logging helpers
@@ -638,7 +716,7 @@ class GigaTestGUI:
         self.capture_time_ms = int(self.time_var.get())
 
         try:
-            with serial.Serial(self.port_var.get(), 115200, timeout=60) as ser:
+            with self._open_connection(timeout=60) as ser:
                 trig_raws = self._trig_raw_counts()
                 mid_flag  = 1 if (self.trig_enable.get() and self.trig_mode_var.get() == "Midpoint") else 0
                 if mid_flag:

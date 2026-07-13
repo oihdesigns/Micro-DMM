@@ -233,7 +233,7 @@ const float GAIN_FACTOR_8         = 0.25;      // +/-0.512 V
 const float GAIN_FACTOR_16        = 0.125;     // +/-0.256 V
 static const int ADC_COUNT_LOW_THRESH  = 600;
 static const int ADC_COUNT_HIGH_THRESH = 1800;
-float vClosedThres     = 1.34; 
+float vClosedThres     = 1.42;  //red=1.34
 #define ADS_RATE_FAST  RATE_ADS1015_3300SPS
 #define ADS_RATE_MID  RATE_ADS1015_490SPS
 #define ADS_RATE_SLOW  RATE_ADS1015_250SPS
@@ -863,11 +863,16 @@ const float BRIDGE_BASELINE_V = 1.262f;
 // ==================================================================
 const char* bridgeResistanceLabel(float v) {
   v = fabs(v);
-  if (v < 1.266f) return "<33K";
-  if (v > 1.64f)  return ">50M";
+  if (v < 1.34f) return "<33K";
+  if (v > 1.706f)  return ">10M";
 
+/*Red
   static const float kBinV[]    = { 1.273f, 1.288f,  1.339f,  1.431f, 1.578f, 1.633f  };
   static const char* kBinName[] = { "~33K", "~100K", "~330K", "~1M", "~10M", "~50M" };
+*/
+  static const float kBinV[]    = { 1.35f, 1.37f,  1.425f,  1.521f, 1.679f};
+  static const char* kBinName[] = { "~33K", "~100K", "~330K", "~1M", "~10M"};
+
   const int n = sizeof(kBinV) / sizeof(kBinV[0]);
 
   int   best     = 0;

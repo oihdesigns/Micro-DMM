@@ -39,8 +39,11 @@
  *   power-on cue (RA4M1): 1-4 green blinks = battery charge level
  *     (0-25/25-50/50-75/75-100 %)
  *
- * Speaker (SPEAKER_PIN, on/off, HIGH = sound) -- mirrors the LED, tunable in the
- * "Speaker / audio alert" block.  Continuity and voltage each have independent
+ * Speaker (SPEAKER_PIN) -- mirrors the LED, tunable in the "Speaker / audio
+ * alert" block.  Active buzzer by default (pin switched on/off); define
+ * CFG_PASSIVE_BUZZER to drive a passive buzzer with tone() so continuity and
+ * voltage sound at different pitches (CONT_FREQ_HZ / VOLT_FREQ_HZ).
+ * Continuity and voltage each have independent
  * on-time, off-time, pulse count, and a *_REPEAT flag (1 = repeat while the
  * state holds at *_REPEAT_MS, 0 = beep once).  Defaults:
  *   closed  = single beep, repeated while continuity persists
@@ -104,7 +107,7 @@
   #define CFG_MOSFET_PIN      D1
   #define LED_PIN             10     // onboard RGB  "RGB_BUILTIN" or "10"
   #define RGB_POWER_PIN       PIN_RGB_EN      // onboard RGB power enable
-  #define CFG_OPEN_THRESH_V   0.250f          // self-contained proto
+  #define CFG_OPEN_THRESH_V   0.430f          // self-contained proto
   #define CFG_REF_BAND_V      0.03f
   //#define CFG_OPEN_THRESH_V 0.1f            // <- breadboard proto alt (then comment the line above)
   #define CFG_SLEEP_WFI       1               // Cortex-M4 WFI idle
@@ -136,7 +139,7 @@
   // the A5 voltage via A5_THRESH_TABLE (piecewise-linear).  Comment this line
   // out for a fixed threshold.  When enabled it OVERRIDES CFG_OPEN_THRESH_V and
   // any !THRESH command (they are recomputed from A5 every detection pass).
-  #define CFG_A5_THRESH       1
+  //#define CFG_A5_THRESH       1
   // Offline calibration log (RA4M1): arm over USB (!OLOG,1), unplug to run on
   // battery -- the board then logs A5 + post-toggle diff to RAM (cleaner than
   // sampling over the USB link).  Replug and the GUI pulls the log (!ODUMP).
@@ -272,11 +275,19 @@ const unsigned long VOLT_MIN_MS     = 500;   // min gap (2 Hz cap)
 #define SPEAKER_ON  HIGH
 #define SPEAKER_OFF LOW
 
+// Buzzer type.  Leave commented for an ACTIVE buzzer (self-oscillating -- the pin
+// is just switched on/off, one fixed tone).  Uncomment for a PASSIVE buzzer,
+// driven with tone() so continuity and voltage can sound at different pitches
+// (CONT_FREQ_HZ / VOLT_FREQ_HZ).  Portable: tone()/noTone() exist on the RA4M1,
+// SAMD21 and RP2040 cores.
+#define CFG_PASSIVE_BUZZER  1
+
 const unsigned long BEEP_MIN_MS = 500;   // min gap between sequence starts (2 Hz cap, both alerts)
 
 // Continuity (CLOSED) beep -------------------------------------------------
 // The initial contact beep (leads just closed) and the ongoing "still there"
 // repeat beeps have independent on/off durations, so they can sound different.
+const unsigned int  CONT_FREQ_HZ     = 2000;   // passive-buzzer pitch (CFG_PASSIVE_BUZZER only)
 const int           CONT_BEEP_PULSES = 1;     // pulses per beep (1 = single beep)
 const unsigned long CONT_ON_MS       = 20;    // initial contact: on-time of each pulse
 const unsigned long CONT_OFF_MS      = 10;    // initial contact: off-time between pulses (only matters if pulses > 1)
@@ -286,6 +297,7 @@ const unsigned long CONT_ONGOING_ON_MS  = 50; // ongoing "still there": on-time 
 const unsigned long CONT_ONGOING_OFF_MS = 10;  // ongoing "still there": off-time between pulses
 
 // Voltage (VOLTAGE) beep ---------------------------------------------------
+const unsigned int  VOLT_FREQ_HZ     = 3000;  // passive-buzzer pitch (CFG_PASSIVE_BUZZER only)
 const int           VOLT_BEEP_PULSES = 2;     // pulses per beep (2 = double beep)
 const unsigned long VOLT_ON_MS       = 20;    // on-time of each pulse
 const unsigned long VOLT_OFF_MS      = 10;    // off-time between pulses
@@ -299,6 +311,7 @@ unsigned long beepPhaseStart   = 0;      // ms timestamp of the current on/off p
 unsigned long lastBeepSeqStart = 0;      // ms timestamp the last sequence began
 unsigned long beepOnMs         = 20;     // on-time  for the sequence in progress
 unsigned long beepOffMs        = 10;     // off-time for the sequence in progress
+unsigned int  beepFreq         = 0;      // passive-buzzer pitch for the sequence in progress
 
 // Boot-time speaker mute (no dedicated input needed): if the leads read CLOSED
 // on the first detection at power-up, the speaker stays silent for the whole
@@ -552,20 +565,46 @@ void updateLed() {
 // updateBeep() advances its on/off phases without blocking, and updateSpeaker()
 // maps leadState -> beeps (honouring the same charge lockout as the LED).
 
-// Begin a sequence of `pulses` beeps with the given on/off timing, unless one
-// is still playing or the 2 Hz rate cap (BEEP_MIN_MS since the last start)
-// hasn't elapsed yet.  The timing is latched so the sequence keeps its own
-// cadence even if another state's constants differ.
-void startBeep(unsigned long now, int pulses, unsigned long onMs, unsigned long offMs) {
-  if (beepOn || beepPulsesLeft > 0)         return;   // a sequence is still playing
-  if (now - lastBeepSeqStart < BEEP_MIN_MS) return;   // 2 Hz cap on new sequences
+// Sound / silence the buzzer element.  ACTIVE buzzer: just a DC level (it makes
+// its own tone).  PASSIVE buzzer (CFG_PASSIVE_BUZZER): a square wave at `freq`
+// Hz via tone(), so each alert can have its own pitch.
+void speakerOn(unsigned int freq) {
+#ifdef CFG_PASSIVE_BUZZER
+  tone(SPEAKER_PIN, freq);
+#else
+  (void)freq;
+  digitalWrite(SPEAKER_PIN, SPEAKER_ON);
+#endif
+}
+
+void speakerOff() {
+#ifdef CFG_PASSIVE_BUZZER
+  noTone(SPEAKER_PIN);
+#endif
+  digitalWrite(SPEAKER_PIN, SPEAKER_OFF);   // leave the pin idle-low either way
+}
+
+// Begin a sequence of `pulses` beeps with the given on/off timing and (passive-
+// buzzer) pitch `freq`, unless one is still playing or the 2 Hz rate cap
+// (BEEP_MIN_MS since the last start) hasn't elapsed yet.  The timing/pitch are
+// latched so the sequence keeps its own cadence even if another state differs.
+// `force` skips both guards: it preempts any in-progress sequence and ignores
+// the rate cap, so a priority alert (voltage detected) always sounds on entry
+// even if a continuity beep just fired.
+void startBeep(unsigned long now, int pulses, unsigned long onMs, unsigned long offMs,
+               bool force, unsigned int freq) {
+  if (!force) {
+    if (beepOn || beepPulsesLeft > 0)         return;   // a sequence is still playing
+    if (now - lastBeepSeqStart < BEEP_MIN_MS) return;   // 2 Hz cap on new sequences
+  }
   lastBeepSeqStart = now;
   beepPulsesLeft   = pulses;
   beepOnMs         = onMs;
   beepOffMs        = offMs;
+  beepFreq         = freq;
   beepPhaseStart   = now;
   beepOn           = true;
-  digitalWrite(SPEAKER_PIN, SPEAKER_ON);              // first pulse on
+  speakerOn(beepFreq);                                // first pulse on
   beepPulsesLeft--;
 }
 
@@ -575,12 +614,12 @@ void updateBeep(unsigned long now) {
   if (!beepOn && beepPulsesLeft == 0) return;         // idle
   if (beepOn) {
     if (now - beepPhaseStart >= beepOnMs) {
-      digitalWrite(SPEAKER_PIN, SPEAKER_OFF);
+      speakerOff();
       beepOn         = false;
       beepPhaseStart = now;
     }
   } else if (beepPulsesLeft > 0 && now - beepPhaseStart >= beepOffMs) {
-    digitalWrite(SPEAKER_PIN, SPEAKER_ON);
+    speakerOn(beepFreq);
     beepOn         = true;
     beepPhaseStart = now;
     beepPulsesLeft--;
@@ -589,7 +628,7 @@ void updateBeep(unsigned long now) {
 
 // Immediately silence the speaker and abandon any in-progress sequence.
 void silenceSpeaker() {
-  if (beepOn) digitalWrite(SPEAKER_PIN, SPEAKER_OFF);
+  if (beepOn) speakerOff();
   beepOn         = false;
   beepPulsesLeft = 0;
 }
@@ -624,12 +663,14 @@ void updateSpeaker() {
 
   if (leadState == STATE_CLOSED) {
     if (entered)                          // just made contact: initial beep
-      startBeep(now, CONT_BEEP_PULSES, CONT_ON_MS, CONT_OFF_MS);
+      startBeep(now, CONT_BEEP_PULSES, CONT_ON_MS, CONT_OFF_MS, false, CONT_FREQ_HZ);
     else if (CONT_REPEAT && now - lastBeepSeqStart >= CONT_REPEAT_MS)
-      startBeep(now, CONT_BEEP_PULSES, CONT_ONGOING_ON_MS, CONT_ONGOING_OFF_MS);
+      startBeep(now, CONT_BEEP_PULSES, CONT_ONGOING_ON_MS, CONT_ONGOING_OFF_MS, false, CONT_FREQ_HZ);
   } else if (leadState == STATE_VOLTAGE) {
-    if (entered || (VOLT_REPEAT && now - lastBeepSeqStart >= VOLT_REPEAT_MS))
-      startBeep(now, VOLT_BEEP_PULSES, VOLT_ON_MS, VOLT_OFF_MS);
+    if (entered)                          // priority alert: always sound on entry,
+      startBeep(now, VOLT_BEEP_PULSES, VOLT_ON_MS, VOLT_OFF_MS, true, VOLT_FREQ_HZ);   // even right after a continuity beep
+    else if (VOLT_REPEAT && now - lastBeepSeqStart >= VOLT_REPEAT_MS)
+      startBeep(now, VOLT_BEEP_PULSES, VOLT_ON_MS, VOLT_OFF_MS, false, VOLT_FREQ_HZ);
   }
 
   updateBeep(now);
