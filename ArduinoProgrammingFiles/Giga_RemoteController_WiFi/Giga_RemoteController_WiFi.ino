@@ -13,7 +13,6 @@
 static const uint16_t CMD_PORT = 8080;   // TCP port the GUI connects to
 
 WiFiServer cmdServer(CMD_PORT);
-WiFiClient cmdClient;
 static bool   wifiActive = false;
 static char   wifiIPStr[20] = "no wifi";
 
@@ -1131,7 +1130,18 @@ static void runDisplayCapture() {
     }
     memcpy(lastDiff,dDiff,sizeof(dDiff));
     lastBitRes    = bitRes;
-    lastElapsedMs = lastLogMs>0 ? lastLogMs : millis()-startMs;
+    // Time span from the sample math (fixed ADC rate) rather than wall clock,
+    // which is inflated by ADC start-up latency / loop jitter and would skew
+    // the frequency read off the plot. Trigger mode logs on change (non-uniform)
+    // so it must fall back to wall clock.
+    if(trigThr>0){
+        lastElapsedMs = lastLogMs>0 ? lastLogMs : millis()-startMs;
+    } else {
+        int nStored=0;
+        for(int i=0;i<N_CHANNELS;i++) if(doCapt[i]&&captLogCnt[i]>nStored) nStored=captLogCnt[i];
+        lastElapsedMs = (uint32_t)((uint64_t)nStored*logEvery*smoothCount*1000/sampleRate);
+        if(lastElapsedMs==0) lastElapsedMs = lastLogMs>0 ? lastLogMs : millis()-startMs;
+    }
     lastMidMode   = false;
     captureReady  = true;
 
@@ -1386,20 +1396,41 @@ void loop() {
     }
 
     // ── Command channel: USB serial OR WiFi TCP (both are Streams) ───────────
-    // Accept a new WiFi client if one is knocking and we don't have one.
-    if(wifiActive && (!cmdClient || !cmdClient.connected())){
+    // USB serial takes priority when bytes are waiting.
+    if(Serial.available()){ processCommand(Serial); return; }
+
+    // WiFi: the GUI opens a fresh TCP connection per capture. Handle exactly one
+    // command per connection, then release the socket — otherwise the Giga's
+    // small socket pool leaks and the board stops responding until reset.
+    if(wifiActive){
         WiFiClient c = cmdServer.available();
-        if(c) cmdClient = c;
+        if(c){
+            // Wait briefly for the full command line to arrive.
+            uint32_t t0 = millis();
+            while(c.connected() && !c.available() && millis()-t0 < 1500) delay(1);
+            if(c.available()) processCommand(c);
+            // Let the GUI finish reading the whole reply (incl. large DATA dumps)
+            // and close first, so stop() can't truncate the response. Capped so a
+            // stalled client can never wedge the board.
+            c.flush();
+            uint32_t t1 = millis();
+            while(c.connected() && millis()-t1 < 8000) delay(2);
+            c.stop();
+        }
     }
-    Stream* io = nullptr;
-    if(Serial.available())                                               io = &Serial;
-    else if(cmdClient && cmdClient.connected() && cmdClient.available())  io = &cmdClient;
-    if(!io) return;
-    processCommand(*io);
 }
 
 // ── Command processing: shared by USB serial and WiFi (both are Streams) ──────
 static void processCommand(Stream& io) {
+    // Read + validate the command line BEFORE any side effects. A partial or
+    // stray read (common right after a socket opens/closes) must never trigger a
+    // capture with the wrong parameters — that was the source of mislabeled
+    // elapsed times over WiFi.
+    String cmd=io.readStringUntil('\n'); cmd.trim();
+    if(!cmd.startsWith("PINS:")){
+        if(cmd.length()) io.println("ERR:BAD_CMD");
+        return;
+    }
     contMode=false;  // any incoming command stops continuous view
     if(logRunning){
         logRunning=false;
@@ -1407,7 +1438,6 @@ static void processCommand(Stream& io) {
         usbFs.unmount(); usbMounted=false;
     }
     if(displayPresent){ currentScreen=SCR_CAPTURING; drawCaptureScreen(); }
-    String cmd=io.readStringUntil('\n'); cmd.trim();
 
     int bitRes      =cmd.substring(cmd.indexOf("BITS:")+5,cmd.indexOf("|TIME:")).toInt();
     int duration    =cmd.substring(cmd.indexOf("TIME:")+5,cmd.indexOf("|SMOOTH:")).toInt();
@@ -1568,8 +1598,18 @@ static void processCommand(Stream& io) {
     if(midpointMode){
         serialElapsed=(uint32_t)((uint64_t)(midRingFill+midPostCount)*smoothCount*1000/sampleRate);
         if(serialElapsed==0) serialElapsed=1;
-    } else {
+    } else if(usingTrig){
+        // Trigger mode logs on change -> non-uniform spacing; wall clock is the
+        // only meaningful span.
         serialElapsed=lastLogMs>0?lastLogMs:(millis()-startMs);
+    } else {
+        // Uniform decimation: derive the true signal span from the sample math.
+        // Immune to ADC start-up latency and WiFi-induced wall-clock jitter,
+        // which otherwise inflate elapsed time and skew the computed frequency.
+        int nStored=0;
+        for(int i=0;i<N_CHANNELS;i++) if(pinReq[i]&&logCnt[i]>nStored) nStored=logCnt[i];
+        serialElapsed=(uint32_t)((uint64_t)nStored*logEvery*smoothCount*1000/sampleRate);
+        if(serialElapsed==0) serialElapsed=lastLogMs>0?lastLogMs:(millis()-startMs);
     }
     io.println(serialElapsed);
 

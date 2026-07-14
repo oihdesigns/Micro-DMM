@@ -47,7 +47,8 @@ class TcpSerial:
                 chunk = self._sock.recv(4096)
             except socket.timeout:
                 return b""
-            if not chunk:                       # peer closed
+            if not chunk:                       # peer closed (EOF)
+                self.is_open = False
                 line, self._buf = bytes(self._buf), bytearray()
                 return line
             self._buf.extend(chunk)
@@ -83,6 +84,10 @@ class GigaTestGUI:
         "A7": "#7f7f7f",
     }
 
+    # Pre-filled WiFi target for the Giga_RemoteController_WiFi sketch. Also kept
+    # in the Port/IP dropdown so you can switch between USB and WiFi in one click.
+    DEFAULT_WIFI_ADDR = "192.168.40.152:8080"
+
     def __init__(self, root):
         self.root = root
         self.root.title("Giga ADC Performance - Plotting & Export")
@@ -97,7 +102,7 @@ class GigaTestGUI:
             "1000000": "10",
         }
 
-        self.port_var   = tk.StringVar()
+        self.port_var   = tk.StringVar(value=self.DEFAULT_WIFI_ADDR)
         self.bit_var    = tk.StringVar(value="12")
         self.time_var   = tk.StringVar(value="1000")
         self.smooth_var = tk.StringVar(value="7")
@@ -162,11 +167,11 @@ class GigaTestGUI:
         top = ttk.Frame(self.root)
         top.pack(fill="x", padx=10, pady=5)
 
-        ports = [p.device for p in serial.tools.list_ports.comports()]
+        ports = [p.device for p in serial.tools.list_ports.comports()] + [self.DEFAULT_WIFI_ADDR]
         ttk.Label(top, text="Port/IP:").pack(side="left")
-        # Editable: pick a COM port (USB sketch) or type the board's WiFi
-        # address, e.g. 192.168.1.42 (WiFi sketch, shown on the touchscreen).
-        self.port_combo = ttk.Combobox(top, textvariable=self.port_var, values=ports, width=16)
+        # Editable: pick a COM port (USB sketch) or the board's WiFi address,
+        # e.g. 192.168.1.42:8080 (WiFi sketch, shown on the touchscreen).
+        self.port_combo = ttk.Combobox(top, textvariable=self.port_var, values=ports, width=18)
         self.port_combo.pack(side="left", padx=5)
         ttk.Button(top, text="↺", width=2, command=self._refresh_ports).pack(side="left", padx=(0, 5))
 
@@ -360,7 +365,7 @@ class GigaTestGUI:
             self.bit_var.set(paired)
 
     def _refresh_ports(self):
-        ports = [p.device for p in serial.tools.list_ports.comports()]
+        ports = [p.device for p in serial.tools.list_ports.comports()] + [self.DEFAULT_WIFI_ADDR]
         self.port_combo["values"] = ports
         cur = self.port_var.get()
         # Keep a manually-typed WiFi address (IP / host:port); only auto-fill
@@ -735,13 +740,25 @@ class GigaTestGUI:
                 effective_time_ms = self.capture_time_ms
 
                 while True:
-                    line = ser.readline().decode().strip()
+                    line = ser.readline().decode(errors="ignore").strip()
                     if not line:
+                        # A serial port stays open through quiet gaps, but a TCP
+                        # peer that closed sends EOF forever — bail instead of
+                        # spinning if the board dropped the link before DONE.
+                        if not getattr(ser, "is_open", True):
+                            messagebox.showerror(
+                                "Connection closed",
+                                "The board closed the connection before finishing.\n"
+                                "Check the IP/port and try again.")
+                            return
                         continue
                     if line.startswith("ERR:ADC_BEGIN_FAILED"):
                         messagebox.showerror("ADC Error",
                             f"Board rejected {self.rate_var.get()} Hz at {self.bit_var.get()}-bit.\n"
                             "Try a lower rate or fewer bits.")
+                        return
+                    if line.startswith("ERR:"):
+                        messagebox.showerror("Board error", line)
                         return
                     if "DONE" in line:
                         try:
