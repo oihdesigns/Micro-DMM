@@ -104,11 +104,11 @@
   #endif
   #define CFG_ADC_RESOLUTION  14
   #define CFG_ADC_FULL_SCALE  16383.0f
-  #define CFG_MOSFET_PIN      D1
-  #define LED_PIN             10     // onboard RGB  "RGB_BUILTIN" or "10"
+  #define CFG_MOSFET_PIN      D7 //1 earlier
+  #define LED_PIN             6     // onboard RGB  "RGB_BUILTIN" or "10" (earlier)
   #define RGB_POWER_PIN       PIN_RGB_EN      // onboard RGB power enable
-  #define CFG_OPEN_THRESH_V   0.430f          // self-contained proto
-  #define CFG_REF_BAND_V      0.03f
+  #define CFG_OPEN_THRESH_V   0.500f          // self-contained proto
+  #define CFG_REF_BAND_V      0.025f
   //#define CFG_OPEN_THRESH_V 0.1f            // <- breadboard proto alt (then comment the line above)
   #define CFG_SLEEP_WFI       1               // Cortex-M4 WFI idle
   // Charge / USB-power detect: A3 is tied to VBUS through a 1:1 divider, so
@@ -133,7 +133,7 @@
   #define CFG_BATT_FULL_V     4.20f           // 100%
   #define CFG_BATT_FULL_PCT   90              // >= this % while charging = green blink
   // Spare-pin (A5) features (RA4M1 only).  CFG_A5_PIN is shared by both.
-  #define CFG_A5_PIN          A5
+  #define CFG_A5_PIN          A0
   #define CFG_A5_MONITOR      1     // continually print $A5,<ms>,<volts> for probing
   // Adaptive open/closed threshold: derive the differential threshold live from
   // the A5 voltage via A5_THRESH_TABLE (piecewise-linear).  Comment this line
@@ -195,7 +195,7 @@ const float ADC_FULL_SCALE  = CFG_ADC_FULL_SCALE;
 // and detection looks at the magnitude of the deviation.  Retune
 // OPEN_THRESH_V against real closed/open readings on the bench.
 
-const float REF_CENTER_V   = 0.00f;   // resting differential (~0 V)
+const float REF_CENTER_V   = -0.01f;   // resting differential (~0 V)
 
 const unsigned long SETTLE_Post_MS = 3;     // MOSFET-off settle before test read
 const unsigned long SETTLE_Pre_uS = 300;
@@ -228,7 +228,7 @@ const int    STATE_STABLE_COUNT = 2;   // detection passes a new state must repe
 
 // ── Pin assignments ──────────────────────────────────────────────
 const int SENSE_POS  = A2;   // pseudo-differential positive input
-const int SENSE_NEG  = A0;   // pseudo-differential negative input
+const int SENSE_NEG  = A1;   // pseudo-differential negative input (A0 previously)
 const int MOSFET_PIN = CFG_MOSFET_PIN;   // bridge MOSFET gate (HIGH = on/resting)
 
 // MOSFET drive polarity (resting = HIGH per spec)
@@ -243,8 +243,8 @@ Adafruit_NeoPixel pixel(NUM_PIXELS, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 // ── Status colours ───────────────────────────────────────────────
 const uint8_t COL_FLOAT_R = 0,   COL_FLOAT_G = 0,   COL_FLOAT_B = 28;   // dim blue
-const uint8_t COL_CLOSED_R = 0,  COL_CLOSED_G = 128, COL_CLOSED_B = 0;   // green
-const uint8_t COL_VOLT_R = 80,   COL_VOLT_G = 0,    COL_VOLT_B = 0;     // red
+const uint8_t COL_CLOSED_R = 0,  COL_CLOSED_G = 200, COL_CLOSED_B = 0;   // green
+const uint8_t COL_VOLT_R = 200,   COL_VOLT_G = 0,    COL_VOLT_B = 0;     // red
 
 // ── Blink behaviour ──────────────────────────────────────────────
 // Every state is driven the same way: a brief flash of its colour for
@@ -297,7 +297,7 @@ const unsigned long CONT_ONGOING_ON_MS  = 50; // ongoing "still there": on-time 
 const unsigned long CONT_ONGOING_OFF_MS = 10;  // ongoing "still there": off-time between pulses
 
 // Voltage (VOLTAGE) beep ---------------------------------------------------
-const unsigned int  VOLT_FREQ_HZ     = 3000;  // passive-buzzer pitch (CFG_PASSIVE_BUZZER only)
+const unsigned int  VOLT_FREQ_HZ     = 2500;  // passive-buzzer pitch (CFG_PASSIVE_BUZZER only)
 const int           VOLT_BEEP_PULSES = 2;     // pulses per beep (2 = double beep)
 const unsigned long VOLT_ON_MS       = 20;    // on-time of each pulse
 const unsigned long VOLT_OFF_MS      = 10;    // off-time between pulses
@@ -391,7 +391,7 @@ int mosfetHold = -1;                    // -1 auto (run detection), 0 hold off, 
 // noise.  A2 should rest near 1.250 V; pinning it to that value means any
 // remaining ripple in the diff is coming from A0 or the supply, not from the
 // reference drifting.  Applies to detection, streaming, AND capture.
-bool  negFixed  = false;     // false = read A2 normally, true = use negFixedV
+bool  negFixed  = true;     // false = read A2 normally, true = use negFixedV
 float negFixedV = 1.250f;    // fixed pseudo-reference voltage when negFixed
 
 // Transient capture buffer (raw counts; volts computed by the host)
@@ -431,7 +431,9 @@ int  cmdLen = 0;
 // it returns the raw count corresponding to negFixedV instead, so the diff
 // isolates A0 / board noise from A2-reference noise.  Centralised here so
 // detection, streaming, and capture all honour the override identically.
+
 int readNegRaw() {
+  
   if (negFixed) {
     return (int)((negFixedV / ADC_REF_VOLTAGE) * ADC_FULL_SCALE + 0.5f);
   }
