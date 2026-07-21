@@ -17,9 +17,20 @@
  *        - any single read beyond VOLTFAST * REFBAND -> present;
  *        - otherwise average VOLTAVG reads and compare to the band.
  *      If voltage is present the open/closed test is bypassed.
- *   3. Test (only when no voltage):  MOSFET LOW, settle, read differential.
- *        - |deviation| above the active threshold -> OPEN  (floating) -> blue
- *        - |deviation| at/below                   -> CLOSED           -> green
+ *   3. Test (only when no voltage):  MOSFET LOW, derive an open/closed metric,
+ *      MOSFET back HIGH.  metric > active threshold -> OPEN (blue), else CLOSED
+ *      (green).  How the metric is derived is selectable (cfg.detectMethod):
+ *        0 SINGLE  : one differential read after settlePreUs; metric = |diff| (V)
+ *                    -- the original method (default; unchanged behaviour).
+ *        1 TIMERET : sample the recovery; metric = time (ms) for the differential
+ *                    to return within detReturnBand of the resting centre.  A
+ *                    dead short recovers fastest, an open lead slowest, so a
+ *                    LONGER time = MORE OPEN.
+ *        2 AREA    : metric = tail-windowed integral (V*ms) of |diff-centre|
+ *                    from detAreaStartUs to detWindowUs.  LARGER area = MORE OPEN.
+ *      All three keep "larger metric = more open", so the DIP threshold table
+ *      and the compare are shared -- but the threshold's UNITS change with the
+ *      method (V / ms / V*ms), so THRESH00..11 must be re-tuned after a switch.
  *
  * ── Threshold select: 2x DIP switches on D8 / D10 ─────────────────
  * Both pins have hardware pull-ups; a switch ON connects its pin to ground.
@@ -122,7 +133,7 @@ const float ADC_FULL_SCALE  = 16383.0f;
 // Layout changes REQUIRE bumping CFG_VERSION so stale stored data is
 // rejected and replaced with defaults instead of being misread.
 #define CFG_MAGIC   0x42484B31UL   // "BHK1"
-#define CFG_VERSION 1
+#define CFG_VERSION 2              // bumped: added detectMethod + recovery params
 #define CFG_EEPROM_ADDR 0
 
 struct Config {
@@ -141,6 +152,18 @@ struct Config {
   uint8_t  settlePostMs;   // ms settle after the test read, before MOSFET on
   uint8_t  negFix;         // 1 = replace the live SENSE_NEG read with negFixV
   float    negFixV;        // fixed pseudo-reference voltage when negFix
+
+  // -- Detection method (how the open/closed metric is derived) -----
+  // 0 = SINGLE  : one differential read at settlePreUs; metric = |diff|   (V)
+  // 1 = TIMERET : time for |diff-refCentre| to fall back within detReturnBand (ms)
+  // 2 = AREA    : tail-windowed integral of |diff-refCentre| over the recovery (V*ms)
+  // In every method a LARGER metric = more OPEN, so the DIP threshold table
+  // and the "metric > threshold -> FLOAT" test are unchanged -- but the units
+  // of the threshold change with the method, so re-tune THRESH00..11 on switch.
+  uint8_t  detectMethod;   // 0=single(legacy) 1=time-to-return 2=tail-area
+  float    detReturnBand;  // method 1: |diff-refCentre| within this = "returned"
+  uint16_t detWindowUs;    // methods 1&2: max sample window / timeout (us from toggle)
+  uint16_t detAreaStartUs; // method 2: tail-area integration start (us from toggle)
 
   // -- Alerts ------------------------------------------------------
   uint8_t  ledEnable;      // 1 = normal detection LED alerts
@@ -193,6 +216,11 @@ void configDefaults() {
   cfg.settlePostMs   = 3;
   cfg.negFix         = 1;        // matches the proven XIAO_Minimal behaviour
   cfg.negFixV        = 1.250f;
+
+  cfg.detectMethod   = 0;        // ship on the proven single-sample method
+  cfg.detReturnBand  = 0.05f;    // best IsoGnd/Open separation in bench captures
+  cfg.detWindowUs    = 1500;     // recovery completes ~0.7-0.95 ms; window past it
+  cfg.detAreaStartUs = 400;      // skip the common initial dip; integrate the tail
 
   cfg.ledEnable      = 1;
   cfg.beepEnable     = 1;
@@ -294,6 +322,10 @@ const ConfigField CFG_FIELDS[] = {
   { "SETTLEPOSTMS",FT_U8,    &cfg.settlePostMs,    0,      50     },
   { "NEGFIX",      FT_BOOL,  &cfg.negFix,          0,      1      },
   { "NEGV",        FT_FLOAT, &cfg.negFixV,         0.0f,   3.3f   },
+  { "DETMETHOD",   FT_U8,    &cfg.detectMethod,    0,      2      },
+  { "DETBAND",     FT_FLOAT, &cfg.detReturnBand,   0.005f, 1.0f   },
+  { "DETWINUS",    FT_U16,   &cfg.detWindowUs,     200,    5000   },
+  { "DETAREAUS",   FT_U16,   &cfg.detAreaStartUs,  0,      5000   },
   // Alerts
   { "LED",         FT_BOOL,  &cfg.ledEnable,       0,      1      },
   { "BEEP",        FT_BOOL,  &cfg.beepEnable,      0,      1      },
@@ -356,6 +388,12 @@ void printField(const ConfigField *f) {
 // ══════════════════════════════════════════════════════════════════
 const int TEST_MAX_ATTEMPTS = 30;   // safety cap on MOSFET test repeats
 
+// Recovery-transient methods (1 & 2): only start looking for the "return to
+// zero" after the differential has actually dipped past this magnitude, so the
+// first read (taken microseconds after MOSFET-off, before the node discharges)
+// can't be mistaken for an instant return.  The trough is always ~1.1 V.
+const float DET_TROUGH_MIN_V = 0.30f;
+
 // LED colours / flash cadence (compile-time; see manual)
 const uint8_t COL_FLOAT_R = 0,  COL_FLOAT_G = 0,   COL_FLOAT_B = 28;   // dim blue
 const uint8_t COL_CLOSED_R = 0, COL_CLOSED_G = 200, COL_CLOSED_B = 0;  // green
@@ -415,6 +453,9 @@ bool speakerMuted = false;    // session mute (leads closed at boot)
 
 // Debug values
 float lastRestV = 0.0f, lastTestV = 0.0f;
+float lastMetric = 0.0f;      // scalar actually compared to the threshold
+float lastReturnMs = 0.0f;    // method 1 result (ms), or window on timeout
+float lastAreaVms  = 0.0f;    // method 2 result (V*ms)
 unsigned long lastSerialTime = 0;
 const unsigned long serialInterval = 250;
 
@@ -517,14 +558,76 @@ bool voltagePresent() {
   return (fabs(lastRestV - cfg.refCenterV) > cfg.refBandV);
 }
 
-// One open/closed test: MOSFET off, settle, read, MOSFET back on.
+// Sample the recovery transient once (methods 1 & 2).  MOSFET is assumed to
+// have just been switched OFF by the caller; timing starts here.  In a single
+// pass this computes BOTH candidate metrics so either can be thresholded and
+// the other reported for tuning:
+//   lastReturnMs = time for |diff-refCentre| to fall back within detReturnBand
+//                  (or detWindowUs, expressed in ms, if it never does -> OPEN)
+//   lastAreaVms  = integral of |diff-refCentre| over [detAreaStartUs, window]
+// Returns the metric selected by cfg.detectMethod (ms for 1, V*ms for 2).
+float sampleRecovery() {
+  unsigned long t0 = micros();
+  float area       = 0.0f;
+  float prevDev    = 0.0f;
+  unsigned long prevT = 0;
+  bool  havePrev   = false;
+  bool  seenTrough = false;      // the dip has occurred (guards false returns)
+  bool  returned   = false;
+  float returnMs   = (float)cfg.detWindowUs / 1000.0f;   // timeout default
+  unsigned long elapsed;
+
+  while ((elapsed = micros() - t0) < cfg.detWindowUs) {
+    float v   = readVoltage();
+    float dev = fabs(v - cfg.refCenterV);
+    lastTestV = v;
+
+    if (dev > DET_TROUGH_MIN_V) seenTrough = true;
+
+    // Tail-area: trapezoid between consecutive in-window samples.
+    if (havePrev && elapsed >= cfg.detAreaStartUs && prevT >= cfg.detAreaStartUs) {
+      float dt = (float)(elapsed - prevT) / 1000.0f;     // ms
+      area += 0.5f * (prevDev + dev) * dt;
+    }
+
+    // Time-to-return: first crossing back within the band, but only after the
+    // transient has actually dipped.
+    if (!returned && seenTrough && dev <= cfg.detReturnBand) {
+      returnMs = (float)elapsed / 1000.0f;
+      returned = true;
+      if (cfg.detectMethod == 1) break;   // time method needs nothing further
+    }
+
+    prevDev = dev; prevT = elapsed; havePrev = true;
+  }
+
+  lastReturnMs = returnMs;
+  lastAreaVms  = area;
+  return (cfg.detectMethod == 1) ? returnMs : area;
+}
+
+// One open/closed test: MOSFET off, derive the metric per cfg.detectMethod,
+// MOSFET back on.  For every method a LARGER metric means MORE OPEN, so the
+// threshold comparison and DIP table are shared across methods.
 LeadState runMosfetTest() {
   digitalWrite(MOSFET_PIN, MOSFET_OFF);
-  delayMicroseconds(cfg.settlePreUs);
-  lastTestV = readVoltage();
+
+  float metric;
+  if (cfg.detectMethod == 0) {
+    // Legacy single-sample: settle, one differential read, threshold |diff|.
+    delayMicroseconds(cfg.settlePreUs);
+    lastTestV = readVoltage();
+    metric    = fabs(lastTestV);
+  } else {
+    // Methods 1 & 2 sample the recovery from the toggle instant (no pre-settle:
+    // the early samples carry the transient the metrics are built from).
+    metric = sampleRecovery();
+  }
+  lastMetric = metric;
+
   sleepMs(cfg.settlePostMs);
   digitalWrite(MOSFET_PIN, MOSFET_ON);
-  return (fabs(lastTestV) > activeThreshV) ? STATE_FLOAT : STATE_CLOSED;
+  return (metric > activeThreshV) ? STATE_FLOAT : STATE_CLOSED;
 }
 
 // Repeat the test until the same result appears cfg.testAgree times in a row
@@ -830,6 +933,10 @@ void printStatus() {
   Serial.print(",vref=");         Serial.print(ADC_REF_VOLTAGE, 3);
   Serial.print(",dip=");          Serial.print(dipIdx);
   Serial.print(",openthr=");      Serial.print(activeThreshV, 3);
+  Serial.print(",detmethod=");    Serial.print(cfg.detectMethod);
+  Serial.print(",metric=");       Serial.print(lastMetric, 4);
+  Serial.print(",retms=");        Serial.print(lastReturnMs, 3);
+  Serial.print(",areavms=");      Serial.print(lastAreaVms, 4);
   Serial.print(",negfix=");       Serial.print(cfg.negFix ? 1 : 0);
   Serial.print(",negv=");         Serial.print(cfg.negFixV, 3);
   Serial.print(",charge=");       Serial.print(chargeActive ? 1 : 0);
@@ -1094,9 +1201,17 @@ void loop() {
     if (leadState == STATE_VOLTAGE) {
       Serial.println("-> VOLTAGE (bypass)");
     } else {
-      Serial.print("Test:");
-      Serial.print(lastTestV, 3);
-      Serial.print("V  -> ");
+      // Metric + units depend on the active detection method; print the metric
+      // that was actually thresholded plus the raw return/area for tuning.
+      Serial.print("m");   Serial.print(cfg.detectMethod);
+      Serial.print(" metric:");
+      if      (cfg.detectMethod == 1) { Serial.print(lastMetric, 3); Serial.print("ms"); }
+      else if (cfg.detectMethod == 2) { Serial.print(lastMetric, 4); Serial.print("Vms"); }
+      else                            { Serial.print(lastMetric, 3); Serial.print("V"); }
+      Serial.print(" (ret:"); Serial.print(lastReturnMs, 3);
+      Serial.print("ms area:"); Serial.print(lastAreaVms, 4);
+      Serial.print("Vms thr:"); Serial.print(activeThreshV, 3);
+      Serial.print(")  -> ");
       Serial.println(leadState == STATE_FLOAT ? "FLOATING" : "CLOSED");
     }
   }

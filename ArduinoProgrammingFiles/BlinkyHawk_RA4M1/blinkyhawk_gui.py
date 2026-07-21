@@ -53,24 +53,31 @@ PLOT_REFRESH_MS = 80       # GUI redraw cadence
 # Config-key metadata: display grouping, label, and a short description.
 # The table itself is built from whatever the DEVICE reports in its !CFG dump,
 # so a key missing here still shows up (under "Other") -- this dict only makes
-# known keys prettier.  kind "bool" renders as a 0/1 dropdown.
+# known keys prettier.  kind "bool" renders as a 0/1 dropdown; kind "choice"
+# renders as a dropdown of the values in the optional 4th tuple element.
 # ---------------------------------------------------------------------------
 KEY_META = {
     # --- Detection ---
     "REFCENTER":    ("Detection", "num",  "Resting differential centre (V)"),
     "REFBAND":      ("Detection", "num",  "No-voltage window half-width (V)"),
-    "THRESH00":     ("Detection", "num",  "Threshold, DIP 00 = both switches ON (V)"),
-    "THRESH01":     ("Detection", "num",  "Threshold, DIP 01 = D8 ON, D10 OFF (V)"),
-    "THRESH10":     ("Detection", "num",  "Threshold, DIP 10 = D8 OFF, D10 ON (V)"),
-    "THRESH11":     ("Detection", "num",  "Threshold, DIP 11 = both switches OFF (V)"),
+    # THRESH units follow DETMETHOD: V (single) / ms (time-to-return) / V*ms (area).
+    "THRESH00":     ("Detection", "num",  "Threshold, DIP 00 = both switches ON (units per DETMETHOD)"),
+    "THRESH01":     ("Detection", "num",  "Threshold, DIP 01 = D8 ON, D10 OFF (units per DETMETHOD)"),
+    "THRESH10":     ("Detection", "num",  "Threshold, DIP 10 = D8 OFF, D10 ON (units per DETMETHOD)"),
+    "THRESH11":     ("Detection", "num",  "Threshold, DIP 11 = both switches OFF (units per DETMETHOD)"),
     "VOLTFAST":     ("Detection", "num",  "Instant voltage-present multiplier (x REFBAND)"),
     "VOLTAVG":      ("Detection", "num",  "Reads averaged for voltage decision"),
     "TESTAGREE":    ("Detection", "num",  "Consecutive matching MOSFET tests required"),
     "STABLECOUNT":  ("Detection", "num",  "Passes before the alert state switches"),
-    "SETTLEPREUS":  ("Detection", "num",  "Settle after MOSFET off, before read (us)"),
+    "SETTLEPREUS":  ("Detection", "num",  "Settle after MOSFET off, before read (us; method 0 only)"),
     "SETTLEPOSTMS": ("Detection", "num",  "Idle after read, before MOSFET on (ms)"),
     "NEGFIX":       ("Detection", "bool", "1 = fixed pseudo-reference instead of live neg pin"),
     "NEGV":         ("Detection", "num",  "Fixed pseudo-reference voltage (V)"),
+    "DETMETHOD":    ("Detection", "choice", "Metric: 0=single |diff|(V)  1=time-to-return(ms)  2=tail-area(V*ms)",
+                     ["0", "1", "2"]),
+    "DETBAND":      ("Detection", "num",  "Method 1: |diff-centre| within this = 'returned' (V)"),
+    "DETWINUS":     ("Detection", "num",  "Methods 1&2: max sample window / timeout (us)"),
+    "DETAREAUS":    ("Detection", "num",  "Method 2: tail-area integration start (us from toggle)"),
     # --- Alerts ---
     "LED":          ("Alerts", "bool", "Master enable: detection LED alerts"),
     "BEEP":         ("Alerts", "bool", "Master enable: speaker"),
@@ -177,6 +184,9 @@ class App(tk.Tk):
         # config table: key -> row widgets/state (built lazily from the device)
         self.cfg_rows = {}
         self.cfg_pending_end = False
+
+        # active detection method (from $STATUS) -> threshold display units
+        self.detmethod = 0
 
         self._build_ui()
         self.after(PLOT_REFRESH_MS, self._tick)
@@ -401,6 +411,10 @@ class App(tk.Tk):
         if kind == "bool":
             editor = ttk.Combobox(self.cfg_inner, width=6, textvariable=var,
                                   values=["0", "1"], state="readonly")
+        elif kind == "choice":
+            choices = meta[3] if meta and len(meta) > 3 else ["0", "1"]
+            editor = ttk.Combobox(self.cfg_inner, width=6, textvariable=var,
+                                  values=choices, state="readonly")
         else:
             editor = ttk.Entry(self.cfg_inner, width=9, textvariable=var)
             editor.bind("<Return>", lambda e, k=key: self._cfg_set(k))
@@ -578,6 +592,10 @@ class App(tk.Tk):
         if len(f) >= 3:
             self._cfg_update(f[1].strip(), f[2].strip())
 
+    def _thr_unit(self):
+        # Threshold units depend on the active detection method.
+        return {0: "V", 1: "ms", 2: "V*ms"}.get(self.detmethod, "V")
+
     def _handle_dip(self, line):
         # $DIP,<idx>,<threshV>  (live DIP-switch change)
         f = line.split(",")
@@ -586,7 +604,8 @@ class App(tk.Tk):
             thr = float(f[2])
         except (ValueError, IndexError):
             return
-        self.dip_lbl.config(text=f"DIP: {idx:02b} -> {thr:.3f} V", foreground="#06a")
+        self.dip_lbl.config(text=f"DIP: {idx:02b} -> {thr:.3f} {self._thr_unit()}",
+                            foreground="#06a")
 
     def _handle_diag(self, line):
         # $DIAG,<ms>,<rawPos>,<rawNeg>,<posV>,<negV>,<diffV>
@@ -628,16 +647,19 @@ class App(tk.Tk):
                 self.rate_var.set(kv["rate"])
             if "capms" in kv:
                 self.cap_ms_var.set(kv["capms"])
+            if "detmethod" in kv:
+                self.detmethod = int(kv["detmethod"])
         except ValueError:
             pass
 
-        # DIP position + active threshold
+        # DIP position + active threshold (units follow the detection method)
         if "dip" in kv:
             try:
                 idx = int(kv["dip"])
                 thr = float(kv.get("openthr", "nan"))
-                self.dip_lbl.config(text=f"DIP: {idx:02b} -> {thr:.3f} V",
-                                    foreground="#06a")
+                self.dip_lbl.config(
+                    text=f"DIP: {idx:02b} -> {thr:.3f} {self._thr_unit()}",
+                    foreground="#06a")
             except ValueError:
                 pass
 
