@@ -34,11 +34,13 @@ Run:
 """
 
 import csv
+import os
 import queue
 import threading
 import tkinter as tk
 from collections import deque
-from tkinter import filedialog, messagebox, ttk
+from datetime import datetime
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
 import serial
 import serial.tools.list_ports
@@ -48,6 +50,13 @@ from matplotlib.figure import Figure
 BAUD = 115200
 LIVE_MAXLEN = 600          # samples kept in the rolling live plot
 PLOT_REFRESH_MS = 80       # GUI redraw cadence
+
+# Master per-unit config log: one row per serial number, updated in place each
+# time that unit's RAM is saved to EEPROM.  Lives next to this script so it is
+# found regardless of the working directory.
+UNITS_CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "blinkyhawk_units.csv")
+UNITS_CSV_FIXED = ["SN", "timestamp"]   # leading columns; config keys follow
 
 # ---------------------------------------------------------------------------
 # Config-key metadata: display grouping, label, and a short description.
@@ -188,6 +197,12 @@ class App(tk.Tk):
         # active detection method (from $STATUS) -> threshold display units
         self.detmethod = 0
 
+        # unit identity + per-unit config logging
+        self.sn = ""                    # serial number reported by the device
+        self.sn_prompted = False        # asked to assign an SN this connection?
+        self.pending_csv_log = False    # log to CSV once the post-save !CFG lands
+        self.units_csv_path = UNITS_CSV
+
         self._build_ui()
         self.after(PLOT_REFRESH_MS, self._tick)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -205,6 +220,9 @@ class App(tk.Tk):
         self.connect_btn.pack(side="left", padx=4)
         self.conn_lbl = ttk.Label(top, text="disconnected", foreground="#a00")
         self.conn_lbl.pack(side="left", padx=8)
+
+        self.sn_lbl = ttk.Label(top, text="SN: --", font=("Consolas", 10, "bold"))
+        self.sn_lbl.pack(side="left", padx=12)
 
         self.dip_lbl = ttk.Label(top, text="DIP: --", font=("Consolas", 10))
         self.dip_lbl.pack(side="right", padx=6)
@@ -328,11 +346,25 @@ class App(tk.Tk):
         self.dirty_lbl = ttk.Label(bar, text="")
         self.dirty_lbl.pack(side="right", padx=6)
 
+        # --- unit identity row ---
+        idbar = ttk.Frame(self.cfg_tab, padding=(6, 0))
+        idbar.pack(fill="x")
+        ttk.Label(idbar, text="Serial number:").pack(side="left")
+        self.sn_cfg_lbl = ttk.Label(idbar, text="--", font=("Consolas", 10, "bold"),
+                                    foreground="#06a")
+        self.sn_cfg_lbl.pack(side="left", padx=(4, 8))
+        ttk.Button(idbar, text="Write SN...",
+                   command=self._write_sn_dialog).pack(side="left", padx=2)
+        self.csv_path_lbl = ttk.Label(
+            idbar, text=f"log: {self.units_csv_path}", foreground="#555")
+        self.csv_path_lbl.pack(side="right", padx=6)
+
         hint = ("Edit a value and press Set (or Enter): the device applies it "
                 "immediately, in RAM only.  'Save RAM -> EEPROM' makes the "
-                "current RAM config permanent (survives power cycles).  Values "
-                "outside the firmware's allowed range are clamped and echoed "
-                "back.")
+                "current RAM config permanent (survives power cycles) AND "
+                "records this unit's full config to the master CSV, keyed by "
+                "serial number.  Values outside the firmware's allowed range "
+                "are clamped and echoed back.")
         ttk.Label(self.cfg_tab, text=hint, wraplength=980, foreground="#444",
                   padding=(8, 0)).pack(fill="x")
 
@@ -473,6 +505,125 @@ class App(tk.Tk):
         self._send("!CFG")
         self._send("!STATUS")
 
+    # ----- serial number + per-unit CSV log -----
+    def _set_sn(self, sn):
+        """Update the live SN and both on-screen labels."""
+        self.sn = sn
+        disp = sn if sn else "(unassigned)"
+        self.sn_lbl.config(text=f"SN: {disp}")
+        self.sn_cfg_lbl.config(text=disp)
+
+    def _handle_sn(self, line):
+        # $SN,<value>  (value may be empty when unassigned)
+        parts = line.split(",", 1)
+        self._set_sn(parts[1].strip() if len(parts) > 1 else "")
+
+    def _write_sn(self, val):
+        """Validate then push a new SN to the device (persists on the unit)."""
+        val = (val or "").strip()
+        if not val:
+            return
+        if "," in val:
+            messagebox.showerror("Write SN", "Serial number cannot contain commas.")
+            return
+        if len(val) > 15:
+            messagebox.showerror("Write SN", "Serial number too long (max 15 chars).")
+            return
+        self._send(f"!SN,{val}")
+        self._send("!STATUS")
+
+    def _write_sn_dialog(self):
+        """Manual 'Write SN...' button: prompt, warning if overwriting."""
+        if not self.serial.is_open:
+            self._log("** not connected")
+            return
+        prompt = "Enter serial number to write (no commas, max 15 chars):"
+        if self.sn:
+            prompt = (f"This unit already has SN '{self.sn}'.\n\n"
+                      "Writing will OVERWRITE it.\n\n" + prompt)
+        val = simpledialog.askstring("Write serial number", prompt,
+                                     parent=self, initialvalue=self.sn)
+        if val is not None:
+            self._write_sn(val)
+
+    def _prompt_for_sn(self):
+        """Auto-prompt fired once per connection when the unit has no SN."""
+        if self.sn or not self.serial.is_open:
+            return
+        val = simpledialog.askstring(
+            "Assign serial number",
+            "This unit has no serial number.\n\nEnter one to write to the "
+            "device now (no commas, max 15 chars), or Cancel to skip:",
+            parent=self)
+        if val is not None:
+            self._write_sn(val)
+
+    def _on_save_ok(self):
+        """A !SAVE succeeded: re-sync the table, then log it to the master CSV."""
+        if not self.sn:
+            messagebox.showwarning(
+                "No serial number",
+                "Config was saved to EEPROM, but NOT logged to the CSV because "
+                "this unit has no serial number.\n\nUse 'Write SN...' to assign "
+                "one, then Save again.")
+            return
+        self.pending_csv_log = True     # _write_units_csv() runs on $CFGEND
+        self._send("!CFG")              # fetch a fresh, complete snapshot
+
+    def _write_units_csv(self):
+        """Insert/replace this unit's row in the master per-unit config CSV."""
+        sn = self.sn
+        if not sn:
+            return
+        cfg_vals = {k: row["dev_lbl"].cget("text")
+                    for k, row in self.cfg_rows.items()}
+        ts = datetime.now().isoformat(timespec="seconds")
+        path = self.units_csv_path
+
+        # Read the existing log (preserving its column order and unit order).
+        fieldnames = list(UNITS_CSV_FIXED)
+        rows_by_sn = {}                 # dict keeps file order; new units append
+        if os.path.exists(path):
+            try:
+                with open(path, newline="") as fh:
+                    reader = csv.DictReader(fh)
+                    if reader.fieldnames:
+                        fieldnames = list(reader.fieldnames)
+                    for row in reader:
+                        key = (row.get("SN") or "").strip()
+                        if key:
+                            rows_by_sn[key] = row
+            except OSError as exc:
+                messagebox.showerror("CSV log", f"Could not read\n{path}\n\n{exc}")
+                return
+
+        # Guarantee the fixed columns lead, then append any new config keys.
+        for i, col in enumerate(UNITS_CSV_FIXED):
+            if col not in fieldnames:
+                fieldnames.insert(i, col)
+        for k in cfg_vals:
+            if k not in fieldnames:
+                fieldnames.append(k)
+
+        # Update-or-insert this unit's row.
+        row = rows_by_sn.get(sn, {})
+        row["SN"] = sn
+        row["timestamp"] = ts
+        row.update(cfg_vals)
+        rows_by_sn[sn] = row
+
+        try:
+            with open(path, "w", newline="") as fh:
+                writer = csv.DictWriter(fh, fieldnames=fieldnames,
+                                        extrasaction="ignore")
+                writer.writeheader()
+                for r in rows_by_sn.values():
+                    writer.writerow(r)
+        except OSError as exc:
+            messagebox.showerror("CSV log", f"Could not write\n{path}\n\n{exc}")
+            return
+        self._log(f"** logged config for SN '{sn}' -> {path}")
+
     # ----------------------------------------------------------- serial
     def _ports(self):
         return [p.device for p in serial.tools.list_ports.comports()]
@@ -485,6 +636,7 @@ class App(tk.Tk):
             self.serial.disconnect()
             self.conn_lbl.config(text="disconnected", foreground="#a00")
             self.connect_btn.config(text="Connect")
+            self._set_sn("")
             return
         port = self.port_cb.get().strip()
         if not port:
@@ -496,9 +648,12 @@ class App(tk.Tk):
             self._log(f"** connect failed: {exc}")
             return
         self._reset_live()
+        self._set_sn("")                 # cleared until the device reports it
+        self.sn_prompted = False         # allow one auto-prompt this connection
+        self.pending_csv_log = False
         self.conn_lbl.config(text=f"connected {port}", foreground="#0a0")
         self.connect_btn.config(text="Disconnect")
-        self.serial.send("!STATUS")
+        self.serial.send("!STATUS")      # brings back sn= (may trigger prompt)
         self.serial.send("!CFG")         # populate the configuration table
 
     def _reset_live(self):
@@ -564,8 +719,22 @@ class App(tk.Tk):
             self._handle_diag(line)
         elif line.startswith("$CFGEND"):
             self._log("<< config table synced")
+            if self.pending_csv_log:        # follows a successful !SAVE
+                self.pending_csv_log = False
+                self._write_units_csv()
         elif line.startswith("$CFG,"):
             self._handle_cfg(line)
+        elif line.startswith("$SN,"):
+            self._handle_sn(line)
+            self._log(f"<< {line}")
+        elif line.startswith("$OK,save"):
+            self._log(f"<< {line}")
+            self._on_save_ok()
+        elif line.startswith("$ERR,save"):
+            self._log(f"<< {line}")
+            messagebox.showerror(
+                "Save failed",
+                f"Device reported:\n{line}\n\nThe CSV log was not updated.")
         elif line.startswith("$DIP,"):
             self._handle_dip(line)
             self._log(f"<< {line}")
@@ -651,6 +820,14 @@ class App(tk.Tk):
                 self.detmethod = int(kv["detmethod"])
         except ValueError:
             pass
+
+        # unit serial number (may be empty). Auto-prompt once per connection
+        # when unassigned, deferred so this queue-processing pass finishes first.
+        if "sn" in kv:
+            self._set_sn(kv["sn"])
+            if not kv["sn"] and self.serial.is_open and not self.sn_prompted:
+                self.sn_prompted = True
+                self.after(150, self._prompt_for_sn)
 
         # DIP position + active threshold (units follow the detection method)
         if "dip" in kv:

@@ -62,6 +62,8 @@
  *   !SAVE               persist the RAM config to EEPROM
  *   !LOAD               discard RAM changes, reload from EEPROM
  *   !DEFAULTS           factory defaults into RAM (then !SAVE to keep)
+ *   !SN[,<value>]       read the unit serial number, or (with value) write it
+ *                       to its own EEPROM block (survives !DEFAULTS; no commas)
  *   !DIAG[,0|1]         enter/exit diagnostic mode (bare = toggle)
  *   !STREAM[,0|1]       continuous raw streaming on/off (diag only)
  *   !RATE,<ms>          stream interval in ms
@@ -74,6 +76,7 @@
  *   $STATUS,...                          current mode/state summary
  *   $CFG,<key>,<value>                   one config value (from !GET/!SET/!CFG)
  *   $CFGEND                              end of a !CFG dump
+ *   $SN,<value>                          unit serial number (empty if unassigned)
  *   $OK,<what> / $ERR,<what>[,detail]    command acknowledge / failure
  *   $DIP,<idx>,<threshV>                 DIP position changed (live)
  *   $DIAG,<ms>,<rawPos>,<rawNeg>,<posV>,<negV>,<diffV>    (streaming)
@@ -244,13 +247,8 @@ void configDefaults() {
   cfg.loopDelayMs    = 50;
 }
 
-// CRC16-CCITT over the struct bytes, excluding the trailing crc field.
-// offsetof, NOT sizeof-2: the struct is 4-byte aligned so there are padding
-// bytes AFTER crc, and sizeof-2 would run the CRC over the crc field itself --
-// making every reload/boot validation fail and re-seed defaults.
-uint16_t configCrc(const Config &c) {
-  const uint8_t *p = (const uint8_t *)&c;
-  size_t n = offsetof(Config, crc);
+// CRC16-CCITT over an arbitrary byte range (shared by Config and SerialId).
+uint16_t crc16_ccitt(const uint8_t *p, size_t n) {
   uint16_t crc = 0xFFFF;
   for (size_t i = 0; i < n; i++) {
     crc ^= (uint16_t)p[i] << 8;
@@ -258,6 +256,14 @@ uint16_t configCrc(const Config &c) {
       crc = (crc & 0x8000) ? (crc << 1) ^ 0x1021 : (crc << 1);
   }
   return crc;
+}
+
+// CRC16-CCITT over the struct bytes, excluding the trailing crc field.
+// offsetof, NOT sizeof-2: the struct is 4-byte aligned so there are padding
+// bytes AFTER crc, and sizeof-2 would run the CRC over the crc field itself --
+// making every reload/boot validation fail and re-seed defaults.
+uint16_t configCrc(const Config &c) {
+  return crc16_ccitt((const uint8_t *)&c, offsetof(Config, crc));
 }
 
 // Persist RAM config to EEPROM (data flash).  Only called on !SAVE / first
@@ -282,6 +288,61 @@ bool configLoad() {
   cfg = stored;
   cfgDirty = false;
   return true;
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  UNIT SERIAL NUMBER (device identity)
+// ══════════════════════════════════════════════════════════════════
+// Stored SEPARATELY from Config, in its own EEPROM block, so it survives
+// !DEFAULTS and any future CFG_VERSION bump -- the SN is the unit's permanent
+// identity, not a tunable.  Written once (usually at first bring-up) via !SN,
+// read back on every boot and reported in $STATUS so the host can key its
+// per-unit config log on it.
+#define SN_MAGIC     0x42485F53UL   // "BH_S"
+#define SN_MAX_LEN   16             // buffer size incl. null terminator
+#define SN_EEPROM_ADDR 512          // well clear of the Config block at addr 0
+                                    // (Config must stay < 512 bytes; it is ~150)
+
+struct SerialId {
+  uint32_t magic;
+  char     sn[SN_MAX_LEN];
+  uint16_t crc;
+};
+
+char unitSN[SN_MAX_LEN] = "";       // live copy ("" = unassigned)
+
+// Explicit prototype (see the ConfigField note above): keeps the Arduino
+// preprocessor from hoisting an auto-generated prototype above SerialId.
+uint16_t snCrc(const SerialId &s);
+
+uint16_t snCrc(const SerialId &s) {
+  return crc16_ccitt((const uint8_t *)&s, offsetof(SerialId, crc));
+}
+
+// Load the SN from EEPROM into unitSN, or leave it empty if unset/corrupt.
+void snLoad() {
+  SerialId s;
+  EEPROM.get(SN_EEPROM_ADDR, s);
+  if (s.magic == SN_MAGIC && s.crc == snCrc(s)) {
+    s.sn[SN_MAX_LEN - 1] = '\0';    // paranoia: guarantee termination
+    strncpy(unitSN, s.sn, SN_MAX_LEN);
+    unitSN[SN_MAX_LEN - 1] = '\0';
+  } else {
+    unitSN[0] = '\0';
+  }
+}
+
+// Persist a new SN to EEPROM and update the live copy.
+void snSave(const char *sn) {
+  SerialId s;
+  memset(&s, 0, sizeof(s));         // deterministic padding for a stable CRC
+  s.magic = SN_MAGIC;
+  strncpy(s.sn, sn, SN_MAX_LEN - 1);
+  s.sn[SN_MAX_LEN - 1] = '\0';
+  s.crc = snCrc(s);
+  EEPROM.put(SN_EEPROM_ADDR, s);
+  strncpy(unitSN, s.sn, SN_MAX_LEN);
+  unitSN[SN_MAX_LEN - 1] = '\0';
 }
 
 // ── Config field table ────────────────────────────────────────────
@@ -944,7 +1005,8 @@ void printStatus() {
   Serial.print(",muted=");        Serial.print(speakerMuted ? 1 : 0);
   Serial.print(",dirty=");        Serial.print(cfgDirty ? 1 : 0);
   Serial.print(",battpct=");      Serial.print(battPct);
-  Serial.print(",battv=");        Serial.println(battV, 3);
+  Serial.print(",battv=");        Serial.print(battV, 3);
+  Serial.print(",sn=");           Serial.println(unitSN);  // last: may be empty
 }
 
 // One streamed sample: both pins independently + computed differential.
@@ -1058,6 +1120,28 @@ void handleLine(char *line) {
     configDefaults();
     cfgDirty = true;                     // RAM now differs from EEPROM
     Serial.println("$OK,defaults");
+  } else if (strcmp(cmd, "SN") == 0) {
+    // !SN            -> report the stored serial number ($SN,<value>)
+    // !SN,<value>    -> write it to EEPROM (persists immediately; it is
+    //                   device identity, not part of the tunable config).
+    if (arg) {
+      while (*arg == ' ') arg++;         // tolerate a leading space
+      if (*arg == '\0') {
+        Serial.println("$ERR,sn,empty");
+      } else if (strchr(arg, ',')) {
+        Serial.println("$ERR,sn,comma not allowed");   // keeps host CSV clean
+      } else if (strlen(arg) > SN_MAX_LEN - 1) {
+        Serial.print("$ERR,sn,too long (max ");
+        Serial.print(SN_MAX_LEN - 1);
+        Serial.println(")");
+      } else {
+        snSave(arg);
+        Serial.print("$SN,");  Serial.println(unitSN);
+        Serial.println("$OK,sn");
+      }
+    } else {
+      Serial.print("$SN,");  Serial.println(unitSN);
+    }
 
   // ── Diagnostics / overrides ──────────────────────────────────
   } else if (strcmp(cmd, "DIAG") == 0) {
@@ -1116,6 +1200,7 @@ void setup() {
   configDefaults();
   bool loaded = configLoad();
   if (!loaded) configSave();             // first boot / stale layout: seed EEPROM
+  snLoad();                              // unit serial number (separate block)
 
   analogReadResolution(ADC_RESOLUTION);
 
@@ -1147,6 +1232,8 @@ void setup() {
   startupBatteryIndicate();              // power-on battery charge-level cue
 
   bootSpeakerMuteCheck();                // leads CLOSED at boot -> session mute
+  Serial.print("SN: ");
+  Serial.println(unitSN[0] ? unitSN : "(unassigned -- write with !SN,<value>)");
   Serial.print("Config: ");
   Serial.println(loaded ? "loaded from EEPROM" : "defaults (EEPROM seeded)");
   Serial.print("Speaker: ");
