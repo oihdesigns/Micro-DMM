@@ -1,18 +1,16 @@
 /*
- * OpenLeadDetect_Feather_Voltmeter.ino
+ * OpenLeadDetect_Feather_Headless.ino
  *
  * Differential voltmeter with open/closed lead detection.
- * Runs on Adafruit ESP32-S2/S3 TFT Feather (ST7789 240x135).
- * Ported from OpenLeadDetect_MinimalistProof_R4Nano.
+ * Headless: no TFT.  All output is over serial + the NeoPixel and the
+ * 2-bit lead-status pins.  Derived from OpenLeadDetect_Feather_Voltmeter.
  *
  * Hardware:
- *   - Adafruit ESP32-S2 or S3 TFT Feather
+ *   - Adafruit ESP32-S2 or S3 Feather
  *   - ADS1115 (16-bit) or ADS1015 (12-bit) ADC on I2C (addr 0x48)
  *     Select via USE_ADS1115 / USE_ADS1015 define below
  *   - Voltage divider bridge with MOSFET on VbridgePin
  *   - 2-bit lead-status output on StatusHiPin / StatusLoPin (see below)
- *   - Pot on clsdThreshold for closed-detect sensitivity  (optional)
- *   - Pot on zeroThreshold for zero-voltage threshold      (optional)
  *
  * Serial commands (115200 baud):
  *   Legacy single-char (send with newline): S G U M R D ?
@@ -41,9 +39,6 @@
 
 #include <Wire.h>
 #include <Adafruit_ADS1X15.h>
-#include <SPI.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_ST7789.h>
 #include <Adafruit_NeoPixel.h>
 #include <Adafruit_MAX1704X.h>
 #include <ctype.h>
@@ -71,9 +66,6 @@ Adafruit_ADS1115 ads;
 Adafruit_ADS1015 ads;
 #endif
 
-// TFT -- pin macros are predefined by the Feather board package
-Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
-
 // NeoPixel -- onboard LED (power shared with TFT_I2C_POWER)
 #ifndef PIN_NEOPIXEL
 #define PIN_NEOPIXEL 33
@@ -92,8 +84,6 @@ const unsigned long battReadInterval = 5000;  // 5 s between reads
 const int VbridgePin     = 5;    // MOSFET gate for bridge measurement
 const int StatusHiPin    = 6;    // lead-status output, high-order bit
 const int StatusLoPin    = 9;    // lead-status output, low-order bit
-const int clsdThreshold  = A0;   // Pot: closed-detect sensitivity
-const int zeroThreshold  = A1;   // Pot: zero-voltage threshold
 const int cfSuppressBtn  = 0;    // Boot button (GPIO 0) toggles closed/float suppression
 
 // ── Lead-status digital output (2-bit code on StatusHiPin / StatusLoPin) ──
@@ -111,11 +101,11 @@ const int cfSuppressBtn  = 0;    // Boot button (GPIO 0) toggles closed/float su
 unsigned long currentMillis   = 0;
 unsigned long lastSerialTime  = 0;
 unsigned long lastStatusTime  = 0;
-unsigned long lastDisplayTime = 0;
+unsigned long lastBlinkTick   = 0;
 
 const unsigned long serialInterval  = 1;
 const unsigned long statusInterval  = 2000;
-const unsigned long displayInterval = 1000;   // 4 Hz TFT refresh
+const unsigned long blinkInterval   = 1000;   // 1 Hz periodic NeoPixel tick
 
 // ── Voltage measurement ───────────────────────────────────────────
 float medianVoltage     = 0.0;
@@ -174,7 +164,6 @@ bool  vClosed          = false;
 bool  vUndefined       = true;
 float ClosedConfidence = 5.0;
 
-float closedBias       = 0.0;
 float CorFTrig         = 1.0;
 
 bool vClosedtrig    = false;
@@ -193,7 +182,7 @@ unsigned long lastRedBlinkTime    = 0;
 const unsigned long RED_BLINK_MIN_MS_AC = 500;  // max 2 Hz red blink in AC mode
 
 // ── Diagnostic mode ───────────────────────────────────────────────
-bool diagMode = false;                 // suppresses TFT/human serial, enables $ protocol
+bool diagMode = false;                 // suppresses human serial, enables $ protocol
 bool streamOn = false;                 // continuous raw streaming
 unsigned long streamIntervalMs = 50;   // streaming period (ADS is slow; ~20 Hz default)
 unsigned long lastStreamMs = 0;
@@ -240,7 +229,7 @@ const float GAIN_FACTOR_8         = 0.25;      // +/-0.512 V
 const float GAIN_FACTOR_16        = 0.125;     // +/-0.256 V
 static const int ADC_COUNT_LOW_THRESH  = 600;
 static const int ADC_COUNT_HIGH_THRESH = 1800;
-float vClosedThres     = 1.42;  //red=1.34
+float vClosedThres     = 1.55;  //red=1.34
 #define ADS_RATE_FAST  RATE_ADS1015_3300SPS
 #define ADS_RATE_MID  RATE_ADS1015_490SPS
 #define ADS_RATE_SLOW  RATE_ADS1015_250SPS
@@ -257,27 +246,9 @@ static const float kGainFactors[] = {
 static const int kNumGainLevels = sizeof(kGainLevels) / sizeof(kGainLevels[0]);
 static size_t gainIndexVolt;
 
-// ── TFT colour palette ───────────────────────────────────────────
-#define COL_BG         ST77XX_BLACK
-#define COL_HEADER     0x1082          // dark blue-grey
-#define COL_TEXT       ST77XX_WHITE
-#define COL_LABEL      0xBDF7          // light grey
-#define COL_VOLTAGE    ST77XX_CYAN
-#define COL_CLOSED_FG  ST77XX_WHITE
-#define COL_CLOSED_BG  0x0400          // dark green
-#define COL_FLOAT_FG   ST77XX_WHITE
-#define COL_FLOAT_BG   0x8200          // dark orange
-#define COL_VNONZERO   0xFFE0          // yellow
-#define COL_DISABLED   0x7BEF          // grey
-#define COL_DIVIDER    0x4208          // dim grey
-#define COL_BAR_FILL   0x07E0          // bright green
-#define COL_BAR_EMPTY  0x2104          // very dark grey
-
 // ── Forward declarations ──────────────────────────────────────────
-void drawStaticUI();
 void measureVoltage();
 void ClosedOrFloat();
-void updateDisplay();
 const char* bridgeResistanceLabel(float v);
 void statusUpdate();
 void handleSerialCommands(char cmd);
@@ -298,29 +269,20 @@ void setup() {
   Serial.begin(115200);
   delay(500);
 
-  // ── Power on TFT + I2C ──
-  pinMode(TFT_BACKLITE, OUTPUT);
-  digitalWrite(TFT_BACKLITE, HIGH);
+  // ── Power rail for I2C + NeoPixel ──
+  // On the TFT Feather this rail also feeds the display; it must be on for the
+  // ADC/fuel gauge/NeoPixel even though nothing is drawn.  Backlight stays off.
+#ifdef TFT_I2C_POWER
   pinMode(TFT_I2C_POWER, OUTPUT);
   digitalWrite(TFT_I2C_POWER, HIGH);
+#endif
+#ifdef TFT_BACKLITE
+  pinMode(TFT_BACKLITE, OUTPUT);
+  digitalWrite(TFT_BACKLITE, LOW);
+#endif
   delay(10);
 
-  // ── Initialise TFT ──
-  tft.init(135, 240);
-  tft.setRotation(3);              // landscape, USB on right
-  tft.fillScreen(COL_BG);
-
-  // Splash screen
-  tft.setTextSize(3);
-  tft.setTextColor(COL_VOLTAGE);
-  tft.setCursor(16, 20);
-  tft.print("OPEN LEAD");
-  tft.setCursor(16, 50);
-  tft.print("DETECT");
-  tft.setTextSize(1);
-  tft.setTextColor(COL_LABEL);
-  tft.setCursor(16, 90);
-  tft.print("Feather Voltmeter  v1.0");
+  Serial.println("OPEN LEAD DETECT - Feather Headless v1.0");
 
   // ── I2C + ADC ──
   Wire.begin();
@@ -342,8 +304,6 @@ void setup() {
   pinMode(VbridgePin,     OUTPUT);
   pinMode(StatusHiPin,    OUTPUT);
   pinMode(StatusLoPin,    OUTPUT);
-  pinMode(clsdThreshold,  INPUT);
-  pinMode(zeroThreshold,  INPUT);
   pinMode(cfSuppressBtn,  INPUT_PULLUP);
   digitalWrite(VbridgePin, BRIDGE_ON);  // bridge connected (resting state)
   writeStatusOutputs(STATUS_NONE);      // 00 until the first classification
@@ -366,37 +326,12 @@ void setup() {
   } else {
     Serial.println("MAX17048 not found - battery info unavailable.");
   }
-
-  delay(1200);                     // hold splash visible
-  tft.fillScreen(COL_BG);
-  drawStaticUI();
-}
-
-// ── Draw elements that never change ──────────────────────────────
-void drawStaticUI() {
-  // Header bar
-  tft.fillRect(0, 0, 240, 16, COL_HEADER);
-  tft.setTextSize(1);
-  tft.setTextColor(COL_VOLTAGE, COL_HEADER);
-  tft.setCursor(4, 4);
-  tft.print("OPEN LEAD DETECT");
-
-  // Dividers
-  tft.drawFastHLine(0, 17, 240, COL_DIVIDER);
-  tft.drawFastHLine(0, 68, 240, COL_DIVIDER);
-
-  // Voltage section label
-  tft.setTextSize(1);
-  tft.setTextColor(COL_LABEL, COL_BG);
-  tft.setCursor(4, 20);
-  tft.print("VOLTAGE");
 }
 
 // ==================================================================
-//  LEAD STATUS  -  shared by the TFT badge and the digital outputs
+//  LEAD STATUS
 // ==================================================================
-// Single source of truth for "what state are the leads in".  Returned codes
-// match the badge cases in updateDisplay():
+// Single source of truth for "what state are the leads in":
 //   0 = closed   1 = floating   2 = V != 0   4 = closed/float suppressed
 int leadDisplayState() {
   if      (cfSuppress)           return 4;   // volt-only mode, no lead test
@@ -416,7 +351,7 @@ uint8_t leadStatusCode() {
   }
 }
 
-// Drive the two status pins and record the code for the TFT indicator.
+// Drive the two status pins and record the code for the serial status line.
 void writeStatusOutputs(uint8_t code) {
   statusCode = code;
   digitalWrite(StatusHiPin, (code & 0x2) ? HIGH : LOW);
@@ -431,9 +366,8 @@ void loop() {
 
   // ── Lead-status digital output ──
   // Refreshed every pass (including diagnostic mode) from the most recent
-  // classification, so an external device sees the current state without
-  // waiting on the 1 Hz TFT refresh.  No rate limiting: the code follows the
-  // detection result directly.
+  // classification, so an external device sees the current state immediately.
+  // No rate limiting: the code follows the detection result directly.
   writeStatusOutputs(leadStatusCode());
 
   // ── Serial (! diagnostic lines + legacy single chars) ──
@@ -451,7 +385,7 @@ void loop() {
       lastStreamMs = currentMillis;
       streamSample();
     }
-    return;                    // skip TFT + human-readable status
+    return;                    // skip human-readable status
   }
 
   // Boot button:
@@ -520,12 +454,10 @@ void loop() {
     battVoltage = battMonitor.cellVoltage();
   }
 
-  // ── Display ──
-  if (currentMillis - lastDisplayTime >= displayInterval) {
-    lastDisplayTime = currentMillis;
-    updateDisplay();
+  // ── Periodic NeoPixel tick (1 Hz) ──
+  if (currentMillis - lastBlinkTick >= blinkInterval) {
+    lastBlinkTick = currentMillis;
 
-    // Periodic blinks at screen refresh rate (1 Hz).
     // In AC mode the red blink is additionally rate-limited to 2 Hz.
     if (voltageHigh &&
         (!acMode || (currentMillis - lastRedBlinkTime >= RED_BLINK_MIN_MS_AC))) {
@@ -595,9 +527,8 @@ void measureVoltage() {
   //medianVoltage = newVoltageReading;
   medianVoltage += (newVoltageReading - medianVoltage) / 10.0f;
 
-  // Zero-threshold (fixed; pot line retained but commented out)
+  // Zero-threshold (fixed)
   CorFTrig = 0.3; //this was 0.25 for the unit that has distinct boards
-  //CorFTrig = (analogRead(zeroThreshold) / 4095.0f) * 0.2f;
 
   prevVzero = Vzero;
 
@@ -664,11 +595,6 @@ void measureVoltage() {
 // ==================================================================
 void ClosedOrFloat() {
   bool prevClosed = vClosed;
-
-  // Closed-threshold pot (12-bit)
- // closedBias   = (analogRead(clsdThreshold) / 4095.0f) * 2.0f;
- // vClosedThres = 5.0f * closedBias;
-
 
   vClosed = vFloating = vUndefined = false;
 
@@ -889,11 +815,19 @@ void pollSerial() {
 }
 
 // Baseline bridge voltage at the lowest characterized point (~10K).  The
-// confidence bar/percent are expressed relative to this baseline, so a
-// near-short (<10K) reads ~0% and the open/closed threshold (vClosedThres,
-// ~330K) reads 100%.  Must match the ~10K entry (kBinV[0]) in
-// bridgeResistanceLabel().
+// confidence percent is expressed relative to this baseline, so a near-short
+// (<10K) reads ~0% and the open/closed threshold (vClosedThres, ~330K) reads
+// 100%.  Must match the ~10K entry (kBinV[0]) in bridgeResistanceLabel().
 const float BRIDGE_BASELINE_V = 1.262f;
+
+// Confidence percent derived from the smoothed bridge voltage (see above).
+float bridgeConfidencePct() {
+  float span = vClosedThres - BRIDGE_BASELINE_V;
+  float pct  = (span > 0.0f)
+               ? ((fabs(bridgeAvg) - BRIDGE_BASELINE_V) / span) * 100.0f
+               : 0.0f;
+  return (pct < 0.0f) ? 0.0f : pct;
+}
 
 // ==================================================================
 //  BRIDGE RESISTANCE ESTIMATE
@@ -926,238 +860,6 @@ const char* bridgeResistanceLabel(float v) {
 }
 
 // ==================================================================
-//  TFT DISPLAY UPDATE
-// ==================================================================
-void updateDisplay() {
-  // Previous-state tracking (static persists across calls)
-  static int     prevSt      = -1;     // forces first-call draw
-  static uint8_t prevDo      = 0xFF;   // impossible code -> forces first draw
-  static bool    prevVzDisp  = false;
-  static bool    prevAcMode  = false;
-  static bool    firstUpdate = true;
-
-  // ── Determine current states ──
-  int st = leadDisplayState();
-
-  bool statusChanged = (st != prevSt)            || firstUpdate;
-  bool vzeroChanged  = (Vzero != prevVzDisp)     || firstUpdate;
-  bool doChanged     = (statusCode != prevDo)    || firstUpdate;
-  bool acChanged     = (acMode != prevAcMode)    || firstUpdate;
-
-  // ── Status-output indicator (header, right side) -- only on change ──
-  // Mirrors what StatusHiPin/StatusLoPin are driving right now.
-  if (doChanged) {
-    tft.fillRect(160, 0, 80, 16, COL_HEADER);
-    tft.setTextSize(1);
-    tft.setCursor(164, 4);
-    switch (statusCode) {
-      case STATUS_CLOSED:
-        tft.setTextColor(COL_BAR_FILL, COL_HEADER);   // green
-        tft.print("DO:10 CLSD");
-        break;
-      case STATUS_FLOAT:
-        tft.setTextColor(0xFDA0, COL_HEADER);         // orange
-        tft.print("DO:01 FLOAT");
-        break;
-      case STATUS_VOLTAGE:
-        tft.setTextColor(COL_VNONZERO, COL_HEADER);   // yellow
-        tft.print("DO:11 VOLT");
-        break;
-      default:
-        tft.setTextColor(COL_DISABLED, COL_HEADER);   // grey
-        tft.print("DO:00 ---");
-        break;
-    }
-  }
-
-  // ── AC mode badge (header, centre) -- only on change ──
-  if (acChanged) {
-    tft.fillRect(100, 0, 58, 16, COL_HEADER);   // clear badge area
-    if (acMode) {
-      tft.setTextSize(1);
-      tft.setTextColor(ST77XX_YELLOW, COL_HEADER);
-      tft.setCursor(104, 4);
-      tft.print("[AC MODE]");
-    }
-  }
-
-  // ── Voltage section label (VOLTAGE / VRMS) -- only on change ──
-  if (acChanged) {
-    tft.fillRect(0, 18, 72, 10, COL_BG);
-    tft.setTextSize(1);
-    tft.setTextColor(COL_LABEL, COL_BG);
-    tft.setCursor(4, 20);
-    tft.print(acMode ? "VRMS   " : "VOLTAGE");
-  }
-
-  // ── Voltage value ──
-  // Clear once when Vzero state toggles (format/colour changes)
-  if (vzeroChanged) {
-    tft.fillRect(0, 30, 240, 36, COL_BG);
-  }
-  // Overwrite in place -- setTextColor(fg, bg) paints background
-  // behind each character, so no fillRect needed between refreshes.
-  tft.setTextSize(3);
-  char vBuf[14];
-  if (!Vzero || cfSuppress) {
-    tft.setTextColor(COL_VOLTAGE, COL_BG);
-    dtostrf(displayVoltage, 10, 3, vBuf);      // fixed 10-char width
-  } else {
-    tft.setTextColor(COL_LABEL, COL_BG);
-    char tmp[8];
-    dtostrf(CorFTrig, 5, 3, tmp);
-    snprintf(vBuf, sizeof(vBuf), "  <%s    ", tmp);  // pad to ~10 chars
-  }
-  tft.setCursor(4, 34);
-  tft.print(vBuf);
-
-  // Unit label (constant position, bg-colour overwrites itself)
-  tft.setTextSize(2);
-  tft.setTextColor(COL_LABEL, COL_BG);
-  tft.setCursor(222, 38);
-  tft.print("V");
-
-  // ── Resistance-bin label for closed/floating states ──
-  const char* rLabel = bridgeResistanceLabel(bridgeAvg);
-  static char prevLabel[10] = "";
-  bool labelChanged = (strcmp(rLabel, prevLabel) != 0);
-
-  // ── Lead-status badge -- redraw on state change or bin change ──
-  if (statusChanged || ((st == 0 || st == 1) && labelChanged)) {
-    tft.fillRect(0, 70, 168, 26, COL_BG);      // clear badge zone
-    tft.setTextSize(2);
-    switch (st) {
-      case 0:
-        tft.fillRoundRect(4, 72, 130, 22, 4, COL_CLOSED_BG);
-        tft.setTextColor(COL_CLOSED_FG, COL_CLOSED_BG);
-        tft.setCursor(14, 75);
-        tft.print(rLabel);
-        break;
-      case 1:
-        tft.fillRoundRect(4, 72, 154, 22, 4, COL_FLOAT_BG);
-        tft.setTextColor(COL_FLOAT_FG, COL_FLOAT_BG);
-        tft.setCursor(14, 75);
-        tft.print(rLabel);
-        break;
-      case 2:
-        tft.setTextColor(COL_VNONZERO, COL_BG);
-        tft.setCursor(8, 75);
-        tft.print("(V != 0)");
-        break;
-      case 4:
-        tft.setTextColor(COL_VOLTAGE, COL_BG);
-        tft.setCursor(8, 75);
-        tft.print("VOLT ONLY");
-        break;
-    }
-    // Clear confidence / bar areas when leaving a state that shows them
-    if (!(Vzero && !cfSuppress)) {
-      tft.fillRect(170, 72, 70, 22, COL_BG);
-      tft.fillRect(3, 97, 204, 8, COL_BG);
-    }
-  }
-
-  // ── Confidence percentage (dynamic, overwrites in place) ──
-  // Baseline-subtracted: 0% at the <10K baseline, 100% at the open/closed
-  // threshold (~330K).  Readings above the threshold exceed 100%.
-  if (Vzero && !cfSuppress) {
-    float span = vClosedThres - BRIDGE_BASELINE_V;
-    float pct  = (span > 0.0f)
-                 ? ((fabs(bridgeAvg) - BRIDGE_BASELINE_V) / span) * 100.0f
-                 : 0.0f;
-    if (pct < 0.0f) pct = 0.0f;
-    tft.setTextSize(2);
-    tft.setTextColor(COL_TEXT, COL_BG);
-    tft.setCursor(174, 75);
-    char cBuf[8];
-    snprintf(cBuf, sizeof(cBuf), "%3d%%", (int)pct);   // fixed 4-char
-    tft.print(cBuf);
-  }
-
-  // ── Confidence bar (fills with colour, no black flash) ──
-  // Bar spans 200px. 100% threshold is at 1/3 of bar (67px from left).
-  if (Vzero && !cfSuppress) {
-    const int barX      = 4;
-    const int barY      = 98;
-    const int barTotal  = 200;
-    const int barH      = 6;
-    const int thresh100 = barTotal / 5;   // 100% mark at 67px
-
-    // Baseline-subtracted, same visual scale as before: the open/closed
-    // threshold (frac = 1.0) lands on the midpoint marker, and the bar fills
-    // completely at twice the (threshold - baseline) span.
-    float span = vClosedThres - BRIDGE_BASELINE_V;
-    float frac = (span > 0.0f)
-                 ? (fabs(bridgeAvg) - BRIDGE_BASELINE_V) / span
-                 : 0.0f;
-    float pct  = frac / 5.0f;
-    int barW   = constrain((int)(pct * barTotal), 0, barTotal);
-
-    if (barW <= thresh100) {
-      // All green, nothing over threshold
-      tft.fillRect(barX,        barY, barW,            barH, COL_BAR_FILL);
-      tft.fillRect(barX + barW, barY, barTotal - barW, barH, COL_BAR_EMPTY);
-    } else {
-      // Green up to threshold, red beyond
-      tft.fillRect(barX,            barY, thresh100,          barH, COL_BAR_FILL);
-      tft.fillRect(barX + thresh100, barY, barW - thresh100,   barH, ST77XX_RED);
-      tft.fillRect(barX + barW,      barY, barTotal - barW,    barH, COL_BAR_EMPTY);
-    }
-
-    // Border and 100% threshold marker line
-    tft.drawRect(barX - 1, barY - 1, barTotal + 2, barH + 2, COL_DIVIDER);
-    tft.drawFastVLine(barX + thresh100, barY - 1, barH + 2, COL_TEXT);
-  }
-
-  // ── Bottom info (overwrite in place with bg colour, no fillRect) ──
-  char buf[12];
-  tft.setTextSize(1);
-  tft.setTextColor(COL_LABEL, COL_BG);
-
-  tft.setCursor(4, 112);
-  tft.print("Thres:");
-  dtostrf(vClosedThres, 5, 3, buf);  tft.print(buf);
-
-  tft.setCursor(90, 112);
-  tft.print("bAvg:");
-  dtostrf(bridgeAvg, 5, 3, buf);      tft.print(buf);
-
-  tft.setCursor(180, 112);
-  tft.print("Gain:");
-  tft.print((int)gainIndexVolt);
-  tft.print(" ");                     // trailing space covers shrinking digit
-
-  tft.setCursor(4, 124);
-  tft.print("Bridge:");
-  dtostrf(bridgeV, 8, 4, buf);       tft.print(buf);
-
-  tft.setCursor(120, 124);
-  tft.print("T:");
-  dtostrf(currentMillis / 1000.0f, 7, 1, buf);
-  tft.print(buf);
-  tft.print("s");
-
-  // Battery in bottom-right corner
-  tft.setCursor(198, 124);
-  if (battFound) {
-    char bBuf[8];
-    snprintf(bBuf, sizeof(bBuf), "B:%3d%%", (int)battPct);
-    tft.print(bBuf);
-  } else {
-    tft.print("B: --");
-  }
-
-  // ── Update tracked state ──
-  strncpy(prevLabel, rLabel, sizeof(prevLabel) - 1);
-  prevLabel[sizeof(prevLabel) - 1] = '\0';
-  prevSt      = st;
-  prevDo      = statusCode;
-  prevVzDisp  = Vzero;
-  prevAcMode  = acMode;
-  firstUpdate = false;
-}
-
-// ==================================================================
 //  SERIAL STATUS
 // ==================================================================
 void statusUpdate() {
@@ -1168,10 +870,18 @@ void statusUpdate() {
     Serial.print(" Bridge:");    Serial.print(bridgeV, 4);
     Serial.print(" / Thres:");   Serial.print(vClosedThres, 4);
     Serial.print(" / ");         Serial.print(vClosed ? "Closed" : "Floating");
+    Serial.print(" / R:");       Serial.print(bridgeResistanceLabel(bridgeAvg));
+    Serial.print(" / Conf:");    Serial.print((int)bridgeConfidencePct());
+    Serial.print("%");
     Serial.print(" / Avg Diff");         Serial.print(bridgeAvgDiff);
   } else {
     Serial.print(" / V !0");
   }
+
+  Serial.print(" / DO:");
+  Serial.print((statusCode & 0x2) ? '1' : '0');
+  Serial.print((statusCode & 0x1) ? '1' : '0');
+  if (cfSuppress) Serial.print(" (VOLT ONLY)");
 
   Serial.print(acMode ? " / VRMS:" : " / VDC:");
   Serial.print(displayVoltage, 4);

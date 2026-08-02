@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(\"/c/Program Files/Arduino IDE/resources/app/lib/backend/resources/arduino-cli.exe\" --config-file * compile *)",
+      "Bash(\"/c/Program Files/Arduino IDE/resources/app/lib/backend/resources/arduino-cli.exe\" --config-file * board *)",
+      "Bash(\"/c/Program Files/Arduino IDE/resources/app/lib/backend/resources/arduino-cli.exe\" --config-file * core list*)",
+      "Bash(arduino-cli compile *)",
+      "Bash(arduino-cli core list*)",
+      "Bash(arduino-cli board *)",
+      "Bash(arduino-cli version*)",
+      "Bash(py -m py_compile *)",
+      "Bash(python -m py_compile *)"
+    ]
+  }
+}
