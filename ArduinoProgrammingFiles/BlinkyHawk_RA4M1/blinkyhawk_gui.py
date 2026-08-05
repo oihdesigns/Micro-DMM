@@ -106,10 +106,22 @@ KEY_META = {
     "BATTEMPTY":    ("Power / battery", "num", "Battery voltage mapped to 0% (V)"),
     "BATTFULL":     ("Power / battery", "num", "Battery voltage mapped to 100% (V)"),
     "BATTFULLPCT":  ("Power / battery", "num", "Charge % at which blink turns green"),
+    # --- Low power ---
+    "SLEEPSEC":     ("Low power", "num",  "Open-lead idle time before sleeping (s; 0 = never sleep)"),
+    "SLEEPTICKMS":  ("Low power", "choice", "Base wake period (ms); snapped to a rate the RTC can produce",
+                     ["2000", "1000", "500", "250", "125"]),
+    "SLEEPTICKS":   ("Low power", "num",  "Probe every N wake ticks (N x SLEEPTICKMS between checks)"),
+    "SLEEPAVG":     ("Low power", "num",  "Reads per sleeping voltage check; ANY over VOLTFAST x REFBAND wakes (fewer = quieter)"),
+    "SLEEPHB":      ("Low power", "num",  "Heartbeat flash every N ticks (counts SLEEPTICKMS ticks, not seconds)"),
+    "SLEEPPARK":    ("Low power", "bool", "1 = park the bridge MOSFET OFF while asleep"),
+    "SLEEPTHR00":   ("Low power", "num",  "Wake threshold, DIP 00 (0 = use THRESH00)"),
+    "SLEEPTHR01":   ("Low power", "num",  "Wake threshold, DIP 01 (0 = use THRESH01)"),
+    "SLEEPTHR10":   ("Low power", "num",  "Wake threshold, DIP 10 (0 = use THRESH10)"),
+    "SLEEPTHR11":   ("Low power", "num",  "Wake threshold, DIP 11 (0 = use THRESH11)"),
     # --- Misc ---
     "LOOPMS":       ("Misc", "num", "Main-loop pacing / sleep (ms)"),
 }
-GROUP_ORDER = ["Detection", "Alerts", "Power / battery", "Misc", "Other"]
+GROUP_ORDER = ["Detection", "Alerts", "Power / battery", "Low power", "Misc", "Other"]
 
 
 class SerialManager:

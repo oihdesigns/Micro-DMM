@@ -53,6 +53,10 @@
  * unit -- e.g. disable the beeper, move REFCENTER, re-map the DIP table --
  * with !SET + !SAVE, no recompile needed.  See the CONFIG FIELD TABLE below
  * for every key, and BlinkyHawk firmware manual (HTML) for full docs.
+ * EEPROM here is data flash, which a sketch upload does NOT erase, so a unit
+ * keeps its tuning across a reflash.  When the struct layout changes,
+ * CFG_VERSION is bumped and a migration (see configMigrateV2) carries the old
+ * values forward rather than reverting the unit to factory defaults.
  *
  * ── Serial protocol (115200 baud, line based) ─────────────────────
  * Commands in (each terminated with newline):
@@ -71,6 +75,14 @@
  *   !MOSFET,<-1|0|1>    MOSFET: -1=auto(run detection) 0=hold off 1=hold on
  *   !ALERTS[,0|1]       re-enable normal alerts while charging (1=on,0=blink)
  *   !CAP[,<ms>]         capture ADC across a MOSFET toggle, then dump
+ *   !SLEEP[,0]          arm the low-power timeout to fire as soon as it is
+ *                       allowed (arm over USB, then unplug); ,0 = disarm
+ *   !SLEEPTEST          run one sleeping-mode probe now and report its decision
+ *                       ($SLEEPTEST,<state>,metric=..,thr=..,retms=..,areavms=..)
+ *   !SLEEPLOG[,0]       dump the probes made while asleep (,0 = clear).  The
+ *                       only way to see what the board measured off USB, where
+ *                       the ground reference -- and the metric -- differ.
+ *   !FLOOR,<0-3>        park the board for a current measurement (see below)
  *   !STATUS  / !?       print current status
  * Data out:
  *   $STATUS,...                          current mode/state summary
@@ -91,6 +103,43 @@
  * Speaker: mirrors the LED (continuity beep / voltage double-beep), passive
  * or active buzzer selectable at runtime (PASSIVE key).  Shorting the leads
  * during boot mutes audio for the session (BOOTMUTE key to disable).
+ *
+ * ── Low-power timeout mode ────────────────────────────────────────
+ * After SLEEPSEC seconds in which the leads have only ever read OPEN, the
+ * board parks every load it can switch (LED rail, speaker, battery-sense
+ * divider, optionally the bridge) and enters Software Standby -- CPU and all
+ * peripheral clocks stopped, RAM retained -- woken by the RTC periodic
+ * interrupt every 2 s.  Each wake runs one cheap probe (SLEEPAVG reads instead
+ * of VOLTAVG, no agreement count, no display debounce) and goes straight back
+ * to sleep unless the leads are closed or voltage is present, in which case it
+ * returns to full-rate operation.  The probe compares against SLEEPTHR00..11
+ * rather than THRESH00..11 when those are non-zero, because the sleeping metric
+ * runs a few percent high (the analog path has not fully settled after a
+ * standby wake) -- so a THRESH tuned to a target resistance can sit below the
+ * sleeping closed-lead reading and silently stop continuity from waking the
+ * unit.  0 means "use THRESH for that position".  The sleeping voltage test is
+ * deliberately
+ * LESS sensitive than the awake one: it uses only the instant-bypass band
+ * (VOLTFAST x REFBAND), never the tight averaged REFBAND test, so lead noise
+ * cannot wake the unit every tick.  A 6 ms dim-blue flash every
+ * SLEEPHB ticks shows it is asleep rather than dead.  Sleeping is skipped
+ * entirely while charging or in diagnostic mode; SLEEPSEC = 0 disables it.
+ * Worst-case wake latency is 2 s x SLEEPTICKS.
+ *
+ * NOTE: millis() does not advance during Standby (its timer is clocked off),
+ * so the sleeping loop counts ticks rather than timing, and the idle timer is
+ * re-based on wake.
+ *
+ * !FLOOR,<1-3> parks the board in one fixed state so a series ammeter can read
+ * a stable current.  The point is the deltas, which say what is worth switching
+ * in hardware on a future board revision:
+ *   1 vs 3  = what Software Standby buys over a plain WFI idle (the MCU's share)
+ *   1 vs 2  = the bridge leg's share (bridge resting vs disconnected)
+ *   1       = the firmware-reachable floor; whatever is left is hardware --
+ *             the voltage reference's bias current, the LDO and charger
+ *             quiescent, and any permanently-connected divider strings.
+ * Send the command over USB with the battery attached through the meter, then
+ * unplug USB -- the board keeps running on battery in the parked state.
  */
 
 #include <Adafruit_NeoPixel.h>
@@ -136,7 +185,10 @@ const float ADC_FULL_SCALE  = 16383.0f;
 // Layout changes REQUIRE bumping CFG_VERSION so stale stored data is
 // rejected and replaced with defaults instead of being misread.
 #define CFG_MAGIC   0x42484B31UL   // "BHK1"
-#define CFG_VERSION 2              // bumped: added detectMethod + recovery params
+#define CFG_VERSION 5              // bumped: added sleepTickMs (base wake period)
+                                   // (v4 added sleepThresh[] wake thresholds;
+                                   //  v3 added low-power timeout fields;
+                                   //  v2 added detectMethod + recovery params)
 #define CFG_EEPROM_ADDR 0
 
 struct Config {
@@ -188,6 +240,33 @@ struct Config {
   float    battEmptyV;     // battery voltage mapped to 0%
   float    battFullV;      // battery voltage mapped to 100%
   uint8_t  battFullPct;    // >= this % while charging = green charge blink
+
+  // -- Low-power timeout -------------------------------------------
+  // After idleTimeoutS seconds in which the leads have only read OPEN, the
+  // board parks every switchable load and drops into Software Standby, waking
+  // on a 2 s RTC tick to probe.  See the LOW-POWER TIMEOUT MODE section.
+  uint16_t idleTimeoutS;   // seconds of open-lead inactivity before sleeping (0 = never)
+  // Base wake period.  The RTC periodic interrupt is the wake source and it only
+  // supports a fixed set of rates (2000/1000/500/250/125 ms here), so a value
+  // set over serial is snapped to the nearest supported one and written back --
+  // !CFG therefore always reports the rate actually programmed, not the request.
+  uint16_t sleepTickMs;
+  uint8_t  sleepPollTicks; // probe every N wake ticks (N * sleepTickMs between probes)
+  uint8_t  sleepVoltAvg;   // reads taken for the voltage check while asleep (any
+                           // one over the bypass band wakes -> fewer = quieter)
+  uint8_t  sleepHbTicks;   // heartbeat flash every N ticks (0 = no heartbeat)
+  uint8_t  sleepParkOff;   // 1 = park the bridge MOSFET OFF while asleep
+
+  // Wake threshold per DIP position, used ONLY by the sleeping probe.  The
+  // sleeping metric runs a few percent higher than the awake one (the analog
+  // path has not fully settled after a standby wake), so a thresh[] value tuned
+  // to a particular resistance can sit below the sleeping closed-lead reading
+  // and silently stop continuity from waking the unit.  These decouple the two:
+  // thresh[] answers "is this resistance low enough to call continuity", while
+  // sleepThresh[] answers the coarser "is anything connected at all -- wake up".
+  // 0 = fall back to thresh[] for that position (the default, so behaviour is
+  // unchanged until a value is deliberately set).
+  float    sleepThresh[4];
 
   // -- Misc --------------------------------------------------------
   uint16_t loopDelayMs;    // main-loop pacing (WFI idle between passes)
@@ -244,6 +323,14 @@ void configDefaults() {
   cfg.battFullV      = 4.20f;
   cfg.battFullPct    = 90;
 
+  cfg.idleTimeoutS   = 15;       // seconds of open leads before sleeping
+  cfg.sleepTickMs    = 2000;     // slowest RTC period = fewest wakes
+  cfg.sleepPollTicks = 1;        // probe on every wake
+  cfg.sleepVoltAvg   = 3;        // reads per probe; any one over the bypass band wakes
+  cfg.sleepHbTicks   = 30;       // "still alive" flash once a minute
+  cfg.sleepParkOff   = 0;        // bridge parked resting (as in normal operation)
+  for (int i = 0; i < 4; i++) cfg.sleepThresh[i] = 0.0f;   // 0 = use thresh[i]
+
   cfg.loopDelayMs    = 50;
 }
 
@@ -287,6 +374,297 @@ bool configLoad() {
   if (stored.crc != configCrc(stored))    return false;
   cfg = stored;
   cfgDirty = false;
+  return true;
+}
+
+// ── Upgrade path from older stored layouts ────────────────────────
+// EEPROM here is the RA4M1's data flash, which a sketch upload does NOT erase --
+// so a unit reflashed with new firmware still has its old config sitting there.
+// configLoad() rejects it (the version differs, and the bytes genuinely can't
+// be reinterpreted as the new struct), which for a field-tuned unit means
+// silently reverting it to factory thresholds.  Instead, keep each superseded
+// layout frozen here and copy the values across.
+//
+// v4 EXACTLY as it shipped (v3 plus sleepThresh[], before sleepTickMs existed).
+// Frozen -- never edit; see the note on ConfigV2.
+struct ConfigV4 {
+  uint32_t magic;
+  uint16_t version;
+  float    refCenterV;
+  float    refBandV;
+  float    thresh[4];
+  float    voltFastMult;
+  uint8_t  voltAvgSamples;
+  uint8_t  testAgree;
+  uint8_t  stableCount;
+  uint16_t settlePreUs;
+  uint8_t  settlePostMs;
+  uint8_t  negFix;
+  float    negFixV;
+  uint8_t  detectMethod;
+  float    detReturnBand;
+  uint16_t detWindowUs;
+  uint16_t detAreaStartUs;
+  uint8_t  ledEnable;
+  uint8_t  beepEnable;
+  uint8_t  bootMute;
+  uint8_t  passiveBuzzer;
+  uint16_t contFreqHz;
+  uint16_t voltFreqHz;
+  uint8_t  contPulses;
+  uint8_t  voltPulses;
+  uint8_t  contRepeat;
+  uint8_t  voltRepeat;
+  uint16_t contRepeatMs;
+  uint16_t voltRepeatMs;
+  uint16_t beepMinMs;
+  float    chargeThreshV;
+  float    battEmptyV;
+  float    battFullV;
+  uint8_t  battFullPct;
+  uint16_t idleTimeoutS;
+  uint8_t  sleepPollTicks;
+  uint8_t  sleepVoltAvg;
+  uint8_t  sleepHbTicks;
+  uint8_t  sleepParkOff;
+  float    sleepThresh[4];
+  uint16_t loopDelayMs;
+  uint16_t crc;
+};
+
+// v3 EXACTLY as it shipped (v2 plus the low-power timeout block, before
+// sleepThresh[] existed).  Frozen -- never edit; see the note on ConfigV2.
+struct ConfigV3 {
+  uint32_t magic;
+  uint16_t version;
+  float    refCenterV;
+  float    refBandV;
+  float    thresh[4];
+  float    voltFastMult;
+  uint8_t  voltAvgSamples;
+  uint8_t  testAgree;
+  uint8_t  stableCount;
+  uint16_t settlePreUs;
+  uint8_t  settlePostMs;
+  uint8_t  negFix;
+  float    negFixV;
+  uint8_t  detectMethod;
+  float    detReturnBand;
+  uint16_t detWindowUs;
+  uint16_t detAreaStartUs;
+  uint8_t  ledEnable;
+  uint8_t  beepEnable;
+  uint8_t  bootMute;
+  uint8_t  passiveBuzzer;
+  uint16_t contFreqHz;
+  uint16_t voltFreqHz;
+  uint8_t  contPulses;
+  uint8_t  voltPulses;
+  uint8_t  contRepeat;
+  uint8_t  voltRepeat;
+  uint16_t contRepeatMs;
+  uint16_t voltRepeatMs;
+  uint16_t beepMinMs;
+  float    chargeThreshV;
+  float    battEmptyV;
+  float    battFullV;
+  uint8_t  battFullPct;
+  uint16_t idleTimeoutS;
+  uint8_t  sleepPollTicks;
+  uint8_t  sleepVoltAvg;
+  uint8_t  sleepHbTicks;
+  uint8_t  sleepParkOff;
+  uint16_t loopDelayMs;
+  uint16_t crc;
+};
+
+// This struct is v2 EXACTLY as it shipped.  It must never be edited again --
+// it is not "the config minus the new fields", it is a historical record of
+// what is actually in the flash of units already in the field.
+struct ConfigV2 {
+  uint32_t magic;
+  uint16_t version;
+  float    refCenterV;
+  float    refBandV;
+  float    thresh[4];
+  float    voltFastMult;
+  uint8_t  voltAvgSamples;
+  uint8_t  testAgree;
+  uint8_t  stableCount;
+  uint16_t settlePreUs;
+  uint8_t  settlePostMs;
+  uint8_t  negFix;
+  float    negFixV;
+  uint8_t  detectMethod;
+  float    detReturnBand;
+  uint16_t detWindowUs;
+  uint16_t detAreaStartUs;
+  uint8_t  ledEnable;
+  uint8_t  beepEnable;
+  uint8_t  bootMute;
+  uint8_t  passiveBuzzer;
+  uint16_t contFreqHz;
+  uint16_t voltFreqHz;
+  uint8_t  contPulses;
+  uint8_t  voltPulses;
+  uint8_t  contRepeat;
+  uint8_t  voltRepeat;
+  uint16_t contRepeatMs;
+  uint16_t voltRepeatMs;
+  uint16_t beepMinMs;
+  float    chargeThreshV;
+  float    battEmptyV;
+  float    battFullV;
+  uint8_t  battFullPct;
+  uint16_t loopDelayMs;
+  uint16_t crc;
+};
+
+// Upgrade a stored v4 image.  sleepTickMs keeps its default (2000), which is
+// the rate v4 hard-coded, so a migrated unit wakes at exactly the same cadence.
+bool configMigrateV4() {
+  ConfigV4 old;
+  EEPROM.get(CFG_EEPROM_ADDR, old);
+  if (old.magic != CFG_MAGIC) return false;
+  if (old.version != 4)       return false;
+  if (old.crc != crc16_ccitt((const uint8_t *)&old, offsetof(ConfigV4, crc))) return false;
+
+  cfg.refCenterV     = old.refCenterV;
+  cfg.refBandV       = old.refBandV;
+  for (int i = 0; i < 4; i++) cfg.thresh[i] = old.thresh[i];
+  cfg.voltFastMult   = old.voltFastMult;
+  cfg.voltAvgSamples = old.voltAvgSamples;
+  cfg.testAgree      = old.testAgree;
+  cfg.stableCount    = old.stableCount;
+  cfg.settlePreUs    = old.settlePreUs;
+  cfg.settlePostMs   = old.settlePostMs;
+  cfg.negFix         = old.negFix;
+  cfg.negFixV        = old.negFixV;
+  cfg.detectMethod   = old.detectMethod;
+  cfg.detReturnBand  = old.detReturnBand;
+  cfg.detWindowUs    = old.detWindowUs;
+  cfg.detAreaStartUs = old.detAreaStartUs;
+  cfg.ledEnable      = old.ledEnable;
+  cfg.beepEnable     = old.beepEnable;
+  cfg.bootMute       = old.bootMute;
+  cfg.passiveBuzzer  = old.passiveBuzzer;
+  cfg.contFreqHz     = old.contFreqHz;
+  cfg.voltFreqHz     = old.voltFreqHz;
+  cfg.contPulses     = old.contPulses;
+  cfg.voltPulses     = old.voltPulses;
+  cfg.contRepeat     = old.contRepeat;
+  cfg.voltRepeat     = old.voltRepeat;
+  cfg.contRepeatMs   = old.contRepeatMs;
+  cfg.voltRepeatMs   = old.voltRepeatMs;
+  cfg.beepMinMs      = old.beepMinMs;
+  cfg.chargeThreshV  = old.chargeThreshV;
+  cfg.battEmptyV     = old.battEmptyV;
+  cfg.battFullV      = old.battFullV;
+  cfg.battFullPct    = old.battFullPct;
+  cfg.idleTimeoutS   = old.idleTimeoutS;
+  cfg.sleepPollTicks = old.sleepPollTicks;
+  cfg.sleepVoltAvg   = old.sleepVoltAvg;
+  cfg.sleepHbTicks   = old.sleepHbTicks;
+  cfg.sleepParkOff   = old.sleepParkOff;
+  for (int i = 0; i < 4; i++) cfg.sleepThresh[i] = old.sleepThresh[i];
+  cfg.loopDelayMs    = old.loopDelayMs;
+  return true;
+}
+
+// Upgrade a stored v3 image.  cfg must already hold defaults on entry, so the
+// fields v3 never had (sleepThresh[]) keep their defaults -- which are 0, i.e.
+// "fall back to thresh[]", so a migrated unit behaves exactly as it did before.
+bool configMigrateV3() {
+  ConfigV3 old;
+  EEPROM.get(CFG_EEPROM_ADDR, old);
+  if (old.magic != CFG_MAGIC) return false;
+  if (old.version != 3)       return false;
+  if (old.crc != crc16_ccitt((const uint8_t *)&old, offsetof(ConfigV3, crc))) return false;
+
+  cfg.refCenterV     = old.refCenterV;
+  cfg.refBandV       = old.refBandV;
+  for (int i = 0; i < 4; i++) cfg.thresh[i] = old.thresh[i];
+  cfg.voltFastMult   = old.voltFastMult;
+  cfg.voltAvgSamples = old.voltAvgSamples;
+  cfg.testAgree      = old.testAgree;
+  cfg.stableCount    = old.stableCount;
+  cfg.settlePreUs    = old.settlePreUs;
+  cfg.settlePostMs   = old.settlePostMs;
+  cfg.negFix         = old.negFix;
+  cfg.negFixV        = old.negFixV;
+  cfg.detectMethod   = old.detectMethod;
+  cfg.detReturnBand  = old.detReturnBand;
+  cfg.detWindowUs    = old.detWindowUs;
+  cfg.detAreaStartUs = old.detAreaStartUs;
+  cfg.ledEnable      = old.ledEnable;
+  cfg.beepEnable     = old.beepEnable;
+  cfg.bootMute       = old.bootMute;
+  cfg.passiveBuzzer  = old.passiveBuzzer;
+  cfg.contFreqHz     = old.contFreqHz;
+  cfg.voltFreqHz     = old.voltFreqHz;
+  cfg.contPulses     = old.contPulses;
+  cfg.voltPulses     = old.voltPulses;
+  cfg.contRepeat     = old.contRepeat;
+  cfg.voltRepeat     = old.voltRepeat;
+  cfg.contRepeatMs   = old.contRepeatMs;
+  cfg.voltRepeatMs   = old.voltRepeatMs;
+  cfg.beepMinMs      = old.beepMinMs;
+  cfg.chargeThreshV  = old.chargeThreshV;
+  cfg.battEmptyV     = old.battEmptyV;
+  cfg.battFullV      = old.battFullV;
+  cfg.battFullPct    = old.battFullPct;
+  cfg.idleTimeoutS   = old.idleTimeoutS;
+  cfg.sleepPollTicks = old.sleepPollTicks;
+  cfg.sleepVoltAvg   = old.sleepVoltAvg;
+  cfg.sleepHbTicks   = old.sleepHbTicks;
+  cfg.sleepParkOff   = old.sleepParkOff;
+  cfg.loopDelayMs    = old.loopDelayMs;
+  return true;
+}
+
+// Try to upgrade a stored v2 image into the live config.  cfg must already
+// hold defaults on entry, so the fields v2 never had keep their default values.
+// Returns true if a valid v2 image was found and migrated.
+bool configMigrateV2() {
+  ConfigV2 old;
+  EEPROM.get(CFG_EEPROM_ADDR, old);
+  if (old.magic != CFG_MAGIC) return false;
+  if (old.version != 2)       return false;
+  if (old.crc != crc16_ccitt((const uint8_t *)&old, offsetof(ConfigV2, crc))) return false;
+
+  cfg.refCenterV     = old.refCenterV;
+  cfg.refBandV       = old.refBandV;
+  for (int i = 0; i < 4; i++) cfg.thresh[i] = old.thresh[i];
+  cfg.voltFastMult   = old.voltFastMult;
+  cfg.voltAvgSamples = old.voltAvgSamples;
+  cfg.testAgree      = old.testAgree;
+  cfg.stableCount    = old.stableCount;
+  cfg.settlePreUs    = old.settlePreUs;
+  cfg.settlePostMs   = old.settlePostMs;
+  cfg.negFix         = old.negFix;
+  cfg.negFixV        = old.negFixV;
+  cfg.detectMethod   = old.detectMethod;
+  cfg.detReturnBand  = old.detReturnBand;
+  cfg.detWindowUs    = old.detWindowUs;
+  cfg.detAreaStartUs = old.detAreaStartUs;
+  cfg.ledEnable      = old.ledEnable;
+  cfg.beepEnable     = old.beepEnable;
+  cfg.bootMute       = old.bootMute;
+  cfg.passiveBuzzer  = old.passiveBuzzer;
+  cfg.contFreqHz     = old.contFreqHz;
+  cfg.voltFreqHz     = old.voltFreqHz;
+  cfg.contPulses     = old.contPulses;
+  cfg.voltPulses     = old.voltPulses;
+  cfg.contRepeat     = old.contRepeat;
+  cfg.voltRepeat     = old.voltRepeat;
+  cfg.contRepeatMs   = old.contRepeatMs;
+  cfg.voltRepeatMs   = old.voltRepeatMs;
+  cfg.beepMinMs      = old.beepMinMs;
+  cfg.chargeThreshV  = old.chargeThreshV;
+  cfg.battEmptyV     = old.battEmptyV;
+  cfg.battFullV      = old.battFullV;
+  cfg.battFullPct    = old.battFullPct;
+  cfg.loopDelayMs    = old.loopDelayMs;
   return true;
 }
 
@@ -406,6 +784,18 @@ const ConfigField CFG_FIELDS[] = {
   { "BATTEMPTY",   FT_FLOAT, &cfg.battEmptyV,      2.5f,   4.0f   },
   { "BATTFULL",    FT_FLOAT, &cfg.battFullV,       3.0f,   4.5f   },
   { "BATTFULLPCT", FT_U8,    &cfg.battFullPct,     50,     100    },
+  // Low-power timeout
+  { "SLEEPSEC",    FT_U16,   &cfg.idleTimeoutS,    0,      65535  },
+  { "SLEEPTICKMS", FT_U16,   &cfg.sleepTickMs,     125,    2000   },
+  { "SLEEPTICKS",  FT_U8,    &cfg.sleepPollTicks,  1,      100    },
+  { "SLEEPAVG",    FT_U8,    &cfg.sleepVoltAvg,    1,      50     },
+  { "SLEEPHB",     FT_U8,    &cfg.sleepHbTicks,    0,      255    },
+  { "SLEEPPARK",   FT_BOOL,  &cfg.sleepParkOff,    0,      1      },
+  // Wake thresholds: 0 = use the matching THRESH value for that DIP position.
+  { "SLEEPTHR00",  FT_FLOAT, &cfg.sleepThresh[0],  0.0f,   3.3f   },
+  { "SLEEPTHR01",  FT_FLOAT, &cfg.sleepThresh[1],  0.0f,   3.3f   },
+  { "SLEEPTHR10",  FT_FLOAT, &cfg.sleepThresh[2],  0.0f,   3.3f   },
+  { "SLEEPTHR11",  FT_FLOAT, &cfg.sleepThresh[3],  0.0f,   3.3f   },
   // Misc
   { "LOOPMS",      FT_U16,   &cfg.loopDelayMs,     1,      1000   },
 };
@@ -480,6 +870,8 @@ LeadState leadState = STATE_VOLTAGE;
 // Explicit prototypes (see note at the ConfigField struct).
 LeadState runMosfetTest();
 LeadState runMosfetTestStable();
+LeadState lowPowerProbe();
+void      slogRecord(LeadState s, bool awake);
 
 // Active open/closed threshold, refreshed from the DIP switches + cfg.thresh
 // table every detection pass.
@@ -554,6 +946,428 @@ void sleepMs(unsigned long ms) {
 }
 
 // ══════════════════════════════════════════════════════════════════
+//  LOW-POWER TIMEOUT MODE
+// ══════════════════════════════════════════════════════════════════
+// After cfg.idleTimeoutS seconds in which the leads have only ever read OPEN,
+// the board stops running the detection loop, parks every load it can switch
+// off (LED rail, speaker, battery-sense divider, optionally the bridge) and
+// enters Software Standby -- CPU and all peripheral clocks stopped, RAM
+// retained.  It wakes on the RTC periodic interrupt, runs one cheap probe, and
+// either sleeps again (still open) or returns to full-rate operation (closed
+// leads or voltage present).
+//
+// The energy cost of the mode is (wake current x awake time) / tick period, so
+// the knobs that matter are how often it probes (cfg.sleepPollTicks) and how
+// much each probe does (cfg.sleepVoltAvg) -- both are EEPROM config so a unit
+// can be characterised on the bench without a reflash.
+#include "RTC.h"
+#include "r_lpm.h"
+
+// The RTC periodic interrupt is the wake source.  Its period is not free-form --
+// the library exposes a fixed ladder, of which these are the useful end -- so
+// cfg.sleepTickMs is snapped to one of them.  2 s is the library's maximum (and
+// the cheapest); below 125 ms the probe cost stops being worth the latency.
+// Worst-case detection latency = cfg.sleepTickMs * cfg.sleepPollTicks.
+struct SleepTickOption { uint16_t ms; Period period; };
+const SleepTickOption SLEEP_TICK_OPTIONS[] = {
+  { 2000, Period::ONCE_EVERY_2_SEC   },
+  { 1000, Period::ONCE_EVERY_1_SEC   },
+  {  500, Period::N2_TIMES_EVERY_SEC },
+  {  250, Period::N4_TIMES_EVERY_SEC },
+  {  125, Period::N8_TIMES_EVERY_SEC },
+};
+const int SLEEP_TICK_OPTION_COUNT =
+    sizeof(SLEEP_TICK_OPTIONS) / sizeof(SLEEP_TICK_OPTIONS[0]);
+const unsigned long SLEEP_HB_MS   = 6;    // heartbeat flash on-time
+const uint8_t SLEEP_HB_BRIGHT     = 12;   // heartbeat flash brightness (dim blue)
+const unsigned long SLEEP_BOOT_GRACE_MS = 30000;   // never sleep this soon after boot
+
+bool          lowPowerActive = false;  // currently parked + sleeping
+bool          sleepArmed     = false;  // !SLEEP: sleep as soon as it is allowed
+unsigned long idleSinceMs    = 0;      // millis() of the last non-open activity
+unsigned int  sleepTickCount = 0;      // ticks since the last probe
+unsigned int  sleepHbCount   = 0;      // ticks since the last heartbeat
+
+// Current-measurement parking (!FLOOR).  Holds the board in one fixed state so
+// a series ammeter reads a stable number:
+//   1 = parked, bridge resting (ON), Software Standby
+//   2 = parked, bridge OFF, Software Standby  -> delta vs 1 = the bridge leg
+//   3 = parked, bridge resting (ON), WFI only -> delta vs 1 = what Standby buys
+int floorMode = 0;
+
+// ── Offline probe log ─────────────────────────────────────────────
+// The sleeping probe runs with USB unplugged and so cannot print, which makes
+// "it won't wake when I'm off USB" impossible to diagnose from the bench: the
+// board behaves differently precisely when you cannot see it.  Every probe
+// therefore records its decision to RAM, and !SLEEPLOG dumps the history once
+// the unit is plugged back in.  Ring buffer -- keeps the most recent probes,
+// which are the ones next to the behaviour you just observed.
+const int SLOG_MAX = 64;
+struct SleepLogEntry {
+  float   metric;      // what was compared against the threshold
+  float   retms;       // method 1/2 recovery time (ms)
+  float   rest;        // resting differential at the probe (V)
+  float   thr;         // threshold in force (DIP switches are live while asleep)
+  uint8_t state;       // LeadState the probe decided
+  uint8_t awake;       // 1 = sampled by the awake loop, 0 = by the sleeping probe
+};
+SleepLogEntry slog[SLOG_MAX];
+int           slogValid = 0;   // entries currently held (<= SLOG_MAX)
+int           slogHead  = 0;   // next write index
+unsigned long slogTotal = 0;   // samples recorded since the last clear
+unsigned long lastSlogAwakeMs = 0;   // pacing for awake-on-battery samples
+float lastProbeThreshV = 0.0f;       // threshold the last sleeping probe used
+
+// ⚠ SBYCR IS GLOBAL STATE.  R_LPM_Open() / R_LPM_LowPowerReconfigure() write the
+// SBYCR register immediately from cfg.low_power_mode:
+//     LPM_MODE_SLEEP   -> SBYCR = 0x4000 (SSBY=0)
+//     LPM_MODE_STANDBY -> SBYCR = 0xC000 (SSBY=1)
+// SSBY decides what EVERY __WFI() in the program does -- R_LPM_LowPowerModeEnter
+// itself only executes "dsb; wfi", it does not set SSBY.  So opening the driver
+// in STANDBY mode silently converts sleepMs()'s idle WFI into a full Software
+// Standby: all peripheral clocks stop (USB dies mid-enumeration, "USB device not
+// recognized") and millis() freezes, so sleepMs()'s millis() deadline never
+// arrives and the board locks up until reset.
+//
+// Therefore: stay in SLEEP mode at all times, and switch to STANDBY only for the
+// duration of a deliberate sleep in lowPowerTick(), switching straight back.
+static lpm_instance_ctrl_t lpmCtrl;
+static lpm_cfg_t           lpmSleepCfg;     // SSBY=0: plain WFI idle (the safe default)
+static lpm_cfg_t           lpmStandbyCfg;   // SSBY=1: WFI enters Software Standby
+static volatile bool       lpmRtcTick = false;
+static bool                lpmReady   = false;
+
+static void lpmRtcCallback() { lpmRtcTick = true; }
+
+// Snap cfg.sleepTickMs to a rate the RTC can actually produce and program it.
+// Writing the snapped value back means !CFG and the sleep log always describe
+// the rate in force rather than what was asked for.  Re-programming is safe to
+// repeat: IRQManager only allocates a vector slot the first time (it guards on
+// periodic_irq == FSP_INVALID_VECTOR) and merely re-enables thereafter.
+bool applySleepTickPeriod() {
+  const SleepTickOption *best = &SLEEP_TICK_OPTIONS[0];
+  long bestDiff = 0x7FFFFFFF;
+  for (int i = 0; i < SLEEP_TICK_OPTION_COUNT; i++) {
+    long diff = (long)cfg.sleepTickMs - (long)SLEEP_TICK_OPTIONS[i].ms;
+    if (diff < 0) diff = -diff;
+    if (diff < bestDiff) { bestDiff = diff; best = &SLEEP_TICK_OPTIONS[i]; }
+  }
+  cfg.sleepTickMs = best->ms;
+
+  static uint16_t programmedMs = 0;
+  if (programmedMs == cfg.sleepTickMs) return true;   // already in force
+  if (!RTC.setPeriodicCallback(lpmRtcCallback, best->period)) return false;
+  programmedMs = cfg.sleepTickMs;
+  return true;
+}
+
+// Explicit prototypes: same reason as the ConfigField helpers above -- the
+// Arduino preprocessor hoists its auto-generated ones too far up the file.
+void enterLowPower();
+void exitLowPower();
+void serviceLowPower();
+void serviceFloorMode();
+void pollSerial();
+
+// Bring up the RTC periodic interrupt and open the LPM driver.  Returns false
+// if either fails, in which case lowPowerTick() degrades to a WFI idle -- the
+// timeout mode still parks every load, it just leaves the core clocked.
+bool lowPowerInit() {
+  if (!RTC.begin()) return false;
+
+  // The periodic interrupt only runs once the RTC counter is started, so seed a
+  // nominal time if it isn't already running.  The value is irrelevant: nothing
+  // reads the calendar, we only need the divider ticking.
+  RTCTime seed(1, Month::JANUARY, 2025, 0, 0, 0,
+               DayOfWeek::WEDNESDAY, SaveLight::SAVING_TIME_INACTIVE);
+  RTC.setTimeIfNotRunning(seed);
+
+  if (!applySleepTickPeriod()) return false;
+
+  lpmStandbyCfg.low_power_mode       = LPM_MODE_STANDBY;
+  lpmStandbyCfg.standby_wake_sources = LPM_STANDBY_WAKE_SOURCE_RTCPRD;
+  lpmSleepCfg.low_power_mode         = LPM_MODE_SLEEP;
+  lpmSleepCfg.standby_wake_sources   = 0;
+
+  // Open in SLEEP mode: this leaves SSBY clear, so sleepMs()'s WFI keeps
+  // behaving as an ordinary CPU idle.  Opening in STANDBY here would arm every
+  // WFI in the program -- see the warning above.
+  if (R_LPM_Open(&lpmCtrl, &lpmSleepCfg) != FSP_SUCCESS) return false;
+
+  lpmReady = true;
+  return true;
+}
+
+// Enter Software Standby until the RTC periodic interrupt fires.  Other enabled
+// interrupts can also return from the WFI inside the driver, so this loops until
+// the tick flag is actually set.
+//
+// NOTE: every peripheral clock stops in Standby, including the AGT behind
+// millis() -- so millis() does NOT advance while asleep.  Nothing in this mode
+// depends on it (ticks are counted, not timed) and exitLowPower() re-bases
+// idleSinceMs on wake, but keep it in mind before adding millis() logic here.
+void lowPowerTick() {
+  if (!lpmReady) { sleepMs(cfg.sleepTickMs); return; }
+
+  // Arm Software Standby (SSBY=1) only for this sleep, and disarm it again
+  // immediately afterwards so no other WFI in the program can trip into it.
+  R_LPM_LowPowerReconfigure(&lpmCtrl, &lpmStandbyCfg);
+  lpmRtcTick = false;
+  while (!lpmRtcTick) R_LPM_LowPowerModeEnter(&lpmCtrl);
+  R_LPM_LowPowerReconfigure(&lpmCtrl, &lpmSleepCfg);
+}
+
+// ── Load parking ──────────────────────────────────────────────────
+// The onboard RGB draws its own quiescent current whenever its rail is up, even
+// showing black, so blanking the pixel is not enough -- RGB_POWER_PIN has to go.
+static void ledPower(bool on) {
+  digitalWrite(RGB_POWER_PIN, on ? HIGH : LOW);
+  if (on) {
+    sleepMs(1);                 // let the rail come up before clocking data out
+    pixel.clear();
+    pixel.show();
+  }
+}
+
+// The onboard Vbatt/2 sense divider is gated by BAT_READ_EN, which setup()
+// drives HIGH and normal operation never lowers -- so it draws continuously.
+// There is no reason to keep it enabled while asleep.
+static void battSense(bool on) {
+  digitalWrite(BATT_EN_PIN, on ? HIGH : LOW);
+  // NOTE: the divider needs time to settle after re-enabling (see
+  // startupBatteryIndicate), so the first battV reading after a wake reads low.
+}
+
+// Park every switchable load and mark the mode active.
+void enterLowPower() {
+  lowPowerActive = true;
+  sleepTickCount = 0;
+  sleepHbCount   = 0;
+  applySleepTickPeriod();        // pick up any change made via !SET / !LOAD
+
+  silenceSpeaker();
+  speakerOff();                 // park the pin idle, not merely stop the sequence
+  setPixel(0, 0, 0);
+  ledPower(false);
+  battSense(false);
+  digitalWrite(MOSFET_PIN, cfg.sleepParkOff ? MOSFET_OFF : MOSFET_ON);
+}
+
+// Restore everything and hand control back to the normal loop.
+void exitLowPower() {
+  lowPowerActive = false;
+  digitalWrite(MOSFET_PIN, MOSFET_ON);   // resting state
+  battSense(true);
+  ledPower(true);
+
+  // millis() froze while we were in Standby, so the idle timer has to be
+  // re-based here rather than carried across the sleep.
+  idleSinceMs = millis();
+}
+
+// One probe pass: is anything still there?  Runs the real runMosfetTest() so
+// every detection method (SINGLE / TIMERET / AREA) and the live DIP threshold
+// behave exactly as they do awake -- only the averaging is cut, and the test's
+// trailing settle is suppressed because the pin is about to be parked anyway.
+// Returns STATE_FLOAT if the leads are still open.
+LeadState lowPowerProbe() {
+  // DIP switches stay live while asleep, but refresh the threshold WITHOUT
+  // updateThresholdFromDip(): that announces changes on serial, and a CDC write
+  // with USB unplugged (which it always is here) can block.
+  dipIdx        = readDipIndex();
+  activeThreshV = cfg.thresh[dipIdx];
+
+  // Wake threshold, if one is configured for this DIP position.  Kept separate
+  // from thresh[] so the continuity threshold can be tuned to a target
+  // resistance without that value having to double as "is anything connected".
+  // Restored before returning -- runMosfetTest() reads activeThreshV, and
+  // !SLEEPTEST runs this probe while awake, where the awake value must survive.
+  float savedThresh = activeThreshV;
+  if (cfg.sleepThresh[dipIdx] > 0.0f) activeThreshV = cfg.sleepThresh[dipIdx];
+
+  // Measure under the SAME rail conditions the awake detector sees.  The LED
+  // rail and the battery-sense divider are both loads on 3.3 V, and on a
+  // floating (battery) supply their current shifts the analog baseline -- the
+  // resting differential moves by ~26 mV between rails-up and rails-down, which
+  // is more than refBandV.  Probing with them parked off makes the probe's
+  // metric incomparable to the awake one, so no single threshold can serve both.
+  // The LED is powered but written black, so nothing is visible; a few ms of
+  // rail per probe costs well under 5 uA averaged.
+  digitalWrite(RGB_POWER_PIN, HIGH);
+  digitalWrite(BATT_EN_PIN, HIGH);
+  sleepMs(1);                                 // let the rail come up
+  pixel.clear();
+  pixel.show();                               // hold it dark, not whatever it powered up as
+
+  // Settle at the resting state before testing.  This is NOT optional padding:
+  // detection methods 1 and 2 measure the recovery transient from the toggle,
+  // and sampleRecovery() only accepts a "return" after the deviation has first
+  // dipped past DET_TROUGH_MIN_V.  From an unsettled baseline that trough never
+  // registers, returnMs falls back to the detWindowUs timeout, the metric lands
+  // above the threshold and a CLOSED lead is misread as FLOAT -- i.e. continuity
+  // silently fails to wake the board.  The awake path gets this settle for free
+  // from voltagePresent()'s ten reads; the probe has to do it explicitly, and
+  // needs it more, having just come out of standby with the ADC clock restarted.
+  digitalWrite(MOSFET_PIN, MOSFET_ON);        // bridge to resting for the test
+  sleepMs(cfg.settlePostMs);                  // rest at baseline (CPU idles)
+  readVoltage();                              // throwaway: flush the ADC after the wake
+
+  uint8_t savedPost = cfg.settlePostMs;
+  cfg.settlePostMs  = 0;                      // no point settling before parking
+
+  // voltagePresentSleep() (not voltagePresent()) -- the wide bypass band only,
+  // so lead noise can't wake the board every tick.  It reads sleepVoltAvg
+  // samples itself, so voltAvgSamples is left alone here.
+  bool present = (voltOverride == VOLT_DISABLED) ? false : voltagePresentSleep();
+  LeadState result = present ? STATE_VOLTAGE : runMosfetTest();
+
+  cfg.settlePostMs  = savedPost;
+  lastProbeThreshV  = activeThreshV;    // what the decision above was made against
+  activeThreshV     = savedThresh;      // hand the awake value back
+
+  digitalWrite(MOSFET_PIN, cfg.sleepParkOff ? MOSFET_OFF : MOSFET_ON);
+
+  // Park the rails again, but only if we are actually asleep -- !SLEEPTEST runs
+  // this same probe while awake and must not switch the LED off underneath the
+  // running alert logic.
+  if (lowPowerActive) {
+    digitalWrite(RGB_POWER_PIN, LOW);
+    digitalWrite(BATT_EN_PIN, LOW);
+  }
+  return result;
+}
+
+// Record one measurement.  Called from the sleeping loop, so it must not print.
+// `awake` distinguishes samples taken by the normal loop (rails up) from those
+// taken by the sleeping probe -- comparing the two on battery is the whole
+// point, since that is where the baseline shift shows up.
+void slogRecord(LeadState s, bool awake) {
+  slog[slogHead].metric = lastMetric;
+  slog[slogHead].retms  = lastReturnMs;
+  slog[slogHead].rest   = lastRestV;
+  slog[slogHead].thr    = awake ? activeThreshV : lastProbeThreshV;
+  slog[slogHead].state  = (uint8_t)s;
+  slog[slogHead].awake  = awake ? 1 : 0;
+  slogHead = (slogHead + 1) % SLOG_MAX;
+  if (slogValid < SLOG_MAX) slogValid++;
+  slogTotal++;
+}
+
+// Dump the log oldest-first.  Called only from the command handler, i.e. on USB.
+void dumpSleepLog() {
+  Serial.print("$SLOGSTART,");
+  Serial.print(slogValid);   Serial.print(",");
+  Serial.print(slogTotal);   Serial.print(",method=");
+  Serial.println(cfg.detectMethod);
+  int start = (slogHead - slogValid + SLOG_MAX) % SLOG_MAX;
+  for (int i = 0; i < slogValid; i++) {
+    const SleepLogEntry &e = slog[(start + i) % SLOG_MAX];
+    Serial.print("$SLOG,");
+    Serial.print(i);         Serial.print(",");
+    Serial.print(e.awake ? "AWAKE" : "SLEEP");
+    Serial.print(",");
+    Serial.print(e.state == STATE_FLOAT ? "FLOAT" :
+                 (e.state == STATE_CLOSED ? "CLOSED" : "VOLTAGE"));
+    Serial.print(",");       Serial.print(e.metric, 4);
+    Serial.print(",");       Serial.print(e.thr, 4);
+    Serial.print(",");       Serial.print(e.retms, 3);
+    Serial.print(",");       Serial.println(e.rest, 4);
+  }
+  Serial.println("$SLOGEND");
+}
+
+// Brief "asleep, not dead" flash.
+static void sleepHeartbeat() {
+  if (cfg.sleepHbTicks == 0 || !cfg.ledEnable) return;
+  if (++sleepHbCount < cfg.sleepHbTicks) return;
+  sleepHbCount = 0;
+  digitalWrite(RGB_POWER_PIN, HIGH);
+  sleepMs(1);
+  setPixel(0, 0, SLEEP_HB_BRIGHT);
+  sleepMs(SLEEP_HB_MS);
+  setPixel(0, 0, 0);
+  ledPower(false);
+}
+
+// Is the board in a state where sleeping is allowed?  Diagnostics need the loop
+// running, and there is no point sleeping while USB is supplying the power.
+//
+// The boot grace period is a safety net, not a feature: sleeping breaks the USB
+// link, so if the charge detect ever misreads (bad A3 divider, wrong CHGTHRESH)
+// a freshly-flashed unit could sleep before a host can reach it.  Holding it
+// awake for the first SLEEP_BOOT_GRACE_MS guarantees a window to connect and
+// send !SET,SLEEPSEC,0.  (Recovery does not depend on this -- the DFU
+// bootloader runs before the sketch, so a double-tap of RESET always works.)
+static bool lowPowerAllowed() {
+  if (millis() < SLEEP_BOOT_GRACE_MS) return false;
+  return (cfg.idleTimeoutS > 0) && !diagMode && !chargeActive;
+}
+
+// One pass of the sleeping loop: sleep a tick, then decide whether to wake up
+// properly.  Emits no serial -- USB is unplugged by definition here, and CDC
+// writes can block when it is.
+void serviceLowPower() {
+  lowPowerTick();
+
+  // A host may have replugged and sent something; that always ends the mode.
+  if (Serial.available()) { exitLowPower(); pollSerial(); return; }
+
+  // Deliberately not updateChargeState(): that also reads the battery, whose
+  // divider is gated off right now and would return a meaningless value.
+  if (readChargeV() > cfg.chargeThreshV) {
+    chargeActive = true;
+    exitLowPower();
+    return;
+  }
+
+  if (++sleepTickCount >= cfg.sleepPollTicks) {
+    sleepTickCount = 0;
+    LeadState s = lowPowerProbe();
+    slogRecord(s, false);            // for !SLEEPLOG -- no serial while asleep
+    if (s != STATE_FLOAT) {          // something is connected -- wake up properly
+      leadState = s;
+      exitLowPower();
+      return;
+    }
+  }
+
+  sleepHeartbeat();
+}
+
+// ── Current-measurement parking (!FLOOR) ──────────────────────────
+// Holds the board in a fixed, fully-parked state so a series ammeter reads a
+// stable number.  No detection, no LED, no probes: the only activity is a check
+// for an exit command on each tick (a few hundred microseconds every 2 s, well
+// under 1 uA averaged).  Exit with !FLOOR,0 or a reset -- note that exiting over
+// USB means the meter is no longer reading the battery-only path.
+void serviceFloorMode() {
+  static int applied = 0;
+  if (applied != floorMode) {
+    applied = floorMode;
+    silenceSpeaker();
+    speakerOff();
+    setPixel(0, 0, 0);
+    ledPower(false);
+    battSense(false);
+    digitalWrite(MOSFET_PIN, (floorMode == 2) ? MOSFET_OFF : MOSFET_ON);
+  }
+
+  if (floorMode == 3) sleepMs(cfg.sleepTickMs);   // WFI only, for the Standby delta
+  else                lowPowerTick();
+
+  if (Serial.available()) {
+    pollSerial();
+    if (floorMode == 0) {            // !FLOOR,0 -- restore and resume
+      applied = 0;
+      digitalWrite(MOSFET_PIN, MOSFET_ON);
+      battSense(true);
+      ledPower(true);
+      idleSinceMs = millis();
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
 //  DIP SWITCHES -> ACTIVE THRESHOLD
 // ══════════════════════════════════════════════════════════════════
 // Raw pin readings, first digit D8, second digit D10 (HIGH = 1 = switch open).
@@ -617,6 +1431,35 @@ bool voltagePresent() {
   }
   lastRestV = sum / cfg.voltAvgSamples;
   return (fabs(lastRestV - cfg.refCenterV) > cfg.refBandV);
+}
+
+// Voltage check used ONLY by the sleeping probe.  Same reads as
+// voltagePresent(), but the decision uses only the wide "instant bypass" band
+// (voltFastMult * refBandV) and never the tight averaged refBandV test -- on a
+// floating lead, noise that drifts past refBandV is enough to wake the board
+// every couple of seconds, which defeats the whole point of sleeping.
+//
+// NOTE: with a single band there is nothing left to average.  If no individual
+// read exceeds the band then their mean cannot either (the mean deviation is at
+// most the largest single deviation), so the averaged comparison would be
+// mathematically dead code.  The check is therefore "did ANY of sleepVoltAvg
+// reads exceed the band" -- which means MORE reads = MORE chances to trip, the
+// opposite of the awake path.  Keep sleepVoltAvg low, and raise VOLTFAST (not
+// SLEEPAVG) if genuine noise still wakes it.
+bool voltagePresentSleep() {
+  float band = cfg.voltFastMult * cfg.refBandV;
+  float sum  = 0.0f;
+  int   n    = cfg.sleepVoltAvg;
+  for (int i = 0; i < n; i++) {
+    float v = readVoltage();
+    if (fabs(v - cfg.refCenterV) > band) {
+      lastRestV = v;
+      return true;
+    }
+    sum += v;
+  }
+  lastRestV = sum / n;        // for debug only; not a decision input
+  return false;
 }
 
 // Sample the recovery transient once (methods 1 & 2).  MOSFET is assumed to
@@ -1004,6 +1847,10 @@ void printStatus() {
   Serial.print(",alertovr=");     Serial.print(alertOverride ? 1 : 0);
   Serial.print(",muted=");        Serial.print(speakerMuted ? 1 : 0);
   Serial.print(",dirty=");        Serial.print(cfgDirty ? 1 : 0);
+  Serial.print(",lp=");           Serial.print(lowPowerActive ? 1 : 0);
+  Serial.print(",armed=");        Serial.print(sleepArmed ? 1 : 0);
+  Serial.print(",idle=");         Serial.print((millis() - idleSinceMs) / 1000);
+  Serial.print(",floor=");        Serial.print(floorMode);
   Serial.print(",battpct=");      Serial.print(battPct);
   Serial.print(",battv=");        Serial.print(battV, 3);
   Serial.print(",sn=");           Serial.println(unitSN);  // last: may be empty
@@ -1091,6 +1938,9 @@ void handleLine(char *line) {
     const ConfigField *f = findField(arg);
     if (!f) { Serial.print("$ERR,set,unknown key "); Serial.println(arg); return; }
     fieldSet(f, atof(val));
+    // The wake period can only take a value the RTC can produce, so snap it
+    // before echoing -- otherwise the reply reports a rate that was never set.
+    if (strcmp(f->name, "SLEEPTICKMS") == 0) applySleepTickPeriod();
     cfgDirty = true;
     printField(f);                       // echo the (possibly clamped) value
   } else if (strcmp(cmd, "GET") == 0) {
@@ -1166,6 +2016,63 @@ void handleLine(char *line) {
     // Re-enable normal alerts while charging (override auto-clears on unplug).
     alertOverride = arg ? (atoi(arg) != 0) : !alertOverride;
     printStatus();
+  } else if (strcmp(cmd, "SLEEP") == 0) {
+    // !SLEEP  arm the low-power timeout to fire as soon as it is allowed --
+    // i.e. expire the countdown now, so the board sleeps the moment it is idle
+    // and off USB.  Arm it over USB, then unplug (same pattern as !OLOG).
+    // The timeout length and probe cadence are config (SLEEPSEC / SLEEPTICKS
+    // / SLEEPAVG / SLEEPHB / SLEEPPARK), set with !SET and kept with !SAVE.
+    if (arg && atoi(arg) == 0) {
+      sleepArmed = false;                // !SLEEP,0 -- cancel a pending arm
+      idleSinceMs = millis();
+      Serial.println("$OK,sleep,disarmed");
+    } else if (cfg.idleTimeoutS == 0) {
+      Serial.println("$ERR,sleep,disabled (set SLEEPSEC > 0)");
+    } else {
+      sleepArmed = true;
+      Serial.println("$OK,sleep,armed");
+    }
+    printStatus();
+  } else if (strcmp(cmd, "SLEEPLOG") == 0) {
+    // !SLEEPLOG    dump every probe the board made while it was asleep
+    // !SLEEPLOG,0  clear the log
+    // Rows are $SLOG,<i>,<state>,<metric>,<thr>,<retms>,<rest> -- oldest first.
+    // This is how you see what a CLOSED lead actually measures off USB, where
+    // the ground reference (and therefore the metric) is not what it is on the
+    // bench.  Tune the DIP threshold against these numbers, not the USB ones.
+    if (arg && atoi(arg) == 0) {
+      slogValid = 0; slogHead = 0; slogTotal = 0;
+      Serial.println("$OK,sleeplog,cleared");
+    } else {
+      dumpSleepLog();
+    }
+  } else if (strcmp(cmd, "SLEEPTEST") == 0) {
+    // Run one sleeping-mode probe right now, awake and over USB, and report
+    // exactly what it decided.  The probe normally runs unplugged and silent,
+    // so this is the only way to see its numbers.  Short the leads and compare
+    // with the periodic debug line: if this reports CLOSED but a sleeping unit
+    // still won't wake, the difference is the standby wake itself rather than
+    // the probe logic.
+    LeadState s = lowPowerProbe();
+    digitalWrite(MOSFET_PIN, MOSFET_ON);      // undo the probe's park
+    Serial.print("$SLEEPTEST,");
+    Serial.print(s == STATE_FLOAT ? "FLOAT" : (s == STATE_CLOSED ? "CLOSED" : "VOLTAGE"));
+    Serial.print(",metric=");  Serial.print(lastMetric, 4);
+    Serial.print(",thr=");     Serial.print(lastProbeThreshV, 4);   // wake threshold used
+    Serial.print(",awakethr="); Serial.print(activeThreshV, 4);
+    Serial.print(",rest=");    Serial.print(lastRestV, 4);
+    Serial.print(",retms=");   Serial.print(lastReturnMs, 3);
+    Serial.print(",areavms="); Serial.print(lastAreaVms, 4);
+    Serial.print(",method=");  Serial.println(cfg.detectMethod);
+  } else if (strcmp(cmd, "FLOOR") == 0) {
+    // !FLOOR,<0-3>  park the board in a fixed state for a current measurement:
+    //   0 = exit    1 = parked, bridge resting, standby
+    //   2 = parked, bridge off, standby       3 = parked, bridge resting, WFI only
+    // Take the reading on battery with the meter in series; the deltas between
+    // levels are what say which loads are worth switching in hardware.
+    floorMode = arg ? constrain(atoi(arg), 0, 3) : 0;
+    printStatus();
+    Serial.flush();              // last words before the board goes quiet
   } else if (strcmp(cmd, "CAP") == 0) {
     unsigned long d = arg ? atol(arg) : capDurationMs;
     if (d < 1) d = 1;
@@ -1198,8 +2105,16 @@ void setup() {
 
   // Config first: everything below reads cfg.
   configDefaults();
-  bool loaded = configLoad();
-  if (!loaded) configSave();             // first boot / stale layout: seed EEPROM
+  bool loaded    = configLoad();
+  bool migrated  = false;
+  if (!loaded) {
+    // Not a current-version image.  Before falling back to factory defaults,
+    // see whether it is a valid older layout worth upgrading -- a unit tuned in
+    // the field must not lose its thresholds just because the struct grew.
+    // Newest layout first, so a v3 image is never mis-read as something older.
+    migrated = configMigrateV4() || configMigrateV3() || configMigrateV2();
+    configSave();                        // persist the migration (or seed defaults)
+  }
   snLoad();                              // unit serial number (separate block)
 
   analogReadResolution(ADC_RESOLUTION);
@@ -1235,7 +2150,9 @@ void setup() {
   Serial.print("SN: ");
   Serial.println(unitSN[0] ? unitSN : "(unassigned -- write with !SN,<value>)");
   Serial.print("Config: ");
-  Serial.println(loaded ? "loaded from EEPROM" : "defaults (EEPROM seeded)");
+  if (loaded)        Serial.println("loaded from EEPROM");
+  else if (migrated) Serial.println("migrated from v2 EEPROM (tuning preserved)");
+  else               Serial.println("defaults (EEPROM seeded)");
   Serial.print("Speaker: ");
   Serial.println(speakerMuted ? "MUTED (leads closed at boot)" : "enabled");
   Serial.print("DIP: ");
@@ -1243,6 +2160,21 @@ void setup() {
   Serial.print(" -> threshold ");
   Serial.print(cfg.thresh[readDipIndex()], 3);
   Serial.println(" V");
+
+  // Bring up the sleep timer / wake source.  A failure is not fatal: the
+  // timeout mode falls back to a WFI idle, which still parks every load.
+  bool lpOk = lowPowerInit();
+  idleSinceMs = millis();
+  Serial.print("Sleep: ");
+  if (cfg.idleTimeoutS == 0) {
+    Serial.println("disabled (SLEEPSEC=0)");
+  } else {
+    Serial.print(cfg.idleTimeoutS);
+    Serial.print(" s timeout, probe every ");
+    Serial.print((unsigned long)cfg.sleepTickMs * cfg.sleepPollTicks);
+    Serial.println(lpOk ? " ms (standby)" : " ms (WFI fallback -- RTC/LPM init failed)");
+  }
+
   Serial.println("BlinkyHawk_RA4M1 ready.");
 }
 
@@ -1251,6 +2183,11 @@ void setup() {
 // ══════════════════════════════════════════════════════════════════
 void loop() {
   pollSerial();
+
+  // Measurement parking and the sleeping loop each own the board completely --
+  // they run before everything else and return without touching detection.
+  if (floorMode)      { serviceFloorMode(); return; }
+  if (lowPowerActive) { serviceLowPower();  return; }
 
   // ── Diagnostic mode ─────────────────────────────────────────
   if (diagMode) {
@@ -1301,6 +2238,29 @@ void loop() {
       Serial.print(")  -> ");
       Serial.println(leadState == STATE_FLOAT ? "FLOATING" : "CLOSED");
     }
+  }
+
+  // Log awake samples while on battery, at the same cadence the sleeping probe
+  // uses.  This is what makes the baseline shift visible: unplug, let it run
+  // awake for a while, let it sleep, replug and compare the AWAKE and SLEEP
+  // rows in !SLEEPLOG.  Skipped on USB -- the host can already see those.
+  if (!chargeActive && millis() - lastSlogAwakeMs >= cfg.sleepTickMs) {
+    lastSlogAwakeMs = millis();
+    slogRecord(leadState, true);
+  }
+
+  // Inactivity timer.  Anything other than an open lead counts as activity, as
+  // does any state in which sleeping is disallowed -- so the countdown starts
+  // fresh once the board is idle AND allowed to sleep, rather than expiring
+  // while it was busy or on USB.  An armed !SLEEP is exempt from the reset:
+  // it has to survive being issued over USB until the unit is unplugged.
+  if (leadState != STATE_FLOAT || !lowPowerAllowed()) {
+    if (!sleepArmed) idleSinceMs = millis();
+  } else if (sleepArmed ||
+             millis() - idleSinceMs >= (unsigned long)cfg.idleTimeoutS * 1000UL) {
+    sleepArmed = false;
+    enterLowPower();
+    return;
   }
 
   sleepMs(cfg.loopDelayMs);    // pace the loop with a real CPU idle (WFI)

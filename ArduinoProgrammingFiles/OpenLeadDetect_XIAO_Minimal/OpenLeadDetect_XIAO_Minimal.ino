@@ -68,6 +68,10 @@
  *   !OLOG[,0|1]      arm/disarm offline battery log (unplug=start, replug=stop)
  *   !ODUMP           stream the stored offline log
  *   !CAP[,<ms>]      capture ADC across a MOSFET toggle, then dump
+ *   !SLEEP[,...]     inactivity timeout: bare=toggle, 0/1=off/on, <sec>=timeout,
+ *                    NOW=sleep now, PARK,<0|1>=bridge state asleep,
+ *                    TICKS,<n>=probe every n*2 s, HB,<n>=heartbeat every n ticks
+ *   !FLOOR,<0-3>     park the board for a current measurement (see below)
  *   !STATUS  / !?    print current status
  * Data out:
  *   $STATUS,...,stream=..,cal=..,rate=..,openthr=..,adaptthr=..,negfix=..,negv=..,charge=..,alertovr=..,olog=..,ocount=..,battpct=..,battv=..
@@ -80,6 +84,26 @@
  *   $CAPSTART,<n>,<toggleUs>,<durMs>,<fullScale>,<vref>     (capture header)
  *   $CAP,<t_us>,<rawPos>,<rawNeg>                           (capture rows)
  *   $CAPEND
+ *
+ * ── Low-power timeout mode (CFG_LOWPOWER) ─────────────────────────
+ * After 5 minutes in which the leads have only ever read OPEN, the board parks
+ * every load it can switch (LED rail, speaker, battery-sense divider,
+ * optionally the bridge) and drops into the deepest sleep the chip has --
+ * Software Standby on the RA4M1, woken by the RTC periodic interrupt.  It wakes
+ * every 2 s, runs one cheap probe, and goes straight back to sleep unless the
+ * leads are closed or voltage is present, in which case it returns to full-rate
+ * operation.  A 6 ms dim-blue flash once a minute shows it is asleep, not dead.
+ * Sleeping is skipped entirely while charging, in diagnostic/calibration mode,
+ * or while the offline log is armed.
+ *
+ * !FLOOR,<1-3> parks the board in one fixed state so a series ammeter can read
+ * a stable current.  The point is the deltas, which say what is worth switching
+ * in hardware on the next board revision:
+ *   1 vs 3  = what Software Standby buys over a plain WFI idle (the MCU's share)
+ *   1 vs 2  = the bridge leg's share (bridge resting vs disconnected)
+ *   1       = the firmware-reachable floor; whatever is left is hardware --
+ *             the voltage reference's bias current, the LDO and charger
+ *             quiescent, and any permanently-connected divider strings.
  */
 
 #include <Adafruit_NeoPixel.h>
@@ -145,6 +169,18 @@
   // sampling over the USB link).  Replug and the GUI pulls the log (!ODUMP).
   // Needs A3 (VBUS sense) + A5; leave undefined on the other boards.
   #define CFG_OFFLINE_LOG     1
+  // Inactivity timeout / low-power mode.  After IDLE_TIMEOUT_MS with nothing
+  // but open leads the board parks everything it can switch off and polls on a
+  // slow tick instead of running the detection loop flat out.
+  #define CFG_LOWPOWER        1
+  // Deepest sleep this chip offers.  RA4M1 has no Deep Software Standby
+  // (BSP_FEATURE_LPM_HAS_DEEP_STANDBY = 0), so Software Standby is the floor:
+  // CPU + all peripheral clocks stopped, RAM retained, woken by the RTC
+  // periodic interrupt.  The core clocks the RTC from LOCO (see
+  // RTC_CLOCK_SOURCE in the RTC library), which keeps running in Standby, so
+  // this needs no 32.768 kHz crystal.  Comment out to fall back to the WFI
+  // idle path (timeout mode still works, it just doesn't sleep as deeply).
+  #define CFG_LPM_STANDBY     1
 
 #elif defined(BOARD_XIAO_SAMD21)
   #if !defined(ARDUINO_ARCH_SAMD)
@@ -358,6 +394,66 @@ int   battPct = 0;      // 0..100 %, linear EMPTY..FULL
 unsigned long lastSerialTime = 0;
 const unsigned long serialInterval = 250;   // ms between debug prints
 const unsigned long generalDelay = 50;
+
+// ── Low-power timeout mode ────────────────────────────────────────
+// After IDLE_TIMEOUT_MS in which the leads have only ever read OPEN, the board
+// stops running the detection loop, parks every load it can switch off (LED
+// rail, speaker, battery-sense divider, optionally the bridge) and drops into
+// the deepest sleep the chip has.  It wakes on a slow RTC tick, runs one cheap
+// probe, and either goes straight back to sleep (still open) or returns to full
+// -rate operation (closed leads or voltage present).
+//
+// The energy cost of the mode is (wake current x awake time) / tick period, so
+// the two knobs that matter are SLEEP_POLL_TICKS and how much work the probe
+// does -- hence the reduced averaging below.  Everything here is deliberately
+// runtime-tunable (!SLEEP) so the current draw can be characterised on the
+// bench without a reflash.
+#ifdef CFG_LOWPOWER
+unsigned long IDLE_TIMEOUT_MS = 5UL * 60 * 1000;   // open-lead inactivity before sleeping
+
+// The RTC periodic interrupt is the wake source; the core's RTC library caps
+// its period at 2 s (Period::ONCE_EVERY_2_SEC), so that is the tick quantum.
+// SLEEP_POLL_TICKS sets how many ticks pass between probes: 1 = probe every
+// 2 s, 2 = every 4 s, etc.  Worst-case detection latency = tick x ticks.
+const unsigned long SLEEP_TICK_MS   = 2000;
+unsigned int  SLEEP_POLL_TICKS      = 1;      // probes every SLEEP_TICK_MS * this
+int           SLEEP_VOLT_SAMPLES    = 3;      // averaged reads per probe (vs VOLT_AVG_SAMPLES awake)
+
+// Heartbeat: a single very short dim-blue flash every N ticks so the unit is
+// visibly asleep rather than dead.  30 ticks = once a minute; 0 disables it.
+// At 6 ms on, ~1 mA, once a minute this averages well under 1 uA.
+unsigned int  SLEEP_HEARTBEAT_TICKS = 30;
+const unsigned long SLEEP_HB_MS     = 6;
+const uint8_t       SLEEP_HB_BRIGHT = 12;
+const unsigned long SLEEP_BOOT_GRACE_MS = 30000;   // never sleep this soon after boot
+
+// Where to park the bridge MOSFET while asleep.  Which state draws less is a
+// board question, not a firmware one -- flip it with !SLEEP,PARK,<0|1> and
+// measure both.  Parking it off costs an extra settle before each probe.
+bool sleepParkBridgeOff = false;
+
+bool          sleepEnabled    = true;   // master enable for the whole mode
+bool          lowPowerActive  = false;  // currently parked + sleeping
+unsigned long idleSinceMs     = 0;      // millis() of the last non-open activity
+unsigned int  sleepTickCount  = 0;      // ticks since the last probe
+unsigned int  sleepHbCount    = 0;      // ticks since the last heartbeat
+
+// Current-measurement parking mode (!FLOOR).  Holds the board in one fixed
+// state forever so a series ammeter reads a stable number:
+//   1 = parked, bridge resting (ON), deepest sleep
+//   2 = parked, bridge OFF, deepest sleep   -> delta vs 1 = bridge/reference leg
+//   3 = parked, bridge resting (ON), WFI idle only (no Standby)
+//                                           -> delta vs 1 = what Standby buys
+int floorMode = 0;
+
+// Defined below sleepMs(); declared here so the command handler can reach them.
+bool lowPowerInit();
+void enterLowPower();
+void exitLowPower();
+void serviceLowPower();
+void serviceFloorMode();
+#endif
+void pollSerial();
 
 #ifdef CFG_A5_MONITOR
 unsigned long lastA5Time = 0;
@@ -952,6 +1048,16 @@ void printStatus() {
   Serial.print(",olog=");         Serial.print((int)offlineState);
   Serial.print(",ocount=");       Serial.print(offCount);
 #endif
+#ifdef CFG_LOWPOWER
+  Serial.print(",sleep=");        Serial.print(sleepEnabled ? 1 : 0);
+  Serial.print(",lp=");           Serial.print(lowPowerActive ? 1 : 0);
+  Serial.print(",timeout=");      Serial.print(IDLE_TIMEOUT_MS / 1000);
+  Serial.print(",idle=");         Serial.print((millis() - idleSinceMs) / 1000);
+  Serial.print(",ticks=");        Serial.print(SLEEP_POLL_TICKS);
+  Serial.print(",hb=");           Serial.print(SLEEP_HEARTBEAT_TICKS);
+  Serial.print(",park=");         Serial.print(sleepParkBridgeOff ? 1 : 0);
+  Serial.print(",floor=");        Serial.print(floorMode);
+#endif
 #ifdef CFG_BATT_MONITOR
   Serial.print(",battpct=");     Serial.print(battPct);
   Serial.print(",battv=");       Serial.println(battV, 3);
@@ -1210,6 +1316,54 @@ void handleLine(char *line) {
 #else
     Serial.println("$ERR,odump,unsupported on this board");
 #endif
+  } else if (strcmp(cmd, "SLEEP") == 0) {
+    // !SLEEP            toggle the inactivity timeout on/off
+    // !SLEEP,0 | ,1     disable / enable it
+    // !SLEEP,<sec>      set the timeout (any value > 1)
+    // !SLEEP,NOW        park and sleep immediately (skip the countdown)
+    // !SLEEP,PARK,<0|1> park the bridge MOSFET on (0) or off (1) while asleep
+    // !SLEEP,TICKS,<n>  probe every n wake ticks (n * 2 s between probes)
+    // !SLEEP,HB,<n>     heartbeat flash every n ticks (0 = none)
+#ifdef CFG_LOWPOWER
+    bool sleepNow = false;
+    if (!arg) {
+      sleepEnabled = !sleepEnabled;
+    } else if (toupper(arg[0]) == 'N') {          // NOW
+      sleepEnabled = true;
+      sleepNow     = true;
+    } else if (toupper(arg[0]) == 'P') {          // PARK,<0|1>
+      char *v = strchr(arg, ',');
+      if (v) sleepParkBridgeOff = (atoi(v + 1) != 0);
+    } else if (toupper(arg[0]) == 'T') {          // TICKS,<n>
+      char *v = strchr(arg, ',');
+      if (v) { int n = atoi(v + 1); SLEEP_POLL_TICKS = (n < 1) ? 1 : n; }
+    } else if (toupper(arg[0]) == 'H') {          // HB,<n>
+      char *v = strchr(arg, ',');
+      if (v) { int n = atoi(v + 1); SLEEP_HEARTBEAT_TICKS = (n < 0) ? 0 : n; }
+    } else {
+      long s = atol(arg);
+      if (s <= 1) sleepEnabled = (s != 0);
+      else        { IDLE_TIMEOUT_MS = (unsigned long)s * 1000UL; sleepEnabled = true; }
+    }
+    // "NOW" backdates the timer so the next loop pass sees it already expired.
+    idleSinceMs = sleepNow ? (millis() - IDLE_TIMEOUT_MS) : millis();
+#else
+    Serial.println("$ERR,sleep,unsupported on this board");
+#endif
+    printStatus();
+  } else if (strcmp(cmd, "FLOOR") == 0) {
+    // !FLOOR,<0-3>  park the board in a fixed state for a current measurement:
+    //   0 = exit    1 = parked, bridge resting, standby
+    //   2 = parked, bridge off, standby       3 = parked, bridge resting, WFI only
+    // Take the reading on battery with the meter in series; the deltas between
+    // levels are what tell you which loads are worth switching in hardware.
+#ifdef CFG_LOWPOWER
+    floorMode = arg ? constrain(atoi(arg), 0, 3) : 0;
+    printStatus();
+    Serial.flush();               // last words before the board goes quiet
+#else
+    Serial.println("$ERR,floor,unsupported on this board");
+#endif
   } else if (strcmp(cmd, "CAP") == 0) {
     unsigned long d = arg ? atol(arg) : capDurationMs;
     if (d < 1) d = 1;
@@ -1266,6 +1420,284 @@ void sleepMs(unsigned long ms) {
 // That needs clock reconfiguration + a defined wake source and must be bench-
 // verified, so it is intentionally kept out of this portable path.
 #endif
+
+// ══════════════════════════════════════════════════════════════════
+//  LOW-POWER TIMEOUT MODE
+// ══════════════════════════════════════════════════════════════════
+#ifdef CFG_LOWPOWER
+
+// ── The sleep itself ──────────────────────────────────────────────
+// lowPowerInit() is called once from setup(); lowPowerTick() blocks until the
+// next tick.  Two implementations: real Software Standby on the RA4M1, and a
+// portable WFI fallback so the timeout mode still works (just less deeply) on
+// any board that doesn't define CFG_LPM_STANDBY.
+#ifdef CFG_LPM_STANDBY
+#include "RTC.h"
+#include "r_lpm.h"
+
+// ⚠ SBYCR IS GLOBAL STATE.  R_LPM_Open() / R_LPM_LowPowerReconfigure() write the
+// SBYCR register immediately from cfg.low_power_mode:
+//     LPM_MODE_SLEEP   -> SBYCR = 0x4000 (SSBY=0)
+//     LPM_MODE_STANDBY -> SBYCR = 0xC000 (SSBY=1)
+// SSBY decides what EVERY __WFI() in the program does -- R_LPM_LowPowerModeEnter
+// itself only executes "dsb; wfi", it does not set SSBY.  So opening the driver
+// in STANDBY mode silently converts sleepMs()'s idle WFI into a full Software
+// Standby: all peripheral clocks stop (USB dies mid-enumeration, "USB device not
+// recognized") and millis() freezes, so sleepMs()'s millis() deadline never
+// arrives and the board locks up until reset.
+//
+// Therefore: stay in SLEEP mode at all times, and switch to STANDBY only for the
+// duration of a deliberate sleep in lowPowerTick(), switching straight back.
+static lpm_instance_ctrl_t lpmCtrl;
+static lpm_cfg_t           lpmSleepCfg;     // SSBY=0: plain WFI idle (the safe default)
+static lpm_cfg_t           lpmStandbyCfg;   // SSBY=1: WFI enters Software Standby
+static volatile bool       lpmRtcTick = false;
+static bool                lpmReady   = false;
+
+static void lpmRtcCallback() { lpmRtcTick = true; }
+
+// Bring up the RTC periodic interrupt and open the LPM driver.  Returns false
+// if either fails, in which case lowPowerTick() silently degrades to WFI --
+// the mode still functions, it just draws more.
+bool lowPowerInit() {
+  if (!RTC.begin()) return false;
+
+  // The periodic interrupt only runs once the RTC counter is started, so give
+  // it a nominal time if it isn't already running.  The value is irrelevant --
+  // nothing here reads the calendar, we only want the divider ticking.
+  RTCTime seed(1, Month::JANUARY, 2025, 0, 0, 0,
+               DayOfWeek::WEDNESDAY, SaveLight::SAVING_TIME_INACTIVE);
+  RTC.setTimeIfNotRunning(seed);
+
+  if (!RTC.setPeriodicCallback(lpmRtcCallback, Period::ONCE_EVERY_2_SEC)) return false;
+
+  lpmStandbyCfg.low_power_mode       = LPM_MODE_STANDBY;
+  lpmStandbyCfg.standby_wake_sources = LPM_STANDBY_WAKE_SOURCE_RTCPRD;
+  lpmSleepCfg.low_power_mode         = LPM_MODE_SLEEP;
+  lpmSleepCfg.standby_wake_sources   = 0;
+
+  // Open in SLEEP mode: this leaves SSBY clear, so sleepMs()'s WFI keeps
+  // behaving as an ordinary CPU idle.  Opening in STANDBY here would arm every
+  // WFI in the program -- see the warning above.
+  if (R_LPM_Open(&lpmCtrl, &lpmSleepCfg) != FSP_SUCCESS) return false;
+
+  lpmReady = true;
+  return true;
+}
+
+// Enter Software Standby until the RTC periodic interrupt fires.  Any other
+// enabled interrupt can also return from the WFI inside the driver, so this
+// loops until the tick flag is actually set.
+//
+// NOTE: every peripheral clock stops in Standby, including the timer behind
+// millis() -- so millis() does not advance while asleep.  Nothing in this mode
+// depends on it (ticks are counted, not timed), and exitLowPower() re-bases
+// idleSinceMs on wake, but keep it in mind before adding millis() logic here.
+void lowPowerTick() {
+  if (!lpmReady) { sleepMs(SLEEP_TICK_MS); return; }
+
+  // Arm Software Standby (SSBY=1) only for this sleep, and disarm it again
+  // immediately afterwards so no other WFI in the program can trip into it.
+  R_LPM_LowPowerReconfigure(&lpmCtrl, &lpmStandbyCfg);
+  lpmRtcTick = false;
+  while (!lpmRtcTick) R_LPM_LowPowerModeEnter(&lpmCtrl);
+  R_LPM_LowPowerReconfigure(&lpmCtrl, &lpmSleepCfg);
+}
+
+#else   // portable fallback: WFI idle, millis() keeps running
+bool lowPowerInit() { return true; }
+void lowPowerTick() { sleepMs(SLEEP_TICK_MS); }
+#endif
+
+// ── Load parking ──────────────────────────────────────────────────
+// Each of these is a load that runs continuously in normal operation and
+// contributes directly to the sleeping current.
+
+// The addressable LED draws its own quiescent current whenever it has power,
+// even showing black -- blanking the pixel is not enough, the rail has to go.
+// Boards without a power-enable pin can only blank it (and will read higher).
+static void ledPower(bool on) {
+#ifdef RGB_POWER_PIN
+  digitalWrite(RGB_POWER_PIN, on ? HIGH : LOW);
+  if (on) {
+    sleepMs(1);                 // let the LED's rail come up before clocking data
+    pixel.clear();
+    pixel.show();
+  }
+#else
+  if (!on) setPixel(0, 0, 0);   // no rail switch: blanking is all we can do
+#endif
+}
+
+// The onboard Vbatt/2 sense divider is gated by BAT_READ_EN.  setup() drives it
+// HIGH and normal operation leaves it there, so it draws continuously; there is
+// no reason to keep it enabled while asleep.
+static void battSense(bool on) {
+#ifdef CFG_BATT_MONITOR
+  digitalWrite(BATT_EN_PIN, on ? HIGH : LOW);
+  // NOTE: the divider needs time to settle after re-enabling (see
+  // startupBatteryIndicate), so the first battV reading after a wake reads low.
+#else
+  (void)on;
+#endif
+}
+
+// Park every switchable load and mark the mode active.
+void enterLowPower() {
+  lowPowerActive = true;
+  sleepTickCount = 0;
+  sleepHbCount   = 0;
+
+  silenceSpeaker();
+  speakerOff();                  // make sure the pin is parked idle, not just quiet
+  setPixel(0, 0, 0);
+  ledPower(false);
+  battSense(false);
+  digitalWrite(MOSFET_PIN, sleepParkBridgeOff ? MOSFET_OFF : MOSFET_ON);
+}
+
+// Restore everything and hand control back to the normal loop.
+void exitLowPower() {
+  lowPowerActive = false;
+  digitalWrite(MOSFET_PIN, MOSFET_ON);   // resting state
+  battSense(true);
+  ledPower(true);
+
+  // millis() froze while we were in Standby, so the idle timer has to be
+  // re-based here rather than carried across the sleep.
+  idleSinceMs = millis();
+}
+
+// One probe pass: is anything still there?  Deliberately cheaper than
+// runDetection() -- fewer averaged reads, no agreement count, no display
+// debounce -- because this runs on every tick and its duration is most of the
+// mode's energy budget.  Returns STATE_FLOAT if the leads are still open.
+LeadState lowPowerProbe() {
+#ifdef CFG_A5_THRESH
+  updateAdaptiveThreshold();                  // same threshold the awake loop would use
+#endif
+  digitalWrite(MOSFET_PIN, MOSFET_ON);        // bridge to resting for the test
+  if (sleepParkBridgeOff) sleepMs(SETTLE_Post_MS);   // only needed if it was parked off
+  else                    delayMicroseconds(SETTLE_Pre_uS);
+
+  int saved = VOLT_AVG_SAMPLES;
+  VOLT_AVG_SAMPLES = SLEEP_VOLT_SAMPLES;
+  bool present = (voltOverride == VOLT_DISABLED) ? false : voltagePresent();
+  VOLT_AVG_SAMPLES = saved;
+
+  LeadState result;
+  if (present) {
+    result = STATE_VOLTAGE;
+  } else {
+    // Same toggle-settle-read as runMosfetTest(), minus its trailing settle --
+    // we are about to park the pin anyway, so that delay would be pure waste.
+    digitalWrite(MOSFET_PIN, MOSFET_OFF);
+    delayMicroseconds(SETTLE_Pre_uS);
+    lastTestV = readVoltage();
+    result = (fabs(lastTestV) > OPEN_THRESH_V) ? STATE_FLOAT : STATE_CLOSED;
+  }
+
+  digitalWrite(MOSFET_PIN, sleepParkBridgeOff ? MOSFET_OFF : MOSFET_ON);
+  return result;
+}
+
+// Brief "I'm asleep, not dead" flash.
+static void sleepHeartbeat() {
+  if (SLEEP_HEARTBEAT_TICKS == 0) return;
+  if (++sleepHbCount < SLEEP_HEARTBEAT_TICKS) return;
+  sleepHbCount = 0;
+#ifdef RGB_POWER_PIN
+  digitalWrite(RGB_POWER_PIN, HIGH);
+  sleepMs(1);
+#endif
+  setPixel(0, 0, SLEEP_HB_BRIGHT);
+  sleepMs(SLEEP_HB_MS);
+  setPixel(0, 0, 0);
+  ledPower(false);
+}
+
+// Is the board in a state where sleeping is allowed?  Diagnostics, calibration
+// and the offline log all need the loop running, and there is no point sleeping
+// while USB is supplying the power.
+static bool lowPowerAllowed() {
+  // Boot grace period: sleeping breaks the USB link, so always hold the board
+  // awake long enough after a flash for a host to connect and disable the mode.
+  if (millis() < SLEEP_BOOT_GRACE_MS) return false;
+  if (!sleepEnabled || diagMode || calMode) return false;
+#ifdef CFG_CHARGE_DETECT
+  if (chargeActive) return false;
+#endif
+#ifdef CFG_OFFLINE_LOG
+  if (offlineState != OFF_IDLE) return false;
+#endif
+  return true;
+}
+
+// One pass of the sleeping loop: sleep a tick, then decide whether to wake up
+// properly.  Emits no serial -- USB is unplugged by definition here, and CDC
+// writes can block when it is.
+void serviceLowPower() {
+  lowPowerTick();
+
+  // A host may have replugged and sent something; that always ends the mode.
+  if (Serial.available()) { exitLowPower(); pollSerial(); return; }
+
+#ifdef CFG_CHARGE_DETECT
+  // Deliberately not updateChargeState(): that also reads the battery, whose
+  // divider is currently gated off and would return a meaningless value.
+  if (readChargeV() > CHARGE_THRESH_V) {
+    chargeActive = true;
+    exitLowPower();
+    return;
+  }
+#endif
+
+  if (++sleepTickCount >= SLEEP_POLL_TICKS) {
+    sleepTickCount = 0;
+    LeadState s = lowPowerProbe();
+    if (s != STATE_FLOAT) {          // something is connected -- wake up properly
+      leadState = s;
+      exitLowPower();
+      return;
+    }
+  }
+
+  sleepHeartbeat();
+}
+
+// ── Current-measurement parking (!FLOOR) ──────────────────────────
+// Holds the board in a fixed, fully-parked state so a series ammeter reads a
+// stable number.  No detection, no LED, no probes: the only activity is a check
+// for an exit command on each tick (a few hundred microseconds every 2 s, well
+// under 1 uA of averaged overhead).  Exit with !FLOOR,0 or a reset -- note that
+// exiting over USB means the meter is no longer reading the battery-only path.
+void serviceFloorMode() {
+  static int applied = 0;
+  if (applied != floorMode) {
+    applied = floorMode;
+    silenceSpeaker();
+    speakerOff();
+    setPixel(0, 0, 0);
+    ledPower(false);
+    battSense(false);
+    digitalWrite(MOSFET_PIN, (floorMode == 2) ? MOSFET_OFF : MOSFET_ON);
+  }
+
+  if (floorMode == 3) sleepMs(SLEEP_TICK_MS);   // WFI only, for the Standby delta
+  else                lowPowerTick();
+
+  if (Serial.available()) {
+    pollSerial();
+    if (floorMode == 0) {            // !FLOOR,0 -- restore and resume
+      applied = 0;
+      digitalWrite(MOSFET_PIN, MOSFET_ON);
+      battSense(true);
+      ledPower(true);
+      idleSinceMs = millis();
+    }
+  }
+}
+#endif  // CFG_LOWPOWER
 
 // Accumulate serial bytes into cmdBuf; dispatch on newline.
 void pollSerial() {
@@ -1328,6 +1760,19 @@ void setup() {
   Serial.print("Speaker: ");
   Serial.println(speakerMuted ? "MUTED (leads closed at boot)" : "enabled");
 
+#ifdef CFG_LOWPOWER
+  // Bring up the sleep timer/wake source.  A failure here is not fatal: the
+  // timeout mode falls back to a WFI idle, which still parks every load, it
+  // just leaves the core clocked.
+  bool lpOk = lowPowerInit();
+  idleSinceMs = millis();
+  Serial.print("Low-power timeout: ");
+  Serial.print(IDLE_TIMEOUT_MS / 1000);
+  Serial.print(" s, wake every ");
+  Serial.print(SLEEP_TICK_MS * SLEEP_POLL_TICKS);
+  Serial.println(lpOk ? " ms (standby)" : " ms (WFI fallback - RTC/LPM init failed)");
+#endif
+
   Serial.println("OpenLeadDetect_XIAO_Minimal ready.");
 }
 
@@ -1336,6 +1781,13 @@ void setup() {
 // ==================================================================
 void loop() {
   pollSerial();
+
+#ifdef CFG_LOWPOWER
+  // Measurement parking and the sleeping loop both own the board completely --
+  // they run before everything else and return without touching detection.
+  if (floorMode)      { serviceFloorMode(); return; }
+  if (lowPowerActive) { serviceLowPower();  return; }
+#endif
 
 #ifdef CFG_OFFLINE_LOG
   // Offline log takes priority and runs the arm/log/ready state machine.  While
@@ -1412,6 +1864,18 @@ void loop() {
 #endif
   updateAlerts();
   updateSpeaker();
+
+#ifdef CFG_LOWPOWER
+  // Inactivity timer.  Anything other than an open lead counts as activity, as
+  // does any state in which sleeping is disallowed (so the countdown starts
+  // fresh once the board is idle AND allowed to sleep, rather than expiring
+  // while it was busy).
+  if (leadState != STATE_FLOAT || !lowPowerAllowed()) idleSinceMs = millis();
+  else if (millis() - idleSinceMs >= IDLE_TIMEOUT_MS) {
+    enterLowPower();
+    return;
+  }
+#endif
 
   // ── Periodic serial debug ──
   if (millis() - lastSerialTime >= serialInterval) {
