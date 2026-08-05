@@ -891,6 +891,17 @@ const unsigned long CHARGE_BLINK_PERIOD_MS = 2000;
 const unsigned long CHARGE_BLINK_ON_MS     = 250;
 const uint8_t       CHARGE_BLINK_BRIGHT    = 25;
 
+// Power-on battery cue.  Everything here is dead time between flipping the
+// switch and being able to measure, so it is kept as short as still reads as a
+// countable blink.  The pre-gap doubles as the BAT_READ_EN divider settle
+// (see setup(), which enables it first thing), so that settle costs nothing.
+const unsigned long BOOT_CUE_PREGAP_MS = 120;
+const unsigned long BOOT_CUE_ON_MS     = 90;
+const unsigned long BOOT_CUE_OFF_MS    = 90;
+
+// VBUS test used before the config is loaded, so it cannot use cfg.chargeThreshV.
+const float BOOT_USB_THRESH_V = 2.0f;
+
 // Battery monitor
 float battV   = 0.0f;
 int   battPct = 0;
@@ -1769,21 +1780,25 @@ void updateAlerts() {
 
 // Power-on charge-level cue: 1..4 slow green blinks (0-25% = 1 ... 75-100% = 4).
 void startupBatteryIndicate() {
-  // BAT_READ_EN was only just driven HIGH, so discard reads over a settling
-  // window before averaging -- otherwise the count reflects a rising voltage.
-  for (int i = 0; i < 20; i++) { readBattV(); delay(5); }
+  // BAT_READ_EN is driven HIGH at the very top of setup(), so by now the
+  // divider has had the whole of init to settle; this pre-gap finishes the job
+  // and is the pause the cue wanted anyway, so the settle is effectively free.
+  // (It replaces a dedicated 100 ms discard loop that used to sit here.)
+  sleepMs(BOOT_CUE_PREGAP_MS);
+  for (int i = 0; i < 4; i++) readBattV();      // discard: flush the ADC S/H
   float v = 0.0f;
-  for (int i = 0; i < 8; i++) { v += readBattV(); delay(2); }
+  for (int i = 0; i < 8; i++) v += readBattV();
   v /= 8.0f;
 
   int blinks = battPercentOf(v) / 25 + 1;
   if (blinks > 4) blinks = 4;
-  sleepMs(400);
   for (int i = 0; i < blinks; i++) {
     setPixel(0, CHARGE_BLINK_BRIGHT, 0);
-    sleepMs(200);
+    sleepMs(BOOT_CUE_ON_MS);
     setPixel(0, 0, 0);
-    sleepMs(250);
+    // No trailing gap after the last blink -- nothing follows it to separate
+    // from, and it would just delay the first measurement.
+    if (i < blinks - 1) sleepMs(BOOT_CUE_OFF_MS);
   }
 }
 
@@ -2100,8 +2115,23 @@ void pollSerial() {
 //  SETUP
 // ══════════════════════════════════════════════════════════════════
 void setup() {
+  // Battery sense first.  The BAT_READ_EN divider needs time to settle before
+  // the power-on charge cue can read it; starting it here lets that settle
+  // overlap the rest of init rather than being paid for as its own delay.
+  pinMode(BATT_PIN, INPUT);              // BAT_DET_PIN (P105) = Vbatt/2 sense
+  pinMode(BATT_EN_PIN, OUTPUT);          // BAT_READ_EN (P400)
+  digitalWrite(BATT_EN_PIN, HIGH);
+
+  analogReadResolution(ADC_RESOLUTION);
+  pinMode(CHARGE_PIN, INPUT);            // A3 = VBUS/2 (USB-power sense)
+
   Serial.begin(115200);
-  delay(300);
+  // The USB settle only buys anything when a host is actually attached.  On
+  // battery -- the case that decides time-to-first-measurement -- it is pure
+  // dead time, so gate it on VBUS.  cfg is not loaded yet, hence the literal
+  // threshold instead of cfg.chargeThreshV.
+  readChargeV();                         // throwaway: first conversion after reset
+  if (readChargeV() > BOOT_USB_THRESH_V) delay(300);
 
   // Config first: everything below reads cfg.
   configDefaults();
@@ -2117,8 +2147,6 @@ void setup() {
   }
   snLoad();                              // unit serial number (separate block)
 
-  analogReadResolution(ADC_RESOLUTION);
-
   pinMode(MOSFET_PIN, OUTPUT);
   digitalWrite(MOSFET_PIN, MOSFET_ON);   // resting state: MOSFET high
 
@@ -2131,11 +2159,8 @@ void setup() {
   pinMode(SPEAKER_PIN, OUTPUT);
   digitalWrite(SPEAKER_PIN, SPEAKER_OFF);
 
-  pinMode(CHARGE_PIN, INPUT);            // A3 = VBUS/2 (USB-power sense)
-  pinMode(BATT_PIN, INPUT);              // BAT_DET_PIN (P105) = Vbatt/2 sense
-  pinMode(BATT_EN_PIN, OUTPUT);          // BAT_READ_EN (P400)
-  digitalWrite(BATT_EN_PIN, HIGH);       // enable the battery-sense divider
-  delay(2);
+  // (CHARGE_PIN / BATT_PIN / BATT_EN_PIN are set up at the top of setup(), so
+  //  the battery divider is already settling while the rest of this runs.)
 
   pinMode(RGB_POWER_PIN, OUTPUT);        // onboard NeoPixel power rail
   digitalWrite(RGB_POWER_PIN, HIGH);
