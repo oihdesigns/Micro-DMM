@@ -233,6 +233,18 @@ class App(tk.Tk):
         self.logscale_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(ctl, text="Log scale", variable=self.logscale_var,
                         command=self._draw_live).pack(side="left")
+
+        self.ylock_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(ctl, text="Lock Y", variable=self.ylock_var,
+                        command=self._on_ylock).pack(side="left", padx=(10, 2))
+        self.ymax_var = tk.StringVar(value="")
+        ymax_e = ttk.Entry(ctl, width=8, textvariable=self.ymax_var)
+        ymax_e.pack(side="left", padx=2)
+        ymax_e.bind("<Return>", lambda _e: self._apply_ymax())
+        ymax_e.bind("<FocusOut>", lambda _e: self._apply_ymax())
+        ttk.Button(ctl, text="Full",
+                   command=lambda: self._set_ymax(65535)).pack(side="left", padx=2)
+
         ttk.Button(ctl, text="Flicker detect",
                    command=lambda: self._send("!FLICKER")).pack(side="left", padx=10)
         self.flicker_lbl = ttk.Label(ctl, text="flicker: --", font=("Consolas", 10))
@@ -756,6 +768,37 @@ class App(tk.Tk):
             self.live_tree.insert("", "end", iid=n,
                                   values=(nm if nm else "clear", "--"))
 
+    def _locked_ymax(self):
+        """Fixed y-axis top for the live chart, or None to let it autoscale."""
+        if not self.ylock_var.get():
+            return None
+        try:
+            top = float(self.ymax_var.get())
+        except ValueError:
+            return None
+        return top if top > 0 else None
+
+    def _on_ylock(self):
+        """Ticking the box freezes the axis where it currently sits, so the view
+        does not jump. Untick to go back to autoscaling."""
+        if self.ylock_var.get() and not self.ymax_var.get().strip():
+            top = self.live_ax.get_ylim()[1]
+            if not top or top <= 0:
+                top = max(self.live_vals.values(), default=0) or 65535
+            self.ymax_var.set(f"{top:.0f}")
+        self._draw_live()
+
+    def _set_ymax(self, value):
+        self.ymax_var.set(str(int(value)))
+        self.ylock_var.set(True)
+        self._draw_live()
+
+    def _apply_ymax(self):
+        """Typing a value implies you want it locked."""
+        if self.ymax_var.get().strip():
+            self.ylock_var.set(True)
+        self._draw_live()
+
     def _draw_live(self):
         names = [CHANNELS[i][0] for i in SPECTRUM_ORDER]
         vals = [self.live_vals.get(n, 0) for n in names]
@@ -771,8 +814,15 @@ class App(tk.Tk):
         self.live_ax.set_xticklabels(labels, fontsize=8)
         self.live_ax.set_ylabel("counts")
         self.live_ax.set_title("AS7343 spectrum")
-        if self.logscale_var.get():
+
+        log = self.logscale_var.get()
+        if log:
             self.live_ax.set_yscale("log")
+
+        top = self._locked_ymax()
+        if top is not None:
+            self.live_ax.set_ylim(bottom=1 if log else 0, top=top)
+        elif log:
             self.live_ax.set_ylim(bottom=1)
         self.live_ax.grid(axis="y", alpha=0.3)
         self.live_fig.tight_layout()

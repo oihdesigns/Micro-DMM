@@ -158,6 +158,11 @@ feature exists: point it at `smux` and you can see the cycle-count cost directly
 * **Live** — spectrum bar chart (12 spectral channels, wavelength-ordered and
   wavelength-coloured), linear or log, single read or continuous stream, plus a
   one-shot flicker detect.
+  **Lock Y** freezes the y-axis so bars stay comparable between readings instead
+  of the axis rescaling under you every sample. Ticking it with the box empty
+  pins the axis where it currently sits; type a number to set an explicit top, or
+  hit **Full** for the sensor's 16-bit full scale (65535). Untick to go back to
+  autoscaling. Under log scale the locked axis starts at 1 rather than 0.
 * **Controls** — gain, ATIME, ASTEP with live integration-time readout, SMUX,
   WTIME + wait enable, auto-zero, LED enable/current, spectral threshold
   (low/high/channel/persistence/interrupt), the 18-channel mask with
