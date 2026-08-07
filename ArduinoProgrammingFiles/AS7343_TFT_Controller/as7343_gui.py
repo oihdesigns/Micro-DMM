@@ -140,6 +140,7 @@ class App(tk.Tk):
         self.enabled_names = []  # channel names currently streamed, in order
         self.live_vals = {}      # name -> value
         self._chan_resync = False
+        self._ymax_is_full = False  # live y-axis is tracking ADC full scale
         self.live_asat = False
         self.live_dsat = False
 
@@ -242,8 +243,8 @@ class App(tk.Tk):
         ymax_e.pack(side="left", padx=2)
         ymax_e.bind("<Return>", lambda _e: self._apply_ymax())
         ymax_e.bind("<FocusOut>", lambda _e: self._apply_ymax())
-        ttk.Button(ctl, text="Full",
-                   command=lambda: self._set_ymax(65535)).pack(side="left", padx=2)
+        self.full_btn = ttk.Button(ctl, text="Full scale", command=self._on_full_scale)
+        self.full_btn.pack(side="left", padx=2)
 
         ttk.Button(ctl, text="Flicker detect",
                    command=lambda: self._send("!FLICKER")).pack(side="left", padx=10)
@@ -269,6 +270,7 @@ class App(tk.Tk):
         self.live_tree.column("val", width=90, anchor="e")
         self.live_tree.pack(fill="y", expand=True)
 
+        self._refresh_full_scale()
         self._draw_live()
 
     # ── Controls tab ────────────────────────────────────────────────────────
@@ -630,6 +632,7 @@ class App(tk.Tk):
 
         self.tint_lbl.config(text=f"tint: {self.tint_ms:.2f} ms")
         self.tint_ctrl_lbl.config(text=f"{self.tint_ms:.2f} ms")
+        self._refresh_full_scale()
 
         self.cfg_tree.delete(*self.cfg_tree.get_children())
         for key in self.cfg:
@@ -768,6 +771,21 @@ class App(tk.Tk):
             self.live_tree.insert("", "end", iid=n,
                                   values=(nm if nm else "clear", "--"))
 
+    def _full_scale(self):
+        """AS7343 ADC full scale = (ATIME+1) x (ASTEP+1), capped at the 16-bit
+        register limit.
+
+        This is well below 65535 for most useful settings — the stock
+        ATIME=29 / ASTEP=599 gives 18000 — so scaling the axis to 65535 would
+        waste most of the plot. Falls back to 65535 only before the device has
+        reported a config.
+        """
+        atime = self.cfg.get("atime")
+        astep = self.cfg.get("astep")
+        if atime is None or astep is None:
+            return 65535
+        return min((atime + 1) * (astep + 1), 65535)
+
     def _locked_ymax(self):
         """Fixed y-axis top for the live chart, or None to let it autoscale."""
         if not self.ylock_var.get():
@@ -784,20 +802,37 @@ class App(tk.Tk):
         if self.ylock_var.get() and not self.ymax_var.get().strip():
             top = self.live_ax.get_ylim()[1]
             if not top or top <= 0:
-                top = max(self.live_vals.values(), default=0) or 65535
+                top = max(self.live_vals.values(), default=0) or self._full_scale()
             self.ymax_var.set(f"{top:.0f}")
+        self._ymax_is_full = False
         self._draw_live()
 
-    def _set_ymax(self, value):
-        self.ymax_var.set(str(int(value)))
+    def _on_full_scale(self):
+        """Lock to the ADC full scale, and keep tracking it — ATIME/ASTEP changes
+        (including those a sweep makes) move full scale, so a fixed number would
+        go stale."""
+        self._ymax_is_full = True
+        self.ymax_var.set(str(self._full_scale()))
         self.ylock_var.set(True)
         self._draw_live()
 
     def _apply_ymax(self):
-        """Typing a value implies you want it locked."""
+        """Typing a value implies you want it locked, at that value specifically —
+        so stop tracking full scale."""
         if self.ymax_var.get().strip():
             self.ylock_var.set(True)
+            if self.ymax_var.get().strip() != str(self._full_scale()):
+                self._ymax_is_full = False
         self._draw_live()
+
+    def _refresh_full_scale(self):
+        """Called whenever the device reports a config: relabel the button with
+        the current full scale, and follow it if we are locked to it."""
+        fs = self._full_scale()
+        self.full_btn.config(text=f"Full scale ({fs})")
+        if self._ymax_is_full and self.ymax_var.get() != str(fs):
+            self.ymax_var.set(str(fs))
+            self._draw_live()
 
     def _draw_live(self):
         names = [CHANNELS[i][0] for i in SPECTRUM_ORDER]

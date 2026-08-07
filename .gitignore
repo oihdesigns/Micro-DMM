@@ -2225,3 +2225,7 @@ PCBDesigns/OpenLead_Headless_V3/jlcpcb/gerber/OpenLead_Headless_V3-PasteTop.gbr
 PCBDesigns/OpenLead_Headless_V3/jlcpcb/gerber/OpenLead_Headless_V3-PTH.drl
 PCBDesigns/OpenLead_Headless_V3/jlcpcb/gerber/OpenLead_Headless_V3-SilkBottom.gbr
 PCBDesigns/OpenLead_Headless_V3/jlcpcb/gerber/OpenLead_Headless_V3-SilkTop.gbr
+
+# Python bytecode caches (generated whenever a GUI script is run)
+__pycache__/
+*.pyc

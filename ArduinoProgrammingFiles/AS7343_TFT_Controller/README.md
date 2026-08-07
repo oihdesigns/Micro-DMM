@@ -161,8 +161,17 @@ feature exists: point it at `smux` and you can see the cycle-count cost directly
   **Lock Y** freezes the y-axis so bars stay comparable between readings instead
   of the axis rescaling under you every sample. Ticking it with the box empty
   pins the axis where it currently sits; type a number to set an explicit top, or
-  hit **Full** for the sensor's 16-bit full scale (65535). Untick to go back to
+  hit **Full scale** to lock to the ADC's actual full scale. Untick to go back to
   autoscaling. Under log scale the locked axis starts at 1 rather than 0.
+
+  Full scale is **not** a fixed 65535 — the AS7343's ADC full scale is
+  `(ATIME+1) x (ASTEP+1)`, capped at the 16-bit register limit. The stock
+  ATIME=29 / ASTEP=599 tops out at **18000**, and a fast capture config like
+  ATIME=0 / ASTEP=99 at just **100**, so pinning the axis to 65535 would squash
+  the data into the bottom of the plot. The button label shows the current value,
+  and once locked to full scale the axis *tracks* it — change ATIME or ASTEP, or
+  run a sweep that changes them, and the axis follows. Typing your own number
+  stops the tracking.
 * **Controls** — gain, ATIME, ASTEP with live integration-time readout, SMUX,
   WTIME + wait enable, auto-zero, LED enable/current, spectral threshold
   (low/high/channel/persistence/interrupt), the 18-channel mask with
