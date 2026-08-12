@@ -22,6 +22,7 @@ import csv
 import os
 import queue
 import threading
+import time
 import tkinter as tk
 from datetime import datetime
 from tkinter import filedialog, messagebox, ttk
@@ -141,6 +142,18 @@ class App(tk.Tk):
         self.live_vals = {}      # name -> value
         self._chan_resync = False
         self._ymax_is_full = False  # live y-axis is tracking ADC full scale
+
+        # Timed CSV log
+        self._log_path = None
+        self._log_names = []
+        self._log_active = False
+        self._log_pending = False
+        self._log_rows = 0
+        self._log_missed = 0
+        self._log_interval = 10.0
+        self._log_start = 0.0
+        self._log_end = 0.0
+        self._log_after = None
         self.live_asat = False
         self.live_dsat = False
 
@@ -250,6 +263,8 @@ class App(tk.Tk):
                    command=lambda: self._send("!FLICKER")).pack(side="left", padx=10)
         self.flicker_lbl = ttk.Label(ctl, text="flicker: --", font=("Consolas", 10))
         self.flicker_lbl.pack(side="left", padx=4)
+
+        self._build_logger_bar(self.live_tab)
 
         body = ttk.Frame(self.live_tab)
         body.pack(fill="both", expand=True)
@@ -545,6 +560,8 @@ class App(tk.Tk):
         self.log.see("end")
 
     def _on_close(self):
+        if self._log_active:
+            self._stop_logging("stopped (window closed)")
         try:
             self.sm.send("!STREAM,0")
         except Exception:
@@ -653,6 +670,8 @@ class App(tk.Tk):
                 if kind == "__closed__":
                     self.conn_lbl.config(text="port closed", foreground="#a00")
                     self.connect_btn.config(text="Connect")
+                    if self._log_active:
+                        self._stop_logging("stopped (port closed)")
                     continue
                 self._handle_line(payload)
         except queue.Empty:
@@ -663,6 +682,13 @@ class App(tk.Tk):
                 self._call_q.get_nowait()()
         except queue.Empty:
             pass
+
+        # Smooth countdown between log ticks, throttled to once a second.
+        if self._log_active:
+            now = time.monotonic()
+            if now - getattr(self, "_log_status_at", 0.0) >= 1.0:
+                self._log_status_at = now
+                self._update_log_status()
 
         self.after(40, self._pump)
 
@@ -737,6 +763,9 @@ class App(tk.Tk):
             else:
                 self._chan_resync = False
                 self.live_vals = {n: int(v) for n, v in zip(names, vals) if v.isdigit()}
+                if self._log_active and self._log_pending:
+                    self._log_pending = False
+                    self._write_log_row()
             self._update_sat()
             self._draw_live()
 
@@ -770,6 +799,183 @@ class App(tk.Tk):
             nm = CHANNELS[idx][1] if idx is not None else None
             self.live_tree.insert("", "end", iid=n,
                                   values=(nm if nm else "clear", "--"))
+
+    # ── Timed CSV log ───────────────────────────────────────────────────────
+    #
+    # Takes one reading every `interval` seconds for `duration`, appending each
+    # to a single CSV. Rows are written on the $R reply rather than on the timer
+    # tick, so what lands in the file is always a real measurement — never a
+    # stale value carried over because the board was busy.
+
+    def _build_logger_bar(self, parent):
+        f = ttk.LabelFrame(parent, text="Timed CSV log", padding=6)
+        f.pack(fill="x", padx=6, pady=(0, 2))
+
+        ttk.Label(f, text="Every").pack(side="left")
+        self.log_interval_var = tk.StringVar(value="10")
+        ttk.Entry(f, width=6, textvariable=self.log_interval_var).pack(side="left", padx=2)
+        ttk.Label(f, text="s   for").pack(side="left")
+        self.log_dur_var = tk.StringVar(value="600")
+        ttk.Entry(f, width=8, textvariable=self.log_dur_var).pack(side="left", padx=2)
+        self.log_unit_var = tk.StringVar(value="seconds")
+        ttk.Combobox(f, width=9, state="readonly", values=["seconds", "minutes"],
+                     textvariable=self.log_unit_var).pack(side="left", padx=2)
+
+        ttk.Button(f, text="File...", command=self._choose_log_file).pack(side="left", padx=(12, 2))
+        self.log_file_lbl = ttk.Label(f, text="(auto-named)", font=("Consolas", 9))
+        self.log_file_lbl.pack(side="left", padx=2)
+
+        self.log_btn = ttk.Button(f, text="Start", command=self._toggle_logging)
+        self.log_btn.pack(side="left", padx=12)
+        self.log_status = ttk.Label(f, text="idle", font=("Consolas", 9))
+        self.log_status.pack(side="left", padx=4)
+
+    def _choose_log_file(self):
+        default = f"as7343_log_{datetime.now():%Y%m%d_%H%M%S}.csv"
+        path = filedialog.asksaveasfilename(
+            defaultextension=".csv", initialfile=default,
+            filetypes=[("CSV", "*.csv")], confirmoverwrite=False)
+        if path:
+            self._log_path = path
+            self.log_file_lbl.config(text=os.path.basename(path))
+
+    def _log_header(self):
+        return (["timestamp", "elapsed_s", "asat", "dsat",
+                 "gain", "atime", "astep", "smux"] + self._log_names)
+
+    def _toggle_logging(self):
+        if self._log_active:
+            self._stop_logging("stopped")
+        else:
+            self._start_logging()
+
+    def _start_logging(self):
+        if not self.sm.is_open():
+            messagebox.showwarning("Not connected", "Connect to the board first.")
+            return
+        try:
+            interval = float(self.log_interval_var.get())
+            duration = float(self.log_dur_var.get())
+        except ValueError:
+            messagebox.showerror("Bad values", "Interval and duration must be numbers.")
+            return
+        if interval <= 0 or duration <= 0:
+            messagebox.showerror("Bad values", "Interval and duration must be positive.")
+            return
+        if self.log_unit_var.get() == "minutes":
+            duration *= 60.0
+
+        names = list(self.enabled_names)
+        if not names:
+            messagebox.showwarning(
+                "No channel list",
+                "The device has not reported its channel set yet.\n"
+                "Hit 'Re-read from device' on the Controls tab, then try again.")
+            return
+
+        path = self._log_path or os.path.abspath(
+            f"as7343_log_{datetime.now():%Y%m%d_%H%M%S}.csv")
+        self._log_names = names
+        header = self._log_header()
+
+        # Appending to a file whose columns differ would produce a ragged CSV.
+        exists = os.path.exists(path) and os.path.getsize(path) > 0
+        if exists:
+            try:
+                with open(path, "r", newline="") as fh:
+                    first = next(csv.reader(fh), [])
+            except OSError as e:
+                messagebox.showerror("Cannot read file", str(e))
+                return
+            if first != header:
+                if not messagebox.askyesno(
+                        "Column mismatch",
+                        f"{os.path.basename(path)} already has different columns:\n\n"
+                        f"existing: {','.join(first) or '(empty)'}\n\n"
+                        f"new:      {','.join(header)}\n\n"
+                        "Appending will make the file ragged. Append anyway?"):
+                    return
+
+        try:
+            with open(path, "a", newline="") as fh:
+                if not exists:
+                    csv.writer(fh).writerow(header)
+        except OSError as e:
+            messagebox.showerror("Cannot open file", str(e))
+            return
+
+        self._log_path = path
+        self.log_file_lbl.config(text=os.path.basename(path))
+        self._log_active = True
+        self._log_pending = False
+        self._log_rows = 0
+        self._log_missed = 0
+        self._log_interval = interval
+        self._log_start = time.monotonic()
+        self._log_end = self._log_start + duration
+        self.log_btn.config(text="Stop")
+        self._log("# logging to " + path)
+        self._log_tick()
+
+    def _log_tick(self):
+        if not self._log_active:
+            return
+        if time.monotonic() >= self._log_end:
+            self._stop_logging("completed")
+            return
+        if self._log_pending:
+            # Previous reading has not come back yet — almost always a long
+            # integration time relative to the interval. Note it and move on.
+            self._log_missed += 1
+        self._log_pending = True
+        self._send("!READ")
+        self._update_log_status()
+        self._log_after = self.after(int(self._log_interval * 1000), self._log_tick)
+
+    def _write_log_row(self):
+        row = [datetime.now().isoformat(timespec="seconds"),
+               f"{time.monotonic() - self._log_start:.1f}",
+               int(self.live_asat), int(self.live_dsat),
+               self.cfg.get("gain", ""), self.cfg.get("atime", ""),
+               self.cfg.get("astep", ""), self.cfg.get("smux", "")]
+        row += [self.live_vals.get(n, "") for n in self._log_names]
+        try:
+            # Reopened per row so the file is complete on disk at all times —
+            # you can open it mid-run, and a crash costs nothing.
+            with open(self._log_path, "a", newline="") as fh:
+                csv.writer(fh).writerow(row)
+        except OSError as e:
+            self._stop_logging(f"write failed: {e}")
+            return
+        self._log_rows += 1
+        self._update_log_status()
+
+    def _update_log_status(self):
+        if not self._log_active:
+            return
+        left = max(0.0, self._log_end - time.monotonic())
+        m, s = divmod(int(left), 60)
+        txt = f"{self._log_rows} rows, {m:d}:{s:02d} left"
+        if self._log_missed:
+            txt += f"  ({self._log_missed} late)"
+        self.log_status.config(text=txt, foreground="#070")
+
+    def _stop_logging(self, why):
+        if self._log_after is not None:
+            try:
+                self.after_cancel(self._log_after)
+            except tk.TclError:
+                pass
+            self._log_after = None
+        was_active = self._log_active
+        self._log_active = False
+        self._log_pending = False
+        self.log_btn.config(text="Start")
+        name = os.path.basename(self._log_path) if self._log_path else "?"
+        self.log_status.config(text=f"{why} - {self._log_rows} rows -> {name}",
+                               foreground="#046" if "fail" not in why else "#a00")
+        if was_active:
+            self._log(f"# log {why}: {self._log_rows} rows -> {self._log_path}")
 
     def _full_scale(self):
         """AS7343 ADC full scale = (ATIME+1) x (ASTEP+1), capped at the 16-bit

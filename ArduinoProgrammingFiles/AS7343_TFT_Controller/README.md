@@ -172,6 +172,22 @@ feature exists: point it at `smux` and you can see the cycle-count cost directly
   and once locked to full scale the axis *tracks* it — change ATIME or ASTEP, or
   run a sweep that changes them, and the axis follows. Typing your own number
   stops the tracking.
+  **Timed CSV log** takes one reading every *n* seconds (default 10) for *x*
+  seconds or minutes (default 600 s), appending each to a single CSV. Pick a file
+  with **File...** or let it auto-name one; re-running against the same file
+  appends without repeating the header, and a column-set mismatch prompts before
+  it makes the file ragged. The status readout shows rows written and time
+  remaining, and it stops on its own at the end of the window, on **Stop**, or if
+  the port drops.
+
+  Rows are written when the `$R` reply lands, not on the timer tick, so every row
+  is a real measurement rather than a stale value carried over while the board was
+  busy. If a reply has not returned by the next tick — a long integration time
+  relative to the interval — that tick is counted as `late` in the status rather
+  than duplicating the previous row. Each row is `timestamp, elapsed_s, asat,
+  dsat, gain, atime, astep, smux` followed by one column per enabled channel, so
+  the acquisition settings travel with the data.
+
 * **Controls** — gain, ATIME, ASTEP with live integration-time readout, SMUX,
   WTIME + wait enable, auto-zero, LED enable/current, spectral threshold
   (low/high/channel/persistence/interrupt), the 18-channel mask with
