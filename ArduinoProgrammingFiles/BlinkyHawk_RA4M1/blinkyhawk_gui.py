@@ -16,6 +16,10 @@ Two tabs:
     - edit any value and push it to device RAM (!SET -- applied immediately)
     - persist RAM to EEPROM (!SAVE), reload EEPROM (!LOAD), factory
       defaults (!DEFAULTS); unsaved-changes state tracked from $STATUS dirty=
+    - "Copy from unit..." clones a previously-saved unit's tuning onto the
+      connected board, picked by serial number out of the master CSV log.
+      Shows a full diff first and writes to RAM only, so it is reviewable
+      and reversible until you Save.  HWREV is never copied (NEVER_COPY_KEYS)
     - unknown keys reported by newer firmware still appear (in "Other"), so
       this GUI does not need updating for every firmware tweak
 
@@ -59,6 +63,16 @@ PLOT_REFRESH_MS = 80       # GUI redraw cadence
 UNITS_CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                          "blinkyhawk_units.csv")
 UNITS_CSV_FIXED = ["SN", "timestamp"]   # leading columns; config keys follow
+
+# Keys that must NEVER be copied from one unit to another by "Copy from unit".
+# HWREV is not a preference, it is a statement about which PCB the XIAO is
+# plugged into.  Copying a V2 donor's HWREV=2 onto a V3 board silences its
+# buzzer and freezes its threshold selector; copying a V3 donor's HWREV=3 onto
+# a V2 board is worse -- the firmware would start driving D8 as a push-pull
+# output into whatever that board's DIP switch is doing, which is a dead short
+# to ground whenever the switch is closed.  The firmware protects itself the
+# same way (its own !DEFAULTS preserves HWREV); this is the host-side half.
+NEVER_COPY_KEYS = {"HWREV"}
 
 # ---------------------------------------------------------------------------
 # Config-key metadata: display grouping, label, and a short description.
@@ -117,6 +131,21 @@ KEY_META = {
     "CONTREPMS":    ("Alerts", "num",  "Continuity repeat period (ms)"),
     "VOLTREPMS":    ("Alerts", "num",  "Voltage repeat period (ms)"),
     "BEEPMIN":      ("Alerts", "num",  "Min gap between beep sequences (ms)"),
+    "CONTONMS":     ("Alerts", "num",  "Continuity pulse on-time, first contact (ms)"),
+    "CONTHOLDMS":   ("Alerts", "num",  "Continuity pulse on-time, ongoing re-beep while held (ms)"),
+    "CONTOFFMS":    ("Alerts", "num",  "Gap between continuity pulses (ms)"),
+    "VOLTONMS":     ("Alerts", "num",  "Voltage pulse on-time (ms)"),
+    "VOLTOFFMS":    ("Alerts", "num",  "Gap between voltage pulses (ms)"),
+    # --- Alert LED --- (hue is fixed in firmware: blue/green/red = the meaning)
+    "LEDFLOATBR":   ("Alert LED", "num", "Floating (blue) brightness 0-255; 0 = this state dark"),
+    "LEDCLOSEDBR":  ("Alert LED", "num", "Closed (green) brightness 0-255; 0 = this state dark"),
+    "LEDVOLTBR":    ("Alert LED", "num", "Voltage (red) brightness 0-255; 0 = this state dark"),
+    "LEDFLOATMS":   ("Alert LED", "num", "Floating flash on-time (ms)"),
+    "LEDCLOSEDMS":  ("Alert LED", "num", "Closed flash on-time (ms)"),
+    "LEDVOLTMS":    ("Alert LED", "num", "Voltage flash on-time (ms)"),
+    "LEDFLOATPER":  ("Alert LED", "num", "Floating: min gap between flash STARTS (ms) = rate cap"),
+    "LEDCLOSEDPER": ("Alert LED", "num", "Closed: min gap between flash STARTS (ms) = rate cap"),
+    "LEDVOLTPER":   ("Alert LED", "num", "Voltage: min gap between flash STARTS (ms) = rate cap"),
     # --- Power / battery ---
     "CHGTHRESH":    ("Power / battery", "num", "VBUS/2 level meaning 'charging' (V)"),
     "BATTEMPTY":    ("Power / battery", "num", "Battery voltage mapped to 0% (V)"),
@@ -137,7 +166,8 @@ KEY_META = {
     # --- Misc ---
     "LOOPMS":       ("Misc", "num", "Main-loop pacing / sleep (ms)"),
 }
-GROUP_ORDER = ["Board", "Detection", "Alerts", "Power / battery", "Low power", "Misc", "Other"]
+GROUP_ORDER = ["Board", "Detection", "Alerts", "Alert LED", "Power / battery",
+               "Low power", "Misc", "Other"]
 
 
 class SerialManager:
@@ -371,6 +401,8 @@ class App(tk.Tk):
                    command=self._cfg_load).pack(side="left", padx=2)
         ttk.Button(bar, text="Factory defaults",
                    command=self._cfg_defaults).pack(side="left", padx=8)
+        ttk.Button(bar, text="Copy from unit...",
+                   command=self._cfg_copy_from_unit).pack(side="left", padx=2)
         self.dirty_lbl = ttk.Label(bar, text="")
         self.dirty_lbl.pack(side="right", padx=6)
 
@@ -532,6 +564,200 @@ class App(tk.Tk):
         self._send("!DEFAULTS")
         self._send("!CFG")
         self._send("!STATUS")
+
+    # ----- copy another unit's config onto this one -----
+    def _read_units_csv(self):
+        """Return {sn: rowdict} from the master per-unit log ({} if unusable)."""
+        path = self.units_csv_path
+        if not os.path.exists(path):
+            return {}
+        try:
+            with open(path, newline="") as fh:
+                return {(r.get("SN") or "").strip(): r
+                        for r in csv.DictReader(fh)
+                        if (r.get("SN") or "").strip()}
+        except OSError as exc:
+            messagebox.showerror("CSV log", f"Could not read\n{path}\n\n{exc}")
+            return {}
+
+    @staticmethod
+    def _same_value(a, b):
+        """Compare two config values numerically so 0.62 == 0.6200."""
+        try:
+            return abs(float(a) - float(b)) <= 1e-6
+        except ValueError:
+            return a == b
+
+    def _copy_plan(self, donor):
+        """Work out what copying `donor`'s config onto this unit would do.
+
+        Returns (changes, blocked, unknown, absent):
+          changes  [(key, current, new)]  differing keys that will be sent
+          blocked  [(key, value)]         in NEVER_COPY_KEYS -- deliberately kept
+          unknown  [(key, value)]         donor has it, this firmware does not
+          absent   [key]                  this unit has it, the donor row does not
+        """
+        changes, blocked, unknown = [], [], []
+        for key, raw in donor.items():
+            if key in UNITS_CSV_FIXED:
+                continue
+            val = (raw or "").strip()
+            if not val:
+                continue
+            if key in NEVER_COPY_KEYS:
+                blocked.append((key, val))
+                continue
+            row = self.cfg_rows.get(key)
+            if row is None:
+                unknown.append((key, val))
+                continue
+            cur = row["dev_lbl"].cget("text").strip()
+            if not self._same_value(cur, val):
+                changes.append((key, cur, val))
+        absent = [k for k in self.cfg_rows
+                  if k not in NEVER_COPY_KEYS and not (donor.get(k) or "").strip()]
+        return changes, blocked, unknown, absent
+
+    def _cfg_copy_from_unit(self):
+        if not self.cfg_rows:
+            messagebox.showinfo(
+                "Copy from unit",
+                "Connect to a device and read its config first -- the copy is "
+                "computed against what this unit currently reports.")
+            return
+        units = self._read_units_csv()
+        donors = [sn for sn in units if sn != self.sn]
+        if not donors:
+            messagebox.showinfo(
+                "Copy from unit",
+                "No other units in the log yet.\n\n"
+                f"{self.units_csv_path}\n\n"
+                "A unit is recorded there when you press 'Save RAM -> EEPROM' "
+                "while it has a serial number assigned.")
+            return
+
+        dlg = tk.Toplevel(self)
+        dlg.title("Copy config from another unit")
+        dlg.transient(self)
+        dlg.geometry("760x520")
+
+        top = ttk.Frame(dlg, padding=8)
+        top.pack(fill="x")
+        ttk.Label(top, text="Copy from:").pack(side="left")
+        donor_var = tk.StringVar(value=donors[0])
+        donor_cb = ttk.Combobox(top, textvariable=donor_var, values=donors,
+                                state="readonly", width=18)
+        donor_cb.pack(side="left", padx=6)
+        ttk.Label(top, text=f"onto this unit ({self.sn or 'unassigned SN'})",
+                  foreground="#555").pack(side="left")
+        stamp_lbl = ttk.Label(top, text="", foreground="#555")
+        stamp_lbl.pack(side="right")
+
+        ttk.Label(dlg, padding=(8, 0), wraplength=730, foreground="#444",
+                  text="Values are written to device RAM only, exactly as if you "
+                       "had typed each one. Nothing is permanent until you press "
+                       "'Save RAM -> EEPROM' afterwards. HWREV is never copied -- "
+                       "it describes the board, not the tuning.").pack(fill="x")
+
+        table = ttk.Frame(dlg)
+        table.pack(fill="both", expand=True, padx=8, pady=6)
+        tree = ttk.Treeview(table, columns=("key", "cur", "new"),
+                            show="headings", height=14)
+        tree.heading("key", text="Key")
+        tree.heading("cur", text="This unit")
+        tree.heading("new", text="Donor")
+        tree.column("key", width=150, anchor="w", stretch=False)
+        tree.column("cur", width=300, anchor="w")
+        tree.column("new", width=110, anchor="w", stretch=False)
+        tsb = ttk.Scrollbar(table, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=tsb.set)
+        tsb.pack(side="right", fill="y")
+        tree.pack(side="left", fill="both", expand=True)
+        tree.tag_configure("note", foreground="#777")
+
+        btns = ttk.Frame(dlg, padding=8)
+        btns.pack(fill="x")
+        summary = ttk.Label(btns, text="", foreground="#444")
+        summary.pack(side="left")
+        apply_btn = ttk.Button(btns, text="Apply to RAM")
+        apply_btn.pack(side="right", padx=4)
+        ttk.Button(btns, text="Cancel", command=dlg.destroy).pack(side="right")
+
+        state = {"changes": []}
+
+        def refresh(*_):
+            donor = units.get(donor_var.get(), {})
+            stamp_lbl.config(text=f"saved {donor.get('timestamp', '?')}")
+            changes, blocked, unknown, absent = self._copy_plan(donor)
+            state["changes"] = changes
+            tree.delete(*tree.get_children())
+            for key, cur, new in changes:
+                tree.insert("", "end", values=(key, cur, new))
+            for key, val in blocked:
+                tree.insert("", "end", tags=("note",),
+                            values=(key, "-- not copied (describes the board) --", val))
+            for key, val in unknown:
+                tree.insert("", "end", tags=("note",),
+                            values=(key, "-- this firmware has no such key --", val))
+            for key in absent:
+                tree.insert("", "end", tags=("note",),
+                            values=(key, "-- donor has no value, left alone --", ""))
+            summary.config(
+                text=f"{len(changes)} value(s) will change; "
+                     f"{len(blocked)} protected, {len(unknown)} unknown, "
+                     f"{len(absent)} absent from donor")
+            apply_btn.config(state="normal" if changes else "disabled")
+
+        def do_apply():
+            changes = state["changes"]
+            if not changes:
+                return
+            donor_sn = donor_var.get()
+            if not messagebox.askyesno(
+                    "Copy from unit",
+                    f"Send {len(changes)} value(s) from SN '{donor_sn}' to this "
+                    f"unit's RAM?\n\nThe EEPROM is untouched until you press "
+                    f"'Save RAM -> EEPROM'.", parent=dlg):
+                return
+            dlg.destroy()
+            self._log(f"** copying {len(changes)} value(s) from SN '{donor_sn}'")
+            self._send_config_burst([f"!SET,{k},{v}" for k, _, v in changes])
+
+        # Wired here, not at construction: do_apply is defined below the button.
+        apply_btn.config(command=do_apply)
+        donor_cb.bind("<<ComboboxSelected>>", refresh)
+        refresh()          # fills the table and sets the button's enabled state
+        dlg.grab_set()
+
+    def _send_config_burst(self, cmds):
+        """Send many !SET lines paced from the Tk event loop.
+
+        The device drains its whole RX buffer each pass, but a pass only comes
+        round every LOOPMS (50 ms default), so dumping ~60 lines at once leaves
+        the host's USB write blocking on CDC back-pressure and the GUI frozen
+        until the board catches up.  Trickling them keeps the UI alive and the
+        board comfortably ahead.  Finishes with !CFG + !STATUS to re-sync the
+        table from what the device actually accepted (values out of range are
+        clamped, so the echo is the truth, not what we sent).
+        """
+        BATCH, PERIOD_MS = 3, 40
+        queue_ = list(cmds)
+
+        def pump():
+            if not self.serial.is_open:
+                self._log("** copy aborted: disconnected")
+                return
+            for cmd in queue_[:BATCH]:
+                self.serial.send(cmd)
+            del queue_[:BATCH]
+            if queue_:
+                self.after(PERIOD_MS, pump)
+            else:
+                self._send("!CFG")
+                self._send("!STATUS")
+                self._log("** copy complete -- review, then Save RAM -> EEPROM")
+
+        pump()
 
     # ----- serial number + per-unit CSV log -----
     def _set_sn(self, sn):

@@ -128,9 +128,21 @@
  * NeoPixel: dim-blue flash = floating, green flash = closed, red flash =
  * voltage present; slow dim-red 25% blink = charging (green when battery
  * >= BATTFULLPCT); 1-4 green boot blinks = battery level.
+ * Each detection state's LED is tunable: LEDFLOATBR/LEDCLOSEDBR/LEDVOLTBR set
+ * brightness (0-255, 0 = that state dark), LEDFLOATMS/LEDCLOSEDMS/LEDVOLTMS
+ * the flash on-time, and LEDFLOATPER/LEDCLOSEDPER/LEDVOLTPER the minimum gap
+ * between flash STARTS (so the period is a rate cap; a PER below the matching
+ * MS just gives a solid-on LED).  The hue of each state is fixed in firmware
+ * on purpose -- the colour is the meaning.  The charging cue and the sleep
+ * heartbeat have their own compile-time constants and are not affected.
  * Speaker: mirrors the LED (continuity beep / voltage double-beep), passive
  * or active buzzer selectable at runtime (PASSIVE key).  Shorting the leads
  * during boot mutes audio for the session (BOOTMUTE key to disable).
+ * Beep shape: CONTPULSES/VOLTPULSES set how many pulses a sequence has,
+ * CONTONMS/VOLTONMS how long each pulse sounds and CONTOFFMS/VOLTOFFMS the
+ * gap between them.  CONTHOLDMS is the (longer) pulse used for the ongoing
+ * re-beep while continuity persists, so a held contact sounds different from
+ * first contact.  BEEPMIN still rate-caps whole sequences.
  * On HWREV 3 the piezo sits between D8 and D9, so SPKDIFF=1 (the default)
  * drives the two legs anti-phase for twice the swing across the element,
  * ~+6 dB over the single-ended V2 drive.  SPKDIFF=0 parks D8 low and
@@ -237,9 +249,11 @@ const float ADC_FULL_SCALE  = 16383.0f;
 // Layout changes REQUIRE bumping CFG_VERSION so stale stored data is
 // rejected and replaced with defaults instead of being misread.
 #define CFG_MAGIC   0x42484B31UL   // "BHK1"
-#define CFG_VERSION 6              // bumped: added hwRev + threshSel + spkDiff
-                                   //         (OpenLead_Headless V3 support)
-                                   // (v5 added sleepTickMs, the base wake period;
+#define CFG_VERSION 7              // bumped: added the beep pulse-shape and alert
+                                   //         LED brightness/timing keys
+                                   // (v6 added hwRev + threshSel + spkDiff for
+                                   //  OpenLead_Headless V3 support;
+                                   //  v5 added sleepTickMs, the base wake period;
                                    //  v4 added sleepThresh[] wake thresholds;
                                    //  v3 added low-power timeout fields;
                                    //  v2 added detectMethod + recovery params)
@@ -307,6 +321,36 @@ struct Config {
   uint16_t contRepeatMs;   // repeat period while CLOSED
   uint16_t voltRepeatMs;   // repeat period while VOLTAGE
   uint16_t beepMinMs;      // min gap between beep sequences (rate cap)
+
+  // -- Beep pulse shape --------------------------------------------
+  // Length of the individual pulses inside one beep sequence.  contPulses /
+  // voltPulses say how many, these say how long.  The "hold" pulse is the
+  // longer one used for the ongoing re-beep while continuity persists, so a
+  // held contact sounds different from first contact.
+  uint16_t contOnMs;       // first-contact continuity pulse on-time
+  uint16_t contHoldMs;     // ongoing "still there" continuity pulse on-time
+  uint16_t contOffMs;      // gap between continuity pulses (both cases)
+  uint16_t voltOnMs;       // voltage pulse on-time
+  uint16_t voltOffMs;      // gap between voltage pulses
+
+  // -- Alert LED (per detection state) ------------------------------
+  // Each state owns one colour channel -- FLOAT is blue, CLOSED green,
+  // VOLTAGE red -- so "brightness" is just that channel's value, 0-255.
+  // The hue is deliberately fixed: these are safety signals and the colour
+  // is the meaning.  (Full per-state RGB would be three more keys each if
+  // that ever changes.)
+  uint8_t  ledFloatBright;
+  uint8_t  ledClosedBright;
+  uint8_t  ledVoltBright;
+  // Flash on-time, and the minimum gap between the START of one flash and
+  // the next -- so the period is the rate cap, not on-time + gap.  Making
+  // perMs shorter than msOn just gives a solid-on LED.
+  uint16_t ledFloatMs;
+  uint16_t ledClosedMs;
+  uint16_t ledVoltMs;
+  uint16_t ledFloatPerMs;
+  uint16_t ledClosedPerMs;
+  uint16_t ledVoltPerMs;
 
   // -- Power / battery ---------------------------------------------
   float    chargeThreshV;  // A3 volts (VBUS/2) above this = charging
@@ -398,6 +442,25 @@ void configDefaults() {
   cfg.voltRepeatMs   = 1000;
   cfg.beepMinMs      = 500;
 
+  // Beep pulse shape and LED flash defaults reproduce EXACTLY the compile-time
+  // constants these keys replaced, so a unit migrated from v6 looks and sounds
+  // identical until someone deliberately changes one.
+  cfg.contOnMs       = 20;
+  cfg.contHoldMs     = 50;
+  cfg.contOffMs      = 10;
+  cfg.voltOnMs       = 20;
+  cfg.voltOffMs      = 10;
+
+  cfg.ledFloatBright  = 28;      // dim blue -- the common idle state
+  cfg.ledClosedBright = 200;     // green
+  cfg.ledVoltBright   = 200;     // red
+  cfg.ledFloatMs      = 150;
+  cfg.ledClosedMs     = 200;
+  cfg.ledVoltMs       = 200;
+  cfg.ledFloatPerMs   = 1000;    // 1 Hz cap
+  cfg.ledClosedPerMs  = 500;     // 2 Hz cap
+  cfg.ledVoltPerMs    = 500;     // 2 Hz cap
+
   cfg.chargeThreshV  = 2.0f;
   cfg.battEmptyV     = 3.30f;
   cfg.battFullV      = 4.20f;
@@ -465,14 +528,69 @@ bool configLoad() {
 // silently reverting it to factory thresholds.  Instead, keep each superseded
 // layout frozen here and copy the values across.
 //
-// Every migration below sets cfg.hwRev = 2, and that is the whole point of the
-// v6 bump: a stored config can only exist on a unit that was already in the
-// field, and every one of those is an OpenLead_Headless V2 with DIP switches on
-// D8/D10.  Inheriting the v6 DEFAULT (hwRev 3) instead would make a reflashed V2
+// Every migration from v5 AND OLDER sets cfg.hwRev = 2, and that was the whole
+// point of the v6 bump: a config stored in one of those layouts can only exist
+// on a unit that predates V3, and every one of those is an OpenLead_Headless V2
+// with DIP switches on D8/D10.  (v6 onwards knows about hwRev for real, so
+// configMigrateV6 carries the stored value across instead -- see there.)
+// Inheriting the current DEFAULT (hwRev 3) instead would make a reflashed V2
 // drive D8 as a push-pull output straight into whatever the DIP switch is doing
 // -- a dead short to ground whenever that switch is closed.  A V2 that is later
 // rebuilt as a V3 is a deliberate !SET,HWREV,3 + !SAVE, never an accident.
 //
+// v6 EXACTLY as it shipped (v5 plus hwRev/threshSel/spkDiff, before the beep
+// pulse-shape and LED brightness/timing keys).  Frozen -- never edit.
+// NOTE: unlike v5 and older, a v6 image CAN be a genuine V3 board, so this
+// migration is the one that must carry hwRev across rather than forcing 2.
+struct ConfigV6 {
+  uint32_t magic;
+  uint16_t version;
+  uint8_t  hwRev;
+  float    refCenterV;
+  float    refBandV;
+  float    thresh[4];
+  uint8_t  threshSel;
+  float    voltFastMult;
+  uint8_t  voltAvgSamples;
+  uint8_t  testAgree;
+  uint8_t  stableCount;
+  uint16_t settlePreUs;
+  uint8_t  settlePostMs;
+  uint8_t  negFix;
+  float    negFixV;
+  uint8_t  detectMethod;
+  float    detReturnBand;
+  uint16_t detWindowUs;
+  uint16_t detAreaStartUs;
+  uint8_t  ledEnable;
+  uint8_t  beepEnable;
+  uint8_t  bootMute;
+  uint8_t  passiveBuzzer;
+  uint8_t  spkDiff;
+  uint16_t contFreqHz;
+  uint16_t voltFreqHz;
+  uint8_t  contPulses;
+  uint8_t  voltPulses;
+  uint8_t  contRepeat;
+  uint8_t  voltRepeat;
+  uint16_t contRepeatMs;
+  uint16_t voltRepeatMs;
+  uint16_t beepMinMs;
+  float    chargeThreshV;
+  float    battEmptyV;
+  float    battFullV;
+  uint8_t  battFullPct;
+  uint16_t idleTimeoutS;
+  uint16_t sleepTickMs;
+  uint8_t  sleepPollTicks;
+  uint8_t  sleepVoltAvg;
+  uint8_t  sleepHbTicks;
+  uint8_t  sleepParkOff;
+  float    sleepThresh[4];
+  uint16_t loopDelayMs;
+  uint16_t crc;
+};
+
 // v5 EXACTLY as it shipped (v4 plus sleepTickMs, before hwRev/threshSel/spkDiff).
 // Frozen -- never edit; see the note on ConfigV2.
 struct ConfigV5 {
@@ -655,6 +773,63 @@ struct ConfigV2 {
   uint16_t loopDelayMs;
   uint16_t crc;
 };
+
+// Upgrade a stored v6 image.  The new beep/LED keys keep their defaults, which
+// are the exact constants v6 had compiled in, so nothing changes audibly or
+// visibly.  hwRev is CARRIED ACROSS here, not forced to 2: v6 is the first
+// layout that knew about V3 boards, so a stored 3 is real information.
+bool configMigrateV6() {
+  ConfigV6 old;
+  EEPROM.get(CFG_EEPROM_ADDR, old);
+  if (old.magic != CFG_MAGIC) return false;
+  if (old.version != 6)       return false;
+  if (old.crc != crc16_ccitt((const uint8_t *)&old, offsetof(ConfigV6, crc))) return false;
+
+  cfg.hwRev          = old.hwRev;
+  cfg.refCenterV     = old.refCenterV;
+  cfg.refBandV       = old.refBandV;
+  for (int i = 0; i < 4; i++) cfg.thresh[i] = old.thresh[i];
+  cfg.threshSel      = old.threshSel;
+  cfg.voltFastMult   = old.voltFastMult;
+  cfg.voltAvgSamples = old.voltAvgSamples;
+  cfg.testAgree      = old.testAgree;
+  cfg.stableCount    = old.stableCount;
+  cfg.settlePreUs    = old.settlePreUs;
+  cfg.settlePostMs   = old.settlePostMs;
+  cfg.negFix         = old.negFix;
+  cfg.negFixV        = old.negFixV;
+  cfg.detectMethod   = old.detectMethod;
+  cfg.detReturnBand  = old.detReturnBand;
+  cfg.detWindowUs    = old.detWindowUs;
+  cfg.detAreaStartUs = old.detAreaStartUs;
+  cfg.ledEnable      = old.ledEnable;
+  cfg.beepEnable     = old.beepEnable;
+  cfg.bootMute       = old.bootMute;
+  cfg.passiveBuzzer  = old.passiveBuzzer;
+  cfg.spkDiff        = old.spkDiff;
+  cfg.contFreqHz     = old.contFreqHz;
+  cfg.voltFreqHz     = old.voltFreqHz;
+  cfg.contPulses     = old.contPulses;
+  cfg.voltPulses     = old.voltPulses;
+  cfg.contRepeat     = old.contRepeat;
+  cfg.voltRepeat     = old.voltRepeat;
+  cfg.contRepeatMs   = old.contRepeatMs;
+  cfg.voltRepeatMs   = old.voltRepeatMs;
+  cfg.beepMinMs      = old.beepMinMs;
+  cfg.chargeThreshV  = old.chargeThreshV;
+  cfg.battEmptyV     = old.battEmptyV;
+  cfg.battFullV      = old.battFullV;
+  cfg.battFullPct    = old.battFullPct;
+  cfg.idleTimeoutS   = old.idleTimeoutS;
+  cfg.sleepTickMs    = old.sleepTickMs;
+  cfg.sleepPollTicks = old.sleepPollTicks;
+  cfg.sleepVoltAvg   = old.sleepVoltAvg;
+  cfg.sleepHbTicks   = old.sleepHbTicks;
+  cfg.sleepParkOff   = old.sleepParkOff;
+  for (int i = 0; i < 4; i++) cfg.sleepThresh[i] = old.sleepThresh[i];
+  cfg.loopDelayMs    = old.loopDelayMs;
+  return true;
+}
 
 // Upgrade a stored v5 image.  threshSel and spkDiff are irrelevant on the V2
 // hardware this necessarily is (the DIP pins decide the threshold, and D8 must
@@ -978,6 +1153,26 @@ const ConfigField CFG_FIELDS[] = {
   { "CONTREPMS",   FT_U16,   &cfg.contRepeatMs,    100,    60000  },
   { "VOLTREPMS",   FT_U16,   &cfg.voltRepeatMs,    100,    60000  },
   { "BEEPMIN",     FT_U16,   &cfg.beepMinMs,       50,     10000  },
+  // Beep pulse shape.  Lower bound 1 ms rather than 0: a zero-length pulse
+  // would leave the beep state machine switching the speaker on and straight
+  // back off every pass, which is a click, not silence -- use BEEP to mute.
+  { "CONTONMS",    FT_U16,   &cfg.contOnMs,        1,      2000   },
+  { "CONTHOLDMS",  FT_U16,   &cfg.contHoldMs,      1,      2000   },
+  { "CONTOFFMS",   FT_U16,   &cfg.contOffMs,       1,      2000   },
+  { "VOLTONMS",    FT_U16,   &cfg.voltOnMs,        1,      2000   },
+  { "VOLTOFFMS",   FT_U16,   &cfg.voltOffMs,       1,      2000   },
+  // Alert LED: brightness (0 = that state's LED off), flash on-time, and the
+  // minimum gap between flash starts.  0 brightness is allowed -- it silences
+  // one state's LED without disabling the other two, which LED cannot do.
+  { "LEDFLOATBR",  FT_U8,    &cfg.ledFloatBright,  0,      255    },
+  { "LEDCLOSEDBR", FT_U8,    &cfg.ledClosedBright, 0,      255    },
+  { "LEDVOLTBR",   FT_U8,    &cfg.ledVoltBright,   0,      255    },
+  { "LEDFLOATMS",  FT_U16,   &cfg.ledFloatMs,      1,      10000  },
+  { "LEDCLOSEDMS", FT_U16,   &cfg.ledClosedMs,     1,      10000  },
+  { "LEDVOLTMS",   FT_U16,   &cfg.ledVoltMs,       1,      10000  },
+  { "LEDFLOATPER", FT_U16,   &cfg.ledFloatPerMs,   1,      60000  },
+  { "LEDCLOSEDPER",FT_U16,   &cfg.ledClosedPerMs,  1,      60000  },
+  { "LEDVOLTPER",  FT_U16,   &cfg.ledVoltPerMs,    1,      60000  },
   // Power / battery
   { "CHGTHRESH",   FT_FLOAT, &cfg.chargeThreshV,   0.5f,   3.3f   },
   { "BATTEMPTY",   FT_FLOAT, &cfg.battEmptyV,      2.5f,   4.0f   },
@@ -1044,21 +1239,13 @@ const int TEST_MAX_ATTEMPTS = 30;   // safety cap on MOSFET test repeats
 // can't be mistaken for an instant return.  The trough is always ~1.1 V.
 const float DET_TROUGH_MIN_V = 0.30f;
 
-// LED colours / flash cadence (compile-time; see manual)
-const uint8_t COL_FLOAT_R = 0,  COL_FLOAT_G = 0,   COL_FLOAT_B = 28;   // dim blue
-const uint8_t COL_CLOSED_R = 0, COL_CLOSED_G = 200, COL_CLOSED_B = 0;  // green
-const uint8_t COL_VOLT_R = 200, COL_VOLT_G = 0,    COL_VOLT_B = 0;     // red
-const unsigned long FLOAT_FLASH_MS  = 150, FLOAT_MIN_MS  = 1000;  // 1 Hz cap
-const unsigned long CLOSED_FLASH_MS = 200, CLOSED_MIN_MS = 500;   // 2 Hz cap
-const unsigned long VOLT_FLASH_MS   = 200, VOLT_MIN_MS   = 500;   // 2 Hz cap
-
-// Continuity beep pulse micro-timing (compile-time)
-const unsigned long CONT_ON_MS         = 20;  // initial contact pulse on-time
-const unsigned long CONT_OFF_MS        = 10;  // gap between pulses
-const unsigned long CONT_ONGOING_ON_MS = 50;  // ongoing "still there" pulse on-time
-const unsigned long CONT_ONGOING_OFF_MS = 10;
-const unsigned long VOLT_ON_MS         = 20;
-const unsigned long VOLT_OFF_MS        = 10;
+// LED colours.  Only the HUE is compile-time -- one channel per state, so the
+// meaning of the colour cannot be reconfigured away.  The magnitude of that
+// channel is cfg.ledFloatBright / ledClosedBright / ledVoltBright, and the
+// cadence is cfg.led*Ms / cfg.led*PerMs.  See the Config struct.
+//
+// Not covered by these keys (still compile-time, different features):
+// CHARGE_BLINK_* for the charging cue and SLEEP_HB_* for the sleep heartbeat.
 
 #define NUM_PIXELS 1
 Adafruit_NeoPixel pixel(NUM_PIXELS, LED_PIN, NEO_GRB + NEO_KHZ800);
@@ -1812,18 +1999,19 @@ void updateLed() {
 
   if (!cfg.ledEnable) { setPixel(0, 0, 0); return; }
 
+  // One channel per state: blue = floating, green = closed, red = voltage.
   switch (leadState) {
     case STATE_FLOAT:
-      flashState(now, COL_FLOAT_R, COL_FLOAT_G, COL_FLOAT_B,
-                 FLOAT_FLASH_MS, FLOAT_MIN_MS, floatFlashing, lastFloatFlash);
+      flashState(now, 0, 0, cfg.ledFloatBright,
+                 cfg.ledFloatMs, cfg.ledFloatPerMs, floatFlashing, lastFloatFlash);
       break;
     case STATE_CLOSED:
-      flashState(now, COL_CLOSED_R, COL_CLOSED_G, COL_CLOSED_B,
-                 CLOSED_FLASH_MS, CLOSED_MIN_MS, closedFlashing, lastClosedFlash);
+      flashState(now, 0, cfg.ledClosedBright, 0,
+                 cfg.ledClosedMs, cfg.ledClosedPerMs, closedFlashing, lastClosedFlash);
       break;
     case STATE_VOLTAGE:
-      flashState(now, COL_VOLT_R, COL_VOLT_G, COL_VOLT_B,
-                 VOLT_FLASH_MS, VOLT_MIN_MS, voltFlashing, lastVoltFlash);
+      flashState(now, cfg.ledVoltBright, 0, 0,
+                 cfg.ledVoltMs, cfg.ledVoltPerMs, voltFlashing, lastVoltFlash);
       break;
   }
 }
@@ -2021,14 +2209,14 @@ void updateSpeaker() {
 
   if (leadState == STATE_CLOSED) {
     if (entered)
-      startBeep(now, cfg.contPulses, CONT_ON_MS, CONT_OFF_MS, false, cfg.contFreqHz);
+      startBeep(now, cfg.contPulses, cfg.contOnMs, cfg.contOffMs, false, cfg.contFreqHz);
     else if (cfg.contRepeat && now - lastBeepSeqStart >= cfg.contRepeatMs)
-      startBeep(now, cfg.contPulses, CONT_ONGOING_ON_MS, CONT_ONGOING_OFF_MS, false, cfg.contFreqHz);
+      startBeep(now, cfg.contPulses, cfg.contHoldMs, cfg.contOffMs, false, cfg.contFreqHz);
   } else if (leadState == STATE_VOLTAGE) {
     if (entered)                // priority alert: always sounds on entry
-      startBeep(now, cfg.voltPulses, VOLT_ON_MS, VOLT_OFF_MS, true, cfg.voltFreqHz);
+      startBeep(now, cfg.voltPulses, cfg.voltOnMs, cfg.voltOffMs, true, cfg.voltFreqHz);
     else if (cfg.voltRepeat && now - lastBeepSeqStart >= cfg.voltRepeatMs)
-      startBeep(now, cfg.voltPulses, VOLT_ON_MS, VOLT_OFF_MS, false, cfg.voltFreqHz);
+      startBeep(now, cfg.voltPulses, cfg.voltOnMs, cfg.voltOffMs, false, cfg.voltFreqHz);
   }
 
   updateBeep(now);
@@ -2491,9 +2679,9 @@ void setup() {
     // see whether it is a valid older layout worth upgrading -- a unit tuned in
     // the field must not lose its thresholds just because the struct grew.
     // Newest layout first, so a v3 image is never mis-read as something older.
-    // Every one of these pins hwRev to 2 -- a stored config means an existing
-    // V2 unit.  See the note above ConfigV5.
-    migrated = configMigrateV5() || configMigrateV4() ||
+    // v6 carries its stored hwRev across; v5 and older pin it to 2, because a
+    // config in one of those layouts means a pre-V3 unit.  See ConfigV5's note.
+    migrated = configMigrateV6() || configMigrateV5() || configMigrateV4() ||
                configMigrateV3() || configMigrateV2();
     configSave();                        // persist the migration (or seed defaults)
   }
