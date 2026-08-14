@@ -32,18 +32,44 @@
  *      and the compare are shared -- but the threshold's UNITS change with the
  *      method (V / ms / V*ms), so THRESH00..11 must be re-tuned after a switch.
  *
- * ── Threshold select: 2x DIP switches on D8 / D10 ─────────────────
- * Both pins have hardware pull-ups; a switch ON connects its pin to ground.
- * The pins are read directly (HIGH = 1 = switch OFF/open, LOW = 0 = ON):
- *     config "XY":  X = D8 reading, Y = D10 reading
- *   11 (both switches OFF)  -> cfg.thresh11   (factory default 0.62 V)
- *   10 (D8 high, D10 low)   -> cfg.thresh10
- *   01 (D8 low,  D10 high)  -> cfg.thresh01
- *   00 (both switches ON)   -> cfg.thresh00
- * The switches are re-read every detection pass, so they can be changed live.
- * The four threshold values themselves are EEPROM configuration (THRESH00..
- * THRESH11), so what each switch position *means* can be re-programmed over
- * serial without reflashing.
+ * ── Board revisions (HWREV) ───────────────────────────────────────
+ * Two PCBs share this firmware; HWREV (EEPROM config) says which one is under
+ * the XIAO, and it is read before any pin is configured because it decides
+ * what D8 physically IS.  Getting it wrong is not cosmetic: HWREV 3 on a V2
+ * board drives D8 push-pull into a closed DIP switch's short to ground.
+ *
+ *   HWREV 2  OpenLead_Headless V2
+ *            D8/D10 = threshold-select DIP switches (inputs, PCB pull-ups)
+ *            D9     = buzzer, other leg hard-wired to ground (single-ended)
+ *   HWREV 3  OpenLead_Headless V3  (default for a board with blank EEPROM)
+ *            D8     = buzzer BZ1+ through R16 100R
+ *            D9     = buzzer BZ1- through R17 100R  -> drivable anti-phase
+ *            D10    = no connection (broken out on J6; parked as output low)
+ *            A1     = NO CONNECTION.  SENSE_NEG has nothing driving it, so
+ *                     NEGFIX must stay 1 on this board (it is the default).
+ *            Threshold select moves from the DIP pins into THRESHSEL.
+ *
+ * A unit carrying a config from an older firmware is migrated with HWREV
+ * pinned to 2 -- a stored config can only exist on a board already in the
+ * field, and all of those are V2s.  Only a blank EEPROM defaults to 3.
+ *
+ * ── Threshold select ──────────────────────────────────────────────
+ * Four thresholds live in EEPROM (THRESH00/01/10/11); one of them is active.
+ * Which one depends on the board:
+ *   HWREV 2  the DIP switches pick it.  Both pins have hardware pull-ups; a
+ *            switch ON connects its pin to ground.  The pins are read directly
+ *            (HIGH = 1 = switch OFF/open, LOW = 0 = ON):
+ *                config "XY":  X = D8 reading, Y = D10 reading
+ *              11 (both switches OFF)  -> cfg.thresh11  (factory default 0.62 V)
+ *              10 (D8 high, D10 low)   -> cfg.thresh10
+ *              01 (D8 low,  D10 high)  -> cfg.thresh01
+ *              00 (both switches ON)   -> cfg.thresh00
+ *            Re-read every detection pass, so they can be changed live.
+ *   HWREV 3  THRESHSEL (0-3) picks it, indexing the same table in the same
+ *            order.  Everything downstream -- SLEEPTHR00..11, the $DIP
+ *            message, the host config table -- is unchanged.
+ * The four values themselves are EEPROM configuration, so what each position
+ * *means* can be re-programmed over serial without reflashing.
  *
  * ── EEPROM configuration ──────────────────────────────────────────
  * Nearly every tunable lives in a Config struct persisted to the RA4M1's
@@ -90,7 +116,9 @@
  *   $CFGEND                              end of a !CFG dump
  *   $SN,<value>                          unit serial number (empty if unassigned)
  *   $OK,<what> / $ERR,<what>[,detail]    command acknowledge / failure
- *   $DIP,<idx>,<threshV>                 DIP position changed (live)
+ *   $DIP,<idx>,<threshV>                 threshold position changed (live).
+ *                                        HWREV 2: a DIP switch moved.
+ *                                        HWREV 3: THRESHSEL was set.
  *   $DIAG,<ms>,<rawPos>,<rawNeg>,<posV>,<negV>,<diffV>    (streaming)
  *   $CAPSTART,<n>,<toggleUs>,<durMs>,<fullScale>,<vref>   (capture header)
  *   $CAP,<t_us>,<rawPos>,<rawNeg>                         (capture rows)
@@ -103,6 +131,13 @@
  * Speaker: mirrors the LED (continuity beep / voltage double-beep), passive
  * or active buzzer selectable at runtime (PASSIVE key).  Shorting the leads
  * during boot mutes audio for the session (BOOTMUTE key to disable).
+ * On HWREV 3 the piezo sits between D8 and D9, so SPKDIFF=1 (the default)
+ * drives the two legs anti-phase for twice the swing across the element,
+ * ~+6 dB over the single-ended V2 drive.  SPKDIFF=0 parks D8 low and
+ * reproduces the V2 drive exactly, for a quieter unit or a bench A/B.
+ * The pair cannot use a GPT complementary output -- D8 is P111/GTIOC3A and
+ * D9 is P110/GTIOC1B, different channels -- so the anti-phase toggle runs
+ * off a private FspTimer instead of the core's single-pin tone().
  *
  * ── Low-power timeout mode ────────────────────────────────────────
  * After SLEEPSEC seconds in which the leads have only ever read OPEN, the
@@ -144,6 +179,7 @@
 
 #include <Adafruit_NeoPixel.h>
 #include <EEPROM.h>
+#include <FspTimer.h>  // anti-phase buzzer drive (see the SPEAKER section)
 #include <ctype.h>
 #include <string.h>
 #include <stddef.h>   // offsetof (configCrc)
@@ -155,14 +191,30 @@
 // ══════════════════════════════════════════════════════════════════
 //  PIN MAP / HARDWARE CONSTANTS  (fixed by the Blinky Hawk PCB)
 // ══════════════════════════════════════════════════════════════════
+// D8 has two different jobs depending on the board revision (cfg.hwRev), so it
+// appears twice below.  Only ONE of the two names may ever be used at a time --
+// see buzzerApplyPinModes(), which is the single place that decides.  Driving
+// D8 as an output on a V2 board would fight a closed DIP switch's hard short to
+// ground; reading it as an input on a V3 board leaves BZ1+ floating and the
+// piezo silent.
 const int   SENSE_POS     = A2;          // pseudo-differential positive input
 const int   SENSE_NEG     = A1;          // pseudo-differential negative input
+                                         // (V3: NOT CONNECTED -- keep NEGFIX=1)
 const int   MOSFET_PIN    = D7;          // bridge MOSFET gate (HIGH = on/resting)
-const int   SPEAKER_PIN   = D9;          // buzzer element
-const int   DIP_PIN_A     = D8;          // threshold-select DIP, first digit  ("X" in XY)
-const int   DIP_PIN_B     = D10;         // threshold-select DIP, second digit ("Y" in XY)
-#define     LED_PIN         6            // onboard RGB data
-#define     RGB_POWER_PIN   PIN_RGB_EN   // onboard RGB power enable
+const int   SPEAKER_PIN   = D9;          // buzzer, "hot" leg (V3: BZ1- via R17 100R)
+const int   SPEAKER_PIN_B = D8;          // buzzer, anti-phase leg (V3: BZ1+ via R16 100R)
+const int   DIP_PIN_A     = D8;          // V2 ONLY: threshold DIP, first digit  ("X" in XY)
+const int   DIP_PIN_B     = D10;         // V2 ONLY: threshold DIP, second digit ("Y" in XY)
+                                         // (V3: no connection; parked as an output low)
+#define     LED_PIN         6            // D6 -> LED1, the SK6812 ON THE PCB
+// PIN_RGB_EN is pin 21 / P500, the power gate for the XIAO module's OWN
+// onboard RGB LED -- it is NOT connected to LED1 on either board revision.
+// It is still worth switching: the onboard LED is a permanent load on the
+// module's 3.3 V rail, and killing it is part of what the sleep-current and
+// !FLOOR numbers assume.  (LED1 itself cannot be gated on V3 at all -- it is
+// wired straight to BatteryRail, so its quiescent draw is now a hardware
+// floor rather than something firmware can park.)
+#define     RGB_POWER_PIN   PIN_RGB_EN
 const int   CHARGE_PIN    = A3;          // VBUS/2 divider (USB-power sense)
 const int   BATT_PIN      = BAT_DET_PIN; // P105, onboard battery sense (Vbatt/2)
 const int   BATT_EN_PIN   = BAT_READ_EN; // P400, HIGH = enable battery sense
@@ -185,8 +237,10 @@ const float ADC_FULL_SCALE  = 16383.0f;
 // Layout changes REQUIRE bumping CFG_VERSION so stale stored data is
 // rejected and replaced with defaults instead of being misread.
 #define CFG_MAGIC   0x42484B31UL   // "BHK1"
-#define CFG_VERSION 5              // bumped: added sleepTickMs (base wake period)
-                                   // (v4 added sleepThresh[] wake thresholds;
+#define CFG_VERSION 6              // bumped: added hwRev + threshSel + spkDiff
+                                   //         (OpenLead_Headless V3 support)
+                                   // (v5 added sleepTickMs, the base wake period;
+                                   //  v4 added sleepThresh[] wake thresholds;
                                    //  v3 added low-power timeout fields;
                                    //  v2 added detectMethod + recovery params)
 #define CFG_EEPROM_ADDR 0
@@ -195,10 +249,24 @@ struct Config {
   uint32_t magic;
   uint16_t version;
 
+  // -- Board revision ----------------------------------------------
+  // 2 = OpenLead_Headless V2: threshold DIP switches on D8/D10, buzzer driven
+  //     single-ended from D9 with its other leg hard-wired to ground.
+  // 3 = OpenLead_Headless V3: no DIP switches (threshSel picks the threshold),
+  //     buzzer wired between D8 and D9 so it can be driven anti-phase.
+  // Set from EEPROM before any pin is configured, because it decides whether
+  // D8 is an input or an output.  A unit migrated from an older stored config
+  // is forced to 2 -- only a board that has never been configured (or one
+  // explicitly told otherwise) is assumed to be V3.
+  uint8_t  hwRev;
+
   // -- Detection ---------------------------------------------------
   float    refCenterV;     // resting differential centre (~0 V)
   float    refBandV;       // |diff - centre| within this -> no voltage, run test
-  float    thresh[4];      // open/closed threshold per DIP position [00,01,10,11]
+  float    thresh[4];      // open/closed threshold per position [00,01,10,11]
+  uint8_t  threshSel;      // hwRev 3 ONLY: which thresh[] entry is active (0-3).
+                           // Replaces the V2 DIP switches; ignored on hwRev 2,
+                           // where the pins still decide.
   float    voltFastMult;   // single-read "voltage present" shortcut multiplier
   uint8_t  voltAvgSamples; // reads averaged for the voltage-present decision
   uint8_t  testAgree;      // consecutive matching MOSFET tests required
@@ -225,6 +293,11 @@ struct Config {
   uint8_t  beepEnable;     // 1 = speaker alerts (master enable)
   uint8_t  bootMute;       // 1 = leads CLOSED at boot mutes audio for the session
   uint8_t  passiveBuzzer;  // 1 = passive buzzer via tone(), 0 = active (DC on/off)
+  // hwRev 3 ONLY: drive the piezo anti-phase (D8 inverted against D9) instead of
+  // parking D8 low.  Doubles the voltage across the element, ~+6 dB.  Kept
+  // switchable so a unit can be quietened, and so the two drives can be A/B'd on
+  // the bench.  Forced off on hwRev 2, where D8 is a DIP input.
+  uint8_t  spkDiff;
   uint16_t contFreqHz;     // continuity pitch (passive buzzer only)
   uint16_t voltFreqHz;     // voltage pitch    (passive buzzer only)
   uint8_t  contPulses;     // pulses per continuity beep
@@ -284,12 +357,18 @@ void configDefaults() {
   cfg.magic   = CFG_MAGIC;
   cfg.version = CFG_VERSION;
 
+  // Defaults describe a NEW board, which is a V3.  Units carrying an older
+  // stored config are V2s and are pinned to hwRev 2 by the migrations below --
+  // this default only ever reaches a board whose EEPROM was blank or reset.
+  cfg.hwRev          = 3;
+
   cfg.refCenterV     = -0.02f;
   cfg.refBandV       = 0.025f;
   cfg.thresh[0]      = 0.15f;    // 00: both switches ON  (most sensitive)
   cfg.thresh[1]      = 0.54f;    // 01: D8 ON,  D10 OFF
   cfg.thresh[2]      = 0.45f;    // 10: D8 OFF, D10 ON
   cfg.thresh[3]      = 0.62f;    // 11: both switches OFF (factory position)
+  cfg.threshSel      = 3;        // V3: same entry the V2 factory DIP position used
   cfg.voltFastMult   = 5.0f;
   cfg.voltAvgSamples = 10;
   cfg.testAgree      = 1;
@@ -308,6 +387,7 @@ void configDefaults() {
   cfg.beepEnable     = 1;
   cfg.bootMute       = 1;
   cfg.passiveBuzzer  = 1;
+  cfg.spkDiff        = 1;        // V3 default: anti-phase drive (loudest)
   cfg.contFreqHz     = 2000;
   cfg.voltFreqHz     = 2500;
   cfg.contPulses     = 1;
@@ -385,6 +465,62 @@ bool configLoad() {
 // silently reverting it to factory thresholds.  Instead, keep each superseded
 // layout frozen here and copy the values across.
 //
+// Every migration below sets cfg.hwRev = 2, and that is the whole point of the
+// v6 bump: a stored config can only exist on a unit that was already in the
+// field, and every one of those is an OpenLead_Headless V2 with DIP switches on
+// D8/D10.  Inheriting the v6 DEFAULT (hwRev 3) instead would make a reflashed V2
+// drive D8 as a push-pull output straight into whatever the DIP switch is doing
+// -- a dead short to ground whenever that switch is closed.  A V2 that is later
+// rebuilt as a V3 is a deliberate !SET,HWREV,3 + !SAVE, never an accident.
+//
+// v5 EXACTLY as it shipped (v4 plus sleepTickMs, before hwRev/threshSel/spkDiff).
+// Frozen -- never edit; see the note on ConfigV2.
+struct ConfigV5 {
+  uint32_t magic;
+  uint16_t version;
+  float    refCenterV;
+  float    refBandV;
+  float    thresh[4];
+  float    voltFastMult;
+  uint8_t  voltAvgSamples;
+  uint8_t  testAgree;
+  uint8_t  stableCount;
+  uint16_t settlePreUs;
+  uint8_t  settlePostMs;
+  uint8_t  negFix;
+  float    negFixV;
+  uint8_t  detectMethod;
+  float    detReturnBand;
+  uint16_t detWindowUs;
+  uint16_t detAreaStartUs;
+  uint8_t  ledEnable;
+  uint8_t  beepEnable;
+  uint8_t  bootMute;
+  uint8_t  passiveBuzzer;
+  uint16_t contFreqHz;
+  uint16_t voltFreqHz;
+  uint8_t  contPulses;
+  uint8_t  voltPulses;
+  uint8_t  contRepeat;
+  uint8_t  voltRepeat;
+  uint16_t contRepeatMs;
+  uint16_t voltRepeatMs;
+  uint16_t beepMinMs;
+  float    chargeThreshV;
+  float    battEmptyV;
+  float    battFullV;
+  uint8_t  battFullPct;
+  uint16_t idleTimeoutS;
+  uint16_t sleepTickMs;
+  uint8_t  sleepPollTicks;
+  uint8_t  sleepVoltAvg;
+  uint8_t  sleepHbTicks;
+  uint8_t  sleepParkOff;
+  float    sleepThresh[4];
+  uint16_t loopDelayMs;
+  uint16_t crc;
+};
+
 // v4 EXACTLY as it shipped (v3 plus sleepThresh[], before sleepTickMs existed).
 // Frozen -- never edit; see the note on ConfigV2.
 struct ConfigV4 {
@@ -520,6 +656,60 @@ struct ConfigV2 {
   uint16_t crc;
 };
 
+// Upgrade a stored v5 image.  threshSel and spkDiff are irrelevant on the V2
+// hardware this necessarily is (the DIP pins decide the threshold, and D8 must
+// stay an input), so only hwRev actually matters here.
+bool configMigrateV5() {
+  ConfigV5 old;
+  EEPROM.get(CFG_EEPROM_ADDR, old);
+  if (old.magic != CFG_MAGIC) return false;
+  if (old.version != 5)       return false;
+  if (old.crc != crc16_ccitt((const uint8_t *)&old, offsetof(ConfigV5, crc))) return false;
+
+  cfg.hwRev          = 2;        // see the note above ConfigV5
+  cfg.refCenterV     = old.refCenterV;
+  cfg.refBandV       = old.refBandV;
+  for (int i = 0; i < 4; i++) cfg.thresh[i] = old.thresh[i];
+  cfg.voltFastMult   = old.voltFastMult;
+  cfg.voltAvgSamples = old.voltAvgSamples;
+  cfg.testAgree      = old.testAgree;
+  cfg.stableCount    = old.stableCount;
+  cfg.settlePreUs    = old.settlePreUs;
+  cfg.settlePostMs   = old.settlePostMs;
+  cfg.negFix         = old.negFix;
+  cfg.negFixV        = old.negFixV;
+  cfg.detectMethod   = old.detectMethod;
+  cfg.detReturnBand  = old.detReturnBand;
+  cfg.detWindowUs    = old.detWindowUs;
+  cfg.detAreaStartUs = old.detAreaStartUs;
+  cfg.ledEnable      = old.ledEnable;
+  cfg.beepEnable     = old.beepEnable;
+  cfg.bootMute       = old.bootMute;
+  cfg.passiveBuzzer  = old.passiveBuzzer;
+  cfg.contFreqHz     = old.contFreqHz;
+  cfg.voltFreqHz     = old.voltFreqHz;
+  cfg.contPulses     = old.contPulses;
+  cfg.voltPulses     = old.voltPulses;
+  cfg.contRepeat     = old.contRepeat;
+  cfg.voltRepeat     = old.voltRepeat;
+  cfg.contRepeatMs   = old.contRepeatMs;
+  cfg.voltRepeatMs   = old.voltRepeatMs;
+  cfg.beepMinMs      = old.beepMinMs;
+  cfg.chargeThreshV  = old.chargeThreshV;
+  cfg.battEmptyV     = old.battEmptyV;
+  cfg.battFullV      = old.battFullV;
+  cfg.battFullPct    = old.battFullPct;
+  cfg.idleTimeoutS   = old.idleTimeoutS;
+  cfg.sleepTickMs    = old.sleepTickMs;
+  cfg.sleepPollTicks = old.sleepPollTicks;
+  cfg.sleepVoltAvg   = old.sleepVoltAvg;
+  cfg.sleepHbTicks   = old.sleepHbTicks;
+  cfg.sleepParkOff   = old.sleepParkOff;
+  for (int i = 0; i < 4; i++) cfg.sleepThresh[i] = old.sleepThresh[i];
+  cfg.loopDelayMs    = old.loopDelayMs;
+  return true;
+}
+
 // Upgrade a stored v4 image.  sleepTickMs keeps its default (2000), which is
 // the rate v4 hard-coded, so a migrated unit wakes at exactly the same cadence.
 bool configMigrateV4() {
@@ -529,6 +719,7 @@ bool configMigrateV4() {
   if (old.version != 4)       return false;
   if (old.crc != crc16_ccitt((const uint8_t *)&old, offsetof(ConfigV4, crc))) return false;
 
+  cfg.hwRev          = 2;        // see the note above ConfigV5
   cfg.refCenterV     = old.refCenterV;
   cfg.refBandV       = old.refBandV;
   for (int i = 0; i < 4; i++) cfg.thresh[i] = old.thresh[i];
@@ -581,6 +772,7 @@ bool configMigrateV3() {
   if (old.version != 3)       return false;
   if (old.crc != crc16_ccitt((const uint8_t *)&old, offsetof(ConfigV3, crc))) return false;
 
+  cfg.hwRev          = 2;        // see the note above ConfigV5
   cfg.refCenterV     = old.refCenterV;
   cfg.refBandV       = old.refBandV;
   for (int i = 0; i < 4; i++) cfg.thresh[i] = old.thresh[i];
@@ -632,6 +824,7 @@ bool configMigrateV2() {
   if (old.version != 2)       return false;
   if (old.crc != crc16_ccitt((const uint8_t *)&old, offsetof(ConfigV2, crc))) return false;
 
+  cfg.hwRev          = 2;        // see the note above ConfigV5
   cfg.refCenterV     = old.refCenterV;
   cfg.refBandV       = old.refBandV;
   for (int i = 0; i < 4; i++) cfg.thresh[i] = old.thresh[i];
@@ -746,6 +939,8 @@ void  fieldSet(const ConfigField *f, float v);
 void  printField(const ConfigField *f);
 
 const ConfigField CFG_FIELDS[] = {
+  // Board revision (decides pin roles -- see the Config struct)
+  { "HWREV",       FT_U8,    &cfg.hwRev,           2,      3      },
   // Detection
   { "REFCENTER",   FT_FLOAT, &cfg.refCenterV,     -1.0f,   1.0f   },
   { "REFBAND",     FT_FLOAT, &cfg.refBandV,        0.001f, 1.0f   },
@@ -753,6 +948,9 @@ const ConfigField CFG_FIELDS[] = {
   { "THRESH01",    FT_FLOAT, &cfg.thresh[1],       0.001f, 3.3f   },
   { "THRESH10",    FT_FLOAT, &cfg.thresh[2],       0.001f, 3.3f   },
   { "THRESH11",    FT_FLOAT, &cfg.thresh[3],       0.001f, 3.3f   },
+  // Which of the four above is active.  hwRev 3 only -- on hwRev 2 the DIP
+  // switches decide and this value is ignored.
+  { "THRESHSEL",   FT_U8,    &cfg.threshSel,       0,      3      },
   { "VOLTFAST",    FT_FLOAT, &cfg.voltFastMult,    1.0f,   50.0f  },
   { "VOLTAVG",     FT_U8,    &cfg.voltAvgSamples,  1,      50     },
   { "TESTAGREE",   FT_U8,    &cfg.testAgree,       1,      10     },
@@ -770,6 +968,7 @@ const ConfigField CFG_FIELDS[] = {
   { "BEEP",        FT_BOOL,  &cfg.beepEnable,      0,      1      },
   { "BOOTMUTE",    FT_BOOL,  &cfg.bootMute,        0,      1      },
   { "PASSIVE",     FT_BOOL,  &cfg.passiveBuzzer,   0,      1      },
+  { "SPKDIFF",     FT_BOOL,  &cfg.spkDiff,         0,      1      },
   { "CONTFREQ",    FT_U16,   &cfg.contFreqHz,      100,    10000  },
   { "VOLTFREQ",    FT_U16,   &cfg.voltFreqHz,      100,    10000  },
   { "CONTPULSES",  FT_U8,    &cfg.contPulses,      1,      5      },
@@ -1018,7 +1217,7 @@ struct SleepLogEntry {
   float   metric;      // what was compared against the threshold
   float   retms;       // method 1/2 recovery time (ms)
   float   rest;        // resting differential at the probe (V)
-  float   thr;         // threshold in force (DIP switches are live while asleep)
+  float   thr;         // threshold in force (the selector stays live while asleep)
   uint8_t state;       // LeadState the probe decided
   uint8_t awake;       // 1 = sampled by the awake loop, 0 = by the sleeping probe
 };
@@ -1182,9 +1381,10 @@ void exitLowPower() {
 // trailing settle is suppressed because the pin is about to be parked anyway.
 // Returns STATE_FLOAT if the leads are still open.
 LeadState lowPowerProbe() {
-  // DIP switches stay live while asleep, but refresh the threshold WITHOUT
-  // updateThresholdFromDip(): that announces changes on serial, and a CDC write
-  // with USB unplugged (which it always is here) can block.
+  // The selector stays live while asleep (hwRev 2: the DIP pins are still read;
+  // hwRev 3: cfg.threshSel is just a memory read), but refresh the threshold
+  // WITHOUT updateThresholdFromDip(): that announces changes on serial, and a
+  // CDC write with USB unplugged (which it always is here) can block.
   dipIdx        = readDipIndex();
   activeThreshV = cfg.thresh[dipIdx];
 
@@ -1379,17 +1579,28 @@ void serviceFloorMode() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  DIP SWITCHES -> ACTIVE THRESHOLD
+//  THRESHOLD SELECT -> ACTIVE THRESHOLD
 // ══════════════════════════════════════════════════════════════════
-// Raw pin readings, first digit D8, second digit D10 (HIGH = 1 = switch open).
-// Index into cfg.thresh[]: 0b(D8)(D10), i.e. "01" = D8 low + D10 high = 1.
+// Which of the four cfg.thresh[] entries is in force.  Where that choice comes
+// from depends on the board:
+//   hwRev 2  physical DIP switches.  Raw pin readings, first digit D8, second
+//            digit D10 (HIGH = 1 = switch open).  Index = 0b(D8)(D10), i.e.
+//            "01" = D8 low + D10 high = 1.
+//   hwRev 3  the DIP switches are gone from the PCB and D8 is a buzzer leg, so
+//            the selection moves into EEPROM as cfg.threshSel.  The index space
+//            and every downstream user (sleepThresh[], the $DIP message, the
+//            GUI's config table) are deliberately unchanged.
 uint8_t readDipIndex() {
+  if (cfg.hwRev >= 3) return cfg.threshSel & 0x03;
   uint8_t a = digitalRead(DIP_PIN_A) ? 1 : 0;   // D8
   uint8_t b = digitalRead(DIP_PIN_B) ? 1 : 0;   // D10
   return (a << 1) | b;
 }
 
-// Refresh activeThreshV from the switches; announce live changes on serial.
+// Refresh activeThreshV from the selector; announce live changes on serial.
+// Still reported as $DIP on hwRev 3 -- the host tooling keys on that name, and
+// the meaning ("the threshold position changed") is the same.  On V3 it fires
+// in response to !SET,THRESHSEL rather than someone moving a switch.
 void updateThresholdFromDip() {
   uint8_t idx = readDipIndex();
   if (idx != dipIdx) {
@@ -1620,16 +1831,130 @@ void updateLed() {
 // ══════════════════════════════════════════════════════════════════
 //  SPEAKER
 // ══════════════════════════════════════════════════════════════════
-// Passive buzzer (cfg.passiveBuzzer): square wave at `freq` via tone(), so
-// each alert can have its own pitch.  Active buzzer: DC level, fixed tone.
+// V2 wires one leg of the piezo to D9 and the other to ground, so a tone is
+// just a square wave on D9 and the core's tone() does the whole job.
+//
+// V3 wires the element BETWEEN D8 and D9 (BZ1+ through R16, BZ1- through R17).
+// Holding D8 low reproduces the V2 drive exactly; driving it INVERTED against
+// D9 puts twice the voltage across the element -- about +6 dB for no extra
+// parts.  That needs both pins toggled from one timer, which tone() cannot do
+// (it owns a single pin), so cfg.spkDiff routes through a private FspTimer.
+//
+// The tidier hardware route -- a GPT channel's complementary GTIOCnA/GTIOCnB
+// pair -- is not available on these pins: on the XIAO RA4M1, D8 is P111 =
+// GTIOC3A and D9 is P110 = GTIOC1B, which are different channels.  (D9 and D10
+// *are* a complementary pair, GTIOC1B/GTIOC1A, but D10 is not wired to the
+// buzzer on V3.)  Hence the software toggle below.
+
+static FspTimer     buzzTimer;
+static bool         buzzTimerOpen = false;   // FspTimer channel claimed
+static volatile bool buzzPhase    = false;
+
+// True when the anti-phase drive should be used: V3 hardware, enabled in
+// config, and a pitched (passive-buzzer) tone rather than a DC level.  On
+// hwRev 2, D8 is a DIP input and must never be driven.
+static inline bool buzzDifferential() {
+  return (cfg.hwRev >= 3) && cfg.spkDiff && cfg.passiveBuzzer;
+}
+
+// Toggle both legs.  Two digitalWrite calls, exactly as the core's own tone
+// ISR does: the ~1 us of skew between them is well under 1% of a half-period
+// at these frequencies, and the load is a capacitor, so it is neither audible
+// nor a shoot-through concern.
+void buzzTimerCallback(timer_callback_args_t *args) {
+  (void)args;
+  buzzPhase = !buzzPhase;
+  digitalWrite(SPEAKER_PIN,   buzzPhase ? HIGH : LOW);
+  digitalWrite(SPEAKER_PIN_B, buzzPhase ? LOW  : HIGH);
+}
+
+// Claim (once) and run the anti-phase timer at `freq`.  The ISR toggles on
+// every fire, so it has to run at twice the tone frequency.  Returns false if
+// no timer channel was free, letting the caller fall back to single-ended.
+static bool buzzTimerRun(unsigned int freq) {
+  float toggleHz = (float)freq * 2.0f;
+  if (buzzTimerOpen) {
+    // set_frequency() only rewrites the period register -- it does NOT start
+    // the timer (the core's own Tone class calls start() separately).  Without
+    // the explicit start below, every beep after the first one is silent.
+    buzzTimer.stop();
+    buzzTimer.set_frequency(toggleHz);
+    buzzTimer.start();
+    return true;
+  }
+  uint8_t type = 0;
+  int8_t  ch   = FspTimer::get_available_timer(type);
+  if (ch < 0) return false;
+  if (!buzzTimer.begin(TIMER_MODE_PERIODIC, type, (uint8_t)ch, toggleHz, 50.0f,
+                       buzzTimerCallback, nullptr)) return false;
+  if (!buzzTimer.setup_overflow_irq()) return false;
+  if (!buzzTimer.open())               return false;
+  buzzTimerOpen = true;
+  buzzTimer.start();
+  return true;
+}
+
+// Set D8/D10 to the roles the current cfg.hwRev calls for.  This is the ONLY
+// place either pin's direction is decided -- call it after anything that can
+// change hwRev (boot, !LOAD, !DEFAULTS, !SET,HWREV).
+void buzzerApplyPinModes() {
+  // Silence first.  This can be called with a tone running (!SET,HWREV while
+  // the board is beeping), and the pin roles are about to change under it.
+  if (buzzTimerOpen) buzzTimer.stop();
+  noTone(SPEAKER_PIN);
+  buzzPhase = false;
+
+  pinMode(SPEAKER_PIN, OUTPUT);
+  digitalWrite(SPEAKER_PIN, SPEAKER_OFF);
+
+  if (cfg.hwRev >= 3) {
+    // V3: D8 is the buzzer's second leg.  D10 is a pure no-connect (broken out
+    // on J6 only), so park it as a driven low rather than leaving a floating
+    // input -- a floating CMOS input burns crossbar current, which matters at
+    // the sleeping-current numbers this board is tuned to.
+    pinMode(SPEAKER_PIN_B, OUTPUT);
+    digitalWrite(SPEAKER_PIN_B, LOW);
+    pinMode(DIP_PIN_B, OUTPUT);
+    digitalWrite(DIP_PIN_B, LOW);
+  } else {
+    // V2: both DIP pins are inputs (hardware pull-ups on the PCB).
+    pinMode(DIP_PIN_A, INPUT);
+    pinMode(DIP_PIN_B, INPUT);
+  }
+}
+
+// Passive buzzer (cfg.passiveBuzzer): square wave at `freq`, so each alert can
+// have its own pitch.  Active buzzer: DC level, fixed tone.
 void speakerOn(unsigned int freq) {
-  if (cfg.passiveBuzzer) tone(SPEAKER_PIN, freq);
-  else                   digitalWrite(SPEAKER_PIN, SPEAKER_ON);
+  if (buzzDifferential() && buzzTimerRun(freq)) return;
+
+  // Not using the anti-phase timer for this pulse.  Stop it explicitly rather
+  // than assuming speakerOff() already did: a priority alert preempts a beep in
+  // progress by calling startBeep(force) -> speakerOn() with no speakerOff()
+  // in between, so a PASSIVE or SPKDIFF change between pulses could otherwise
+  // leave the ISR toggling both legs underneath the drive selected here.
+  if (buzzTimerOpen) buzzTimer.stop();
+  if (cfg.hwRev >= 3) digitalWrite(SPEAKER_PIN_B, LOW);   // park the second leg
+
+  if (!cfg.passiveBuzzer) {
+    // DC drive.  With the second leg low this still puts the full rail across
+    // the element -- but note a bare piezo like the PKLCS1212E makes no sound
+    // from a DC level at all.  PASSIVE=0 only does something useful with a
+    // self-oscillating buzzer fitted in its place.
+    digitalWrite(SPEAKER_PIN, SPEAKER_ON);
+    return;
+  }
+  tone(SPEAKER_PIN, freq);                    // single-ended (V2, or no timer free)
 }
 
 void speakerOff() {
+  if (buzzTimerOpen) buzzTimer.stop();
   noTone(SPEAKER_PIN);                        // harmless when not toning
   digitalWrite(SPEAKER_PIN, SPEAKER_OFF);
+  // Both legs low = no voltage across the element and no static current, which
+  // is what the low-power park and !FLOOR measurements assume.
+  if (cfg.hwRev >= 3) digitalWrite(SPEAKER_PIN_B, LOW);
+  buzzPhase = false;
 }
 
 // Begin a rate-limited sequence of `pulses` beeps.  `force` preempts any
@@ -1806,7 +2131,7 @@ void startupBatteryIndicate() {
 //  DETECTION (one pass) -- sets leadState, honouring voltOverride
 // ══════════════════════════════════════════════════════════════════
 void runDetection() {
-  updateThresholdFromDip();              // DIP switches are live
+  updateThresholdFromDip();              // selector re-read every pass
   digitalWrite(MOSFET_PIN, MOSFET_ON);   // resting state
 
   bool present;
@@ -1843,6 +2168,7 @@ void runDetection() {
 // ══════════════════════════════════════════════════════════════════
 void printStatus() {
   Serial.print("$STATUS,diag=");  Serial.print(diagMode ? 1 : 0);
+  Serial.print(",hwrev=");        Serial.print(cfg.hwRev);
   Serial.print(",vmode=");        Serial.print((int)voltOverride);
   Serial.print(",mosfet=");       Serial.print(mosfetHold);
   Serial.print(",stream=");       Serial.print(streamOn ? 1 : 0);
@@ -1850,7 +2176,8 @@ void printStatus() {
   Serial.print(",capms=");        Serial.print(capDurationMs);
   Serial.print(",res=");          Serial.print(ADC_RESOLUTION);
   Serial.print(",vref=");         Serial.print(ADC_REF_VOLTAGE, 3);
-  Serial.print(",dip=");          Serial.print(dipIdx);
+  Serial.print(",dip=");          Serial.print(dipIdx);   // hwRev 3: = THRESHSEL
+  Serial.print(",spkdiff=");      Serial.print(buzzDifferential() ? 1 : 0);
   Serial.print(",openthr=");      Serial.print(activeThreshV, 3);
   Serial.print(",detmethod=");    Serial.print(cfg.detectMethod);
   Serial.print(",metric=");       Serial.print(lastMetric, 4);
@@ -1956,6 +2283,14 @@ void handleLine(char *line) {
     // The wake period can only take a value the RTC can produce, so snap it
     // before echoing -- otherwise the reply reports a rate that was never set.
     if (strcmp(f->name, "SLEEPTICKMS") == 0) applySleepTickPeriod();
+    // HWREV re-assigns what D8/D10 physically are, so the pins have to be
+    // re-configured before anything drives them again.
+    if (strcmp(f->name, "HWREV") == 0) { silenceSpeaker(); buzzerApplyPinModes(); }
+    // A1 is a no-connect on V3, so a live SENSE_NEG read there is just a
+    // floating pin.  Allowed (it is occasionally worth looking at on the
+    // bench) but never silent -- this is otherwise a baffling failure.
+    if (strcmp(f->name, "NEGFIX") == 0 && !cfg.negFix && cfg.hwRev >= 3)
+      Serial.println("$ERR,set,NEGFIX=0 with HWREV=3: A1 is not connected on V3");
     cfgDirty = true;
     printField(f);                       // echo the (possibly clamped) value
   } else if (strcmp(cmd, "GET") == 0) {
@@ -1979,10 +2314,24 @@ void handleLine(char *line) {
       Serial.println("$ERR,save,verify failed (flash readback mismatch)");
     }
   } else if (strcmp(cmd, "LOAD") == 0) {
-    if (configLoad()) Serial.println("$OK,load");
-    else              Serial.println("$ERR,load,stored config invalid");
+    if (configLoad()) {
+      silenceSpeaker();
+      buzzerApplyPinModes();             // the reloaded image may change hwRev
+      Serial.println("$OK,load");
+    } else {
+      Serial.println("$ERR,load,stored config invalid");
+    }
   } else if (strcmp(cmd, "DEFAULTS") == 0) {
+    // HWREV describes the PCB this XIAO is plugged into, not a preference, so
+    // it survives a factory reset the way the serial number does.  Letting it
+    // revert to the default 3 would hand D8 to the buzzer on a V2 board and
+    // drive a push-pull output into whatever its DIP switch is doing.  Change
+    // it deliberately with !SET,HWREV if a board is genuinely rebuilt.
+    uint8_t keepHwRev = cfg.hwRev;
     configDefaults();
+    cfg.hwRev = keepHwRev;
+    silenceSpeaker();
+    buzzerApplyPinModes();
     cfgDirty = true;                     // RAM now differs from EEPROM
     Serial.println("$OK,defaults");
   } else if (strcmp(cmd, "SN") == 0) {
@@ -2142,7 +2491,10 @@ void setup() {
     // see whether it is a valid older layout worth upgrading -- a unit tuned in
     // the field must not lose its thresholds just because the struct grew.
     // Newest layout first, so a v3 image is never mis-read as something older.
-    migrated = configMigrateV4() || configMigrateV3() || configMigrateV2();
+    // Every one of these pins hwRev to 2 -- a stored config means an existing
+    // V2 unit.  See the note above ConfigV5.
+    migrated = configMigrateV5() || configMigrateV4() ||
+               configMigrateV3() || configMigrateV2();
     configSave();                        // persist the migration (or seed defaults)
   }
   snLoad();                              // unit serial number (separate block)
@@ -2151,13 +2503,11 @@ void setup() {
   digitalWrite(MOSFET_PIN, MOSFET_ON);   // resting state: MOSFET high
 
   pinMode(SENSE_POS, INPUT);
-  pinMode(SENSE_NEG, INPUT);
+  pinMode(SENSE_NEG, INPUT);             // V3: no connection -- NEGFIX covers it
 
-  pinMode(DIP_PIN_A, INPUT);             // hardware pull-ups on the PCB
-  pinMode(DIP_PIN_B, INPUT);
-
-  pinMode(SPEAKER_PIN, OUTPUT);
-  digitalWrite(SPEAKER_PIN, SPEAKER_OFF);
+  // Speaker + D8/D10 roles.  Must come after the config load: cfg.hwRev is what
+  // decides whether D8 is a DIP input or the buzzer's second output.
+  buzzerApplyPinModes();
 
   // (CHARGE_PIN / BATT_PIN / BATT_EN_PIN are set up at the top of setup(), so
   //  the battery divider is already settling while the rest of this runs.)
@@ -2176,11 +2526,17 @@ void setup() {
   Serial.println(unitSN[0] ? unitSN : "(unassigned -- write with !SN,<value>)");
   Serial.print("Config: ");
   if (loaded)        Serial.println("loaded from EEPROM");
-  else if (migrated) Serial.println("migrated from v2 EEPROM (tuning preserved)");
+  else if (migrated) Serial.println("migrated from older EEPROM (tuning preserved, HWREV=2)");
   else               Serial.println("defaults (EEPROM seeded)");
+  Serial.print("Board: HWREV ");
+  Serial.println(cfg.hwRev >= 3 ? "3 (V3: no DIP, differential buzzer)"
+                                : "2 (V2: DIP switches, single-ended buzzer)");
   Serial.print("Speaker: ");
-  Serial.println(speakerMuted ? "MUTED (leads closed at boot)" : "enabled");
-  Serial.print("DIP: ");
+  Serial.print(speakerMuted ? "MUTED (leads closed at boot)" : "enabled");
+  if (!cfg.passiveBuzzer)        Serial.println(", DC drive (PASSIVE=0)");
+  else if (buzzDifferential())   Serial.println(", anti-phase D8/D9");
+  else                           Serial.println(", single-ended D9");
+  Serial.print(cfg.hwRev >= 3 ? "Threshold: THRESHSEL " : "DIP: ");
   Serial.print(readDipIndex());
   Serial.print(" -> threshold ");
   Serial.print(cfg.thresh[readDipIndex()], 3);

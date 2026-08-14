@@ -681,7 +681,7 @@
         "uuid": "62275b9a-5659-49ae-82ec-4456e0d78504"
       }
     ],
-    "used_designators": "LED1,Q2-3,R2-3,R18,SW1-3",
+    "used_designators": "LED1,Q2-3,J4,R2-3,R18,SW1-3",
     "variants": []
   },
   "sheets": [

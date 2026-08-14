@@ -19,8 +19,10 @@ Two tabs:
     - unknown keys reported by newer firmware still appear (in "Other"), so
       this GUI does not need updating for every firmware tweak
 
-The top bar always shows charge/battery state and the live DIP-switch
-threshold position ($DIP lines).
+The top bar always shows charge/battery state and the live threshold
+position ($DIP lines).  On HWREV 2 boards that position comes from the
+physical DIP switches; on HWREV 3 (no DIP switches fitted) it is the
+THRESHSEL config key.  Same four slots, same message, either way.
 
 Descended from OpenLeadDetect_XIAO_Minimal/diagnostic_gui.py with the A5
 potentiometer features (calibration sweep, offline battery log, !THRESH,
@@ -66,14 +68,25 @@ UNITS_CSV_FIXED = ["SN", "timestamp"]   # leading columns; config keys follow
 # renders as a dropdown of the values in the optional 4th tuple element.
 # ---------------------------------------------------------------------------
 KEY_META = {
+    # --- Board ---
+    # HWREV decides what D8 physically is, so it is the one key that must match
+    # the PCB before anything else is trusted.  It survives !DEFAULTS.
+    "HWREV":        ("Board", "choice", "PCB revision: 2 = DIP switches + single-ended buzzer, "
+                                        "3 = no DIP (see THRESHSEL) + buzzer across D8/D9",
+                     ["2", "3"]),
     # --- Detection ---
     "REFCENTER":    ("Detection", "num",  "Resting differential centre (V)"),
     "REFBAND":      ("Detection", "num",  "No-voltage window half-width (V)"),
     # THRESH units follow DETMETHOD: V (single) / ms (time-to-return) / V*ms (area).
-    "THRESH00":     ("Detection", "num",  "Threshold, DIP 00 = both switches ON (units per DETMETHOD)"),
-    "THRESH01":     ("Detection", "num",  "Threshold, DIP 01 = D8 ON, D10 OFF (units per DETMETHOD)"),
-    "THRESH10":     ("Detection", "num",  "Threshold, DIP 10 = D8 OFF, D10 ON (units per DETMETHOD)"),
-    "THRESH11":     ("Detection", "num",  "Threshold, DIP 11 = both switches OFF (units per DETMETHOD)"),
+    # Positions are named for the V2 DIP switches; on HWREV 3 the same four slots
+    # are selected by THRESHSEL instead.
+    "THRESH00":     ("Detection", "num",  "Threshold, position 00 = both switches ON (units per DETMETHOD)"),
+    "THRESH01":     ("Detection", "num",  "Threshold, position 01 = D8 ON, D10 OFF (units per DETMETHOD)"),
+    "THRESH10":     ("Detection", "num",  "Threshold, position 10 = D8 OFF, D10 ON (units per DETMETHOD)"),
+    "THRESH11":     ("Detection", "num",  "Threshold, position 11 = both switches OFF (units per DETMETHOD)"),
+    "THRESHSEL":    ("Detection", "choice", "HWREV 3 only: which THRESH slot is active "
+                                            "(0=00, 1=01, 2=10, 3=11). Ignored on HWREV 2.",
+                     ["0", "1", "2", "3"]),
     "VOLTFAST":     ("Detection", "num",  "Instant voltage-present multiplier (x REFBAND)"),
     "VOLTAVG":      ("Detection", "num",  "Reads averaged for voltage decision"),
     "TESTAGREE":    ("Detection", "num",  "Consecutive matching MOSFET tests required"),
@@ -92,6 +105,9 @@ KEY_META = {
     "BEEP":         ("Alerts", "bool", "Master enable: speaker"),
     "BOOTMUTE":     ("Alerts", "bool", "Leads shorted at boot mutes audio for session"),
     "PASSIVE":      ("Alerts", "bool", "1 = passive buzzer (tone), 0 = active buzzer"),
+    "SPKDIFF":      ("Alerts", "bool", "HWREV 3 only: 1 = drive D8 anti-phase to D9 "
+                                       "(2x swing across the piezo, ~+6 dB); 0 = park D8 low "
+                                       "for the single-ended V2 drive"),
     "CONTFREQ":     ("Alerts", "num",  "Continuity beep pitch (Hz, passive only)"),
     "VOLTFREQ":     ("Alerts", "num",  "Voltage beep pitch (Hz, passive only)"),
     "CONTPULSES":   ("Alerts", "num",  "Pulses per continuity beep"),
@@ -114,14 +130,14 @@ KEY_META = {
     "SLEEPAVG":     ("Low power", "num",  "Reads per sleeping voltage check; ANY over VOLTFAST x REFBAND wakes (fewer = quieter)"),
     "SLEEPHB":      ("Low power", "num",  "Heartbeat flash every N ticks (counts SLEEPTICKMS ticks, not seconds)"),
     "SLEEPPARK":    ("Low power", "bool", "1 = park the bridge MOSFET OFF while asleep"),
-    "SLEEPTHR00":   ("Low power", "num",  "Wake threshold, DIP 00 (0 = use THRESH00)"),
-    "SLEEPTHR01":   ("Low power", "num",  "Wake threshold, DIP 01 (0 = use THRESH01)"),
-    "SLEEPTHR10":   ("Low power", "num",  "Wake threshold, DIP 10 (0 = use THRESH10)"),
-    "SLEEPTHR11":   ("Low power", "num",  "Wake threshold, DIP 11 (0 = use THRESH11)"),
+    "SLEEPTHR00":   ("Low power", "num",  "Wake threshold, position 00 (0 = use THRESH00)"),
+    "SLEEPTHR01":   ("Low power", "num",  "Wake threshold, position 01 (0 = use THRESH01)"),
+    "SLEEPTHR10":   ("Low power", "num",  "Wake threshold, position 10 (0 = use THRESH10)"),
+    "SLEEPTHR11":   ("Low power", "num",  "Wake threshold, position 11 (0 = use THRESH11)"),
     # --- Misc ---
     "LOOPMS":       ("Misc", "num", "Main-loop pacing / sleep (ms)"),
 }
-GROUP_ORDER = ["Detection", "Alerts", "Power / battery", "Low power", "Misc", "Other"]
+GROUP_ORDER = ["Board", "Detection", "Alerts", "Power / battery", "Low power", "Misc", "Other"]
 
 
 class SerialManager:
@@ -236,7 +252,7 @@ class App(tk.Tk):
         self.sn_lbl = ttk.Label(top, text="SN: --", font=("Consolas", 10, "bold"))
         self.sn_lbl.pack(side="left", padx=12)
 
-        self.dip_lbl = ttk.Label(top, text="DIP: --", font=("Consolas", 10))
+        self.dip_lbl = ttk.Label(top, text="THR POS: --", font=("Consolas", 10))
         self.dip_lbl.pack(side="right", padx=6)
         self.batt_lbl = ttk.Label(top, text="batt: --")
         self.batt_lbl.pack(side="right", padx=6)
@@ -778,14 +794,15 @@ class App(tk.Tk):
         return {0: "V", 1: "ms", 2: "V*ms"}.get(self.detmethod, "V")
 
     def _handle_dip(self, line):
-        # $DIP,<idx>,<threshV>  (live DIP-switch change)
+        # $DIP,<idx>,<threshV>  -- live threshold-position change.
+        # HWREV 2: someone moved a DIP switch.  HWREV 3: THRESHSEL was set.
         f = line.split(",")
         try:
             idx = int(f[1])
             thr = float(f[2])
         except (ValueError, IndexError):
             return
-        self.dip_lbl.config(text=f"DIP: {idx:02b} -> {thr:.3f} {self._thr_unit()}",
+        self.dip_lbl.config(text=f"THR POS {idx:02b} -> {thr:.3f} {self._thr_unit()}",
                             foreground="#06a")
 
     def _handle_diag(self, line):
@@ -841,13 +858,14 @@ class App(tk.Tk):
                 self.sn_prompted = True
                 self.after(150, self._prompt_for_sn)
 
-        # DIP position + active threshold (units follow the detection method)
+        # Threshold position + active threshold (units follow the detection
+        # method).  Still reported as "dip=" for both board revisions.
         if "dip" in kv:
             try:
                 idx = int(kv["dip"])
                 thr = float(kv.get("openthr", "nan"))
                 self.dip_lbl.config(
-                    text=f"DIP: {idx:02b} -> {thr:.3f} {self._thr_unit()}",
+                    text=f"THR POS {idx:02b} -> {thr:.3f} {self._thr_unit()}",
                     foreground="#06a")
             except ValueError:
                 pass
