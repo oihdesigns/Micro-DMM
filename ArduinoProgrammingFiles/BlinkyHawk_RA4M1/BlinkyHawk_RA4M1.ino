@@ -156,7 +156,7 @@
  * board parks every load it can switch (LED rail, speaker, battery-sense
  * divider, optionally the bridge) and enters Software Standby -- CPU and all
  * peripheral clocks stopped, RAM retained -- woken by the RTC periodic
- * interrupt every 2 s.  Each wake runs one cheap probe (SLEEPAVG reads instead
+ * interrupt every SLEEPTICKMS.  Each wake runs one cheap probe (SLEEPAVG instead
  * of VOLTAVG, no agreement count, no display debounce) and goes straight back
  * to sleep unless the leads are closed or voltage is present, in which case it
  * returns to full-rate operation.  The probe compares against SLEEPTHR00..11
@@ -171,7 +171,10 @@
  * cannot wake the unit every tick.  A 6 ms dim-blue flash every
  * SLEEPHB ticks shows it is asleep rather than dead.  Sleeping is skipped
  * entirely while charging or in diagnostic mode; SLEEPSEC = 0 disables it.
- * Worst-case wake latency is 2 s x SLEEPTICKS.
+ * Worst-case wake latency is SLEEPTICKMS x SLEEPTICKS.  SLEEPTICKMS snaps to
+ * the RTC ladder, 2 s down to ~4 ms; sleeping averages roughly an eighth of
+ * the awake current, so a short SLEEPSEC with a fast tick is a legitimate
+ * operating point and not only a standby mode.
  *
  * NOTE: millis() does not advance during Standby (its timer is clocked off),
  * so the sleeping loop counts ticks rather than timing, and the idle timer is
@@ -462,7 +465,12 @@ void configDefaults() {
   cfg.ledVoltPerMs    = 500;     // 2 Hz cap
 
   cfg.chargeThreshV  = 2.0f;
-  cfg.battEmptyV     = 3.30f;
+  // 3.70, not the cell's electrical floor: below ~3.6 V the analog baseline has
+  // drifted far enough that merely moving the leads trips the voltage detector
+  // (measured Aug 2026 -- false alerts at 3.6 V in, clean at 3.7 V).  The gauge
+  // therefore has to read empty while the unit is still trustworthy, so "empty"
+  // means "stop believing it" rather than "the cell is flat".
+  cfg.battEmptyV     = 3.70f;
   cfg.battFullV      = 4.20f;
   cfg.battFullPct    = 90;
 
@@ -1180,8 +1188,12 @@ const ConfigField CFG_FIELDS[] = {
   { "BATTFULLPCT", FT_U8,    &cfg.battFullPct,     50,     100    },
   // Low-power timeout
   { "SLEEPSEC",    FT_U16,   &cfg.idleTimeoutS,    0,      65535  },
-  { "SLEEPTICKMS", FT_U16,   &cfg.sleepTickMs,     125,    2000   },
-  { "SLEEPTICKS",  FT_U8,    &cfg.sleepPollTicks,  1,      100    },
+  // SLEEPTICKMS is snapped to the RTC ladder (SLEEP_TICK_OPTIONS), so the
+  // bounds only have to admit the ends of it -- 4 ms = 1/256 s, 2000 = 2 s.
+  { "SLEEPTICKMS", FT_U16,   &cfg.sleepTickMs,     4,      2000   },
+  // 255 rather than 100 so the fast rungs can still be paired with a slow probe
+  // cadence: at a 16 ms tick, 100 ticks is only 1.6 s between probes.
+  { "SLEEPTICKS",  FT_U8,    &cfg.sleepPollTicks,  1,      255    },
   { "SLEEPAVG",    FT_U8,    &cfg.sleepVoltAvg,    1,      50     },
   { "SLEEPHB",     FT_U8,    &cfg.sleepHbTicks,    0,      255    },
   { "SLEEPPARK",   FT_BOOL,  &cfg.sleepParkOff,    0,      1      },
@@ -1361,23 +1373,41 @@ void sleepMs(unsigned long ms) {
 #include "r_lpm.h"
 
 // The RTC periodic interrupt is the wake source.  Its period is not free-form --
-// the library exposes a fixed ladder, of which these are the useful end -- so
-// cfg.sleepTickMs is snapped to one of them.  2 s is the library's maximum (and
-// the cheapest); below 125 ms the probe cost stops being worth the latency.
+// the library exposes a fixed ladder of 2 s down to 1/256 s -- so cfg.sleepTickMs
+// is snapped to the nearest rung.  2 s is the library's maximum and the cheapest.
 // Worst-case detection latency = cfg.sleepTickMs * cfg.sleepPollTicks.
+//
+// The whole ladder is exposed because the useful operating point is not obvious
+// from the datasheet: sleeping costs ~1.4 mA average against ~11.5 mA awake, so
+// a fast tick paired with a short SLEEPSEC (sleep almost immediately, poll
+// quickly) can be both more responsive AND cheaper than staying awake.  Where
+// that trade stops paying is a bench question, hence the rungs.
+//
+// The sub-125 ms rungs are not whole milliseconds (1/16 s = 62.5 ms, 1/256 s =
+// 3.90625 ms); the ms column is the rounded value, since cfg.sleepTickMs is a
+// uint16_t of milliseconds.  Only the derived latency/pacing arithmetic uses it,
+// and it is off by at most ~2.5% -- the interrupt itself runs at the exact rate.
+// Below roughly 30 ms the probe and the standby wake overhead dominate the tick,
+// so the board stops idling between wakes and average current climbs toward the
+// awake figure: those rungs are for measuring that knee, not for shipping.
 struct SleepTickOption { uint16_t ms; Period period; };
 const SleepTickOption SLEEP_TICK_OPTIONS[] = {
-  { 2000, Period::ONCE_EVERY_2_SEC   },
-  { 1000, Period::ONCE_EVERY_1_SEC   },
-  {  500, Period::N2_TIMES_EVERY_SEC },
-  {  250, Period::N4_TIMES_EVERY_SEC },
-  {  125, Period::N8_TIMES_EVERY_SEC },
+  { 2000, Period::ONCE_EVERY_2_SEC     },
+  { 1000, Period::ONCE_EVERY_1_SEC     },
+  {  500, Period::N2_TIMES_EVERY_SEC   },
+  {  250, Period::N4_TIMES_EVERY_SEC   },
+  {  125, Period::N8_TIMES_EVERY_SEC   },
+  {   63, Period::N16_TIMES_EVERY_SEC  },   // 62.5 ms
+  {   31, Period::N32_TIMES_EVERY_SEC  },   // 31.25 ms
+  {   16, Period::N64_TIMES_EVERY_SEC  },   // 15.625 ms
+  {    8, Period::N128_TIMES_EVERY_SEC },   // 7.8125 ms
+  {    4, Period::N256_TIMES_EVERY_SEC },   // 3.90625 ms
 };
 const int SLEEP_TICK_OPTION_COUNT =
     sizeof(SLEEP_TICK_OPTIONS) / sizeof(SLEEP_TICK_OPTIONS[0]);
 const unsigned long SLEEP_HB_MS   = 6;    // heartbeat flash on-time
 const uint8_t SLEEP_HB_BRIGHT     = 12;   // heartbeat flash brightness (dim blue)
-const unsigned long SLEEP_BOOT_GRACE_MS = 30000;   // never sleep this soon after boot
+const unsigned long SLEEP_BOOT_GRACE_MS = 8000;   // never sleep this soon after boot
 
 bool          lowPowerActive = false;  // currently parked + sleeping
 bool          sleepArmed     = false;  // !SLEEP: sleep as soon as it is allowed
@@ -2658,6 +2688,9 @@ void setup() {
   pinMode(BATT_PIN, INPUT);              // BAT_DET_PIN (P105) = Vbatt/2 sense
   pinMode(BATT_EN_PIN, OUTPUT);          // BAT_READ_EN (P400)
   digitalWrite(BATT_EN_PIN, HIGH);
+  
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH); //Turn User LED Off, HIGH=Off
 
   analogReadResolution(ADC_RESOLUTION);
   pinMode(CHARGE_PIN, INPUT);            // A3 = VBUS/2 (USB-power sense)
@@ -2813,7 +2846,14 @@ void loop() {
   // uses.  This is what makes the baseline shift visible: unplug, let it run
   // awake for a while, let it sleep, replug and compare the AWAKE and SLEEP
   // rows in !SLEEPLOG.  Skipped on USB -- the host can already see those.
-  if (!chargeActive && millis() - lastSlogAwakeMs >= cfg.sleepTickMs) {
+  // Paced by the PROBE interval (tick x ticks-per-probe), not the raw tick: on
+  // the fast rungs a per-tick sample would overwrite the whole 64-entry ring
+  // several times a second, leaving nothing of the run to compare against. The
+  // 100 ms floor holds even if the probe interval itself is shorter than that.
+  unsigned long slogEveryMs =
+      (unsigned long)cfg.sleepTickMs * cfg.sleepPollTicks;
+  if (slogEveryMs < 100UL) slogEveryMs = 100UL;
+  if (!chargeActive && millis() - lastSlogAwakeMs >= slogEveryMs) {
     lastSlogAwakeMs = millis();
     slogRecord(leadState, true);
   }

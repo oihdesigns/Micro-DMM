@@ -152,10 +152,15 @@ KEY_META = {
     "BATTFULL":     ("Power / battery", "num", "Battery voltage mapped to 100% (V)"),
     "BATTFULLPCT":  ("Power / battery", "num", "Charge % at which blink turns green"),
     # --- Low power ---
-    "SLEEPSEC":     ("Low power", "num",  "Open-lead idle time before sleeping (s; 0 = never sleep)"),
-    "SLEEPTICKMS":  ("Low power", "choice", "Base wake period (ms); snapped to a rate the RTC can produce",
-                     ["2000", "1000", "500", "250", "125"]),
-    "SLEEPTICKS":   ("Low power", "num",  "Probe every N wake ticks (N x SLEEPTICKMS between checks)"),
+    "SLEEPSEC":     ("Low power", "num",  "Open-lead idle time before sleeping (s; 0 = never sleep). "
+                                          "Small values (1-2 s) + a fast SLEEPTICKMS = poll-while-asleep operation"),
+    # The RTC ladder runs 2 s down to 1/256 s. The sub-125 ms rungs are rounded
+    # here and in firmware (62.5 -> 63, 3.90625 -> 4); the interrupt itself is exact.
+    "SLEEPTICKMS":  ("Low power", "choice", "Base wake period (ms); snapped to a rate the RTC can produce. "
+                                            "63/31/16/8/4 are the 1/16..1/256 s rungs (rounded); below ~30 ms "
+                                            "the probe dominates the tick and average current climbs to awake levels",
+                     ["2000", "1000", "500", "250", "125", "63", "31", "16", "8", "4"]),
+    "SLEEPTICKS":   ("Low power", "num",  "Probe every N wake ticks (N x SLEEPTICKMS between checks; 1-255)"),
     "SLEEPAVG":     ("Low power", "num",  "Reads per sleeping voltage check; ANY over VOLTFAST x REFBAND wakes (fewer = quieter)"),
     "SLEEPHB":      ("Low power", "num",  "Heartbeat flash every N ticks (counts SLEEPTICKMS ticks, not seconds)"),
     "SLEEPPARK":    ("Low power", "bool", "1 = park the bridge MOSFET OFF while asleep"),
