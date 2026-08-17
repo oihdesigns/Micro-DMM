@@ -409,12 +409,17 @@ void configDefaults() {
   // this default only ever reaches a board whose EEPROM was blank or reset.
   cfg.hwRev          = 3;
 
-  cfg.refCenterV     = -0.02f;
+  cfg.refCenterV     = 0.018f;
   cfg.refBandV       = 0.025f;
-  cfg.thresh[0]      = 0.15f;    // 00: both switches ON  (most sensitive)
-  cfg.thresh[1]      = 0.54f;    // 01: D8 ON,  D10 OFF
-  cfg.thresh[2]      = 0.45f;    // 10: D8 OFF, D10 ON
-  cfg.thresh[3]      = 0.62f;    // 11: both switches OFF (factory position)
+  // NOTE: thresh[] is in the units of cfg.detectMethod, which is now 1
+  // (time-to-return), so slot 11 is 1.0 MILLISECONDS, not volts.  Slots 00-10
+  // are the old method-0 volt figures and have NOT been re-tuned for method 1 --
+  // they are placeholders until someone characterises them.  Only slot 11 (the
+  // factory selection) is a real, bench-tuned value.
+  cfg.thresh[0]      = 0.15f;    // 00: not re-tuned for method 1
+  cfg.thresh[1]      = 0.54f;    // 01: not re-tuned for method 1
+  cfg.thresh[2]      = 0.45f;    // 10: not re-tuned for method 1
+  cfg.thresh[3]      = 1.0f;     // 11: ms, the factory selection
   cfg.threshSel      = 3;        // V3: same entry the V2 factory DIP position used
   cfg.voltFastMult   = 5.0f;
   cfg.voltAvgSamples = 10;
@@ -425,7 +430,7 @@ void configDefaults() {
   cfg.negFix         = 1;        // matches the proven XIAO_Minimal behaviour
   cfg.negFixV        = 1.250f;
 
-  cfg.detectMethod   = 0;        // ship on the proven single-sample method
+  cfg.detectMethod   = 1;        // time-to-return: what the V3 units ship on
   cfg.detReturnBand  = 0.05f;    // best IsoGnd/Open separation in bench captures
   cfg.detWindowUs    = 1500;     // recovery completes ~0.7-0.95 ms; window past it
   cfg.detAreaStartUs = 400;      // skip the common initial dip; integrate the tail
@@ -435,29 +440,28 @@ void configDefaults() {
   cfg.bootMute       = 1;
   cfg.passiveBuzzer  = 1;
   cfg.spkDiff        = 1;        // V3 default: anti-phase drive (loudest)
-  cfg.contFreqHz     = 2000;
-  cfg.voltFreqHz     = 2500;
+  // The fitted buzzer is a resonator: it is only usefully loud near 4 kHz, so
+  // both alerts sit there and are told apart by pulse count, not pitch.
+  cfg.contFreqHz     = 4000;
+  cfg.voltFreqHz     = 4000;
   cfg.contPulses     = 1;
-  cfg.voltPulses     = 2;
+  cfg.voltPulses     = 2;        // double beep (still being tuned by ear)
   cfg.contRepeat     = 1;
   cfg.voltRepeat     = 0;
   cfg.contRepeatMs   = 1000;
   cfg.voltRepeatMs   = 1000;
-  cfg.beepMinMs      = 500;
+  cfg.beepMinMs      = 250;
 
-  // Beep pulse shape and LED flash defaults reproduce EXACTLY the compile-time
-  // constants these keys replaced, so a unit migrated from v6 looks and sounds
-  // identical until someone deliberately changes one.
-  cfg.contOnMs       = 20;
-  cfg.contHoldMs     = 50;
+  cfg.contOnMs       = 100;
+  cfg.contHoldMs     = 100;
   cfg.contOffMs      = 10;
   cfg.voltOnMs       = 20;
   cfg.voltOffMs      = 10;
 
-  cfg.ledFloatBright  = 28;      // dim blue -- the common idle state
-  cfg.ledClosedBright = 200;     // green
+  cfg.ledFloatBright  = 20;      // dim blue -- the common idle state
+  cfg.ledClosedBright = 64;      // green
   cfg.ledVoltBright   = 200;     // red
-  cfg.ledFloatMs      = 150;
+  cfg.ledFloatMs      = 50;
   cfg.ledClosedMs     = 200;
   cfg.ledVoltMs       = 200;
   cfg.ledFloatPerMs   = 1000;    // 1 Hz cap
@@ -474,13 +478,19 @@ void configDefaults() {
   cfg.battFullV      = 4.20f;
   cfg.battFullPct    = 90;
 
-  cfg.idleTimeoutS   = 15;       // seconds of open leads before sleeping
-  cfg.sleepTickMs    = 2000;     // slowest RTC period = fewest wakes
+  // Sleeping costs ~2 mA against ~11 mA awake, so the unit drops into the
+  // low-power poll almost immediately and lives there: 1 s of open leads, then
+  // wake ~16x/sec to probe.  This is the operating state, not a standby mode.
+  cfg.idleTimeoutS   = 1;        // seconds of open leads before sleeping
+  cfg.sleepTickMs    = 63;       // 1/16 s rung; ~2 mA average
   cfg.sleepPollTicks = 1;        // probe on every wake
   cfg.sleepVoltAvg   = 3;        // reads per probe; any one over the bypass band wakes
-  cfg.sleepHbTicks   = 30;       // "still alive" flash once a minute
+  cfg.sleepHbTicks   = 32;       // counts TICKS, so ~2 s at a 63 ms tick
   cfg.sleepParkOff   = 0;        // bridge parked resting (as in normal operation)
   for (int i = 0; i < 4; i++) cfg.sleepThresh[i] = 0.0f;   // 0 = use thresh[i]
+  // Slot 11 is the factory selection and the one that matters: a probe taken out
+  // of standby reads high, so its wake threshold sits above the awake 1.0 ms.
+  cfg.sleepThresh[3] = 1.2f;     // ms (units follow detectMethod)
 
   cfg.loopDelayMs    = 50;
 }
