@@ -1,0 +1,26 @@
+{
+  "buses": [
+    {"id": "bench", "protocol": "modbus", "port": "COM5", "baud": 19200,
+     "timeout": 0.25, "retries": 2},
+    {"id": "aux", "protocol": "ascii", "port": "COM7", "baud": 19200},
+    {"id": "sim", "protocol": "sim"}
+  ],
+  "devices": [
+    {"name": "MFC-N2", "bus": "bench", "address": "1",
+     "model": "MC-500SCCM-D-MODBUS-485-PCV10/CM", "units": "SCCM",
+     "full_scale": 500.0, "poll_hz": 4.0,
+     "readings": ["pressure", "temperature", "volumetric", "mass", "setpoint", "totalizer"]},
+
+    {"name": "MFC-Ar", "bus": "bench", "address": "2",
+     "model": "MC-50SCCM-D", "units": "SCCM", "full_scale": 50.0, "poll_hz": 4.0},
+
+    {"name": "MFM-vent", "bus": "aux", "address": "B",
+     "model": "M-5SLPM-D", "units": "SLPM", "full_scale": 5.0,
+     "poll_hz": 2.0, "is_controller": false,
+     "readings": ["pressure", "temperature", "volumetric", "mass"]},
+
+    {"name": "SIM-spare", "bus": "sim", "address": "sim",
+     "model": "simulated MC-100SCCM", "units": "SCCM",
+     "full_scale": 100.0, "poll_hz": 4.0}
+  ]
+}
