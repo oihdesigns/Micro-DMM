@@ -38,6 +38,13 @@ MAX_DISPLAY_PTS = 5_000   # downsample limit for streaming waveform render
 
 TC_UNITS = ["°C", "°F", "mV"]
 
+# EMA filter, applied to the thermocouple traces in the GUI rather than on the
+# board: the filter state is rebuilt from the sample buffer whenever a setting
+# changes, so a new time constant re-filters the history already on screen
+# instead of only affecting samples that arrive afterwards.
+TRACE_MODES = ["Instant + EMA", "Instant only", "EMA only"]
+EMA_MODES = ["Time constant (s)", "Alpha (per sample)"]
+
 # Meter layout, in characters of the monospaced display font: the value column
 # holds the widest reading any mode produces ("+0.007629", "+2501.60") and the
 # unit column holds "V", "mV", "°C", "°F".
@@ -121,6 +128,7 @@ BG     = "#1a1a1a"
 PANEL  = "#222222"
 ACCENT = "#00ff32"
 AMBER  = "#ffaa00"
+CYAN   = "#00ccff"   # EMA trace — distinct from the green instant trace
 DIM    = "#888888"
 WHITE  = "#e0e0e0"
 RED    = "#ff4444"
@@ -151,6 +159,16 @@ class App(tk.Tk):
         self._tc_c:  deque = deque(maxlen=200_000)
         self._tc_mv: deque = deque(maxlen=200_000)
         self._last_cj_c = float("nan")
+
+        # EMA of those two series, maintained incrementally in lockstep with
+        # them. Both are kept because °C→°F is affine (so the filter commutes
+        # with it) but volts→°C is not: filtering mV and converting would not
+        # give the same answer as filtering the temperature.
+        self._ema_c:  deque = deque(maxlen=200_000)
+        self._ema_mv: deque = deque(maxlen=200_000)
+        self._ema_state_c = None
+        self._ema_state_mv = None
+        self._ema_last_t = None
 
         self._last_stream_plot = 0.0   # throttle streaming plot to ~30 fps
 
@@ -324,6 +342,44 @@ class App(tk.Tk):
         tk.Button(tc_btns, text="Clear zero", bg=PANEL, fg=DIM, relief="flat",
                   command=lambda: self._send("!TCOFF,0")).pack(side="left", padx=4)
 
+        # ── EMA filter ────────────────────────────────────────────────────────
+        self._lbl(f, "EMA filter")
+
+        trace_row = tk.Frame(f, bg=BG)
+        trace_row.pack(fill="x", pady=2)
+        tk.Label(trace_row, text="Traces:", bg=BG, fg=WHITE,
+                 width=8, anchor="w").pack(side="left")
+        self._trace_var = tk.StringVar(value=TRACE_MODES[0])
+        trace_cb = ttk.Combobox(trace_row, textvariable=self._trace_var,
+                                values=TRACE_MODES, state="readonly", width=14)
+        trace_cb.pack(side="left")
+        trace_cb.bind("<<ComboboxSelected>>", lambda _: self._on_units_changed())
+
+        ema_row = tk.Frame(f, bg=BG)
+        ema_row.pack(fill="x", pady=2)
+        tk.Label(ema_row, text="Filter:", bg=BG, fg=WHITE,
+                 width=8, anchor="w").pack(side="left")
+        self._ema_mode_var = tk.StringVar(value=EMA_MODES[0])
+        ema_cb = ttk.Combobox(ema_row, textvariable=self._ema_mode_var,
+                              values=EMA_MODES, state="readonly", width=14)
+        ema_cb.pack(side="left")
+        ema_cb.bind("<<ComboboxSelected>>", lambda _: self._on_ema_mode_changed())
+
+        val_row = tk.Frame(f, bg=BG)
+        val_row.pack(fill="x", pady=1)
+        tk.Label(val_row, text="τ / α:", bg=BG, fg=DIM,
+                 width=8, anchor="w").pack(side="left")
+        self._ema_val_var = tk.StringVar(value="2.0")
+        ema_entry = tk.Entry(val_row, textvariable=self._ema_val_var, width=7,
+                             bg=PANEL, fg=WHITE, insertbackground=WHITE,
+                             relief="flat", validate="key",
+                             validatecommand=(vcmd_f2, "%P"))
+        ema_entry.pack(side="left", padx=2)
+        ema_entry.bind("<Return>",   lambda _: self._ema_recompute())
+        ema_entry.bind("<FocusOut>", lambda _: self._ema_recompute())
+        self._ema_hint = tk.Label(val_row, text="s", bg=BG, fg=DIM)
+        self._ema_hint.pack(side="left")
+
         self._burnout_var = tk.BooleanVar(value=False)
         tk.Checkbutton(f, text="Burn-out current (open TC detect)",
                        variable=self._burnout_var, bg=BG, fg=WHITE,
@@ -435,6 +491,7 @@ class App(tk.Tk):
         self._cj_lbl     = self._stat_row(tc_stats, "Cold Jct")
         self._tcmv_lbl   = self._stat_row(tc_stats, "TC EMF")
         self._tcalt_lbl  = self._stat_row(tc_stats, "Hot Jct")
+        self._ema_lbl    = self._stat_row(tc_stats, "EMA")
         self._tcflag_lbl = self._stat_row(tc_stats, "TC Status")
 
         # ── waveform plot ─────────────────────────────────────────────────────
@@ -450,6 +507,9 @@ class App(tk.Tk):
                                             label="stream")
         self._burst_line,  = self._ax.plot([], [], color=AMBER,  linewidth=0.8,
                                             label="burst")
+        # one EMA line serves both, since the plot shows stream or burst, never both
+        self._ema_line,    = self._ax.plot([], [], color=CYAN,   linewidth=1.4,
+                                            label="EMA")
         self._plot_title = self._ax.set_title("", color=DIM, fontsize=8, pad=3)
 
         canvas = FigureCanvasTkAgg(fig, master=f)
@@ -581,6 +641,7 @@ class App(tk.Tk):
             self._timestamps.clear()
             self._tc_c.clear()
             self._tc_mv.clear()
+            self._ema_reset()
             self._stream_btn.config(text="■  Stop Stream", bg="#552200")
 
     def _trigger_burst(self):
@@ -743,6 +804,10 @@ class App(tk.Tk):
             self._tc_c.append(hot_c)
             self._tc_mv.append(mv)
             self._voltages.append(v_tc)
+            self._ema_push(now, hot_c, mv)
+            ema_now = self._ema_display_series()[-1] if self._ema_c else float("nan")
+            self._ema_lbl.config(
+                text="—" if ema_now != ema_now else f"{ema_now:+.4f} {unit}")
             self._update_stream_plot()
 
         elif line.startswith("$TCCFG,"):
@@ -889,6 +954,7 @@ class App(tk.Tk):
         self._timestamps.clear()
         self._tc_c.clear()
         self._tc_mv.clear()
+        self._ema_reset()
         self._t0 = time.monotonic()
         self._on_units_changed()
 
@@ -896,6 +962,96 @@ class App(tk.Tk):
         self._update_stream_plot(force=True)
         if self._burst_volts:
             self._update_burst_plot()
+
+    # ── EMA filter ────────────────────────────────────────────────────────────
+
+    def _on_ema_mode_changed(self):
+        by_time = self._ema_mode_var.get() == EMA_MODES[0]
+        self._ema_hint.config(text="s" if by_time else "")
+        self._ema_val_var.set("2.0" if by_time else "0.1")
+        self._ema_recompute()
+
+    def _ema_setting(self) -> float:
+        try:
+            return float(self._ema_val_var.get())
+        except ValueError:
+            return 2.0 if self._ema_mode_var.get() == EMA_MODES[0] else 0.1
+
+    def _ema_alpha(self, dt: float) -> float:
+        """Weight for one sample.
+
+        In time-constant mode the weight is derived from the actual gap between
+        samples — a = 1 - exp(-dt/tau) — so the filter keeps the same physical
+        response when the data rate changes, and a long gap simply lets it
+        re-converge instead of dragging a stale value forward.
+        """
+        if self._ema_mode_var.get() == EMA_MODES[1]:
+            return min(max(self._ema_setting(), 0.0), 1.0)
+        tau = self._ema_setting()
+        if tau <= 0.0:
+            return 1.0
+        return 1.0 - math.exp(-max(dt, 0.0) / tau)
+
+    def _ema_reset(self):
+        self._ema_c.clear()
+        self._ema_mv.clear()
+        self._ema_state_c = None
+        self._ema_state_mv = None
+        self._ema_last_t = None
+
+    def _ema_push(self, t: float, c_val: float, mv_val: float):
+        """Advance the filter by one sample and record its output."""
+        if c_val != c_val:          # out-of-range reading: hold state, gap the trace
+            self._ema_c.append(float("nan"))
+            self._ema_mv.append(float("nan"))
+            return
+        dt = 0.0 if self._ema_last_t is None else max(t - self._ema_last_t, 0.0)
+        alpha = self._ema_alpha(dt)
+        if self._ema_state_c is None:
+            self._ema_state_c, self._ema_state_mv = c_val, mv_val
+        else:
+            self._ema_state_c  += alpha * (c_val  - self._ema_state_c)
+            self._ema_state_mv += alpha * (mv_val - self._ema_state_mv)
+        self._ema_last_t = t
+        self._ema_c.append(self._ema_state_c)
+        self._ema_mv.append(self._ema_state_mv)
+
+    def _ema_recompute(self):
+        """Re-run the filter over everything buffered, then redraw.
+
+        This is what makes the time constant tunable: change it and the whole
+        visible history is re-filtered, rather than having to wait for new
+        samples to work through the old setting.
+        """
+        times, temps, mvs = (list(self._timestamps), list(self._tc_c),
+                             list(self._tc_mv))
+        self._ema_reset()
+        for t, c_val, mv_val in zip(times, temps, mvs):
+            self._ema_push(t, c_val, mv_val)
+        self._on_units_changed()
+
+    def _ema_offline(self, ys, dt: float):
+        """Filter an already-captured series (burst) with uniform spacing."""
+        alpha = self._ema_alpha(dt)
+        out, state = [], None
+        for y in ys:
+            if y != y:
+                out.append(float("nan"))
+                continue
+            state = y if state is None else state + alpha * (y - state)
+            out.append(state)
+        return out
+
+    def _show_instant(self) -> bool:
+        return self._trace_var.get() != TRACE_MODES[2]
+
+    def _show_ema(self) -> bool:
+        return self._tc_mode and self._trace_var.get() != TRACE_MODES[1]
+
+    def _ema_display_series(self):
+        """The EMA in the unit on screen — see the note in __init__ on why the
+        °C and mV filters are kept separately."""
+        return self._tc_convert(self._ema_c, self._ema_mv)
 
     def _y_label(self) -> str:
         if not self._tc_mode:
@@ -967,6 +1123,25 @@ class App(tk.Tk):
             except ValueError:
                 self._ax.autoscale_view()
 
+    @staticmethod
+    def _set_line(line, xs, ys):
+        """Set a trace, blanking x as well when there is no y — matplotlib
+        rejects mismatched lengths at draw time, not at set_data time."""
+        if len(ys):
+            line.set_data(xs, ys)
+        else:
+            line.set_data([], [])
+
+    def _update_legend(self):
+        """Only worth the space when both traces are on screen."""
+        show = self._show_ema() and self._show_instant()
+        existing = self._ax.get_legend()
+        if show and existing is None:
+            self._ax.legend(loc="upper left", fontsize=8, facecolor=PANEL,
+                            edgecolor=SEP, labelcolor=DIM)
+        elif not show and existing is not None:
+            existing.remove()
+
     def _update_stream_plot(self, force: bool = False):
         now = time.monotonic()
         if not force and now - self._last_stream_plot < 1 / 30:
@@ -976,11 +1151,13 @@ class App(tk.Tk):
         self._ax.set_ylabel(self._y_label(), color=DIM)
         if not self._timestamps:
             self._stream_line.set_data([], [])
+            self._ema_line.set_data([], [])
             self._canvas.draw_idle()
             return
         ts = list(self._timestamps)
         vs = (self._tc_convert(self._tc_c, self._tc_mv) if self._tc_mode
               else list(self._voltages))
+        es = self._ema_display_series() if self._show_ema() else []
 
         # rolling history window
         try:
@@ -993,19 +1170,26 @@ class App(tk.Tk):
         xs = ts[idx:]
         ys = vs[idx:]
 
+        # the EMA is filtered before this, so decimating it here only thins
+        # the drawn line rather than changing the filter's response
+        fs = es[idx:] if es else []
+
         # downsample to keep render fast
         if len(xs) > MAX_DISPLAY_PTS:
             step = max(len(xs) // MAX_DISPLAY_PTS, 1)
             xs = xs[::step]
             ys = ys[::step]
+            fs = fs[::step]
 
-        self._stream_line.set_data(xs, ys)
+        self._set_line(self._stream_line, xs, ys if self._show_instant() else [])
+        self._set_line(self._ema_line, xs, fs)
         self._burst_line.set_data([], [])
         self._plot_title.set_text("Streaming")
         self._plot_title.set_color(DIM)
         self._ax.set_xlabel("Time (s)", color=DIM)
         self._ax.set_xlim(cutoff, t_end)   # explicit x-range keeps rolling effect
-        self._apply_y_range(ys)
+        self._apply_y_range((ys if self._show_instant() else []) + fs)
+        self._update_legend()
         self._canvas.draw_idle()
 
     def _burst_series(self):
@@ -1027,7 +1211,9 @@ class App(tk.Tk):
         # x-axis: time in seconds
         dt = 1.0 / self._burst_sps if self._burst_sps > 0 else 1.0
         xs = [i * dt for i in range(count)]
-        self._burst_line.set_data(xs, ys)
+        fs = self._ema_offline(ys, dt) if self._show_ema() else []
+        self._set_line(self._burst_line, xs, ys if self._show_instant() else [])
+        self._set_line(self._ema_line, xs, fs)
         self._stream_line.set_data([], [])
         self._plot_title.set_text(f"Burst  ({count} samples @ {self._burst_sps:.1f} SPS)")
         self._plot_title.set_color(AMBER)
@@ -1035,7 +1221,8 @@ class App(tk.Tk):
         self._ax.set_ylabel(self._y_label(), color=DIM)
         self._ax.relim()
         self._ax.set_xlim(0, xs[-1] if count > 1 else 1.0)
-        self._apply_y_range(ys)
+        self._apply_y_range((ys if self._show_instant() else []) + fs)
+        self._update_legend()
         self._canvas.draw_idle()
 
     def _log(self, text: str):
