@@ -167,8 +167,11 @@ static const double TK_INV_HIGH[] = {      // 20.644 … 54.886 mV (500 … 1372
   -9.650715E-04,  8.802193E-06, -3.110810E-08
 };
 
-#define TK_MV_MIN  (-5.891)   // -200 °C — the bottom of the inverse fit
-#define TK_MV_MAX  (54.886)   // 1372 °C
+// The limits are the forward polynomial evaluated at the endpoints rather
+// than the rounded table values — at 1372 °C it returns 54.8864 mV, and a
+// limit of 54.886 would reject the top hundredth of a degree of the scale.
+#define TK_MV_MIN  (-5.89141)   // -200 °C — the bottom of the inverse fit
+#define TK_MV_MAX  (54.88637)   // 1372 °C
 
 static double tkPoly(const double* c, uint8_t n, double x) {
   double out = 0.0, p = 1.0;

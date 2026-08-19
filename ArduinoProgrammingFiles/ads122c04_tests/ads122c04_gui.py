@@ -37,6 +37,13 @@ RATE_NOMINAL = [20, 45, 90, 175, 330, 600, 1000]
 MAX_DISPLAY_PTS = 5_000   # downsample limit for streaming waveform render
 
 TC_UNITS = ["°C", "°F", "mV"]
+
+# Meter layout, in characters of the monospaced display font: the value column
+# holds the widest reading any mode produces ("+0.007629", "+2501.60") and the
+# unit column holds "V", "mV", "°C", "°F".
+METER_VALUE_W = 9
+METER_UNIT_W  = 2
+METER_W = METER_VALUE_W + 1 + METER_UNIT_W
 CJ_SOURCES = ["Internal sensor", "Fixed value"]
 
 # ── type-K thermocouple math (NIST ITS-90) ────────────────────────────────────
@@ -63,7 +70,10 @@ _TK_INV_MID = (0.0, 2.508355E+01, 7.860106E-02, -2.503131E-01, 8.315270E-02,
 _TK_INV_HIGH = (-1.318058E+02, 4.830222E+01, -1.646031E+00, 5.464731E-02,
                 -9.650715E-04, 8.802193E-06, -3.110810E-08)
 
-TK_MV_MIN, TK_MV_MAX = -5.891, 54.886     # -200 °C … 1372 °C
+# Range limits are the forward polynomial evaluated at the endpoints, not
+# the rounded table values: at 1372 °C it returns 54.8864 mV, so a limit of
+# 54.886 would reject the top hundredth of a degree of the scale.
+TK_MV_MIN, TK_MV_MAX = -5.89141, 54.88637   # -200 °C … 1372 °C
 
 
 def _poly(coeffs, x):
@@ -405,9 +415,12 @@ class App(tk.Tk):
         meter = tk.Frame(f, bg=PANEL)
         meter.pack(fill="x", pady=(0, 4))
 
-        self._volt_lbl = tk.Label(meter, text="------- V",
-                                   bg=PANEL, fg=ACCENT,
-                                   font=("Courier New", 36, "bold"))
+        # Fixed character width: the reading is padded to METER_W columns so
+        # 2-digit and 4-digit values occupy the same space and nothing packed
+        # after this label slides around as the temperature changes.
+        self._volt_lbl = tk.Label(meter, text=self._meter_text("-------", "V"),
+                                   bg=PANEL, fg=ACCENT, width=METER_W,
+                                   anchor="w", font=("Courier New", 36, "bold"))
         self._volt_lbl.pack(side="left", padx=16, pady=8)
 
         stats = tk.Frame(meter, bg=PANEL)
@@ -461,14 +474,24 @@ class App(tk.Tk):
                                 relief="flat")
         self._console.pack(fill="x")
 
-    def _stat_row(self, parent, title):
+    def _stat_row(self, parent, title, width=21):
         row = tk.Frame(parent, bg=PANEL)
         row.pack(anchor="w")
         tk.Label(row, text=f"{title}:", bg=PANEL, fg=DIM,
                  width=12, anchor="w").pack(side="left")
-        lbl = tk.Label(row, text="—", bg=PANEL, fg=WHITE, anchor="w", width=16)
+        # width is in characters and clips anything longer, so it has to cover
+        # the widest value each row can show ("25.00 °C / 77.00 °F")
+        lbl = tk.Label(row, text="—", bg=PANEL, fg=WHITE, anchor="w", width=width)
         lbl.pack(side="left")
         return lbl
+
+    @staticmethod
+    def _meter_text(value: str, unit: str = "") -> str:
+        """Pad a reading into the meter's fixed column layout."""
+        return f"{value:>{METER_VALUE_W}} {unit:<{METER_UNIT_W}}"
+
+    def _set_meter(self, value: str, unit: str = "", color: str = ACCENT):
+        self._volt_lbl.config(text=self._meter_text(value, unit), fg=color)
 
     def _bstat(self, parent, title):
         col = tk.Frame(parent, bg=PANEL)
@@ -642,7 +665,7 @@ class App(tk.Tk):
             is_se   = 8 <= mux_i <= 11
             nom_sps = RATE_NOMINAL[rate_i] * (2 if turbo else 1)
 
-            self._volt_lbl.config(text=f"{volts:+.6f} V", fg=ACCENT)
+            self._set_meter(f"{volts:+.6f}", "V")
             self._raw_lbl.config(text=f"0x{raw & 0xFFFFFF:06X}  ({raw})")
             self._sps_lbl.config(text=f"{act_sps:.1f}")
             self._nom_lbl.config(text=str(nom_sps))
@@ -683,15 +706,15 @@ class App(tk.Tk):
             unit = self._tc_unit_var.get()
             mv = v_tc * 1000.0
 
+            color = RED if flags else ACCENT
             if unit == "mV":
-                self._volt_lbl.config(text=f"{mv:+.4f} mV")
+                self._set_meter(f"{mv:+.4f}", "mV", color)
             elif unit == "°F":
-                self._volt_lbl.config(
-                    text="---- °F" if hot_c != hot_c else f"{c_to_f(hot_c):+.2f} °F")
+                self._set_meter("-------" if hot_c != hot_c
+                                else f"{c_to_f(hot_c):+.2f}", "°F", color)
             else:
-                self._volt_lbl.config(
-                    text="---- °C" if hot_c != hot_c else f"{hot_c:+.2f} °C")
-            self._volt_lbl.config(fg=RED if flags else ACCENT)
+                self._set_meter("-------" if hot_c != hot_c
+                                else f"{hot_c:+.2f}", "°C", color)
 
             self._raw_lbl.config(text=f"0x{raw & 0xFFFFFF:06X}  ({raw})")
             self._sps_lbl.config(text=f"{act_sps:.1f}")
@@ -729,7 +752,7 @@ class App(tk.Tk):
             parts = line[6:].split(",")
             if len(parts) < 4:
                 return
-            self._volt_lbl.config(text=f"{float(parts[0]):.4f} °C")
+            self._set_meter(f"{float(parts[0]):.4f}", "°C")
             self._sps_lbl.config(text=f"{float(parts[3]):.1f}")
             self._mode_lbl.config(text="TEMP")
 
@@ -761,7 +784,7 @@ class App(tk.Tk):
                 self._stream_btn.config(text="▶  Start Stream", bg="#224422")
 
         elif line.startswith("$ERR,"):
-            self._volt_lbl.config(text="ERROR")
+            self._set_meter("ERROR", "", RED)
             if self._in_burst:
                 self._in_burst = False
                 self._burst_btn.config(state="normal")
