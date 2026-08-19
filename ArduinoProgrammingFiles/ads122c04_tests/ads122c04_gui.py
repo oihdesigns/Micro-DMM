@@ -4,6 +4,7 @@ Requires: pip install pyserial matplotlib
 """
 
 import sys
+import math
 import time
 import threading
 import queue
@@ -35,6 +36,77 @@ RATE_NOMINAL = [20, 45, 90, 175, 330, 600, 1000]
 
 MAX_DISPLAY_PTS = 5_000   # downsample limit for streaming waveform render
 
+TC_UNITS = ["°C", "°F", "mV"]
+CJ_SOURCES = ["Internal sensor", "Fixed value"]
+
+# ── type-K thermocouple math (NIST ITS-90) ────────────────────────────────────
+# Same fits as the sketch. The board already sends a compensated temperature;
+# these are here so the GUI can re-derive one — for burst captures, and for any
+# sample when the cold junction or units change after the fact.
+
+_TK_NEG = (0.0, 0.394501280250E-01, 0.236223735980E-04, -0.328589067840E-06,
+           -0.499048287770E-08, -0.675090591730E-10, -0.574103274280E-12,
+           -0.310888728940E-14, -0.104516093650E-16, -0.198892668780E-19,
+           -0.163226974860E-22)
+_TK_POS = (-0.176004136860E-01, 0.389212049750E-01, 0.185587700320E-04,
+           -0.994575928740E-07, 0.318409457190E-09, -0.560728448890E-12,
+           0.560750590590E-15, -0.320207200030E-18, 0.971511471520E-22,
+           -0.121047212750E-25)
+_TK_A0, _TK_A1, _TK_A2 = 0.118597600000E+00, -0.118343200000E-03, 0.126968600000E+03
+
+_TK_INV_NEG = (0.0, 2.5173462E+01, -1.1662878E+00, -1.0833638E+00,
+               -8.9773540E-01, -3.7342377E-01, -8.6632643E-02, -1.0450598E-02,
+               -5.1920577E-04)
+_TK_INV_MID = (0.0, 2.508355E+01, 7.860106E-02, -2.503131E-01, 8.315270E-02,
+               -1.228034E-02, 9.804036E-04, -4.413030E-05, 1.057734E-06,
+               -1.052755E-08)
+_TK_INV_HIGH = (-1.318058E+02, 4.830222E+01, -1.646031E+00, 5.464731E-02,
+                -9.650715E-04, 8.802193E-06, -3.110810E-08)
+
+TK_MV_MIN, TK_MV_MAX = -5.891, 54.886     # -200 °C … 1372 °C
+
+
+def _poly(coeffs, x):
+    out, p = 0.0, 1.0
+    for c in coeffs:
+        out += c * p
+        p *= x
+    return out
+
+
+def tk_temp_to_mv(t_c: float) -> float:
+    """Type-K EMF in mV for a junction at t_c, referenced to 0 °C."""
+    if t_c < 0.0:
+        return _poly(_TK_NEG, t_c)
+    return _poly(_TK_POS, t_c) + _TK_A0 * math.exp(_TK_A1 * (t_c - _TK_A2) ** 2)
+
+
+def tk_mv_to_temp(mv: float) -> float:
+    """Inverse: mV referenced to 0 °C -> °C. NaN outside the type-K range."""
+    if mv != mv or mv < TK_MV_MIN or mv > TK_MV_MAX:
+        return float("nan")
+    if mv < 0.0:
+        return _poly(_TK_INV_NEG, mv)
+    if mv < 20.644:
+        return _poly(_TK_INV_MID, mv)
+    return _poly(_TK_INV_HIGH, mv)
+
+
+def tk_hot_temp(v_tc: float, cj_c: float) -> float:
+    """Cold-junction-compensated hot-junction temperature, °C.
+
+    v_tc is what the ADC sees across the thermocouple, in volts; cj_c is the
+    cold junction. Adding back the EMF the cold junction is not producing puts
+    the total on the 0 °C reference the tables use.
+    """
+    if cj_c != cj_c:
+        return float("nan")
+    return tk_mv_to_temp(v_tc * 1000.0 + tk_temp_to_mv(cj_c))
+
+
+def c_to_f(t_c: float) -> float:
+    return t_c * 9.0 / 5.0 + 32.0
+
 BG     = "#1a1a1a"
 PANEL  = "#222222"
 ACCENT = "#00ff32"
@@ -62,6 +134,13 @@ class App(tk.Tk):
         self._voltages:   deque = deque(maxlen=200_000)
         self._timestamps: deque = deque(maxlen=200_000)
         self._t0 = time.monotonic()
+
+        # thermocouple mode: hot-junction °C and raw EMF in mV, in lockstep
+        # with _timestamps, so the unit selector is a pure display transform
+        self._tc_mode = False
+        self._tc_c:  deque = deque(maxlen=200_000)
+        self._tc_mv: deque = deque(maxlen=200_000)
+        self._last_cj_c = float("nan")
 
         self._last_stream_plot = 0.0   # throttle streaming plot to ~30 fps
 
@@ -173,6 +252,75 @@ class App(tk.Tk):
                        command=lambda: self._send_bool("!TEMP", self._temp_var)
                        ).pack(anchor="w")
 
+        # ── thermocouple section ──────────────────────────────────────────────
+        self._sep(f)
+        self._lbl(f, "Thermocouple (type K)", color=ACCENT)
+
+        self._tc_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(f, text="TC Mode", variable=self._tc_var,
+                       bg=BG, fg=WHITE, selectcolor=PANEL, activebackground=BG,
+                       command=self._on_tc_toggle).pack(anchor="w")
+
+        unit_row = tk.Frame(f, bg=BG)
+        unit_row.pack(fill="x", pady=2)
+        tk.Label(unit_row, text="Units:", bg=BG, fg=WHITE,
+                 width=8, anchor="w").pack(side="left")
+        self._tc_unit_var = tk.StringVar(value=TC_UNITS[0])
+        unit_cb = ttk.Combobox(unit_row, textvariable=self._tc_unit_var,
+                               values=TC_UNITS, state="readonly", width=6)
+        unit_cb.pack(side="left")
+        unit_cb.bind("<<ComboboxSelected>>", lambda _: self._on_units_changed())
+
+        cj_row = tk.Frame(f, bg=BG)
+        cj_row.pack(fill="x", pady=2)
+        tk.Label(cj_row, text="Cold jct:", bg=BG, fg=WHITE,
+                 width=8, anchor="w").pack(side="left")
+        self._cj_src_var = tk.StringVar(value=CJ_SOURCES[0])
+        cj_cb = ttk.Combobox(cj_row, textvariable=self._cj_src_var,
+                             values=CJ_SOURCES, state="readonly", width=14)
+        cj_cb.pack(side="left")
+        cj_cb.bind("<<ComboboxSelected>>",
+                   lambda _: self._send(f"!TCCJSRC,{CJ_SOURCES.index(self._cj_src_var.get())}"))
+
+        vcmd_f2 = self.register(self._validate_float)
+        fixed_row = tk.Frame(f, bg=BG)
+        fixed_row.pack(fill="x", pady=1)
+        tk.Label(fixed_row, text="Fixed:", bg=BG, fg=DIM,
+                 width=8, anchor="w").pack(side="left")
+        self._cj_val_var = tk.StringVar(value="25.0")
+        e = tk.Entry(fixed_row, textvariable=self._cj_val_var, width=7, bg=PANEL,
+                     fg=WHITE, insertbackground=WHITE, relief="flat",
+                     validate="key", validatecommand=(vcmd_f2, "%P"))
+        e.pack(side="left", padx=2)
+        e.bind("<Return>", lambda _: self._send_float("!TCCJVAL", self._cj_val_var))
+        tk.Label(fixed_row, text="°C", bg=BG, fg=DIM).pack(side="left")
+
+        trim_row = tk.Frame(f, bg=BG)
+        trim_row.pack(fill="x", pady=1)
+        tk.Label(trim_row, text="Trim:", bg=BG, fg=DIM,
+                 width=8, anchor="w").pack(side="left")
+        self._cj_trim_var = tk.StringVar(value="0.0")
+        e = tk.Entry(trim_row, textvariable=self._cj_trim_var, width=7, bg=PANEL,
+                     fg=WHITE, insertbackground=WHITE, relief="flat",
+                     validate="key", validatecommand=(vcmd_f2, "%P"))
+        e.pack(side="left", padx=2)
+        e.bind("<Return>", lambda _: self._send_float("!TCCJTRIM", self._cj_trim_var))
+        tk.Label(trim_row, text="°C", bg=BG, fg=DIM).pack(side="left")
+
+        tc_btns = tk.Frame(f, bg=BG)
+        tc_btns.pack(fill="x", pady=(3, 0))
+        tk.Button(tc_btns, text="Zero TC", bg=PANEL, fg=WHITE, relief="flat",
+                  command=lambda: self._send("!TCZERO")).pack(side="left")
+        tk.Button(tc_btns, text="Clear zero", bg=PANEL, fg=DIM, relief="flat",
+                  command=lambda: self._send("!TCOFF,0")).pack(side="left", padx=4)
+
+        self._burnout_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(f, text="Burn-out current (open TC detect)",
+                       variable=self._burnout_var, bg=BG, fg=WHITE,
+                       selectcolor=PANEL, activebackground=BG,
+                       command=lambda: self._send_bool("!BURNOUT", self._burnout_var)
+                       ).pack(anchor="w")
+
         tk.Label(f, bg=BG).pack(pady=4)
         self._stream_btn = tk.Button(f, text="▶  Start Stream",
                                      bg="#224422", fg=ACCENT,
@@ -268,6 +416,13 @@ class App(tk.Tk):
         self._sps_lbl  = self._stat_row(stats, "Actual SPS")
         self._nom_lbl  = self._stat_row(stats, "Nominal SPS")
         self._mode_lbl = self._stat_row(stats, "Mode")
+
+        tc_stats = tk.Frame(meter, bg=PANEL)
+        tc_stats.pack(side="left", padx=16)
+        self._cj_lbl     = self._stat_row(tc_stats, "Cold Jct")
+        self._tcmv_lbl   = self._stat_row(tc_stats, "TC EMF")
+        self._tcalt_lbl  = self._stat_row(tc_stats, "Hot Jct")
+        self._tcflag_lbl = self._stat_row(tc_stats, "TC Status")
 
         # ── waveform plot ─────────────────────────────────────────────────────
         fig = Figure(figsize=(6, 3), facecolor=BG)
@@ -401,6 +556,8 @@ class App(tk.Tk):
             self._t0 = time.monotonic()
             self._voltages.clear()
             self._timestamps.clear()
+            self._tc_c.clear()
+            self._tc_mv.clear()
             self._stream_btn.config(text="■  Stop Stream", bg="#552200")
 
     def _trigger_burst(self):
@@ -485,7 +642,7 @@ class App(tk.Tk):
             is_se   = 8 <= mux_i <= 11
             nom_sps = RATE_NOMINAL[rate_i] * (2 if turbo else 1)
 
-            self._volt_lbl.config(text=f"{volts:+.6f} V")
+            self._volt_lbl.config(text=f"{volts:+.6f} V", fg=ACCENT)
             self._raw_lbl.config(text=f"0x{raw & 0xFFFFFF:06X}  ({raw})")
             self._sps_lbl.config(text=f"{act_sps:.1f}")
             self._nom_lbl.config(text=str(nom_sps))
@@ -507,6 +664,66 @@ class App(tk.Tk):
             self._voltages.append(volts)
             self._timestamps.append(now)
             self._update_stream_plot()
+
+        elif line.startswith("$TC,"):
+            parts = line[4:].split(",")
+            if len(parts) < 9:
+                return
+            raw     = int(parts[0])
+            v_tc    = float(parts[1])
+            cj_c    = self._to_float(parts[2])
+            hot_c   = self._to_float(parts[3])
+            gain_i  = int(parts[4])
+            rate_i  = int(parts[5])
+            turbo   = int(parts[6])
+            act_sps = float(parts[7])
+            flags   = int(parts[8])
+
+            self._last_cj_c = cj_c
+            unit = self._tc_unit_var.get()
+            mv = v_tc * 1000.0
+
+            if unit == "mV":
+                self._volt_lbl.config(text=f"{mv:+.4f} mV")
+            elif unit == "°F":
+                self._volt_lbl.config(
+                    text="---- °F" if hot_c != hot_c else f"{c_to_f(hot_c):+.2f} °F")
+            else:
+                self._volt_lbl.config(
+                    text="---- °C" if hot_c != hot_c else f"{hot_c:+.2f} °C")
+            self._volt_lbl.config(fg=RED if flags else ACCENT)
+
+            self._raw_lbl.config(text=f"0x{raw & 0xFFFFFF:06X}  ({raw})")
+            self._sps_lbl.config(text=f"{act_sps:.1f}")
+            self._nom_lbl.config(text=str(RATE_NOMINAL[rate_i] * (2 if turbo else 1)))
+            self._mode_lbl.config(text="TC (type K)")
+            self._cj_lbl.config(
+                text="—" if cj_c != cj_c else f"{cj_c:.3f} °C / {c_to_f(cj_c):.2f} °F")
+            self._tcmv_lbl.config(text=f"{mv:+.4f} mV")
+            # the unit selector picks one for the meter; show the other here
+            if hot_c != hot_c:
+                self._tcalt_lbl.config(text="—")
+            elif unit == "°F":
+                self._tcalt_lbl.config(text=f"{hot_c:+.2f} °C")
+            else:
+                self._tcalt_lbl.config(text=f"{c_to_f(hot_c):+.2f} °F")
+            self._tcflag_lbl.config(text=self._tc_flag_text(flags),
+                                    fg=RED if flags else WHITE)
+
+            if self._gain_var.get() != GAIN_LABELS[gain_i]:
+                self._gain_var.set(GAIN_LABELS[gain_i])
+            if self._rate_var.get() != RATE_LABELS[rate_i]:
+                self._rate_var.set(RATE_LABELS[rate_i])
+
+            now = time.monotonic() - self._t0
+            self._timestamps.append(now)
+            self._tc_c.append(hot_c)
+            self._tc_mv.append(mv)
+            self._voltages.append(v_tc)
+            self._update_stream_plot()
+
+        elif line.startswith("$TCCFG,"):
+            self._apply_tccfg_readback(line[7:].split(","))
 
         elif line.startswith("$TEMP,"):
             parts = line[6:].split(",")
@@ -560,10 +777,27 @@ class App(tk.Tk):
 
         self._bstat_count.config(text=str(count))
         self._bstat_sps.config(text=f"{self._burst_sps:.1f}")
-        self._bstat_mean.config(text=f"{mean_v:+.6f} V")
-        self._bstat_std.config(text=f"{std_v:.6f} V")
-        self._bstat_min.config(text=f"{min_v:+.6f} V")
-        self._bstat_max.config(text=f"{max_v:+.6f} V")
+        if self._tc_mode:
+            # the board's stats are in volts; temperature is not a linear
+            # function of them, so recompute in the displayed unit
+            ys = [y for y in self._burst_series() if y == y]
+            unit = self._tc_unit_var.get()
+            if ys:
+                mean = sum(ys) / len(ys)
+                std  = (sum((y - mean) ** 2 for y in ys) / len(ys)) ** 0.5
+                self._bstat_mean.config(text=f"{mean:+.4f} {unit}")
+                self._bstat_std.config(text=f"{std:.4f} {unit}")
+                self._bstat_min.config(text=f"{min(ys):+.4f} {unit}")
+                self._bstat_max.config(text=f"{max(ys):+.4f} {unit}")
+            else:
+                for lbl in (self._bstat_mean, self._bstat_std,
+                            self._bstat_min, self._bstat_max):
+                    lbl.config(text="—")
+        else:
+            self._bstat_mean.config(text=f"{mean_v:+.6f} V")
+            self._bstat_std.config(text=f"{std_v:.6f} V")
+            self._bstat_min.config(text=f"{min_v:+.6f} V")
+            self._bstat_max.config(text=f"{max_v:+.6f} V")
 
         self._update_burst_plot()
 
@@ -591,6 +825,87 @@ class App(tk.Tk):
                   f"Temp: {'On' if temp else 'Off'}"),
             fg=WHITE)
 
+    # ── thermocouple helpers ──────────────────────────────────────────────────
+
+    @staticmethod
+    def _to_float(text: str) -> float:
+        try:
+            return float(text)
+        except ValueError:
+            return float("nan")     # the sketch prints nan for "no reading"
+
+    @staticmethod
+    def _tc_flag_text(flags: int) -> str:
+        if not flags:
+            return "OK"
+        names = []
+        if flags & 0x01:
+            names.append("RANGE")
+        if flags & 0x02:
+            names.append("CJ STALE")
+        if flags & 0x04:
+            names.append("SAT/OPEN")
+        return " ".join(names)
+
+    def _send_float(self, cmd: str, var: tk.StringVar):
+        try:
+            self._send(f"{cmd},{float(var.get()):.4f}")
+        except ValueError:
+            pass
+
+    def _on_tc_toggle(self):
+        self._set_tc_mode(self._tc_var.get())
+        self._send_bool("!TC", self._tc_var)
+
+    def _set_tc_mode(self, on: bool):
+        """Switch the plot between the voltage and thermocouple series."""
+        if on == self._tc_mode:
+            return
+        self._tc_mode = on
+        self._voltages.clear()
+        self._timestamps.clear()
+        self._tc_c.clear()
+        self._tc_mv.clear()
+        self._t0 = time.monotonic()
+        self._on_units_changed()
+
+    def _on_units_changed(self):
+        self._update_stream_plot(force=True)
+        if self._burst_volts:
+            self._update_burst_plot()
+
+    def _y_label(self) -> str:
+        if not self._tc_mode:
+            return "Voltage (V)"
+        unit = self._tc_unit_var.get()
+        return {"°C": "Temperature (°C)", "°F": "Temperature (°F)",
+                "mV": "Thermocouple EMF (mV)"}[unit]
+
+    def _tc_convert(self, temps_c, mvs):
+        """Pick the display series for the selected unit."""
+        unit = self._tc_unit_var.get()
+        if unit == "mV":
+            return list(mvs)
+        if unit == "°F":
+            return [c_to_f(t) if t == t else float("nan") for t in temps_c]
+        return list(temps_c)
+
+    def _apply_tccfg_readback(self, parts):
+        if len(parts) < 7:
+            return
+        tc_on   = int(parts[0])
+        cj_src  = int(parts[1])
+        cj_val  = float(parts[2])
+        cj_trim = float(parts[3])
+        burnout = int(parts[6])
+
+        self._tc_var.set(bool(tc_on))
+        self._set_tc_mode(bool(tc_on))
+        self._cj_src_var.set(CJ_SOURCES[1 if cj_src else 0])
+        self._cj_val_var.set(f"{cj_val:g}")
+        self._cj_trim_var.set(f"{cj_trim:g}")
+        self._burnout_var.set(bool(burnout))
+
     # ── plot helpers ──────────────────────────────────────────────────────────
 
     def _validate_float(self, s: str) -> bool:
@@ -608,6 +923,9 @@ class App(tk.Tk):
         self._ymax_entry.config(state=state)
 
     def _apply_y_range(self, visible_ys=None):
+        if visible_ys:
+            # out-of-range TC samples come through as NaN — ignore them here
+            visible_ys = [y for y in visible_ys if y == y and abs(y) != float("inf")]
         if not hasattr(self, "_autoscale_var") or self._autoscale_var.get():
             if visible_ys:
                 lo, hi = min(visible_ys), max(visible_ys)
@@ -626,16 +944,20 @@ class App(tk.Tk):
             except ValueError:
                 self._ax.autoscale_view()
 
-    def _update_stream_plot(self):
+    def _update_stream_plot(self, force: bool = False):
         now = time.monotonic()
-        if now - self._last_stream_plot < 1 / 30:
+        if not force and now - self._last_stream_plot < 1 / 30:
             return
         self._last_stream_plot = now
 
+        self._ax.set_ylabel(self._y_label(), color=DIM)
         if not self._timestamps:
+            self._stream_line.set_data([], [])
+            self._canvas.draw_idle()
             return
         ts = list(self._timestamps)
-        vs = list(self._voltages)
+        vs = (self._tc_convert(self._tc_c, self._tc_mv) if self._tc_mode
+              else list(self._voltages))
 
         # rolling history window
         try:
@@ -663,20 +985,34 @@ class App(tk.Tk):
         self._apply_y_range(ys)
         self._canvas.draw_idle()
 
+    def _burst_series(self):
+        """Burst samples in the units currently being displayed.
+
+        The board sends a burst as raw counts plus volts-per-LSB, so in TC mode
+        the conversion happens here, against the most recent cold junction.
+        """
+        if not self._tc_mode:
+            return list(self._burst_volts)
+        temps = [tk_hot_temp(v, self._last_cj_c) for v in self._burst_volts]
+        return self._tc_convert(temps, [v * 1000.0 for v in self._burst_volts])
+
     def _update_burst_plot(self):
         if not self._burst_volts:
             return
-        count = len(self._burst_volts)
+        ys = self._burst_series()
+        count = len(ys)
         # x-axis: time in seconds
         dt = 1.0 / self._burst_sps if self._burst_sps > 0 else 1.0
         xs = [i * dt for i in range(count)]
-        self._burst_line.set_data(xs, self._burst_volts)
+        self._burst_line.set_data(xs, ys)
         self._stream_line.set_data([], [])
         self._plot_title.set_text(f"Burst  ({count} samples @ {self._burst_sps:.1f} SPS)")
         self._plot_title.set_color(AMBER)
         self._ax.set_xlabel("Time (s)", color=DIM)
+        self._ax.set_ylabel(self._y_label(), color=DIM)
         self._ax.relim()
-        self._apply_y_range(self._burst_volts)
+        self._ax.set_xlim(0, xs[-1] if count > 1 else 1.0)
+        self._apply_y_range(ys)
         self._canvas.draw_idle()
 
     def _log(self, text: str):
