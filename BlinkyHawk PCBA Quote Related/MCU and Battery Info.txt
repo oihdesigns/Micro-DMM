@@ -1,0 +1,4 @@
+MCU- Seeed Studio XIAO RA4M1 
+
+Battery - LiPo 402535
+
