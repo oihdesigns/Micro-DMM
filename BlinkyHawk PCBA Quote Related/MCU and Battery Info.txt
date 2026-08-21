@@ -1,4 +1,12 @@
 MCU- Seeed Studio XIAO RA4M1 
 
-Battery - LiPo 402535
+Battery - LiPo 402535 (320mA)
 
+Stacking Banana Plug:
+LCSC:
+Possible match: C5144249, C5144251
+Direct match (few in stock, expensive, discard the plastic pieces): C5144260
+
+
+
+Wire from main body to probes is 9.5" (240mm)
