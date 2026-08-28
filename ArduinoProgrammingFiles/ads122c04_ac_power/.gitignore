@@ -1,0 +1,3 @@
+# written by the GUI at runtime, not source
+__pycache__/
+ac_power_profile.json
