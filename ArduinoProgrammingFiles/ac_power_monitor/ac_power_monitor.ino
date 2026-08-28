@@ -1,15 +1,35 @@
 /*!
- * ADS122C04 AC Power Monitor / Logger
+ * AC Power Monitor / Logger
  * Derived from ads122c04_tests — same serial-command style, AC-specific math.
  *
- * ── Channels ────────────────────────────────────────────────────────────────
- *   AIN0 (+) / AIN1 (−)  mains voltage, through the divider / isolation front end
- *   AIN2 (+) / AIN3 (−)  load current, through the shunt / CT burden
- *   D5                   relay driver (load on/off), driven open at boot
+ * ── Pick a front end: change ADC_BACKEND below, nothing else ────────────────
+ *   BACKEND_ADS122C04  external 24-bit delta-sigma over I2C, truly differential
+ *   BACKEND_RA4M1      the RA4M1's own ADC, 14 bit, pseudo-differential
  *
- * Both pairs are differential and both are AC, so each has to sit inside the
- * common-mode window: bias the front end near mid-supply and leave the PGA
- * bypassed (the default here), which lets the inputs swing rail to rail.
+ *   Everything downstream of acquisition — the RMS and power maths, the
+ *   windowing, the relay, the energy accumulator, the waveform capture, the
+ *   serial protocol — is shared. Only the ~150 lines that fetch a sample
+ *   differ, so the two backends cannot drift apart in the part that is hard
+ *   to get right.
+ *
+ * ── Channels ────────────────────────────────────────────────────────────────
+ *   ADS122C04:  AIN0 (+) / AIN1 (−) is mains voltage
+ *               AIN2 (+) / AIN3 (−) is load current
+ *   RA4M1:      A0 (+) / A1 (−) is mains voltage      (pins are settable,
+ *               A2 (+) / A3 (−) is load current        see !VPIN / !IPIN)
+ *   Both:       D5 is the relay driver, driven open at boot
+ *
+ * On the ADS122C04 both pairs are truly differential, so bias the front end
+ * near mid-supply and leave the PGA bypassed (the default), which lets the
+ * inputs swing rail to rail.
+ *
+ * The RA4M1 ADC is single-ended only, so a "pair" here is two conversions
+ * subtracted: the + pin carries the signal biased at mid-supply, and the − pin
+ * watches the bias node itself. Subtracting cancels bias and supply drift,
+ * which is the whole point — but the two conversions are not simultaneous, so
+ * the − pin must be a quiet reference, not the other half of an anti-phase
+ * drive. Set the − pin to -1 for a plain single-ended read; per-window DC
+ * removal then does the same job, just without rejecting supply noise.
  *
  * ── Scaling ─────────────────────────────────────────────────────────────────
  *   Each channel is "this many ADC volts differential = this much real world",
@@ -19,11 +39,23 @@
  *   mains cycle — the readings reported here are RMS, not peak.
  *
  * ── How the two channels are measured at once (they are not) ────────────────
- *   There is one ADC and one multiplexer, so V and I are sampled alternately:
- *   V, I, V, I … Every mux change is followed by a START so each conversion is
- *   fully settled, which costs one conversion time per sample. At 1000 SPS with
- *   turbo that lands near 550-750 V/I pairs per second, about 9-12 pairs per
- *   60 Hz cycle. Two consequences are worth knowing:
+ *   Either way there is one converter, so V and I are sampled alternately.
+ *
+ *   On the ADS122C04 every mux change is followed by a START so each
+ *   conversion is fully settled, which costs one conversion time per sample.
+ *   At 1000 SPS with turbo that lands near 550-750 V/I pairs per second, about
+ *   9-12 pairs per 60 Hz cycle — the tight case, and what the maths below is
+ *   built for.
+ *
+ *   The RA4M1 is far quicker, so instead of racing it, acquisition is divided
+ *   into equal time buckets and every conversion taken inside a bucket is
+ *   averaged into one stored sample (SPC buckets per mains cycle, default 32).
+ *   That fixes the sample grid the maths wants regardless of how fast
+ *   analogRead actually is, spends the surplus speed on noise rather than
+ *   throwing it away, and the boxcar is a genuine anti-alias filter — at
+ *   32 samples per cycle it costs 0.02 % of the fundamental.
+ *
+ *   Two consequences are worth knowing:
  *
  *     - Each current sample sits half a step after the voltage sample beside
  *       it, so real power uses a voltage interpolated to the current instant —
@@ -33,11 +65,12 @@
  *       better than 0.01 % at any phase angle. Trimming PHASECAL off 0.5 also
  *       cancels the phase error of a CT or of an input filter, which is what
  *       makes the power factor believable.
- *     - Anything above ~300 Hz aliases. Real power and RMS are right for linear
- *       loads and approximate for choppy ones. When the shape is what matters,
- *       take a single-channel waveform capture instead: one mux, continuous
- *       mode, the full 2000 SPS — 33 points per 60 Hz cycle, good to the 16th
- *       harmonic.
+ *     - On the ADS122C04, anything above ~300 Hz aliases. Real power and RMS
+ *       are right for linear loads and approximate for choppy ones. When the
+ *       shape is what matters, take a single-channel waveform capture instead:
+ *       one mux, continuous mode, the full 2000 SPS — 33 points per 60 Hz
+ *       cycle, good to the 16th harmonic. The RA4M1 does not have this problem
+ *       at its default 32 samples per cycle.
  *
  * ── Measurement window ──────────────────────────────────────────────────────
  *   Sums run between two rising zero crossings of the voltage, over a whole
@@ -63,22 +96,33 @@
  *   !ZERO                 store the present readings as the channel offsets
  *   !VOFF,<uV> !IOFF,<uV> set those offsets directly
  *   !EZERO                reset the energy accumulator
+ *   !VREF,<volts>         full-scale reference voltage of the converter
+ *   !WAVE                 capture a waveform now
+ *   !WLEN,<sec>           waveform capture length
+ *   !WCH,<0|1|2>          capture voltage / current / both interleaved
+ *
+ *   ADS122C04 only:
  *   !VGAIN,<0-7> !IGAIN   per-channel gain index (0=1x … 7=128x)
  *   !PGA,<0|1>            PGA in circuit (needed above 4x; costs common mode)
  *   !RATE,<0-6>           data rate index
  *   !TURBO,<0|1>          turbo mode
- *   !VREF,<volts>         reference voltage, if an external one is fitted
  *   !I2C,<hz>             I2C clock — 1000000 buys ~35 % more pairs per second
- *   !WAVE                 capture a waveform now
- *   !WLEN,<sec>           waveform capture length
- *   !WCH,<0|1|2>          capture voltage / current / both interleaved
+ *
+ *   RA4M1 only:
+ *   !BITS,<8|10|12|14>    analogReadResolution (default 14)
+ *   !SPC,<n>              stored samples per mains cycle (default 32)
+ *   !VPIN,<p>,<n>         voltage + and − analog channels, 0-3; −1 = none
+ *   !IPIN,<p>,<n>         current + and − analog channels
+ *   !AREF,<0-4>           0 default/AVCC, 1 internal, 2 1.5 V, 3 2.0 V, 4 2.5 V
  *
  * ── Output ──────────────────────────────────────────────────────────────────
  *   $PWR,<vrms>,<irms>,<w>,<va>,<var>,<pf>,<hz>,<vpk>,<ipk>,<wh>,<uptime_s>,
  *        <pairs>,<pairs_per_s>,<relay>,<flags>
  *        flags: +1 no zero crossings  +2 V clipped  +4 I clipped
  *               +8 over-current trip  +16 window truncated  +32 ADC read failed
- *   $CFG,<rate>,<turbo>,<pga>,<vgain>,<igain>,<relay>,<streaming>
+ *   $CFG,<backend>,<relay>,<streaming>            backend: 0 = ADS, 1 = RA4M1
+ *   $ADC,0,<rate>,<turbo>,<pga>,<vgain>,<igain>,<i2c_hz>
+ *   $ADC,1,<bits>,<spc>,<vp>,<vn>,<ip>,<in>,<aref>,<avg_depth>
  *   $ACFG,<v_adc_fs>,<v_fs>,<i_adc_fs>,<i_fs>,<phasecal>,<cycles>,<mains_hz>,
  *         <trip_a>,<dcrem>,<v_off_uv>,<i_off_uv>,<rly_inv>,<wave_len_s>,
  *         <wave_ch>,<vref>
@@ -87,16 +131,48 @@
  *   $RLY,<0|1>        $TRIP,<irms>,<limit>        $ERR,<message>
  */
 
-#include <Wire.h>
-#include <Adafruit_ADS122C04.h>
+// ═════════════════════════════════════════════════════════════════════════════
+//  CHANGE THIS ONE LINE TO PICK A FRONT END
+// ═════════════════════════════════════════════════════════════════════════════
+#define BACKEND_ADS122C04  0
+#define BACKEND_RA4M1      1
+
+#define ADC_BACKEND  BACKEND_RA4M1
+
+// ═════════════════════════════════════════════════════════════════════════════
 
 #include "ac_types.h"
 
-Adafruit_ADS122C04 ads;
+#if ADC_BACKEND == BACKEND_ADS122C04
+
+  #include <Wire.h>
+  #include <Adafruit_ADS122C04.h>
+  Adafruit_ADS122C04 ads;
+
+  // The ADS122C04 is 24-bit, so samples are stored as raw signed counts.
+  typedef int32_t sample_t;
+  #define BUF_MAX 2048          // ~2 s interleaved / ~1 s single channel
+
+#else
+
+  // Samples are the mean of however many conversions landed in a time bucket,
+  // so they carry a fraction and are stored as floats. The RA4M1 has 32 KB of
+  // RAM, so the buffers are sized for a window rather than for seconds of
+  // capture: 512 pairs is 16 cycles at the default 32 samples per cycle.
+  typedef float sample_t;
+  #define BUF_MAX 512
+
+  // Analog channels, listed rather than computed: the XIAO RA4M1 has no A4 and
+  // numbers PIN_A0 from 0, so A0 + n is not portable. Edit to suit the board.
+  static const uint8_t ANALOG_PINS[] = { A0, A1, A2, A3 };
+  #define ANALOG_PIN_COUNT ((int8_t)(sizeof(ANALOG_PINS) / sizeof(ANALOG_PINS[0])))
+
+#endif
 
 // ── board wiring ──────────────────────────────────────────────────────────────
 #define RELAY_PIN 5
 
+#if ADC_BACKEND == BACKEND_ADS122C04
 // ── register-level constants ──────────────────────────────────────────────────
 // The hot loop writes CONFIG0 and reads DRDY/data with raw Wire calls. The
 // library setMux() is a read-modify-write plus a four-register cache refresh —
@@ -113,13 +189,11 @@ Adafruit_ADS122C04 ads;
 
 #define ADC_FULL_SCALE  8388608.0f        // 2^23
 #define CLIP_RAW        8000000L          // ~95 % of full scale
+#endif
 
 // ── measurement buffers ───────────────────────────────────────────────────────
-// 2048 pairs is ~2 s of interleaved capture or ~1 s of single-channel capture
-// at the top rate; a 10-cycle 60 Hz power window needs fewer than 150.
-#define BUF_MAX 2048
-static int32_t g_vbuf[BUF_MAX];
-static int32_t g_ibuf[BUF_MAX];
+static sample_t g_vbuf[BUF_MAX];
+static sample_t g_ibuf[BUF_MAX];
 
 // ── result flags ──────────────────────────────────────────────────────────────
 #define FLG_NOCROSS  0x01
@@ -130,6 +204,8 @@ static int32_t g_ibuf[BUF_MAX];
 #define FLG_ADCERR   0x20
 
 // ── ADC config state ──────────────────────────────────────────────────────────
+#if ADC_BACKEND == BACKEND_ADS122C04
+
 static uint8_t  g_addr     = ADS122C04_DEFAULT_ADDR;
 static uint8_t  g_rate_idx = 6;        // 1000 SPS
 static bool     g_turbo    = true;     // -> 2000 SPS
@@ -139,6 +215,28 @@ static uint8_t  g_i_gain   = 0;        // 1x
 static float    g_vref     = 2.048f;   // internal reference
 static uint32_t g_i2c_hz   = 400000;
 static uint32_t g_conv_us  = 500;      // one conversion at the current rate
+
+#else
+
+static uint8_t  g_bits     = 14;       // analogReadResolution
+static uint16_t g_spc      = 32;       // stored samples per mains cycle
+static int8_t   g_vp = 0,  g_vn = 1;   // indices into ANALOG_PINS; -1 = none
+static int8_t   g_ip = 2,  g_in = 3;
+static uint8_t  g_aref     = 0;        // index into AREF_TABLE
+// The board's actual analog reference. It only sets the scale that !VSCALE /
+// !ISCALE are then calibrated against, so getting it wrong costs nothing once
+// the channels have been calibrated against a known load — but 3.3 here and a
+// 5 V board would make the pre-calibration numbers look 50 % low.
+static float    g_vref     = 3.3f;
+static uint16_t g_adc_max  = 16383;    // (1 << bits) - 1
+static uint16_t g_avg_depth = 0;       // conversions averaged per stored sample
+
+static const uint8_t AREF_TABLE[] = {
+  AR_DEFAULT, AR_INTERNAL, AR_INTERNAL_1_5V, AR_INTERNAL_2_0V, AR_INTERNAL_2_5V
+};
+#define AREF_COUNT ((uint8_t)(sizeof(AREF_TABLE) / sizeof(AREF_TABLE[0])))
+
+#endif
 
 // ── scaling / calibration ─────────────────────────────────────────────────────
 static float g_v_adc_fs = 1.5f,  g_v_fs = 170.0f;   // 1.5 V diff = 170 V
@@ -171,6 +269,7 @@ static float   g_wave_len_s   = 0.2f;
 static uint8_t g_wave_ch      = 2;     // 0 = V, 1 = I, 2 = both interleaved
 static bool    g_wave_pending = false;
 
+#if ADC_BACKEND == BACKEND_ADS122C04
 // ── lookup tables ─────────────────────────────────────────────────────────────
 const ads122c04_gain_t GAIN_TABLE[] = {
   ADS122C04_GAIN_1,  ADS122C04_GAIN_2,  ADS122C04_GAIN_4,  ADS122C04_GAIN_8,
@@ -247,10 +346,16 @@ static int32_t readChannel(uint8_t mux, uint8_t gain_idx) {
 
 static uint16_t nominalSps() { return RATE_NOMINAL[g_rate_idx][g_turbo ? 1 : 0]; }
 
-// ADC volts per LSB on a channel — the reference over gain and full scale.
-static inline float lsbFor(uint8_t gain_idx) {
-  return g_vref / ((float)GAIN_VALUE[gain_idx] * ADC_FULL_SCALE);
+// ADC volts per LSB on each channel — the reference over gain and full scale.
+static inline float lsbV() {
+  return g_vref / ((float)GAIN_VALUE[g_v_gain] * ADC_FULL_SCALE);
 }
+static inline float lsbI() {
+  return g_vref / ((float)GAIN_VALUE[g_i_gain] * ADC_FULL_SCALE);
+}
+
+// The ADC sets the pace here, so a window is bounded by time, not by count.
+static inline uint16_t targetPairs() { return BUF_MAX; }
 
 void applyConfig() {
   Wire.setClock(g_i2c_hz);
@@ -262,6 +367,41 @@ void applyConfig() {
   g_conv_us = 1000000UL / nominalSps();
 }
 
+#else   // ── BACKEND_RA4M1 ─────────────────────────────────────────────────────
+
+// Both channels share the converter and its reference, so one LSB serves both.
+static inline float lsbV() { return g_vref / (float)(g_adc_max + 1); }
+static inline float lsbI() { return lsbV(); }
+
+// Here the converter is faster than the maths needs, so the window is bounded
+// by a sample count and the surplus speed is averaged away inside each bucket.
+static inline uint16_t targetPairs() {
+  uint32_t t = (uint32_t)g_spc * ((uint32_t)g_cycles + 2UL);
+  return (t > BUF_MAX) ? (uint16_t)BUF_MAX : (uint16_t)t;
+}
+
+void applyConfig() {
+  analogReference(AREF_TABLE[g_aref]);
+  analogReadResolution(g_bits);
+  g_adc_max = (uint16_t)((1UL << g_bits) - 1UL);
+  for (int8_t k = 0; k < ANALOG_PIN_COUNT; k++) pinMode(ANALOG_PINS[k], INPUT);
+}
+
+// One pseudo-differential reading in raw counts. The two conversions are not
+// simultaneous, so the − pin wants to be a quiet bias node rather than the
+// other half of an anti-phase drive; clipping is caught on the individual
+// conversions, because a difference of zero could equally be two rails.
+static inline int32_t readPair(int8_t pp, int8_t pn, uint8_t &flags, uint8_t clipbit) {
+  int32_t a = analogRead(ANALOG_PINS[pp]);
+  if (a <= 2 || a >= (int32_t)g_adc_max - 2) flags |= clipbit;
+  if (pn < 0) return a - (int32_t)(g_adc_max >> 1);
+  int32_t b = analogRead(ANALOG_PINS[pn]);
+  if (b <= 2 || b >= (int32_t)g_adc_max - 2) flags |= clipbit;
+  return a - b;
+}
+
+#endif
+
 void setRelay(bool on) {
   g_relay = on;
   digitalWrite(RELAY_PIN, (on != g_rly_inv) ? HIGH : LOW);
@@ -269,15 +409,37 @@ void setRelay(bool on) {
   Serial.println(g_relay ? 1 : 0);
 }
 
-void printConfig() {
-  Serial.print(F("$CFG,"));
+// Backend-specific settings get their own line, so the shared $CFG stays the
+// same shape whichever front end is fitted and the GUI can pick a panel from
+// the backend id before it has to parse anything else.
+void printAdcConfig() {
+#if ADC_BACKEND == BACKEND_ADS122C04
+  Serial.print(F("$ADC,0,"));
   Serial.print(g_rate_idx);            Serial.print(',');
   Serial.print(g_turbo ? 1 : 0);       Serial.print(',');
   Serial.print(g_pga ? 1 : 0);         Serial.print(',');
   Serial.print(g_v_gain);              Serial.print(',');
   Serial.print(g_i_gain);              Serial.print(',');
+  Serial.println(g_i2c_hz);
+#else
+  Serial.print(F("$ADC,1,"));
+  Serial.print(g_bits);                Serial.print(',');
+  Serial.print(g_spc);                 Serial.print(',');
+  Serial.print(g_vp);                  Serial.print(',');
+  Serial.print(g_vn);                  Serial.print(',');
+  Serial.print(g_ip);                  Serial.print(',');
+  Serial.print(g_in);                  Serial.print(',');
+  Serial.print(g_aref);                Serial.print(',');
+  Serial.println(g_avg_depth);
+#endif
+}
+
+void printConfig() {
+  Serial.print(F("$CFG,"));
+  Serial.print(ADC_BACKEND);           Serial.print(',');
   Serial.print(g_relay ? 1 : 0);       Serial.print(',');
   Serial.println(g_streaming ? 1 : 0);
+  printAdcConfig();
 }
 
 void printAcConfig() {
@@ -300,9 +462,13 @@ void printAcConfig() {
 }
 
 // ═══ acquisition ══════════════════════════════════════════════════════════════
+//
+// Both backends present the same two calls. dt_s always comes back as the
+// *measured* spacing between voltage samples, never a nominal one, because
+// that is the grid every later calculation indexes against.
 
-// Interleaved V/I pairs. dt_s comes back as the measured spacing between
-// voltage samples, which is the grid every later calculation indexes against.
+#if ADC_BACKEND == BACKEND_ADS122C04
+
 uint16_t acquirePairs(uint16_t maxn, uint32_t dur_us, bool abortable,
                       float &dt_s, uint8_t &flags) {
   uint16_t n = 0;
@@ -315,6 +481,8 @@ uint16_t acquirePairs(uint16_t maxn, uint32_t dur_us, bool abortable,
     int32_t v = readChannel(MUX_V, g_v_gain);
     int32_t i = readChannel(MUX_I, g_i_gain);
     if (v == INT32_MIN || i == INT32_MIN) { flags |= FLG_ADCERR; break; }
+    if (labs((long)v) > CLIP_RAW) flags |= FLG_VCLIP;
+    if (labs((long)i) > CLIP_RAW) flags |= FLG_ICLIP;
     if (n == 0) t_first = tv;
     t_last = tv;
     g_vbuf[n] = v;
@@ -352,6 +520,7 @@ uint16_t acquireSingle(uint8_t ch, uint16_t maxn, uint32_t dur_us,
     uint32_t t = micros();
     int32_t raw = adcReadRaw();
     if (raw == INT32_MIN) { flags |= FLG_ADCERR; break; }
+    if (labs((long)raw) > CLIP_RAW) flags |= (ch == 1) ? FLG_ICLIP : FLG_VCLIP;
     if (n == 0) t_first = t;
     t_last = t;
     g_vbuf[n++] = raw;
@@ -362,6 +531,112 @@ uint16_t acquireSingle(uint8_t ch, uint16_t maxn, uint32_t dur_us,
   ads.setContinuousMode(false);
   return n;
 }
+
+#else   // ── BACKEND_RA4M1 ─────────────────────────────────────────────────────
+
+// Acquisition is divided into maxn equal time buckets across dur_us, and every
+// conversion that lands inside a bucket is averaged into one stored sample.
+// The RA4M1 is quicker than the maths needs, so this spends the surplus on
+// noise instead of discarding it, and pins the sample grid to a known rate
+// rather than to whatever analogRead happens to cost. Each sample is stamped
+// at the centre of its bucket's conversions, so dt stays honest even if the
+// converter turns out to be slower than the requested bucket.
+uint16_t acquirePairs(uint16_t maxn, uint32_t dur_us, bool abortable,
+                      float &dt_s, uint8_t &flags) {
+  if (maxn > BUF_MAX) maxn = BUF_MAX;
+  if (maxn == 0) { dt_s = 0.0f; return 0; }
+
+  uint32_t bucket_us = dur_us / maxn;
+  if (bucket_us < 1) bucket_us = 1;
+
+  uint16_t n = 0;
+  uint32_t total_conv = 0;
+  uint32_t first_mid = 0, last_mid = 0;
+  uint32_t t_start = micros();
+
+  while (n < maxn) {
+    if (abortable && Serial.available()) { g_abort = true; break; }
+    // a hard cap, in case the converter cannot keep up with the bucket rate
+    if ((uint32_t)(micros() - t_start) > dur_us * 4UL + 100000UL) {
+      flags |= FLG_SHORT;
+      break;
+    }
+
+    uint32_t deadline  = t_start + (uint32_t)(n + 1) * bucket_us;
+    uint32_t acc_start = micros();
+    int32_t sv = 0, si = 0;
+    uint16_t cnt = 0;
+    do {
+      sv += readPair(g_vp, g_vn, flags, FLG_VCLIP);
+      si += readPair(g_ip, g_in, flags, FLG_ICLIP);
+      cnt++;
+    } while ((int32_t)(micros() - deadline) < 0 && cnt < 2000);
+    uint32_t acc_end = micros();
+
+    g_vbuf[n] = (float)sv / (float)cnt;
+    g_ibuf[n] = (float)si / (float)cnt;
+    total_conv += cnt;
+
+    uint32_t mid = acc_start + (acc_end - acc_start) / 2;
+    if (n == 0) first_mid = mid;
+    last_mid = mid;
+    n++;
+  }
+
+  g_avg_depth = n ? (uint16_t)(total_conv / n) : 0;
+  dt_s = (n > 1) ? (float)(last_mid - first_mid) * 1.0e-6f / (float)(n - 1) : 0.0f;
+  return n;
+}
+
+// The same bucketing on one channel, which simply halves the conversions per
+// bucket and so doubles the averaging depth at a given rate.
+uint16_t acquireSingle(uint8_t ch, uint16_t maxn, uint32_t dur_us,
+                       float &dt_s, uint8_t &flags) {
+  if (maxn > BUF_MAX) maxn = BUF_MAX;
+  if (maxn == 0) { dt_s = 0.0f; return 0; }
+
+  int8_t  pp = (ch == 1) ? g_ip : g_vp;
+  int8_t  pn = (ch == 1) ? g_in : g_vn;
+  uint8_t cb = (ch == 1) ? FLG_ICLIP : FLG_VCLIP;
+
+  uint32_t bucket_us = dur_us / maxn;
+  if (bucket_us < 1) bucket_us = 1;
+
+  uint16_t n = 0;
+  uint32_t total_conv = 0;
+  uint32_t first_mid = 0, last_mid = 0;
+  uint32_t t_start = micros();
+
+  while (n < maxn) {
+    if ((uint32_t)(micros() - t_start) > dur_us * 4UL + 100000UL) {
+      flags |= FLG_SHORT;
+      break;
+    }
+    uint32_t deadline  = t_start + (uint32_t)(n + 1) * bucket_us;
+    uint32_t acc_start = micros();
+    int32_t s = 0;
+    uint16_t cnt = 0;
+    do {
+      s += readPair(pp, pn, flags, cb);
+      cnt++;
+    } while ((int32_t)(micros() - deadline) < 0 && cnt < 2000);
+    uint32_t acc_end = micros();
+
+    g_vbuf[n] = (float)s / (float)cnt;
+    total_conv += cnt;
+
+    uint32_t mid = acc_start + (acc_end - acc_start) / 2;
+    if (n == 0) first_mid = mid;
+    last_mid = mid;
+    n++;
+  }
+
+  g_avg_depth = n ? (uint16_t)(total_conv / n) : 0;
+  dt_s = (n > 1) ? (float)(last_mid - first_mid) * 1.0e-6f / (float)(n - 1) : 0.0f;
+  return n;
+}
+
+#endif
 
 // ═══ AC analysis ══════════════════════════════════════════════════════════════
 
@@ -469,19 +744,17 @@ bool analyzePower(uint16_t n, float dt_s, PowerResult &r) {
   r.span_s = 0.0f;
   if (n < 12 || dt_s <= 0.0f) return false;
 
-  A_LSB_V = lsbFor(g_v_gain);
-  A_LSB_I = lsbFor(g_i_gain);
+  A_LSB_V = lsbV();
+  A_LSB_I = lsbI();
   A_SCL_V = g_v_fs / g_v_adc_fs;
   A_SCL_I = g_i_fs / g_i_adc_fs;
   A_OFF_V = g_v_off;
   A_OFF_I = g_i_off;
   A_VM = 0.0;
   A_IM = 0.0;
-
-  for (uint16_t k = 0; k < n; k++) {
-    if (labs((long)g_vbuf[k]) > CLIP_RAW) r.flags |= FLG_VCLIP;
-    if (labs((long)g_ibuf[k]) > CLIP_RAW) r.flags |= FLG_ICLIP;
-  }
+  // clipping is flagged during acquisition, where the individual conversions
+  // are still visible — on a pseudo-differential pair a difference of zero
+  // could equally be two rails
 
   lagrange4((double)g_phasecal, A_W);
 
@@ -578,7 +851,7 @@ void serviceMeasurement() {
 
   uint8_t acq_flags = 0;
   float dt_s = 0.0f;
-  uint16_t n = acquirePairs(BUF_MAX, dur_us, true, dt_s, acq_flags);
+  uint16_t n = acquirePairs(targetPairs(), dur_us, true, dt_s, acq_flags);
 
   if (g_abort) {          // a command is waiting — drop this window and go read it
     g_abort = false;
@@ -623,6 +896,16 @@ void serviceMeasurement() {
 
 // ═══ waveform capture ═════════════════════════════════════════════════════════
 
+// A stored sample is whole counts on the ADS122C04 but the mean of a bucket of
+// conversions on the RA4M1, so the fraction has to survive the wire.
+static inline void printSample(sample_t v) {
+#if ADC_BACKEND == BACKEND_ADS122C04
+  Serial.print(v);
+#else
+  Serial.print(v, 3);
+#endif
+}
+
 void captureWave() {
   g_wave_pending = false;
 
@@ -648,14 +931,14 @@ void captureWave() {
   Serial.print(n);                        Serial.print(',');
   Serial.print(g_wave_ch);                Serial.print(',');
   Serial.print(dt_s * 1.0e6f, 3);         Serial.print(',');
-  Serial.print(lsbFor(g_v_gain), 12);     Serial.print(',');
-  Serial.print(lsbFor(g_i_gain), 12);     Serial.print(',');
+  Serial.print(lsbV(), 12);     Serial.print(',');
+  Serial.print(lsbI(), 12);     Serial.print(',');
   Serial.println(flags);
 
   for (uint16_t k = 0; k < n; k++) {
     Serial.print(F("$WD,"));
-    Serial.print(g_vbuf[k]);
-    if (g_wave_ch == 2) { Serial.print(','); Serial.print(g_ibuf[k]); }
+    printSample(g_vbuf[k]);
+    if (g_wave_ch == 2) { Serial.print(','); printSample(g_ibuf[k]); }
     Serial.println();
   }
   Serial.println(F("$WEND"));
@@ -676,7 +959,7 @@ void zeroChannels() {
   if (n < 4) { Serial.println(F("$ERR,Zero failed")); return; }
 
   double sv = 0.0, si = 0.0;
-  float lv = lsbFor(g_v_gain), li = lsbFor(g_i_gain);
+  float lv = lsbV(), li = lsbI();
   for (uint16_t k = 0; k < n; k++) {
     sv += (double)g_vbuf[k] * lv;
     si += (double)g_ibuf[k] * li;
@@ -696,6 +979,14 @@ static float secondArg(const char* args) {
   const char* c = strchr(args, ',');
   return c ? atof(c + 1) : NAN;
 }
+
+#if ADC_BACKEND == BACKEND_RA4M1
+// An index into ANALOG_PINS; the negative side may also be -1 for "none".
+static bool validPin(int v, bool allow_none) {
+  if (allow_none && v == -1) return true;
+  return v >= 0 && v < ANALOG_PIN_COUNT;
+}
+#endif
 
 void handleCommand(const char* cmd) {
   if (strcmp(cmd, "!START") == 0) {
@@ -764,6 +1055,13 @@ void handleCommand(const char* cmd) {
   } else if (strcmp(cmd, "!EZERO") == 0) {
     g_wh = 0.0;
 
+  } else if (strncmp(cmd, "!VREF,", 6) == 0) {
+    float v = atof(cmd + 6);
+    if (v > 0.1f && v < 6.0f) { g_vref = v; printAcConfig(); }
+    else Serial.println(F("$ERR,VREF must be 0.1-6 V"));
+
+#if ADC_BACKEND == BACKEND_ADS122C04
+
   } else if (strncmp(cmd, "!VGAIN,", 7) == 0) {
     int v = atoi(cmd + 7);
     if (v >= 0 && v < GAIN_COUNT) { g_v_gain = (uint8_t)v; applyConfig(); printConfig(); }
@@ -785,15 +1083,44 @@ void handleCommand(const char* cmd) {
   } else if (strncmp(cmd, "!TURBO,", 7) == 0) {
     g_turbo = (atoi(cmd + 7) != 0); applyConfig(); printConfig();
 
-  } else if (strncmp(cmd, "!VREF,", 6) == 0) {
-    float v = atof(cmd + 6);
-    if (v > 0.1f && v < 6.0f) { g_vref = v; printAcConfig(); }
-    else Serial.println(F("$ERR,VREF must be 0.1-6 V"));
-
   } else if (strncmp(cmd, "!I2C,", 5) == 0) {
     long v = atol(cmd + 5);
     if (v >= 100000L && v <= 1000000L) { g_i2c_hz = (uint32_t)v; applyConfig(); printConfig(); }
     else Serial.println(F("$ERR,I2C must be 100000-1000000"));
+
+#else
+
+  } else if (strncmp(cmd, "!BITS,", 6) == 0) {
+    int v = atoi(cmd + 6);
+    if (v == 8 || v == 10 || v == 12 || v == 14) {
+      g_bits = (uint8_t)v; applyConfig(); printConfig();
+    } else Serial.println(F("$ERR,BITS must be 8, 10, 12 or 14"));
+
+  } else if (strncmp(cmd, "!SPC,", 5) == 0) {
+    int v = atoi(cmd + 5);
+    if (v >= 8 && v <= 256) { g_spc = (uint16_t)v; printConfig(); }
+    else Serial.println(F("$ERR,SPC must be 8-256"));
+
+  } else if (strncmp(cmd, "!VPIN,", 6) == 0) {
+    int p = atoi(cmd + 6);
+    float q = secondArg(cmd + 6);
+    if (validPin(p, false) && !isnan(q) && validPin((int)q, true)) {
+      g_vp = (int8_t)p; g_vn = (int8_t)q; printConfig();
+    } else Serial.println(F("$ERR,VPIN needs <plus>,<minus>; minus may be -1"));
+
+  } else if (strncmp(cmd, "!IPIN,", 6) == 0) {
+    int p = atoi(cmd + 6);
+    float q = secondArg(cmd + 6);
+    if (validPin(p, false) && !isnan(q) && validPin((int)q, true)) {
+      g_ip = (int8_t)p; g_in = (int8_t)q; printConfig();
+    } else Serial.println(F("$ERR,IPIN needs <plus>,<minus>; minus may be -1"));
+
+  } else if (strncmp(cmd, "!AREF,", 6) == 0) {
+    int v = atoi(cmd + 6);
+    if (v >= 0 && v < AREF_COUNT) { g_aref = (uint8_t)v; applyConfig(); printConfig(); }
+    else Serial.println(F("$ERR,AREF out of range"));
+
+#endif
 
   } else if (strcmp(cmd, "!WAVE") == 0) {
     g_wave_pending = true;
@@ -839,6 +1166,7 @@ void setup() {
   Serial.begin(115200);
   while (!Serial) delay(10);
 
+#if ADC_BACKEND == BACKEND_ADS122C04
   Wire.begin();
   Wire.setClock(g_i2c_hz);
 
@@ -853,8 +1181,15 @@ void setup() {
   }
 
   applyConfig();
-  Serial.print(F("$READY,0x"));
+  Serial.print(F("$READY,ADS122C04,0x"));
   Serial.println(g_addr, HEX);
+#else
+  applyConfig();
+  Serial.print(F("$READY,RA4M1,"));
+  Serial.print(g_bits);
+  Serial.println(F("bit"));
+#endif
+
   printConfig();
   printAcConfig();
 }

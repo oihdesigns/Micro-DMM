@@ -41,6 +41,19 @@ WAVE_CH_LABELS = ["Voltage (AIN0−AIN1)", "Current (AIN2−AIN3)",
 I2C_LABELS = ["100 kHz", "400 kHz", "1 MHz"]
 I2C_VALUES = [100000, 400000, 1000000]
 
+# backend ids, matching ADC_BACKEND in the sketch
+BACKEND_ADS122C04 = 0
+BACKEND_RA4M1     = 1
+BACKEND_NAMES     = {BACKEND_ADS122C04: "ADS122C04", BACKEND_RA4M1: "RA4M1"}
+
+# RA4M1 backend
+BITS_LABELS = ["8", "10", "12", "14"]
+AREF_LABELS = ["Default / AVCC", "Internal", "1.5 V", "2.0 V", "2.5 V"]
+# index into the sketch's ANALOG_PINS, with "none" as the trailing entry so the
+# negative-side selectors can offer it and the positive-side ones cannot
+PIN_LABELS  = ["A0", "A1", "A2", "A3", "none"]
+PIN_NONE    = len(PIN_LABELS) - 1
+
 # $PWR flag bits, in the sketch's order
 FLAG_NAMES = [(0x01, "NO ZERO X"), (0x02, "V CLIP"), (0x04, "I CLIP"),
               (0x08, "TRIPPED"),   (0x10, "TRUNCATED"), (0x20, "ADC ERR")]
@@ -514,6 +527,29 @@ class App(tk.Tk):
                   command=self._apply_profile).pack(side="left", padx=4)
 
     def _build_adc_tab(self, f):
+        # Both front ends get a panel; the board says which one it is in $CFG
+        # and only that panel is ever packed, so the tab always matches the
+        # hardware rather than offering settings that would be ignored.
+        self._adc_host = f
+        self._adc_ads = tk.Frame(f, bg=BG)
+        self._adc_ra  = tk.Frame(f, bg=BG)
+        self._build_adc_ads(self._adc_ads)
+        self._build_adc_ra4m1(self._adc_ra)
+        self._build_adc_shared(f)
+        self._set_backend(BACKEND_RA4M1)
+
+    def _set_backend(self, backend: int):
+        if backend == getattr(self, "_backend", None):
+            return
+        self._backend = backend
+        self._adc_ads.pack_forget()
+        self._adc_ra.pack_forget()
+        panel = self._adc_ads if backend == BACKEND_ADS122C04 else self._adc_ra
+        panel.pack(fill="x", before=self._adc_shared)
+        # the two converters have very different natural full scales
+        self._vref_var.set("2.048" if backend == BACKEND_ADS122C04 else "3.3")
+
+    def _build_adc_ads(self, f):
         self._lbl(f, "Conversion")
         self._rate_var = tk.StringVar(value=RATE_LABELS[6])
         self._combo_row(f, "Rate:", self._rate_var, RATE_LABELS,
@@ -560,11 +596,66 @@ class App(tk.Tk):
                  bg=BG, fg=DIM, justify="left", anchor="w",
                  font=("Courier New", 7)).pack(fill="x")
 
+    def _build_adc_ra4m1(self, f):
+        self._lbl(f, "Conversion")
+        self._bits_var = tk.StringVar(value=BITS_LABELS[-1])
+        self._combo_row(f, "Bits:", self._bits_var, BITS_LABELS,
+                        lambda: self._send(f"!BITS,{self._bits_var.get()}"),
+                        width=8)
+
+        self._spc_var = tk.StringVar(value="32")
+        self._entry_row(f, "Samples:", self._spc_var, "/cycle",
+                        on_enter=lambda: self._send_int("!SPC", self._spc_var))
+        tk.Label(f, text="Every conversion inside a sample's time\n"
+                         "slot is averaged into it, so a lower rate\n"
+                         "here buys averaging rather than losing\n"
+                         "data. 32 is ~1900 Hz on 60 Hz mains.",
+                 bg=BG, fg=DIM, justify="left", anchor="w",
+                 font=("Courier New", 7)).pack(fill="x")
+
+        self._aref_var = tk.StringVar(value=AREF_LABELS[0])
+        self._combo_row(f, "Ref:", self._aref_var, AREF_LABELS,
+                        lambda: self._send(
+                            f"!AREF,{AREF_LABELS.index(self._aref_var.get())}"),
+                        width=14)
+
+        self._sep(f)
+        self._lbl(f, "Pseudo-differential pins")
+        self._vp_var = tk.StringVar(value=PIN_LABELS[0])
+        self._vn_var = tk.StringVar(value=PIN_LABELS[1])
+        self._ip_var = tk.StringVar(value=PIN_LABELS[2])
+        self._in_var = tk.StringVar(value=PIN_LABELS[3])
+        self._combo_row(f, "V  +/−:", self._vp_var, PIN_LABELS[:-1],
+                        self._send_vpin, width=5)
+        self._combo_row(f, "     −:", self._vn_var, PIN_LABELS,
+                        self._send_vpin, width=5)
+        self._combo_row(f, "I  +/−:", self._ip_var, PIN_LABELS[:-1],
+                        self._send_ipin, width=5)
+        self._combo_row(f, "     −:", self._in_var, PIN_LABELS,
+                        self._send_ipin, width=5)
+        tk.Label(f, text="The − pin should watch the bias node, not\n"
+                         "an anti-phase signal: the two conversions\n"
+                         "are not simultaneous. Pick none for a plain\n"
+                         "single-ended read.",
+                 bg=BG, fg=DIM, justify="left", anchor="w",
+                 font=("Courier New", 7)).pack(fill="x")
+
+    def _build_adc_shared(self, f):
+        shared = tk.Frame(f, bg=BG)
+        shared.pack(fill="x")
+        self._adc_shared = shared
+        f = shared
+
         self._sep(f)
         self._lbl(f, "Reference")
-        self._vref_var = tk.StringVar(value="2.048")
+        self._vref_var = tk.StringVar(value="3.3")
         self._entry_row(f, "VREF:", self._vref_var, "V",
                         on_enter=lambda: self._send_float("!VREF", self._vref_var))
+        tk.Label(f, text="Full scale of the converter. Only sets the\n"
+                         "starting scale — calibrating the channels\n"
+                         "against a known load absorbs any error.",
+                 bg=BG, fg=DIM, justify="left", anchor="w",
+                 font=("Courier New", 7)).pack(fill="x")
 
         self._sep(f)
         self._lbl(f, "Relay driver")
@@ -810,6 +901,20 @@ class App(tk.Tk):
         self._send_vscale()
         self._send_iscale()
 
+    @staticmethod
+    def _pin_index(var) -> int:
+        """Selector label -> the sketch's channel index, with none as -1."""
+        i = PIN_LABELS.index(var.get())
+        return -1 if i == PIN_NONE else i
+
+    def _send_vpin(self):
+        self._send(f"!VPIN,{self._pin_index(self._vp_var)},"
+                   f"{self._pin_index(self._vn_var)}")
+
+    def _send_ipin(self):
+        self._send(f"!IPIN,{self._pin_index(self._ip_var)},"
+                   f"{self._pin_index(self._in_var)}")
+
     def _zero_channels(self):
         if self._relay and not messagebox.askyesno(
                 "Load is on",
@@ -963,11 +1068,20 @@ class App(tk.Tk):
             "vref":      self._vref_var,
             "wave_len":  self._wave_len_var,
             "wave_ch":   self._wave_ch_var,
+            "trend_hist": self._trend_hist_var,
+            # ADS122C04 front end
             "rate":      self._rate_var,
             "vgain":     self._vgain_var,
             "igain":     self._igain_var,
             "i2c":       self._i2c_var,
-            "trend_hist": self._trend_hist_var,
+            # RA4M1 front end
+            "bits":      self._bits_var,
+            "spc":       self._spc_var,
+            "aref":      self._aref_var,
+            "vp":        self._vp_var,
+            "vn":        self._vn_var,
+            "ip":        self._ip_var,
+            "in":        self._in_var,
         }
 
     def _save_profile(self):
@@ -1005,12 +1119,21 @@ class App(tk.Tk):
             self._log("-- profile loaded into the GUI (not connected)")
             return
         self._send_float("!VREF", self._vref_var)
-        self._send(f"!RATE,{RATE_LABELS.index(self._rate_var.get())}")
-        self._send_bool("!TURBO", self._turbo_var)
-        self._send_bool("!PGA", self._pga_var)
-        self._send(f"!VGAIN,{GAIN_LABELS.index(self._vgain_var.get())}")
-        self._send(f"!IGAIN,{GAIN_LABELS.index(self._igain_var.get())}")
-        self._send(f"!I2C,{I2C_VALUES[I2C_LABELS.index(self._i2c_var.get())]}")
+        # only the front end that is actually fitted; the other half of the
+        # profile is kept on file but would just draw $ERR lines from the board
+        if self._backend == BACKEND_ADS122C04:
+            self._send(f"!RATE,{RATE_LABELS.index(self._rate_var.get())}")
+            self._send_bool("!TURBO", self._turbo_var)
+            self._send_bool("!PGA", self._pga_var)
+            self._send(f"!VGAIN,{GAIN_LABELS.index(self._vgain_var.get())}")
+            self._send(f"!IGAIN,{GAIN_LABELS.index(self._igain_var.get())}")
+            self._send(f"!I2C,{I2C_VALUES[I2C_LABELS.index(self._i2c_var.get())]}")
+        else:
+            self._send(f"!BITS,{self._bits_var.get()}")
+            self._send_int("!SPC", self._spc_var)
+            self._send(f"!AREF,{AREF_LABELS.index(self._aref_var.get())}")
+            self._send_vpin()
+            self._send_ipin()
         self._send_both_scales()
         self._send_float("!PHASECAL", self._phase_var)
         self._send_int("!CYCLES", self._cycles_var)
@@ -1054,6 +1177,8 @@ class App(tk.Tk):
             self._finish_wave()
         elif line.startswith("$CFG,"):
             self._apply_cfg(line[5:].split(","))
+        elif line.startswith("$ADC,"):
+            self._apply_adc(line[5:].split(","))
         elif line.startswith("$ACFG,"):
             self._apply_acfg(line[6:].split(","))
         elif line.startswith("$RLY,"):
@@ -1131,11 +1256,13 @@ class App(tk.Tk):
         self._wave_status.config(text=f"Receiving 0/{self._wave_expect}", fg=AMBER)
 
     def _collect_wave_sample(self, payload: str):
+        # float, not int: the ADS backend sends whole counts but the RA4M1
+        # sends the mean of a bucket of conversions, which carries a fraction
         parts = payload.split(",")
         try:
-            self._wave_v.append(int(parts[0]))
+            self._wave_v.append(float(parts[0]))
             if len(parts) > 1:
-                self._wave_i.append(int(parts[1]))
+                self._wave_i.append(float(parts[1]))
         except ValueError:
             return
         n = len(self._wave_v)
@@ -1305,31 +1432,76 @@ class App(tk.Tk):
     # ══ config readback ═══════════════════════════════════════════════════════
 
     def _apply_cfg(self, parts):
-        if len(parts) < 7:
+        if len(parts) < 3:
             return
-        rate, turbo, pga = int(parts[0]), int(parts[1]), int(parts[2])
-        vgain, igain     = int(parts[3]), int(parts[4])
-        relay, streaming = int(parts[5]), int(parts[6])
+        backend, relay, streaming = int(parts[0]), int(parts[1]), int(parts[2])
 
-        self._rate_var.set(RATE_LABELS[rate])
-        self._turbo_var.set(bool(turbo))
-        self._pga_var.set(bool(pga))
-        self._vgain_var.set(GAIN_LABELS[vgain])
-        self._igain_var.set(GAIN_LABELS[igain])
+        self._set_backend(backend)
         self._set_relay_button(bool(relay))
-
         self._streaming = bool(streaming)
         self._stream_btn.config(
             text="■  Stop Stream" if streaming else "▶  Start Stream",
             bg="#552200" if streaming else "#224422")
 
-        nominal = RATE_NOMINAL[rate] * (2 if turbo else 1)
-        self._cfg_lbl.config(
-            text=(f"Rate     {RATE_LABELS[rate]}  ({nominal} SPS)\n"
-                  f"Gain     V {GAIN_LABELS[vgain]}   I {GAIN_LABELS[igain]}\n"
-                  f"PGA      {'in circuit' if pga else 'bypassed'}\n"
-                  f"Relay    {'CLOSED' if relay else 'open'}"),
-            fg=WHITE)
+    def _apply_adc(self, parts):
+        """Backend-specific settings; the first field says which shape follows."""
+        if not parts:
+            return
+        backend = int(parts[0])
+        self._set_backend(backend)
+
+        if backend == BACKEND_ADS122C04:
+            if len(parts) < 7:
+                return
+            rate, turbo, pga = int(parts[1]), int(parts[2]), int(parts[3])
+            vgain, igain     = int(parts[4]), int(parts[5])
+            i2c_hz           = int(parts[6])
+
+            self._rate_var.set(RATE_LABELS[rate])
+            self._turbo_var.set(bool(turbo))
+            self._pga_var.set(bool(pga))
+            self._vgain_var.set(GAIN_LABELS[vgain])
+            self._igain_var.set(GAIN_LABELS[igain])
+            if i2c_hz in I2C_VALUES:
+                self._i2c_var.set(I2C_LABELS[I2C_VALUES.index(i2c_hz)])
+
+            nominal = RATE_NOMINAL[rate] * (2 if turbo else 1)
+            self._cfg_lbl.config(
+                text=(f"Front end ADS122C04\n"
+                      f"Rate      {RATE_LABELS[rate]}  ({nominal} SPS)\n"
+                      f"Gain      V {GAIN_LABELS[vgain]}   I {GAIN_LABELS[igain]}\n"
+                      f"PGA       {'in circuit' if pga else 'bypassed'}\n"
+                      f"I2C       {i2c_hz // 1000} kHz"),
+                fg=WHITE)
+        else:
+            if len(parts) < 9:
+                return
+            bits, spc = int(parts[1]), int(parts[2])
+            vp, vn    = int(parts[3]), int(parts[4])
+            ip, in_   = int(parts[5]), int(parts[6])
+            aref      = int(parts[7])
+            depth     = int(parts[8])
+
+            if str(bits) in BITS_LABELS:
+                self._bits_var.set(str(bits))
+            self._spc_var.set(str(spc))
+            if 0 <= aref < len(AREF_LABELS):
+                self._aref_var.set(AREF_LABELS[aref])
+            for var, idx in ((self._vp_var, vp), (self._vn_var, vn),
+                             (self._ip_var, ip), (self._in_var, in_)):
+                var.set(PIN_LABELS[PIN_NONE if idx < 0 else idx])
+
+            def pin(idx):
+                return "none" if idx < 0 else PIN_LABELS[idx]
+
+            self._cfg_lbl.config(
+                text=(f"Front end RA4M1 internal\n"
+                      f"Res       {bits} bit\n"
+                      f"Sampling  {spc}/cycle, {depth or '—'} averaged each\n"
+                      f"V pins    {pin(vp)} − {pin(vn)}\n"
+                      f"I pins    {pin(ip)} − {pin(in_)}\n"
+                      f"Ref       {AREF_LABELS[aref] if 0 <= aref < len(AREF_LABELS) else aref}"),
+                fg=WHITE)
 
     def _apply_acfg(self, parts):
         if len(parts) < 15:
