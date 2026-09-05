@@ -111,6 +111,7 @@ void emitStatus() {
   Serial.print(F(",rmeas="));         Serial.print(resistanceMeasured ? 1 : 0);
   Serial.print(F(",cont="));          Serial.print(adsContinuous() ? 1 : 0);
   Serial.print(F(",ohmspark="));      Serial.print(ohmsParked ? 1 : 0);
+  Serial.print(F(",ohmsforce="));     Serial.print(ohmsForceOff ? 1 : 0);
   Serial.print(F(",dirty="));         Serial.print(cfgDirty ? 1 : 0);
   Serial.print(F(",hwrev="));         Serial.print(cfg.hwRev);
   Serial.print(F(",sn="));            Serial.println(unitSN);
@@ -134,7 +135,7 @@ static void emitLog() {
 static void emitHelp() {
   Serial.println(F("$INFO,help,config,!CFG !GET,K !SET,K,V !SAVE !LOAD !DEFAULTS !SEEDCAL,N !SN[,V]"));
   Serial.println(F("$INFO,help,live,!READ !STREAM[,0|1] !RATE,MS !STATUS !MINMAX[,0|1] !RESET"));
-  Serial.println(F("$INFO,help,meter,!ZERO !ZEROCLR !MODE,N !RANGE,0|1|A !VDISP[,0|1]"));
+  Serial.println(F("$INFO,help,meter,!ZERO !ZEROCLR !MODE,N !RANGE,0|1|A !VDISP[,0|1] !PARK[,0|1]"));
   Serial.println(F("$INFO,help,cal,!CAL,OHMS[,IDX] !CALV,VOLTS !CALI !IDET !DEBUG !AMPS !FAST !LOG !DUMP"));
 }
 
@@ -146,6 +147,12 @@ static void emitHelp() {
 // chosen from the same raw value the measurement path would use, so a cal
 // point always lands in the bucket it will later be applied from.
 static void calResistance(float actual, int forcedIdx) {
+  // Same reason as !ZERO: calibrating against a held reading would write a
+  // correction factor derived from a measurement that never happened.
+  if (!resistanceMeasured) {
+    Serial.println(F("$ERR,cal,resistance not being measured"));
+    return;
+  }
   if (rawResistance <= 0.0f) {
     Serial.println(F("$ERR,cal,no raw reading"));
     return;
@@ -331,6 +338,13 @@ void handleLine(char *line) {
 
   // ---- Meter control -----------------------------------------
   } else if (strcmp(cmd, "ZERO") == 0) {
+    // Refuse rather than null the leads against a reading the meter is not
+    // taking -- in a voltmeter mode, or with the source parked, the value
+    // would be whatever was last measured and the null silently wrong.
+    if (!resistanceMeasured) {
+      Serial.println(F("$ERR,zero,resistance not being measured"));
+      return;
+    }
     zeroOffsetRes  = currentResistance;
     initialZeroSet = true;
     Serial.print(F("$OK,zero,")); Serial.println(zeroOffsetRes, 4);
@@ -372,6 +386,13 @@ void handleLine(char *line) {
   } else if (strcmp(cmd, "AMPS") == 0) {
     ampsMode = arg ? (atoi(arg) != 0) : !ampsMode;
     Serial.print(F("$OK,amps,")); Serial.println(ampsMode ? 1 : 0);
+
+  } else if (strcmp(cmd, "PARK") == 0) {
+    // Force the ohms source off regardless of mode.  The source is a constant
+    // 20 mA LM317, so this is the low-power switch; resistance readings are
+    // suppressed while it is held, the same as in a mode that never reads them.
+    ohmsForceOff = arg ? (atoi(arg) != 0) : !ohmsForceOff;
+    emitStatus();
 
   } else if (strcmp(cmd, "IDET") == 0) {
     // Re-run current-sensor detection and report the raw numbers.  Detection

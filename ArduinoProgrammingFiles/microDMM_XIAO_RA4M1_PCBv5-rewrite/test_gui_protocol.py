@@ -127,6 +127,16 @@ chk("hwrev", app.hwrev, "6")
 chk("stream checkbox", app.stream_var.get(), True)
 chk("mode from status", app.mode_lbl.cget("text"), "mode 4 Precise")
 
+# --- the ohms-source-off toggle tracks the device, not the click -------
+app._handle_line("$STATUS,mode=0,range=high,auto=1,ps=0,zero=0.0000,bridge=1,"
+                 "stream=1,debug=0,amps=1,irange=high,rmeas=0,cont=0,"
+                 "ohmspark=1,ohmsforce=1,dirty=0,hwrev=6,sn=20260905_001")
+chk("park box follows device on", app.park_var.get(), True)
+app._handle_line("$STATUS,mode=0,range=high,auto=1,ps=0,zero=0.0000,bridge=1,"
+                 "stream=1,debug=0,amps=1,irange=high,rmeas=1,cont=0,"
+                 "ohmspark=0,ohmsforce=0,dirty=0,hwrev=6,sn=20260905_001")
+chk("park box follows device off", app.park_var.get(), False)
+
 # --- $CFG rows, including one this GUI has never heard of --------------
 for line in ["$CFG,HWREV,6", "$CFG,RCAL03,0.997100", "$CFG,VSCALE,-68.426399",
              "$CFG,IZERO,2.500000", "$CFG,KEYBOARD,1", "$CFG,FUTUREKEY,42"]:

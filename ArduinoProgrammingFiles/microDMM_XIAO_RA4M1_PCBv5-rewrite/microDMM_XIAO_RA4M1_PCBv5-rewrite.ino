@@ -166,6 +166,10 @@ bool resistanceMeasured = false;
 // rail) is currently switched off.  The union of every reason to park it, so
 // it -- not powerSave -- is what says whether that 20 mA is flowing.
 bool ohmsParked = false;
+// Operator override (!PARK): hold the ohms source off whatever the mode.  A
+// runtime flag, not a config key -- it is an action taken at the bench, not a
+// tuning value, and it should not survive a power cycle.
+bool ohmsForceOff = false;
 // When it last came back on, for the post-unpark settle window.
 unsigned long ohmsUnparkMs = 0;
 // Long enough for the source and the node to come up before a reading counts.
@@ -328,7 +332,11 @@ void loop() {
     // only the input, logging wants the V/I rate (and does not want 20 mA
     // injected into the circuit it is logging), and Charging has the screen off
     // with nothing reading anything.  HighRMode is resistance only.
-    bool ohmsMode = !takeLog &&
+    // The !PARK override folds in here rather than only at the pin, so that
+    // forcing the source off also stops the channel being read and reported --
+    // measuring with the source off would otherwise publish a garbage
+    // resistance flagged as a live measurement.
+    bool ohmsMode = !takeLog && !ohmsForceOff &&
                     currentMode != Voltmeter &&
                     currentMode != VACmanual &&
                     currentMode != Charging;

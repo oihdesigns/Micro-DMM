@@ -20,11 +20,22 @@ void updateAlerts() {
     return;
   }
 
-  // Continuity.  Parenthesised to exactly the binding the pre-rewrite code
-  // had: && binds tighter than ||, so blinkLimit gates ONLY the bridge-closed
-  // clause, not the two resistance clauses.  Left as found -- see the plan.
-  continuity = (isBetween(currentResistance, cfg.contMin, cfg.contMax)) ||
-               (isBetween(currentResistance, cfg.contMin, cfg.contMaxHi) && ohmsHighRange) ||
+  // Continuity, from two independent sources: a low resistance reading, or the
+  // bridge finding the leads closed.
+  //
+  // The resistance clauses are gated on resistanceMeasured.  Without it they
+  // read a value the meter has stopped refreshing -- switch out of a
+  // resistance mode while the leads are shorted and the alert stays on for
+  // good, because currentResistance still holds the last low reading it took.
+  // The bridge clause needs no such gate; it runs in the voltmeter modes and
+  // is exactly what should still raise continuity there.
+  //
+  // Parenthesised to the binding the pre-rewrite code had: && binds tighter
+  // than ||, so blinkLimit gates ONLY the bridge clause.  Left as found.
+  continuity = (resistanceMeasured &&
+                (isBetween(currentResistance, cfg.contMin, cfg.contMax) ||
+                 (isBetween(currentResistance, cfg.contMin, cfg.contMaxHi) &&
+                  ohmsHighRange))) ||
                ((Vzero && !vFloating) && blinkLimit < cfg.blinkLimit);
 
   // Voltage warning.  Same note: blinkLimit gates ONLY the AltUnits clause.

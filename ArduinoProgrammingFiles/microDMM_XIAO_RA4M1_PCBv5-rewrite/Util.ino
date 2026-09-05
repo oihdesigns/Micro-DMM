@@ -86,7 +86,10 @@ void handleButtonInput() {
   } else if (voltageDisplay) {
     deltaVdigits = vDigits - 1;
     deltaV = preciseMode ? newVoltageReading : averageVoltage;
-  } else {
+  } else if (resistanceMeasured || zeroOffsetRes != 0.0f) {
+    // Setting a null needs a live reading; clearing one never does.  Without
+    // the guard a press in a mode that is not measuring would null the leads
+    // against whatever value was left over.
     zeroOffsetRes = (zeroOffsetRes == 0.0f) ? currentResistance : 0.0f;
   }
 }

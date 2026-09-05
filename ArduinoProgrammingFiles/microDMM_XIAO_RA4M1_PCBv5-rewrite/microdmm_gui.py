@@ -443,6 +443,13 @@ class App(tk.Tk):
         ttk.Checkbutton(ctrl, text="Stream", variable=self.stream_var,
                         command=self._toggle_stream).pack(side="right")
         ttk.Button(ctrl, text="Read once", command=lambda: self._send("!READ")).pack(side="right", padx=6)
+        # Holds the 20 mA LM317 ohms source off whatever the mode.  Resistance
+        # is suppressed while it is held, exactly as in a mode that never
+        # reads it, so the readouts show "not measured" rather than a leftover.
+        self.park_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(ctrl, text="Ohms source off (low power)",
+                        variable=self.park_var,
+                        command=self._toggle_park).pack(side="right", padx=(0, 14))
 
         fig = Figure(figsize=(9, 3.4), dpi=100)
         self.ax = fig.add_subplot(111)
@@ -845,6 +852,10 @@ class App(tk.Tk):
             self.dirty_lbl.config(text="UNSAVED CONFIG" if self.dirty else "")
         if "stream" in kv:
             self.stream_var.set(kv["stream"] == "1")
+        if "ohmsforce" in kv:
+            # Reflect the device's own view: !PARK echoes $STATUS, so this is
+            # what confirms the toggle landed rather than assuming it did.
+            self.park_var.set(kv["ohmsforce"] == "1")
         # !STATUS is echoed after every !SET, so the prompt has to be once per
         # connection or editing config would raise a dialog on every keystroke.
         if not self.unit_sn and not self.sn_prompted:
@@ -1076,6 +1087,9 @@ class App(tk.Tk):
 
     def _toggle_stream(self):
         self._send(f"!STREAM,{1 if self.stream_var.get() else 0}")
+
+    def _toggle_park(self):
+        self._send(f"!PARK,{1 if self.park_var.get() else 0}")
 
     def _redraw_live(self):
         if self.trace_t:
