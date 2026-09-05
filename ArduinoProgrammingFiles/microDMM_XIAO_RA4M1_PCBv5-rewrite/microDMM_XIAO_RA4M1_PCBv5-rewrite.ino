@@ -162,6 +162,14 @@ bool voltageDisplay   = false;
 // anything that consumes it needs to know that, the display and the host
 // included.
 bool resistanceMeasured = false;
+// Whether the ohms source (an LM317 sourcing a constant 20 mA off the 9 V
+// rail) is currently switched off.  The union of every reason to park it, so
+// it -- not powerSave -- is what says whether that 20 mA is flowing.
+bool ohmsParked = false;
+// When it last came back on, for the post-unpark settle window.
+unsigned long ohmsUnparkMs = 0;
+// Long enough for the source and the node to come up before a reading counts.
+#define OHMS_UNPARK_SETTLE_MS 25UL
 bool MinMaxDisplay    = false;
 bool screenRefreshFast = false;
 bool ampsMode         = false;
@@ -316,11 +324,18 @@ void loop() {
   if (currentMillis - previousAdcMillis >= cfg.adcMs) {
     previousAdcMillis = currentMillis;
 
-    // Which channels this pass will touch.  The two voltmeter modes are only
-    // interested in the input, so the ohms channel is skipped outright rather
-    // than measured into a value nothing will display; logging skips it to
-    // keep the V/I rate up, and HighRMode is resistance only.
-    bool readR = !takeLog && currentMode != Voltmeter && currentMode != VACmanual;
+    // Does this mode use the ohms channel at all?  The two voltmeter modes want
+    // only the input, logging wants the V/I rate (and does not want 20 mA
+    // injected into the circuit it is logging), and Charging has the screen off
+    // with nothing reading anything.  HighRMode is resistance only.
+    bool ohmsMode = !takeLog &&
+                    currentMode != Voltmeter &&
+                    currentMode != VACmanual &&
+                    currentMode != Charging;
+
+    // Measure it whenever the mode uses it -- INCLUDING while power saving,
+    // because watching the parked rail sag is how power save decides to end.
+    bool readR = ohmsMode;
     bool readV = (currentMode != HighRMode);
 
     // Free-running conversion pays off only on a single channel whose config
@@ -329,7 +344,16 @@ void loop() {
     // See the ADS1115 ACCESS notes in Measure.ino.
     adsPlanPass((uint8_t)readR + (uint8_t)readV +
                 (uint8_t)(readV && currentOnOff), readR);
-    resistanceMeasured = readR;
+
+    // A reading taken while the source is still coming back up is a transient,
+    // not a measurement, so hold the things that CONSUME it off for a moment
+    // after an unpark.  Without this the first sample after leaving voltmeter
+    // mode lands in the resistance min/max and stays there.  A fixed constant
+    // rather than a key because it is short and nothing has needed to tune it;
+    // promote it to the retired float slot in Config if the LM317 wants longer.
+    bool rFresh = readR &&
+                  (millis() - ohmsUnparkMs >= OHMS_UNPARK_SETTLE_MS);
+    resistanceMeasured = rFresh;
 
     if (readR) measureResistance();
     if (readV) {
@@ -342,12 +366,11 @@ void loop() {
     // has sat pegged (nothing connected) for psHoldMs, park it and watch for
     // the rail to sag, which means a resistance is across the leads again.
     //
-    // Gated on readR because every input to this state machine -- ohmsVoltage
-    // and currentResistance -- comes from the measurement that pass skipped.
-    // Stepping it on a reading left over from some earlier mode would arm or
-    // release power save on stale evidence, so it simply holds instead and
-    // resumes when resistance measurement does.
-    if (readR) {
+    // Gated on rFresh because every input to this state machine -- ohmsVoltage
+    // and currentResistance -- comes from a measurement that this pass may not
+    // have taken, or may have taken mid-transient.  Stepping it on either
+    // would arm or release power save on evidence that is not there.
+    if (rFresh) {
       if (!powerSave) {
         if (ohmsVoltage > cfg.zenerMaxV - cfg.psMargin && !timeHighset &&
             currentMode != HighRMode) {
@@ -372,50 +395,66 @@ void loop() {
           Serial.println(ohmsVoltage, 3);
         }
       }
-    } else {
-      // Not measuring the ohms channel, so there is no evidence to run the
-      // state machine on.  Drop out of power save rather than hold it: a held
-      // power save keeps the ohms source parked, and the source's bias is part
-      // of the front end the bridge test is tuned against.  It re-arms from
-      // fresh readings as soon as resistance measurement resumes.
+    } else if (!ohmsMode) {
+      // This mode never reads the channel, so the idle timeout has nothing to
+      // time.  Clear it: the source is parked below on mode grounds anyway,
+      // and leaving powerSave latched would make it look like the timeout had
+      // fired when resistance measurement resumes.
       powerSave   = false;
       timeHighset = false;
     }
 
     // ---- Ohms source parking ----
-    // Applied on EVERY pass, from the current state, rather than only inside
-    // the branch that engages it.  That release is what was missing: entering
-    // Charging mode parked the source, and nothing ever wrote the pin back, so
-    // cycling out of Charging left the ohms source parked for good and every
-    // later resistance reading pinned near zero -- able to fall when the leads
+    // The source is an LM317 sourcing a constant 20 mA off the 9 V rail, so it
+    // is far and away the meter's biggest drain.  Park it whenever nothing is
+    // going to read it: either the mode does not use the channel at all (both
+    // voltmeter modes, logging, charging -- see ohmsMode above), or the idle
+    // timeout has fired.  Power save is the one parked case that keeps
+    // measuring, because watching the parked rail sag is how it decides to end.
+    //
+    // Derived from the current state on EVERY pass rather than written only
+    // inside the branch that engages it.  That release is what was missing
+    // before: entering Charging parked the source and nothing ever wrote the
+    // pin back, so cycling out left it parked for good and every later
+    // resistance reading was pinned near zero -- able to fall when the leads
     // were shorted, never able to rise.
     //
     // Written only on a change so the PWM is not restarted every pass, and
     // keyed on the value so a !SET of PSPWM still takes effect.
     static int ohmsPwmApplied = 0;
-    int ohmsPwmWant = (powerSave || currentMode == Charging) ? cfg.psPwm : 0;
+    int ohmsPwmWant = (!ohmsMode || powerSave) ? cfg.psPwm : 0;
     if (ohmsPwmWant != ohmsPwmApplied) {
+      // Coming back on: start the settle window before anything reads it.
+      if (ohmsPwmWant == 0) ohmsUnparkMs = millis();
       ohmsPwmApplied = ohmsPwmWant;
       analogWrite(OHMPWMPIN, ohmsPwmWant);
     }
+    ohmsParked = (ohmsPwmWant != 0);
 
     // ---- Which measurement to show ----
     // Voltage wins if there is any; resistance takes over once the reading
-    // falls into a plausible ohms window.  HighRMode pins it to resistance.
-    if ((abs(countV) > (int)cfg.vDispCount || currentMode == Voltmeter) &&
+    // falls into a plausible ohms window.  HighRMode pins it to resistance,
+    // and both voltmeter modes pin it to voltage -- VACmanual has to be named
+    // in BOTH tests now that it no longer measures resistance, or the held
+    // value from whatever mode preceded it would decide the display and then
+    // never change.
+    if ((abs(countV) > (int)cfg.vDispCount ||
+         currentMode == Voltmeter || currentMode == VACmanual) &&
         currentMode != HighRMode) {
       voltageDisplay = true;
       ads.setDataRate(preciseMode ? RATE_ADS1115_16SPS : RATE_ADS1115_860SPS);
     }
     if ((isBetween(currentResistance, cfg.rDispMin, cfg.rDispMax) &&
-         currentMode != Voltmeter) || currentMode == HighRMode) {
+         currentMode != Voltmeter && currentMode != VACmanual) ||
+        currentMode == HighRMode) {
       voltageDisplay = false;
       ads.setDataRate(RATE_ADS1115_32SPS);
     }
 
-    // Also gated on readR: without it the stale reading would be re-registered
-    // into the extremes on every pass of a mode that is not measuring it.
-    if (readR) {
+    // Also gated on rFresh: without it a held value would be re-registered
+    // into the extremes on every pass of a mode that is not measuring, and the
+    // first post-unpark transient would land there permanently.
+    if (rFresh) {
     displayResistance = currentResistance - zeroOffsetRes;
 
     // Track resistance extremes only once the lead null has been settled --
@@ -426,7 +465,7 @@ void loop() {
       if (displayResistance < lowR && displayResistance > cfg.mmRMin)
         lowR = displayResistance;
     }
-    }  // readR
+    }  // rFresh
   }
 
   serialPoll();
@@ -446,7 +485,10 @@ void loop() {
   // ---- Screen saver ----
   // Only once the meter is in power save AND genuinely idle: no voltage, no
   // AC, no current.  Any activity resets the countdown.
-  if (powerSave && fabs(newVoltageReading) < cfg.sleepVMax &&
+  // Keyed on ohmsParked rather than powerSave so it still works in the
+  // voltmeter modes, where the source is parked on mode grounds and the idle
+  // timeout never runs.
+  if (ohmsParked && fabs(newVoltageReading) < cfg.sleepVMax &&
       !VACPresense && Ireading == 0.0f) {
     if (!deepSleepTrigger) {
       deepSleepStart   = millis();

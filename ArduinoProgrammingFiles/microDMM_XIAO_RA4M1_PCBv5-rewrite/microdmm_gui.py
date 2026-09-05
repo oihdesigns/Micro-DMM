@@ -75,6 +75,7 @@ FLAG_BITS = [
     ("screen asleep", 9), ("precise", 10), ("alt units", 11),
     ("amps mode", 12), ("R open", 13), ("current sensor", 14),
     ("unsaved config", 15), ("R measured", 16), ("ADC continuous", 17),
+    ("ohms source parked", 18),
 ]
 
 # Lamps shown on the Live tab, in order, with the colour they light.
@@ -82,7 +83,8 @@ LAMPS = [
     ("CONT", 5, "#1faa3f"), ("VAC", 2, "#d68000"), ("FLOAT", 3, "#0b6fb8"),
     ("OPEN", 13, "#7a7a7a"), ("PWRSAVE", 1, "#8a4bbd"), ("ASLEEP", 9, "#555555"),
     ("AUTO", 7, "#1faa3f"), ("HIGH R", 6, "#0b6fb8"), ("I SENSOR", 14, "#1faa3f"),
-    ("CONT ADC", 17, "#0b6fb8"), ("DIRTY", 15, "#c02020"),
+    ("CONT ADC", 17, "#0b6fb8"), ("SRC OFF", 18, "#8a4bbd"),
+    ("DIRTY", 15, "#c02020"),
 ]
 
 # Detection is a boot decision: if no ammeter was found the channel stays
@@ -94,6 +96,10 @@ BIT_AMPS_MODE = 12
 # record's resistance is a live measurement or a leftover.
 BIT_R_MEASURED = 16
 BIT_CONTINUOUS = 17
+# The 20 mA LM317 ohms source is parked. Union of every reason (mode does not
+# use the channel, idle timeout, charging), so this -- not PWRSAVE -- is what
+# says whether that current is flowing.
+BIT_OHMS_PARKED = 18
 
 # Traces sourced from the ohms channel, which bit 16 can invalidate.
 R_TRACES = {"Resistance (ohm)", "Resistance nulled", "Ohms rail (V)"}
@@ -413,7 +419,7 @@ class App(tk.Tk):
         self.lamps = {}
         for name, bit, colour in LAMPS:
             lbl = tk.Label(lamp_row, text=name, font=("Segoe UI", 8, "bold"),
-                           width=11, relief="ridge", bg="#eeeeee", fg="#aaaaaa")
+                           width=10, relief="ridge", bg="#eeeeee", fg="#aaaaaa")
             lbl.pack(side="left", padx=2, ipady=3)
             self.lamps[name] = (lbl, bit, colour)
 

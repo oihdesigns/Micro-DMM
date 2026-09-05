@@ -29,6 +29,7 @@
  *   2 VACPresense      6 ohmsHighRange 10 preciseMode   14 currentOnOff
  *   3 vFloating        7 ohmsAutoRange 11 altUnits      15 config dirty
  *   16 resistance measured this pass   17 ADS in continuous conversion
+ *   18 ohms source parked (the 20 mA LM317 is off)
  */
 
 #define CMD_BUF_LEN 64
@@ -62,6 +63,7 @@ static uint32_t liveFlags() {
   // integer keeps working; only code that masked it to 16 bits would care.
   if (resistanceMeasured) f |= 1uL << 16;
   if (adsContinuous())    f |= 1uL << 17;
+  if (ohmsParked)         f |= 1uL << 18;
   return f;
 }
 
@@ -108,6 +110,7 @@ void emitStatus() {
   Serial.print(F(",irange="));        Serial.print(Irange ? "high" : "low");
   Serial.print(F(",rmeas="));         Serial.print(resistanceMeasured ? 1 : 0);
   Serial.print(F(",cont="));          Serial.print(adsContinuous() ? 1 : 0);
+  Serial.print(F(",ohmspark="));      Serial.print(ohmsParked ? 1 : 0);
   Serial.print(F(",dirty="));         Serial.print(cfgDirty ? 1 : 0);
   Serial.print(F(",hwrev="));         Serial.print(cfg.hwRev);
   Serial.print(F(",sn="));            Serial.println(unitSN);

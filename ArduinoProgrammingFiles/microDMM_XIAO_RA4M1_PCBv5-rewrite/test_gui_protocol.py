@@ -102,6 +102,18 @@ chk("no stale primary", app.primary_lbl.cget("text"), "--")
 chk("stale primary caption", app.primary_cap.cget("text"),
     "resistance not measured in this mode")
 
+# --- ohms source parked (bit 18) ---------------------------------------
+# Voltmeter mode: R not measured, ADC free-running, 20 mA source off.
+# bits 0,7,14,17,18 = 1+128+16384+131072+262144 = 409729
+app._handle_line("$LIVE,14600,4700.000,4700.000,12.000000,12.000000,0.0100,0.0000,2.50000,4.980,1,409729")
+chk("source-off lamp lit", app.lamps["SRC OFF"][0].cget("bg"), "#8a4bbd")
+chk("pwrsave lamp dark", app.lamps["PWRSAVE"][0].cget("bg"), "#eeeeee")
+
+# Measuring resistance again: source back on, timeout not fired.
+# bits 7,16 = 128+65536 = 65664
+app._handle_line("$LIVE,14800,4700.000,4700.000,0.001000,0.001000,0.0010,0.0000,2.50000,4.980,0,65664")
+chk("source-off lamp dark", app.lamps["SRC OFF"][0].cget("bg"), "#eeeeee")
+
 # --- $MINMAX -----------------------------------------------------------
 app._handle_line("$MINMAX,-0.001200,12.400000,0.500,8000000.000,0.0000,1.2500,00:04,01:12")
 if "12.4 V" not in app.mm_lbl.cget("text"):
