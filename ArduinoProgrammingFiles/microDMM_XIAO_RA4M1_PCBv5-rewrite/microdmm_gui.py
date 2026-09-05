@@ -74,7 +74,7 @@ FLAG_BITS = [
     ("high range", 6), ("auto range", 7), ("min/max", 8),
     ("screen asleep", 9), ("precise", 10), ("alt units", 11),
     ("amps mode", 12), ("R open", 13), ("current sensor", 14),
-    ("unsaved config", 15),
+    ("unsaved config", 15), ("R measured", 16), ("ADC continuous", 17),
 ]
 
 # Lamps shown on the Live tab, in order, with the colour they light.
@@ -82,13 +82,21 @@ LAMPS = [
     ("CONT", 5, "#1faa3f"), ("VAC", 2, "#d68000"), ("FLOAT", 3, "#0b6fb8"),
     ("OPEN", 13, "#7a7a7a"), ("PWRSAVE", 1, "#8a4bbd"), ("ASLEEP", 9, "#555555"),
     ("AUTO", 7, "#1faa3f"), ("HIGH R", 6, "#0b6fb8"), ("I SENSOR", 14, "#1faa3f"),
-    ("DIRTY", 15, "#c02020"),
+    ("CONT ADC", 17, "#0b6fb8"), ("DIRTY", 15, "#c02020"),
 ]
 
 # Detection is a boot decision: if no ammeter was found the channel stays
 # suppressed until the meter is power-cycled.  Bit 14 says which.
 BIT_I_SENSOR = 14
 BIT_AMPS_MODE = 12
+# Voltmeter mode and logging skip the ohms channel entirely, so the resistance
+# fields in $LIVE hold whatever they last read.  Bit 16 says whether this
+# record's resistance is a live measurement or a leftover.
+BIT_R_MEASURED = 16
+BIT_CONTINUOUS = 17
+
+# Traces sourced from the ohms channel, which bit 16 can invalidate.
+R_TRACES = {"Resistance (ohm)", "Resistance nulled", "Ohms rail (V)"}
 
 # Upper edge of each RCAL bucket -- mirrors R_CAL_EDGES in Config.ino.  Used
 # only to label the calibration rows and to show which bucket is live.
@@ -406,7 +414,7 @@ class App(tk.Tk):
         self.lamps = {}
         for name, bit, colour in LAMPS:
             lbl = tk.Label(lamp_row, text=name, font=("Segoe UI", 8, "bold"),
-                           width=13, relief="ridge", bg="#eeeeee", fg="#aaaaaa")
+                           width=11, relief="ridge", bg="#eeeeee", fg="#aaaaaa")
             lbl.pack(side="left", padx=2, ipady=3)
             self.lamps[name] = (lbl, bit, colour)
 
@@ -729,9 +737,16 @@ class App(tk.Tk):
             self.t0 = ms
         t = (ms - self.t0) / 1000.0
 
-        idx, unit = TRACES[self.trace_var.get()]
-        self.trace_t.append(t)
-        self.trace_y.append(vals[idx])
+        r_live = bool(flags & (1 << BIT_R_MEASURED))
+
+        # Don't extend a resistance trace with samples the meter did not take
+        # this pass -- it would draw a flat line that looks like a steady
+        # reading rather than a gap where nothing was measured.
+        trace_name = self.trace_var.get()
+        if r_live or trace_name not in R_TRACES:
+            idx, unit = TRACES[trace_name]
+            self.trace_t.append(t)
+            self.trace_y.append(vals[idx])
 
         # Primary readout follows whatever the meter selected for itself.
         volt_disp = bool(flags & (1 << 0))
@@ -751,6 +766,9 @@ class App(tk.Tk):
             else:
                 self.primary_lbl.config(text=eng(vals[3], "V"), fg="#0b6fb8")
                 self.primary_cap.config(text="DC volts")
+        elif not r_live:
+            self.primary_lbl.config(text="--", fg="#aaaaaa")
+            self.primary_cap.config(text="resistance not measured in this mode")
         elif r_open:
             self.primary_lbl.config(text="OPEN", fg="#7a7a7a")
             self.primary_cap.config(text="resistance")
@@ -767,6 +785,10 @@ class App(tk.Tk):
                 # Say why there is no number rather than showing 0 A, which
                 # looks like a reading of zero current.
                 self.sec_lbls[name].config(text="no sensor", fg="#aaaaaa")
+            elif not r_live and name in ("Resistance", "Nulled", "Ohms rail"):
+                # Held over from the last mode that measured it, so show it as
+                # stale rather than as a present-tense reading.
+                self.sec_lbls[name].config(text="not measured", fg="#aaaaaa")
             else:
                 self.sec_lbls[name].config(text=eng(val, unit_, 4), fg="black")
 

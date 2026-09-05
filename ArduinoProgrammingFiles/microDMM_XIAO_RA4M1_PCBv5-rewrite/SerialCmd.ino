@@ -28,6 +28,7 @@
  *   1 powerSave        5 continuity   9  screenSleep    13 resistance open
  *   2 VACPresense      6 ohmsHighRange 10 preciseMode   14 currentOnOff
  *   3 vFloating        7 ohmsAutoRange 11 altUnits      15 config dirty
+ *   16 resistance measured this pass   17 ADS in continuous conversion
  */
 
 #define CMD_BUF_LEN 64
@@ -39,8 +40,8 @@ static unsigned long lastMinMaxMs  = 0;
 // ==================================================================
 //  EMITTERS
 // ==================================================================
-static uint16_t liveFlags() {
-  uint16_t f = 0;
+static uint32_t liveFlags() {
+  uint32_t f = 0;
   if (voltageDisplay)  f |= 1u << 0;
   if (powerSave)       f |= 1u << 1;
   if (VACPresense)     f |= 1u << 2;
@@ -57,6 +58,10 @@ static uint16_t liveFlags() {
   if (ohmsVoltage > (zenerActiveV - cfg.openMargin)) f |= 1u << 13;
   if (currentOnOff)    f |= 1u << 14;
   if (cfgDirty)        f |= 1u << 15;
+  // Bits 16+ needed the word widened past 16.  A host reading this as a plain
+  // integer keeps working; only code that masked it to 16 bits would care.
+  if (resistanceMeasured) f |= 1uL << 16;
+  if (adsContinuous())    f |= 1uL << 17;
   return f;
 }
 
@@ -101,6 +106,8 @@ void emitStatus() {
   Serial.print(F(",debug="));         Serial.print(debugMode ? 1 : 0);
   Serial.print(F(",amps="));          Serial.print(currentOnOff ? 1 : 0);
   Serial.print(F(",irange="));        Serial.print(Irange ? "high" : "low");
+  Serial.print(F(",rmeas="));         Serial.print(resistanceMeasured ? 1 : 0);
+  Serial.print(F(",cont="));          Serial.print(adsContinuous() ? 1 : 0);
   Serial.print(F(",dirty="));         Serial.print(cfgDirty ? 1 : 0);
   Serial.print(F(",hwrev="));         Serial.print(cfg.hwRev);
   Serial.print(F(",sn="));            Serial.println(unitSN);

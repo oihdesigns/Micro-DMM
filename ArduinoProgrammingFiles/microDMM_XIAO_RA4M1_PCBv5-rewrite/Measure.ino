@@ -23,6 +23,127 @@ static const int kNumGainLevels = sizeof(kGainLevels) / sizeof(kGainLevels[0]);
 // by zero.  Small enough to be invisible, large enough to stay finite.
 static const float ZENER_CLAMP_EPS = 0.0001f;
 
+// The three things this meter measures, by ADS1115 mux setting.
+#define ADS_MUX_OHMS    MUX_BY_CHANNEL[2]
+#define ADS_MUX_CURRENT MUX_BY_CHANNEL[3]
+#define ADS_MUX_VOLTS   ADS1X15_REG_CONFIG_MUX_DIFF_0_1
+
+// ==================================================================
+//  ADS1115 ACCESS
+// ==================================================================
+// Two ways to get a sample out of the part:
+//
+//   single-shot  write the config register to start a conversion, poll the OS
+//                bit until it finishes, read the result.  Every sample pays a
+//                full conversion period of polling.
+//   continuous   write the config register once; the ADC free-runs and each
+//                sample is a single register read.
+//
+// Continuous is only faster when the config register holds still.  Changing
+// the mux, the gain or the data rate restarts the conversion, and a restart
+// costs the same full conversion period that single-shot pays -- plus an extra
+// register write.  So it needs BOTH:
+//
+//   one channel     alternating channels restarts on every switch;
+//   a settled rate  the resistance path reschedules the data rate on its own
+//                   each pass, and the display-select block in loop() writes it
+//                   again, so any pass that includes the ohms channel would
+//                   restart every time and come out slightly BEHIND single-shot.
+//
+// That leaves voltmeter mode with no ammeter fitted -- the case this was added
+// for -- and logging with no ammeter.  HighRMode is a single channel but is the
+// ohms channel, so it deliberately stays on single-shot.
+//
+// TRAP: conversionComplete() reads the config register's OS bit, which is
+// permanently 0 while the part is free-running -- the library's own wait loop
+// (and readADC_SingleEnded, which uses it) would spin forever.  Nothing on the
+// continuous path may call it, so the first sample after a restart is waited
+// out on a timer instead.
+//
+// Sampling faster than the conversion rate returns the same result twice.
+// That is inherent to reading a free-running ADC and is harmless for display,
+// but it means the rolling voltage buffer can hold repeated samples, which
+// slightly understates the rms figure.  Raise the data rate rather than the
+// loop rate if that matters.
+static bool      adsContWanted  = false;
+static bool      adsContRunning = false;
+static uint16_t  adsContMux     = 0xFFFF;
+static adsGain_t adsContGain    = GAIN_TWOTHIRDS;
+static uint16_t  adsContRate    = RATE_ADS1115_128SPS;
+
+// Conversion period per data rate, microseconds, rounded up.
+static uint32_t adsConversionUs(uint16_t rate) {
+  switch (rate) {
+    case RATE_ADS1115_8SPS:   return 125000;
+    case RATE_ADS1115_16SPS:  return  62500;
+    case RATE_ADS1115_32SPS:  return  31250;
+    case RATE_ADS1115_64SPS:  return  15625;
+    case RATE_ADS1115_128SPS: return   7813;
+    case RATE_ADS1115_250SPS: return   4000;
+    case RATE_ADS1115_475SPS: return   2106;
+    case RATE_ADS1115_860SPS: return   1163;
+    default:                  return   7813;
+  }
+}
+
+// delayMicroseconds() is only reliable for small values, and the slow data
+// rates are well past that.
+static void adsWaitOneConversion(uint16_t rate) {
+  uint32_t us = adsConversionUs(rate) + 200;      // margin for start-up
+  if (us >= 16000) {
+    delay(us / 1000UL);
+    delayMicroseconds((unsigned int)(us % 1000UL));
+  } else {
+    delayMicroseconds((unsigned int)us);
+  }
+}
+
+// Called once per measurement pass with the number of distinct channels that
+// pass will read, and whether the ohms channel is one of them.
+void adsPlanPass(uint8_t channelCount, bool ohmsInPass) {
+  adsContWanted = (channelCount == 1) && !ohmsInPass;
+}
+
+bool adsContinuous() { return adsContRunning; }
+
+int16_t adsSample(uint16_t mux) {
+  if (adsContWanted) {
+    // Restart whenever anything the config register holds has moved.  Reading
+    // the gain and rate back from the library means the many setGain() and
+    // setDataRate() calls scattered through the measurement code do not each
+    // have to remember to tell this layer.
+    if (!adsContRunning || mux != adsContMux ||
+        ads.getGain() != adsContGain || ads.getDataRate() != adsContRate) {
+      ads.startADCReading(mux, /*continuous=*/true);
+      adsContMux     = mux;
+      adsContGain    = ads.getGain();
+      adsContRate    = ads.getDataRate();
+      adsContRunning = true;
+      adsWaitOneConversion(adsContRate);   // first result after a restart
+    }
+    return ads.getLastConversionResults();
+  }
+
+  // Single shot.  startADCReading writes MODE_SINGLE, which also takes the
+  // part out of continuous mode, so no explicit teardown is needed.
+  adsContRunning = false;
+  ads.startADCReading(mux, /*continuous=*/false);
+  while (!ads.conversionComplete()) { }
+  return ads.getLastConversionResults();
+}
+
+// A conversion that is guaranteed to have STARTED after this call.  Used where
+// the reading has to follow a specific event -- the bridge MOSFET toggling,
+// or sensor detection -- rather than being whatever the free-running ADC last
+// happened to finish.
+int16_t adsSampleFresh(uint16_t mux) {
+  bool saved = adsContWanted;
+  adsContWanted = false;
+  int16_t v = adsSample(mux);
+  adsContWanted = saved;
+  return v;
+}
+
 // ==================================================================
 //  VOLTAGE FILTER
 // ==================================================================
@@ -85,16 +206,16 @@ void measureResistance() {
 
   // --- Read with one step of gain correction ---
   ads.setGain(kGainLevels[gainIndex]);
-  adcCount = ads.readADC_SingleEnded(2);
+  adcCount = adsSample(ADS_MUX_OHMS);
 
   if (adcCount > (int16_t)cfg.adcCountHigh && gainIndex > 0) {
     gainIndex--;
     ads.setGain(kGainLevels[gainIndex]);
-    adcCount = ads.readADC_SingleEnded(2);
+    adcCount = adsSample(ADS_MUX_OHMS);
   } else if (adcCount < (int16_t)cfg.adcCountLow && gainIndex < kNumGainLevels - 1) {
     gainIndex++;
     ads.setGain(kGainLevels[gainIndex]);
-    adcCount = ads.readADC_SingleEnded(2);
+    adcCount = adsSample(ADS_MUX_OHMS);
   }
 
   ohmsVoltage = adcCount * kGainFactors[gainIndex] / 1000.0f;
@@ -182,23 +303,23 @@ void measureVoltage() {
 
   if (!(VACPresense && altUnits)) {
     ads.setGain(kGainLevels[gainIndexVolt]);
-    countV = ads.readADC_Differential_0_1();
+    countV = adsSample(ADS_MUX_VOLTS);
     if (abs(countV) > (int16_t)cfg.adcCountHigh && gainIndexVolt > 0) {
       --gainIndexVolt;
       ads.setGain(kGainLevels[gainIndexVolt]);
-      countV = ads.readADC_Differential_0_1();
+      countV = adsSample(ADS_MUX_VOLTS);
     } else if (abs(countV) < (int16_t)cfg.adcCountLow &&
                gainIndexVolt < (size_t)(kNumGainLevels - 1)) {
       ++gainIndexVolt;
       ads.setGain(kGainLevels[gainIndexVolt]);
-      countV = ads.readADC_Differential_0_1();
+      countV = adsSample(ADS_MUX_VOLTS);
     }
     newVoltageReading = (countV * kGainFactors[gainIndexVolt] / 1000.0f) * cfg.voltScale;
   } else {
     // AC in AltUnits: hold a fixed mid gain so the rms figure is not chasing
     // its own range changes.
     ads.setGain(GAIN_EIGHT);
-    countV = ads.readADC_Differential_0_1();
+    countV = adsSample(ADS_MUX_VOLTS);
     newVoltageReading = (countV * GAIN_FACTOR_8 / 1000.0f) * cfg.voltScale;
   }
 
@@ -302,7 +423,7 @@ bool detectCurrentSensor() {
   int16_t lo  = 32767;
   int16_t hi  = -32768;
   for (uint8_t i = 0; i < cfg.iDetSamples; i++) {
-    int16_t c = ads.readADC_SingleEnded(3);
+    int16_t c = adsSampleFresh(ADS_MUX_CURRENT);
     sum += c;
     if (c < lo) lo = c;
     if (c > hi) hi = c;
@@ -373,23 +494,23 @@ void measureCurrent() {
   if (Irange) {
     // High range: fixed coarse gain, hall-sensor style conversion.
     ads.setGain(GAIN_TWOTHIRDS);
-    countI = ads.readADC_SingleEnded(3);
+    countI = adsSample(ADS_MUX_CURRENT);
     currentShuntVoltage = (countI * GAIN_FACTOR_TWOTHIRDS / 1000.0f);
     Ireading = (currentShuntVoltage - cfg.iZero) / cfg.iShunt;
   } else {
     // Low range: auto-gain, direct shunt conversion.
     ads.setGain(kGainLevels[gainIndexCurrent]);
-    countI = ads.readADC_SingleEnded(3);
+    countI = adsSample(ADS_MUX_CURRENT);
 
     if (abs(countI) > (int32_t)cfg.adcCountHigh && gainIndexCurrent > 0) {
       --gainIndexCurrent;
       ads.setGain(kGainLevels[gainIndexCurrent]);
-      countI = ads.readADC_SingleEnded(3);
+      countI = adsSample(ADS_MUX_CURRENT);
     } else if (abs(countI) < (int32_t)cfg.adcCountLow &&
                gainIndexCurrent < (size_t)(kNumGainLevels - 1)) {
       ++gainIndexCurrent;
       ads.setGain(kGainLevels[gainIndexCurrent]);
-      countI = ads.readADC_SingleEnded(3);
+      countI = adsSample(ADS_MUX_CURRENT);
     }
 
     currentShuntVoltage = (countI * kGainFactors[gainIndexCurrent] / 1000.0f);
@@ -426,7 +547,9 @@ void ClosedOrFloat() {
   digitalWrite(VbridgePin, HIGH);
   ads.setGain(GAIN_EIGHT);
   delay(2);
-  bridgeV = (ads.readADC_Differential_0_1() * GAIN_FACTOR_8 / 1000.0f) * -1.0f;
+  // Fresh, not free-running: this reading only means something if the whole
+  // conversion happened after the MOSFET went high.
+  bridgeV = (adsSampleFresh(ADS_MUX_VOLTS) * GAIN_FACTOR_8 / 1000.0f) * -1.0f;
   vFloating = (bridgeV < cfg.bridgeThr);
   digitalWrite(VbridgePin, LOW);
 }

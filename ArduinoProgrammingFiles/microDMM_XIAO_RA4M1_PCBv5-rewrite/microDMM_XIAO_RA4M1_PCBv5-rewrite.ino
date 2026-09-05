@@ -157,6 +157,11 @@ const char *rSuffix  = "",  *rSuffixlow  = "",  *rSuffixhigh  = "";
 bool ohmsHighRange    = true;
 bool ohmsAutoRange    = true;
 bool voltageDisplay   = false;
+// Whether the last pass actually read the ohms channel.  Voltmeter mode and
+// logging skip it, which leaves currentResistance holding an old value --
+// anything that consumes it needs to know that, the display and the host
+// included.
+bool resistanceMeasured = false;
 bool MinMaxDisplay    = false;
 bool screenRefreshFast = false;
 bool ampsMode         = false;
@@ -311,16 +316,38 @@ void loop() {
   if (currentMillis - previousAdcMillis >= cfg.adcMs) {
     previousAdcMillis = currentMillis;
 
-    if (!takeLog) measureResistance();     // logging wants the fastest V/I rate
-    if (currentMode != HighRMode) {
+    // Which channels this pass will touch.  Voltmeter mode is only interested
+    // in the input, so the ohms channel is skipped outright rather than
+    // measured into a value nothing will display; logging skips it to keep the
+    // V/I rate up, and HighRMode is resistance only.
+    bool readR = !takeLog && currentMode != Voltmeter;
+    bool readV = (currentMode != HighRMode);
+
+    // Free-running conversion pays off only on a single channel whose config
+    // is not being rewritten each pass -- which rules the ohms channel out.
+    // Voltmeter mode with no ammeter fitted is the case it was added for.
+    // See the ADS1115 ACCESS notes in Measure.ino.
+    adsPlanPass((uint8_t)readR + (uint8_t)readV +
+                (uint8_t)(readV && currentOnOff), readR);
+    resistanceMeasured = readR;
+
+    if (readR) measureResistance();
+    if (readV) {
       measureVoltage();
-      measureCurrent();
+      measureCurrent();                    // self-suppresses with no sensor
     }
 
     // ---- Power save ----
     // The ohms source is the meter's biggest continuous draw.  Once the rail
     // has sat pegged (nothing connected) for psHoldMs, park it and watch for
     // the rail to sag, which means a resistance is across the leads again.
+    //
+    // Gated on readR because every input to this state machine -- ohmsVoltage
+    // and currentResistance -- comes from the measurement that pass skipped.
+    // Stepping it on a reading left over from some earlier mode would arm or
+    // release power save on stale evidence, so it simply holds instead and
+    // resumes when resistance measurement does.
+    if (readR) {
     if (!powerSave) {
       if (ohmsVoltage > cfg.zenerMaxV - cfg.psMargin && !timeHighset &&
           currentMode != HighRMode) {
@@ -350,6 +377,7 @@ void loop() {
         analogWrite(OHMPWMPIN, 0);
       }
     }
+    }  // readR
 
     // ---- Which measurement to show ----
     // Voltage wins if there is any; resistance takes over once the reading
@@ -365,6 +393,9 @@ void loop() {
       ads.setDataRate(RATE_ADS1115_32SPS);
     }
 
+    // Also gated on readR: without it the stale reading would be re-registered
+    // into the extremes on every pass of a mode that is not measuring it.
+    if (readR) {
     displayResistance = currentResistance - zeroOffsetRes;
 
     // Track resistance extremes only once the lead null has been settled --
@@ -375,6 +406,7 @@ void loop() {
       if (displayResistance < lowR && displayResistance > cfg.mmRMin)
         lowR = displayResistance;
     }
+    }  // readR
   }
 
   serialPoll();

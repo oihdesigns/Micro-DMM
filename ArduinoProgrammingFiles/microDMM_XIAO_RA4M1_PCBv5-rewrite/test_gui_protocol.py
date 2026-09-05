@@ -26,35 +26,36 @@ def chk(label, got, want):
         fails.append(f"{label}: got {got!r} want {want!r}")
 
 # --- $LIVE, exactly the field order emitLive() prints -------------------
-# ms,R,Rz,V,Vavg,Vac,I,Vr,Vbat,mode,flags   flags: voltageDisplay|autoRange
-app._handle_line("$LIVE,12345,4700.125,4699.875,3.300000,3.299000,0.0021,0.0000,2.50000,4.980,1,129")
+# ms,R,Rz,V,Vavg,Vac,I,Vr,Vbat,mode,flags
+# flags: voltageDisplay | autoRange | Rmeasured  (mode 0, so R is measured)
+app._handle_line("$LIVE,12345,4700.125,4699.875,3.300000,3.299000,0.0021,0.0000,2.50000,4.980,0,65665")
 chk("primary", app.primary_lbl.cget("text"), "3.3 V")
 chk("caption", app.primary_cap.cget("text"), "DC volts")
 chk("secondary R", app.sec_lbls["Resistance"].cget("text"), "4.7 kohm")
-chk("mode label", app.mode_lbl.cget("text"), "mode 1 Voltmeter")
+chk("mode label", app.mode_lbl.cget("text"), "mode 0 Default")
 chk("trace len", len(app.trace_t), 1)
 
-# resistance display, R open, config dirty  -> bits 7,13,15 = 41088
-app._handle_line("$LIVE,12545,8000000.000,8000000.000,0.000100,0.000050,0.0001,0.0000,4.99900,4.980,0,41088")
+# resistance display, R open, config dirty, R measured -> 106624
+app._handle_line("$LIVE,12545,8000000.000,8000000.000,0.000100,0.000050,0.0001,0.0000,4.99900,4.980,0,106624")
 chk("open readout", app.primary_lbl.cget("text"), "OPEN")
 chk("dirty banner", app.dirty_lbl.cget("text"), "UNSAVED CONFIG")
 chk("OPEN lamp lit", app.lamps["OPEN"][0].cget("bg"), "#7a7a7a")
 
-# AC present (bits 0,2,7) = 133
-app._handle_line("$LIVE,12745,8000000.000,8000000.000,0.010000,0.000100,120.4000,0.0000,4.99900,4.980,2,133")
+# AC present (bits 0,2,7,16) = 65669
+app._handle_line("$LIVE,12745,8000000.000,8000000.000,0.010000,0.000100,120.4000,0.0000,4.99900,4.980,2,65669")
 chk("ac caption", app.primary_cap.cget("text"), "AC rms")
 
 # --- ammeter suppression ----------------------------------------------
 # No sensor (bit 14 clear) while amps mode IS on (bit 12): the current channel
 # must read "no sensor", and amps mode must NOT take over the primary readout.
-app._handle_line("$LIVE,13000,4700.000,4700.000,0.001000,0.001000,0.0010,0.0000,2.50000,4.980,0,4224")
+app._handle_line("$LIVE,13000,4700.000,4700.000,0.001000,0.001000,0.0010,0.0000,2.50000,4.980,0,69760")
 chk("suppressed current", app.sec_lbls["Current"].cget("text"), "no sensor")
 chk("suppressed is grey", app.sec_lbls["Current"].cget("fg"), "#aaaaaa")
 chk("amps did not take primary", app.primary_cap.cget("text"), "resistance (nulled)")
 chk("sensor lamp dark", app.lamps["I SENSOR"][0].cget("bg"), "#eeeeee")
 
 # Sensor present (bits 12 and 14) -> amps becomes the primary readout again.
-app._handle_line("$LIVE,13200,4700.000,4700.000,0.001000,0.001000,0.0010,1.2500,2.50000,4.980,0,20608")
+app._handle_line("$LIVE,13200,4700.000,4700.000,0.001000,0.001000,0.0010,1.2500,2.50000,4.980,0,86144")
 chk("amps primary", app.primary_cap.cget("text"), "current")
 chk("amps value", app.primary_lbl.cget("text"), "1.25 A")
 chk("current shown", app.sec_lbls["Current"].cget("text"), "1.25 A")
@@ -72,6 +73,34 @@ chk("idet izero mirrored", app.cali_lbl.cget("text"), "IZERO 2.4999")
 app._handle_line("$IDET,low,12,0.0022,0.0041,1,0,1,0.0000")
 if "shunt" not in app.idet_lbl.cget("text"):
     fails.append(f"idet low: {app.idet_lbl.cget('text')!r}")
+
+# --- voltmeter mode: resistance not measured ---------------------------
+# bits 0 (voltageDisplay), 7 (auto), 14 (sensor), 17 (continuous) = 147585.
+# Bit 16 CLEAR: the resistance fields are leftovers, not measurements.
+n0 = len(app.trace_t)
+app.trace_var.set("Resistance (ohm)")
+app._handle_line("$LIVE,14000,4700.000,4700.000,12.000000,12.000000,0.0100,0.0000,2.50000,4.980,1,147585")
+chk("stale R hidden", app.sec_lbls["Resistance"].cget("text"), "not measured")
+chk("stale nulled hidden", app.sec_lbls["Nulled"].cget("text"), "not measured")
+chk("stale rail hidden", app.sec_lbls["Ohms rail"].cget("text"), "not measured")
+chk("voltage still live", app.sec_lbls["Voltage"].cget("text"), "12 V")
+chk("R trace not extended", len(app.trace_t), n0)
+chk("continuous lamp lit", app.lamps["CONT ADC"][0].cget("bg"), "#0b6fb8")
+
+# Same record with bit 16 SET and 17 clear -> R live, single-shot again.
+# (measured R and continuous are mutually exclusive: continuous needs the ohms
+#  channel out of the pass.)
+app._handle_line("$LIVE,14200,4700.000,4700.000,12.000000,12.000000,0.0100,0.0000,2.50000,4.980,1,82049")
+chk("live R shown", app.sec_lbls["Resistance"].cget("text"), "4.7 kohm")
+chk("R trace extended", len(app.trace_t), n0 + 1)
+app.trace_var.set("Voltage (V)")
+
+# Resistance primary with bit 16 clear must not present a leftover as a
+# reading: flags 128 (auto range only), voltageDisplay clear, R not measured.
+app._handle_line("$LIVE,14400,4700.000,4700.000,0.001000,0.001000,0.0010,0.0000,2.50000,4.980,0,128")
+chk("no stale primary", app.primary_lbl.cget("text"), "--")
+chk("stale primary caption", app.primary_cap.cget("text"),
+    "resistance not measured in this mode")
 
 # --- $MINMAX -----------------------------------------------------------
 app._handle_line("$MINMAX,-0.001200,12.400000,0.500,8000000.000,0.0000,1.2500,00:04,01:12")
