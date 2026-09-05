@@ -75,15 +75,17 @@ FLAG_BITS = [
     ("screen asleep", 9), ("precise", 10), ("alt units", 11),
     ("amps mode", 12), ("R open", 13), ("current sensor", 14),
     ("unsaved config", 15), ("R measured", 16), ("ADC continuous", 17),
-    ("ohms source parked", 18),
+    ("ohms source parked", 18), ("low-power held", 19),
+    ("wake condition met", 20),
 ]
 
 # Lamps shown on the Live tab, in order, with the colour they light.
 LAMPS = [
     ("CONT", 5, "#1faa3f"), ("VAC", 2, "#d68000"), ("FLOAT", 3, "#0b6fb8"),
     ("OPEN", 13, "#7a7a7a"), ("PWRSAVE", 1, "#8a4bbd"), ("ASLEEP", 9, "#555555"),
-    ("AUTO", 7, "#1faa3f"), ("HIGH R", 6, "#0b6fb8"), ("I SENSOR", 14, "#1faa3f"),
-    ("CONT ADC", 17, "#0b6fb8"), ("SRC OFF", 18, "#8a4bbd"),
+    ("AUTO", 7, "#1faa3f"), ("HIGH R", 6, "#0b6fb8"), ("ISENSE", 14, "#1faa3f"),
+    ("CONTADC", 17, "#0b6fb8"), ("SRC OFF", 18, "#8a4bbd"),
+    ("LP HELD", 19, "#c02020"), ("WAKE", 20, "#d68000"),
     ("DIRTY", 15, "#c02020"),
 ]
 
@@ -100,6 +102,10 @@ BIT_CONTINUOUS = 17
 # use the channel, idle timeout, charging), so this -- not PWRSAVE -- is what
 # says whether that current is flowing.
 BIT_OHMS_PARKED = 18
+# Power save held on by hand for bench work, ignoring the wake condition.
+BIT_LOWPWR_HELD = 19
+# The parked rail is sagging enough to wake -- reported even when held.
+BIT_WAKE_MET = 20
 
 # Traces sourced from the ohms channel, which bit 16 can invalidate.
 R_TRACES = {"Resistance (ohm)", "Resistance nulled", "Ohms rail (V)"}
@@ -419,7 +425,7 @@ class App(tk.Tk):
         self.lamps = {}
         for name, bit, colour in LAMPS:
             lbl = tk.Label(lamp_row, text=name, font=("Segoe UI", 8, "bold"),
-                           width=10, relief="ridge", bg="#eeeeee", fg="#aaaaaa")
+                           width=8, relief="ridge", bg="#eeeeee", fg="#aaaaaa")
             lbl.pack(side="left", padx=2, ipady=3)
             self.lamps[name] = (lbl, bit, colour)
 
@@ -443,13 +449,15 @@ class App(tk.Tk):
         ttk.Checkbutton(ctrl, text="Stream", variable=self.stream_var,
                         command=self._toggle_stream).pack(side="right")
         ttk.Button(ctrl, text="Read once", command=lambda: self._send("!READ")).pack(side="right", padx=6)
-        # Holds the 20 mA LM317 ohms source off whatever the mode.  Resistance
-        # is suppressed while it is held, exactly as in a mode that never
-        # reads it, so the readouts show "not measured" rather than a leftover.
-        self.park_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(ctrl, text="Ohms source off (low power)",
-                        variable=self.park_var,
-                        command=self._toggle_park).pack(side="right", padx=(0, 14))
+        # Holds the meter in power save: 20 mA source parked, channel still
+        # measured, and the rail sag that would normally end it ignored.  For
+        # bench work -- it is the only way to sit in the low-power state long
+        # enough to measure its draw or watch the detection, because connecting
+        # anything to look at otherwise wakes it straight back up.
+        self.lowpwr_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(ctrl, text="Hold low-power (ohms watch)",
+                        variable=self.lowpwr_var,
+                        command=self._toggle_lowpwr).pack(side="right", padx=(0, 14))
 
         fig = Figure(figsize=(9, 3.4), dpi=100)
         self.ax = fig.add_subplot(111)
@@ -852,10 +860,10 @@ class App(tk.Tk):
             self.dirty_lbl.config(text="UNSAVED CONFIG" if self.dirty else "")
         if "stream" in kv:
             self.stream_var.set(kv["stream"] == "1")
-        if "ohmsforce" in kv:
-            # Reflect the device's own view: !PARK echoes $STATUS, so this is
+        if "lowpwr" in kv:
+            # Reflect the device's own view: !LOWPWR echoes $STATUS, so this is
             # what confirms the toggle landed rather than assuming it did.
-            self.park_var.set(kv["ohmsforce"] == "1")
+            self.lowpwr_var.set(kv["lowpwr"] == "1")
         # !STATUS is echoed after every !SET, so the prompt has to be once per
         # connection or editing config would raise a dialog on every keystroke.
         if not self.unit_sn and not self.sn_prompted:
@@ -1088,8 +1096,8 @@ class App(tk.Tk):
     def _toggle_stream(self):
         self._send(f"!STREAM,{1 if self.stream_var.get() else 0}")
 
-    def _toggle_park(self):
-        self._send(f"!PARK,{1 if self.park_var.get() else 0}")
+    def _toggle_lowpwr(self):
+        self._send(f"!LOWPWR,{1 if self.lowpwr_var.get() else 0}")
 
     def _redraw_live(self):
         if self.trace_t:

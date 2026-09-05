@@ -30,6 +30,8 @@
  *   3 vFloating        7 ohmsAutoRange 11 altUnits      15 config dirty
  *   16 resistance measured this pass   17 ADS in continuous conversion
  *   18 ohms source parked (the 20 mA LM317 is off)
+ *   19 low-power state held by hand (!LOWPWR)
+ *   20 wake condition met right now (parked rail is sagging)
  */
 
 #define CMD_BUF_LEN 64
@@ -64,6 +66,14 @@ static uint32_t liveFlags() {
   if (resistanceMeasured) f |= 1uL << 16;
   if (adsContinuous())    f |= 1uL << 17;
   if (ohmsParked)         f |= 1uL << 18;
+  if (forceLowPower)      f |= 1uL << 19;
+  // Whether the sag that ends power save is satisfied AT THIS INSTANT,
+  // reported whether or not it is being acted on.  With !LOWPWR holding the
+  // state, this is what makes SLEEPV and PSHYST tunable: connect something
+  // and watch whether the wake would have fired, and at what rail voltage,
+  // without the meter waking up and destroying the measurement.
+  if (ohmsParked && ohmsVoltage < cfg.sleepV - cfg.psHyst)
+    f |= 1uL << 20;
   return f;
 }
 
@@ -111,7 +121,7 @@ void emitStatus() {
   Serial.print(F(",rmeas="));         Serial.print(resistanceMeasured ? 1 : 0);
   Serial.print(F(",cont="));          Serial.print(adsContinuous() ? 1 : 0);
   Serial.print(F(",ohmspark="));      Serial.print(ohmsParked ? 1 : 0);
-  Serial.print(F(",ohmsforce="));     Serial.print(ohmsForceOff ? 1 : 0);
+  Serial.print(F(",lowpwr="));        Serial.print(forceLowPower ? 1 : 0);
   Serial.print(F(",dirty="));         Serial.print(cfgDirty ? 1 : 0);
   Serial.print(F(",hwrev="));         Serial.print(cfg.hwRev);
   Serial.print(F(",sn="));            Serial.println(unitSN);
@@ -135,7 +145,7 @@ static void emitLog() {
 static void emitHelp() {
   Serial.println(F("$INFO,help,config,!CFG !GET,K !SET,K,V !SAVE !LOAD !DEFAULTS !SEEDCAL,N !SN[,V]"));
   Serial.println(F("$INFO,help,live,!READ !STREAM[,0|1] !RATE,MS !STATUS !MINMAX[,0|1] !RESET"));
-  Serial.println(F("$INFO,help,meter,!ZERO !ZEROCLR !MODE,N !RANGE,0|1|A !VDISP[,0|1] !PARK[,0|1]"));
+  Serial.println(F("$INFO,help,meter,!ZERO !ZEROCLR !MODE,N !RANGE,0|1|A !VDISP[,0|1] !LOWPWR[,0|1]"));
   Serial.println(F("$INFO,help,cal,!CAL,OHMS[,IDX] !CALV,VOLTS !CALI !IDET !DEBUG !AMPS !FAST !LOG !DUMP"));
 }
 
@@ -387,11 +397,19 @@ void handleLine(char *line) {
     ampsMode = arg ? (atoi(arg) != 0) : !ampsMode;
     Serial.print(F("$OK,amps,")); Serial.println(ampsMode ? 1 : 0);
 
-  } else if (strcmp(cmd, "PARK") == 0) {
-    // Force the ohms source off regardless of mode.  The source is a constant
-    // 20 mA LM317, so this is the low-power switch; resistance readings are
-    // suppressed while it is held, the same as in a mode that never reads them.
-    ohmsForceOff = arg ? (atoi(arg) != 0) : !ohmsForceOff;
+  } else if (strcmp(cmd, "LOWPWR") == 0) {
+    // Hold the meter in power save: the 20 mA source stays parked, the channel
+    // is still measured, and the rail sag that would normally end it is
+    // ignored.  Without this the state cannot be observed -- connecting
+    // anything to measure the draw or watch the detection wakes it up, which
+    // is precisely the behaviour being tuned.
+    forceLowPower = arg ? (atoi(arg) != 0) : !forceLowPower;
+    if (!forceLowPower) {
+      // Release immediately rather than leaving power save latched until the
+      // next sag; the arm timer then restarts from a fresh reading.
+      powerSave   = false;
+      timeHighset = false;
+    }
     emitStatus();
 
   } else if (strcmp(cmd, "IDET") == 0) {

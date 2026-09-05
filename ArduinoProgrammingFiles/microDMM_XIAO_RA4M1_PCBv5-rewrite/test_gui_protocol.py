@@ -52,14 +52,14 @@ app._handle_line("$LIVE,13000,4700.000,4700.000,0.001000,0.001000,0.0010,0.0000,
 chk("suppressed current", app.sec_lbls["Current"].cget("text"), "no sensor")
 chk("suppressed is grey", app.sec_lbls["Current"].cget("fg"), "#aaaaaa")
 chk("amps did not take primary", app.primary_cap.cget("text"), "resistance (nulled)")
-chk("sensor lamp dark", app.lamps["I SENSOR"][0].cget("bg"), "#eeeeee")
+chk("sensor lamp dark", app.lamps["ISENSE"][0].cget("bg"), "#eeeeee")
 
 # Sensor present (bits 12 and 14) -> amps becomes the primary readout again.
 app._handle_line("$LIVE,13200,4700.000,4700.000,0.001000,0.001000,0.0010,1.2500,2.50000,4.980,0,86144")
 chk("amps primary", app.primary_cap.cget("text"), "current")
 chk("amps value", app.primary_lbl.cget("text"), "1.25 A")
 chk("current shown", app.sec_lbls["Current"].cget("text"), "1.25 A")
-chk("sensor lamp lit", app.lamps["I SENSOR"][0].cget("bg"), "#1faa3f")
+chk("sensor lamp lit", app.lamps["ISENSE"][0].cget("bg"), "#1faa3f")
 
 # --- $IDET, all three outcomes ----------------------------------------
 app._handle_line("$IDET,off,-1834,-0.3439,0.2118,0,0,0,0.0000")
@@ -85,7 +85,7 @@ chk("stale nulled hidden", app.sec_lbls["Nulled"].cget("text"), "not measured")
 chk("stale rail hidden", app.sec_lbls["Ohms rail"].cget("text"), "not measured")
 chk("voltage still live", app.sec_lbls["Voltage"].cget("text"), "12 V")
 chk("R trace not extended", len(app.trace_t), n0)
-chk("continuous lamp lit", app.lamps["CONT ADC"][0].cget("bg"), "#0b6fb8")
+chk("continuous lamp lit", app.lamps["CONTADC"][0].cget("bg"), "#0b6fb8")
 
 # Same record with bit 16 SET and 17 clear -> R live, single-shot again.
 # (measured R and continuous are mutually exclusive: continuous needs the ohms
@@ -127,15 +127,29 @@ chk("hwrev", app.hwrev, "6")
 chk("stream checkbox", app.stream_var.get(), True)
 chk("mode from status", app.mode_lbl.cget("text"), "mode 4 Precise")
 
-# --- the ohms-source-off toggle tracks the device, not the click -------
-app._handle_line("$STATUS,mode=0,range=high,auto=1,ps=0,zero=0.0000,bridge=1,"
-                 "stream=1,debug=0,amps=1,irange=high,rmeas=0,cont=0,"
-                 "ohmspark=1,ohmsforce=1,dirty=0,hwrev=6,sn=20260905_001")
-chk("park box follows device on", app.park_var.get(), True)
+# --- the hold-low-power toggle tracks the device, not the click -------
+app._handle_line("$STATUS,mode=0,range=high,auto=1,ps=1,zero=0.0000,bridge=1,"
+                 "stream=1,debug=0,amps=1,irange=high,rmeas=1,cont=0,"
+                 "ohmspark=1,lowpwr=1,dirty=0,hwrev=6,sn=20260905_001")
+chk("low-power box follows device on", app.lowpwr_var.get(), True)
 app._handle_line("$STATUS,mode=0,range=high,auto=1,ps=0,zero=0.0000,bridge=1,"
                  "stream=1,debug=0,amps=1,irange=high,rmeas=1,cont=0,"
-                 "ohmspark=0,ohmsforce=0,dirty=0,hwrev=6,sn=20260905_001")
-chk("park box follows device off", app.park_var.get(), False)
+                 "ohmspark=0,lowpwr=0,dirty=0,hwrev=6,sn=20260905_001")
+chk("low-power box follows device off", app.lowpwr_var.get(), False)
+
+# Held low power still reports LIVE resistance -- that is the whole point of
+# the hold, so bit 16 must be SET while bits 1/18/19 are too.
+# bits 1,7,16,18,19 = 2+128+65536+262144+524288 = 852098
+app._handle_line("$LIVE,15000,0.850,0.850,0.000100,0.000100,0.0010,0.0000,0.61000,4.980,0,852098")
+chk("held LP shows live R", app.sec_lbls["Resistance"].cget("text"), "850 mohm")
+chk("held lamp lit", app.lamps["LP HELD"][0].cget("bg"), "#c02020")
+chk("source-off lamp lit too", app.lamps["SRC OFF"][0].cget("bg"), "#8a4bbd")
+chk("pwrsave lamp lit too", app.lamps["PWRSAVE"][0].cget("bg"), "#8a4bbd")
+chk("wake not met at 0.61 V rail", app.lamps["WAKE"][0].cget("bg"), "#eeeeee")
+
+# Same held state but the rail has sagged: bit 20 set (852098 + 1048576).
+app._handle_line("$LIVE,15200,0.850,0.850,0.000100,0.000100,0.0010,0.0000,0.40000,4.980,0,1900674")
+chk("wake met when rail sags", app.lamps["WAKE"][0].cget("bg"), "#d68000")
 
 # --- $CFG rows, including one this GUI has never heard of --------------
 for line in ["$CFG,HWREV,6", "$CFG,RCAL03,0.997100", "$CFG,VSCALE,-68.426399",

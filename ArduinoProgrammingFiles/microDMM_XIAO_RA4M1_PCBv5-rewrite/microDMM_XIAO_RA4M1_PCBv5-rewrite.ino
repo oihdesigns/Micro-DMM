@@ -166,10 +166,14 @@ bool resistanceMeasured = false;
 // rail) is currently switched off.  The union of every reason to park it, so
 // it -- not powerSave -- is what says whether that 20 mA is flowing.
 bool ohmsParked = false;
-// Operator override (!PARK): hold the ohms source off whatever the mode.  A
-// runtime flag, not a config key -- it is an action taken at the bench, not a
-// tuning value, and it should not survive a power cycle.
-bool ohmsForceOff = false;
+// Operator override (!LOWPWR): hold the meter in power save -- source parked,
+// channel still measured, and the sag that would normally end it ignored.
+// For bench work: it is the only way to sit in the low-power state long enough
+// to measure its draw or watch what the detection sees, since connecting
+// anything to look at would otherwise wake it straight back up.
+// A runtime flag, not a config key: a bench action, not a tuning value, and it
+// should not survive a power cycle.
+bool forceLowPower = false;
 // When it last came back on, for the post-unpark settle window.
 unsigned long ohmsUnparkMs = 0;
 // Long enough for the source and the node to come up before a reading counts.
@@ -332,11 +336,10 @@ void loop() {
     // only the input, logging wants the V/I rate (and does not want 20 mA
     // injected into the circuit it is logging), and Charging has the screen off
     // with nothing reading anything.  HighRMode is resistance only.
-    // The !PARK override folds in here rather than only at the pin, so that
-    // forcing the source off also stops the channel being read and reported --
-    // measuring with the source off would otherwise publish a garbage
-    // resistance flagged as a live measurement.
-    bool ohmsMode = !takeLog && !ohmsForceOff &&
+    // forceLowPower is deliberately NOT folded in here.  Power save parks the
+    // source but keeps measuring -- that is how it notices the rail sagging --
+    // and the whole point of forcing it is to watch those readings.
+    bool ohmsMode = !takeLog &&
                     currentMode != Voltmeter &&
                     currentMode != VACmanual &&
                     currentMode != Charging;
@@ -379,7 +382,13 @@ void loop() {
     // have taken, or may have taken mid-transient.  Stepping it on either
     // would arm or release power save on evidence that is not there.
     if (rFresh) {
-      if (!powerSave) {
+      if (forceLowPower) {
+        // Held by hand: engage, and ignore the sag that would normally end it.
+        // Measurement continues, so the readings and the alerts behave exactly
+        // as they do in a real power save -- just without waking up.
+        powerSave   = true;
+        timeHighset = false;
+      } else if (!powerSave) {
         if (ohmsVoltage > cfg.zenerMaxV - cfg.psMargin && !timeHighset &&
             currentMode != HighRMode) {
           timeHigh    = millis();
