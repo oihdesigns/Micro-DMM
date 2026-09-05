@@ -173,7 +173,13 @@ struct Config {
   float    bridgeFltThr;   // V, split between "floating" and "unsure"
   float    bridgeAvgMax;   // gate: |DC average| must be under this
   float    bridgeVMax;     // gate: instantaneous reading must be under this
-  float    bridgeVacMax;   // gate in VACmanual: VAC must be under this
+  // RETIRED (was BRIDGEVAC): the bridge test no longer runs in VACmanual at
+  // all, so this gate has no caller and the key is gone from the table.  The
+  // FIELD stays because the layout is append-only -- removing it from the
+  // middle would stop older versions being a byte-exact prefix and break the
+  // one-memcpy migration.  Reuse it for the next float key rather than
+  // appending one, and rename it then.
+  float    bridgeVacMax_retired;
 
   // ---- Filtering / misc ---------------------------------------
   uint8_t  vSamples;       // live length of the rolling voltage buffer

@@ -221,15 +221,16 @@ void measureResistance() {
   ohmsVoltage = adcCount * kGainFactors[gainIndex] / 1000.0f;
 
   // --- Which reference is in force ---
-  // In power-save the constant-current source is off and the rail sits at
+  // In power save the constant-current source is parked and the rail sits at
   // sleepV, so the divider maths has to be told about it.
-  if (powerSave) {
-    zenerActiveV = cfg.sleepV;
-  } else if (ohmsVoltage > zenerActiveV) {
-    ohmsVoltage = zenerActiveV - ZENER_CLAMP_EPS;
-  } else {
-    zenerActiveV = cfg.zenerMaxV;
-  }
+  //
+  // Derived from the state every pass rather than edited in place.  The old
+  // form only restored zenerMaxV in the branch that ran when the reading was
+  // BELOW the reference, so once it had dropped to sleepV any reading above
+  // sleepV took the clamp branch instead and left it there -- the reference
+  // stayed low, every reading clamped, and the meter read open for good.
+  zenerActiveV = powerSave ? cfg.sleepV : cfg.zenerMaxV;
+  if (ohmsVoltage > zenerActiveV) ohmsVoltage = zenerActiveV - ZENER_CLAMP_EPS;
 
   // --- Raw resistance ---
   if (currentRangeHigh) {
@@ -239,8 +240,10 @@ void measureResistance() {
   }
 
   // --- One-shot lead auto-zero at startup ---
+  // No analogWrite here any more: loop() owns OHMPWMPIN outright.  Two writers
+  // for one pin is how the park got stuck, and the pin is already unparked at
+  // boot, so this write was only ever a redundant second claim on it.
   if (!initialZeroSet) {
-    analogWrite(OHMPWMPIN, 0);
     if (currentResistance > 0.001f && currentResistance < cfg.zeroAutoMax) {
       zeroOffsetRes  = currentResistance;
       initialZeroSet = true;
@@ -377,12 +380,15 @@ void measureVoltage() {
   // --- Bridge test (open lead vs. closed) ---
   // Only on boards that have the circuit, only in the modes it is wanted in,
   // and only when the reading is small enough that the answer is interesting.
-  bool bridgeMode = (currentMode == Voltmeter || currentMode == VACmanual ||
-                     currentMode == AltUnitsMode);
+  //
+  // NOT in VACmanual.  The test drives the bridge MOSFET across the inputs and
+  // reads the transient it produces, which only means anything against a
+  // quiet DC input; on an AC input it fires against whatever point of the
+  // waveform it lands on.  It used to run here, gated on VAC being below
+  // BRIDGEVAC -- that gate is gone and so is the key.
+  bool bridgeMode = (currentMode == Voltmeter || currentMode == AltUnitsMode);
   bool bridgeQuiet = (fabs(averageVoltage) < cfg.bridgeAvgMax &&
-                      currentMode != VACmanual &&
-                      newVoltageReading < cfg.bridgeVMax) ||
-                     (currentMode == VACmanual && VAC < cfg.bridgeVacMax);
+                      newVoltageReading < cfg.bridgeVMax);
 
   if (cfg.bridge && bridgeMode && voltageDisplay && bridgeQuiet) {
     Vzero = true;

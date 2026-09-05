@@ -316,11 +316,11 @@ void loop() {
   if (currentMillis - previousAdcMillis >= cfg.adcMs) {
     previousAdcMillis = currentMillis;
 
-    // Which channels this pass will touch.  Voltmeter mode is only interested
-    // in the input, so the ohms channel is skipped outright rather than
-    // measured into a value nothing will display; logging skips it to keep the
-    // V/I rate up, and HighRMode is resistance only.
-    bool readR = !takeLog && currentMode != Voltmeter;
+    // Which channels this pass will touch.  The two voltmeter modes are only
+    // interested in the input, so the ohms channel is skipped outright rather
+    // than measured into a value nothing will display; logging skips it to
+    // keep the V/I rate up, and HighRMode is resistance only.
+    bool readR = !takeLog && currentMode != Voltmeter && currentMode != VACmanual;
     bool readV = (currentMode != HighRMode);
 
     // Free-running conversion pays off only on a single channel whose config
@@ -348,36 +348,56 @@ void loop() {
     // release power save on stale evidence, so it simply holds instead and
     // resumes when resistance measurement does.
     if (readR) {
-    if (!powerSave) {
-      if (ohmsVoltage > cfg.zenerMaxV - cfg.psMargin && !timeHighset &&
-          currentMode != HighRMode) {
-        timeHigh    = millis();
-        timeHighset = true;
-        if (cfg.psDebug) Serial.println(F("$PS,armed"));
-      }
-      if (timeHighset && currentResistance < cfg.psCancelR) {
-        timeHighset = false;
-        if (cfg.psDebug) Serial.println(F("$PS,cancel"));
-      }
-      if (timeHighset && (millis() - timeHigh) > cfg.psHoldMs) {
-        powerSave = true;
-        if (cfg.psDebug) Serial.println(F("$PS,start"));
-      }
-    }
-
-    if (powerSave || currentMode == Charging) {
-      analogWrite(OHMPWMPIN, cfg.psPwm);
-      if (ohmsVoltage < cfg.sleepV - cfg.psHyst) {
+      if (!powerSave) {
+        if (ohmsVoltage > cfg.zenerMaxV - cfg.psMargin && !timeHighset &&
+            currentMode != HighRMode) {
+          timeHigh    = millis();
+          timeHighset = true;
+          if (cfg.psDebug) Serial.println(F("$PS,armed"));
+        }
+        if (timeHighset && currentResistance < cfg.psCancelR) {
+          timeHighset = false;
+          if (cfg.psDebug) Serial.println(F("$PS,cancel"));
+        }
+        if (timeHighset && (millis() - timeHigh) > cfg.psHoldMs) {
+          powerSave = true;
+          if (cfg.psDebug) Serial.println(F("$PS,start"));
+        }
+      } else if (ohmsVoltage < cfg.sleepV - cfg.psHyst) {
+        // The rail sagged, so something is across the leads again.
         powerSave   = false;
         timeHighset = false;
         if (cfg.psDebug) {
           Serial.print(F("$PS,end,"));
           Serial.println(ohmsVoltage, 3);
         }
-        analogWrite(OHMPWMPIN, 0);
       }
+    } else {
+      // Not measuring the ohms channel, so there is no evidence to run the
+      // state machine on.  Drop out of power save rather than hold it: a held
+      // power save keeps the ohms source parked, and the source's bias is part
+      // of the front end the bridge test is tuned against.  It re-arms from
+      // fresh readings as soon as resistance measurement resumes.
+      powerSave   = false;
+      timeHighset = false;
     }
-    }  // readR
+
+    // ---- Ohms source parking ----
+    // Applied on EVERY pass, from the current state, rather than only inside
+    // the branch that engages it.  That release is what was missing: entering
+    // Charging mode parked the source, and nothing ever wrote the pin back, so
+    // cycling out of Charging left the ohms source parked for good and every
+    // later resistance reading pinned near zero -- able to fall when the leads
+    // were shorted, never able to rise.
+    //
+    // Written only on a change so the PWM is not restarted every pass, and
+    // keyed on the value so a !SET of PSPWM still takes effect.
+    static int ohmsPwmApplied = 0;
+    int ohmsPwmWant = (powerSave || currentMode == Charging) ? cfg.psPwm : 0;
+    if (ohmsPwmWant != ohmsPwmApplied) {
+      ohmsPwmApplied = ohmsPwmWant;
+      analogWrite(OHMPWMPIN, ohmsPwmWant);
+    }
 
     // ---- Which measurement to show ----
     // Voltage wins if there is any; resistance takes over once the reading

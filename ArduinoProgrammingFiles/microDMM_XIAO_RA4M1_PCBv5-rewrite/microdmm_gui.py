@@ -206,8 +206,7 @@ KEY_META = {
     "BRIDGETHR": ("Bridge test", "num", "Volts below which the leads read floating."),
     "BRIDGEFLT": ("Bridge test", "num", "Split between floating and unsure."),
     "BRIDGEAVG": ("Bridge test", "num", "Gate: DC average must be under this."),
-    "BRIDGEVMAX":("Bridge test", "num", "Gate: instantaneous reading under this."),
-    "BRIDGEVAC": ("Bridge test", "num", "Gate in VAC manual: rms under this."),
+    "BRIDGEVMAX":("Bridge test", "num", "Gate: instantaneous reading under this. Not run in VAC mode."),
 
     "VSAMPLES":  ("Filtering", "num", "Rolling voltage window length (max 100)."),
     "SMOOTHA":   ("Filtering", "num", "Display smoothing coefficient, 0-1."),

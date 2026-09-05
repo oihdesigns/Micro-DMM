@@ -182,7 +182,7 @@ void configDefaults() {
   cfg.bridgeFltThr = -0.25f;
   cfg.bridgeAvgMax = 0.030f;
   cfg.bridgeVMax   = 0.05f;
-  cfg.bridgeVacMax = 5.0f;
+  cfg.bridgeVacMax_retired = 0.0f;   // see DMMTypes.h
 
   cfg.vSamples    = VOLT_SAMPLE_MAX;
   cfg.smoothAlpha = 0.2f;
@@ -309,7 +309,6 @@ const ConfigField CFG_FIELDS[] = {
   { "BRIDGEFLT",   FT_FLOAT, &cfg.bridgeFltThr,  -6.0f,    6.0f     },
   { "BRIDGEAVG",   FT_FLOAT, &cfg.bridgeAvgMax,   0.0f,    10.0f    },
   { "BRIDGEVMAX",  FT_FLOAT, &cfg.bridgeVMax,     0.0f,    10.0f    },
-  { "BRIDGEVAC",   FT_FLOAT, &cfg.bridgeVacMax,   0.0f,    1000.0f  },
   // Filtering / misc
   { "VSAMPLES",    FT_U8,    &cfg.vSamples,       1,       VOLT_SAMPLE_MAX },
   { "SMOOTHA",     FT_FLOAT, &cfg.smoothAlpha,    0.001f,  1.0f     },
