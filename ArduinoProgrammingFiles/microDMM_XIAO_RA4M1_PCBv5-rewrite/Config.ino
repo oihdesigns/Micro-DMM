@@ -109,9 +109,16 @@ void configDefaults() {
   cfg.iAutoZero = 1;
   cfg.iNoiseHi  = 0.01f;
   cfg.iNoiseLo  = 0.0005f;
-  cfg.iDetCount = 300;
-  cfg.iDetLo    = 2.3f;
-  cfg.iDetHi    = 2.7f;
+  // Current-sensor detection.  IDETCNT is a SYMMETRIC window: a reading is
+  // "at ground" when |counts| < IDETCNT, so a floating input drifting
+  // negative no longer passes as a shunt.  300 counts at 2/3 gain is +/-56 mV.
+  cfg.iDetCount   = 300;
+  cfg.iDetLo      = 2.3f;
+  cfg.iDetHi      = 2.7f;
+  cfg.iDetSamples = 8;
+  cfg.iDetSettleMs = 50;
+  cfg.iDetPPV     = 0.05f;
+  cfg.iShuntR     = 1.0f;          // the value the old unreachable branch used
 
   cfg.rangeThreshR  = 400.0f;
   cfg.rangeDeadband = 0.05f;
@@ -232,6 +239,11 @@ const ConfigField CFG_FIELDS[] = {
   { "IDETCNT",     FT_U16,   &cfg.iDetCount,      0,       32767    },
   { "IDETLO",      FT_FLOAT, &cfg.iDetLo,         0.0f,    6.0f     },
   { "IDETHI",      FT_FLOAT, &cfg.iDetHi,         0.0f,    6.0f     },
+  { "IDETSAMP",    FT_U8,    &cfg.iDetSamples,    1,       64       },
+  { "IDETSETTLE",  FT_U16,   &cfg.iDetSettleMs,   0,       5000     },
+  // 0 disables the stability test, leaving detection on the windows alone.
+  { "IDETPP",      FT_FLOAT, &cfg.iDetPPV,        0.0f,    6.0f     },
+  { "ISHUNTR",     FT_FLOAT, &cfg.iShuntR,        0.0001f, 10000.0f },
   // Ranging
   { "RANGETHR",    FT_FLOAT, &cfg.rangeThreshR,   1.0f,    100000.0f},
   { "RANGEDB",     FT_FLOAT, &cfg.rangeDeadband,  0.0f,    0.5f     },
@@ -384,6 +396,123 @@ bool configLoad() {
 }
 
 // ==================================================================
+//  MIGRATION
+// ==================================================================
+// A frozen copy of the CFG_VERSION 1 layout.  Do NOT tidy, regroup or
+// "improve" this struct -- it is not source, it is a record of the bytes
+// already sitting in the data flash of programmed units.  Its only job is to
+// be byte-identical to what version 1 wrote.
+struct ConfigV1 {
+  uint32_t magic;
+  uint16_t version;
+  uint8_t  hwRev;
+  uint8_t  bridge;
+  float    rCal[R_CAL_BUCKETS];
+  float    constantI;
+  float    constantR;
+  float    dividerR;
+  float    zenerMaxV;
+  float    sleepV;
+  float    voltScale;
+  float    altMult;
+  float    thermR0;
+  float    thermB;
+  float    iShunt;
+  float    iZero;
+  uint8_t  iAutoZero;
+  float    iNoiseHi;
+  float    iNoiseLo;
+  uint16_t iDetCount;
+  float    iDetLo;
+  float    iDetHi;
+  float    rangeThreshR;
+  float    rangeDeadband;
+  uint16_t adcCountLow;
+  uint16_t adcCountHigh;
+  float    openMargin;
+  float    openR;
+  uint16_t vDispCount;
+  float    rDispMin;
+  float    rDispMax;
+  float    zeroAutoMax;
+  float    rateJump;
+  float    rateBumpV;
+  float    rateSlowV;
+  float    ratePrecR;
+  float    rateStable;
+  float    mmRMax;
+  float    mmRMin;
+  uint16_t psHoldMs;
+  float    psMargin;
+  float    psHyst;
+  float    psCancelR;
+  uint8_t  psPwm;
+  uint16_t sleepSec;
+  float    sleepVMax;
+  uint8_t  psDebug;
+  uint16_t adcMs;
+  uint16_t battMs;
+  uint16_t lcdMs;
+  uint16_t lcdFastMs;
+  uint16_t lcdBumpMs;
+  uint16_t streamMs;
+  uint8_t  alertsOn;
+  float    contMin;
+  float    contMax;
+  float    contMaxHi;
+  float    vAlert;
+  float    vAlertAlt;
+  float    vacAlert;
+  float    vacAlertAlt;
+  uint8_t  beepBright;
+  uint8_t  beepHold;
+  uint8_t  blinkLimit;
+  uint16_t alertPerMs;
+  uint16_t alertOnMs;
+  uint16_t alertP2OnMs;
+  uint16_t alertP2OffMs;
+  float    vacThresh;
+  float    vacThreshAlt;
+  float    vacAvgMax;
+  float    bridgeThr;
+  float    bridgeFltThr;
+  float    bridgeAvgMax;
+  float    bridgeVMax;
+  float    bridgeVacMax;
+  uint8_t  vSamples;
+  float    smoothAlpha;
+  float    battScale;
+  uint8_t  keyboardEn;
+  uint16_t btnLongMs;
+  uint16_t btnShortMs;
+
+  uint16_t crc;
+};
+
+// Version 2 only appended fields, so version 1 is a byte-exact prefix and the
+// shared part transfers with one memcpy.  The static_assert is what makes
+// that safe: if anyone ever inserts a field into the middle of Config rather
+// than appending, the offsets stop matching and this fails to compile instead
+// of silently shifting every stored calibration constant by a few bytes.
+static_assert(offsetof(ConfigV1, crc) == offsetof(Config, iDetSamples),
+              "ConfigV1 must stay a byte-exact prefix of Config -- append new "
+              "fields before crc, never insert them mid-struct");
+
+static bool configMigrateV1() {
+  ConfigV1 old;
+  EEPROM.get(CFG_EEPROM_ADDR, old);
+  if (old.magic != CFG_MAGIC) return false;
+  if (old.version != 1)       return false;
+  if (crc16_ccitt((const uint8_t *)&old, offsetof(ConfigV1, crc)) != old.crc)
+    return false;
+
+  configDefaults();                                   // seeds the new keys
+  memcpy(&cfg, &old, offsetof(ConfigV1, crc));        // stored values win
+  cfg.version = CFG_VERSION;
+  return true;
+}
+
+// ==================================================================
 //  LEGACY SEED
 // ==================================================================
 // Copy one of the six original calibration sets into the live config.
@@ -450,15 +579,20 @@ void configSetup() {
   configDefaults();
 
   if (configLoad()) {
-    Serial.print(F("Config loaded, v"));
+    Serial.print(F("$INFO,boot,config,loaded,v"));
     Serial.println(cfg.version);
+  } else if (configMigrateV1()) {
+    // Carry a version 1 image forward rather than discarding it -- a stored
+    // config can only exist on a unit somebody has already tuned.
+    configSave();
+    Serial.println(F("$INFO,boot,config,migrated from v1"));
   } else {
     uint8_t legacyId = EEPROM.read(LEGACY_ID_ADDR);
     bool seeded = configSeedFromLegacy(legacyId);
     configSave();
-    Serial.print(F("Config seeded from "));
+    Serial.print(F("$INFO,boot,config,seeded,"));
     if (seeded) {
-      Serial.print(F("legacy unit #"));
+      Serial.print(F("legacy unit "));
       Serial.println(legacyId);
     } else {
       Serial.print(F("defaults (no legacy set for byte1="));

@@ -86,8 +86,12 @@ void updateDisplay() {
   display.print(currentMode);
 
   // --- Current overlay ---
-  if (((Irange && !isBetween(Ireading, -cfg.iNoiseHi, cfg.iNoiseHi)) ||
-       (!Irange && currentOnOff)) || ampsMode) {
+  // currentOnOff gates the whole thing, ampsMode included: with no sensor
+  // fitted there is no reading to force onto the screen, and showing one
+  // would be showing a floating pin.
+  if (currentOnOff &&
+      ((Irange && !isBetween(Ireading, -cfg.iNoiseHi, cfg.iNoiseHi)) ||
+       !Irange || ampsMode)) {
     display.setTextSize(2);
     display.setCursor(0, 16);
     if (Irange) {

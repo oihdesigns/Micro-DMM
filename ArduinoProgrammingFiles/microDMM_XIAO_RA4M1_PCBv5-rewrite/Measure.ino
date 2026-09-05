@@ -273,24 +273,104 @@ void measureVoltage() {
 }
 
 // ==================================================================
+//  CURRENT SENSOR DETECTION
+// ==================================================================
+// Decides, once per boot, what is on the current channel:
+//
+//   mean at ground    -> a shunt          (low range)
+//   mean at mid-rail  -> an ACS712 or similar hall sensor (high range)
+//   neither, or an unsteady reading -> nothing fitted, readings suppressed
+//
+// Both fitted cases DRIVE the pin.  An empty header leaves it floating and
+// high impedance, which shows up two ways: the mean lands nowhere in
+// particular, and the samples wander.  The spread test is the backstop for a
+// floating pin whose mean happens to drift through one of the windows.
+//
+// Every threshold is a key and every measured number is reported, because
+// what a floating input actually reads is a property of the board, not
+// something that can be settled from the source: run !IDET on the bench with
+// and without a sensor and set IDETCNT / IDETLO / IDETHI / IDETPP from what
+// comes back.
+//
+// Returns true if a sensor was found; sets Irange, currentOnOff, and (when
+// IAUTOZERO) cfg.iZero in RAM.
+bool detectCurrentSensor() {
+  ads.setGain(GAIN_TWOTHIRDS);
+  delay(cfg.iDetSettleMs);         // settle BEFORE sampling, not after
+
+  int32_t sum = 0;
+  int16_t lo  = 32767;
+  int16_t hi  = -32768;
+  for (uint8_t i = 0; i < cfg.iDetSamples; i++) {
+    int16_t c = ads.readADC_SingleEnded(3);
+    sum += c;
+    if (c < lo) lo = c;
+    if (c > hi) hi = c;
+  }
+
+  int16_t mean = (int16_t)(sum / (int32_t)cfg.iDetSamples);
+  adcReadingCurrent   = mean;
+  currentShuntVoltage = mean * GAIN_FACTOR_TWOTHIRDS / 1000.0f;
+  float ppV = (hi - lo) * GAIN_FACTOR_TWOTHIRDS / 1000.0f;
+
+  // Symmetric, so a floating pin sitting below ground is not read as a shunt.
+  bool atGround = (abs((int32_t)mean) < (int32_t)cfg.iDetCount);
+  bool atMidRail = isBetween(currentShuntVoltage, cfg.iDetLo, cfg.iDetHi);
+  bool steady    = (cfg.iDetPPV <= 0.0f) || (ppV <= cfg.iDetPPV);
+
+  if ((atGround || atMidRail) && steady) {
+    Irange       = atMidRail;
+    currentOnOff = true;
+    if (cfg.iAutoZero) cfg.iZero = atMidRail ? currentShuntVoltage : 0.0f;
+  } else {
+    currentOnOff = false;
+    Irange       = false;
+    Ireading     = 0.0f;
+  }
+
+  Serial.print(F("$IDET,"));
+  Serial.print(currentOnOff ? (Irange ? "high" : "low") : "off");
+  Serial.print(',');  Serial.print(mean);
+  Serial.print(',');  Serial.print(currentShuntVoltage, 4);
+  Serial.print(',');  Serial.print(ppV, 4);
+  Serial.print(',');  Serial.print(atGround ? 1 : 0);
+  Serial.print(',');  Serial.print(atMidRail ? 1 : 0);
+  Serial.print(',');  Serial.print(steady ? 1 : 0);
+  Serial.print(',');  Serial.println(cfg.iZero, 4);
+
+  return currentOnOff;
+}
+
+// ==================================================================
 //  CURRENT
 // ==================================================================
-// NOTE: `if (IHigh)` is the pre-rewrite condition, kept verbatim.  IHigh is a
-// float that starts at -6.0 and only ever holds a measured maximum, so this is
-// effectively always true and the low-range branch below does not run.  That
-// is a known open question, deliberately left alone by this rewrite so the
-// restructure stays behaviour-preserving -- see the notes in the plan before
-// changing it to `if (Irange)`.
 void measureCurrent() {
   static bool   firstCurrentRun = true;
   static size_t gainIndexCurrent;
+
+  // No sensor was found at boot, so there is nothing on this channel but a
+  // floating pin.  Suppressing here rather than at the call site is what makes
+  // the boot decision actually mean something: before this, detection set a
+  // flag that only the display consulted, so the reading was still computed
+  // from a floating input and still went out over $LIVE.
+  if (!currentOnOff) {
+    Ireading            = 0.0f;
+    currentShuntVoltage = 0.0f;
+    countI              = 0;
+    return;
+  }
 
   if (firstCurrentRun) {
     gainIndexCurrent = kNumGainLevels - 1;
     firstCurrentRun  = false;
   }
 
-  if (IHigh) {
+  // WAS `if (IHigh)`, which is a float initialised to -6.0 that only ever
+  // holds a measured maximum -- always non-zero, so the shunt branch below
+  // could never run and a detected shunt was read with the hall-sensor
+  // formula.  Changed to Irange, the flag detection actually sets, because
+  // otherwise the detection result has no effect on the measurement.
+  if (Irange) {
     // High range: fixed coarse gain, hall-sensor style conversion.
     ads.setGain(GAIN_TWOTHIRDS);
     countI = ads.readADC_SingleEnded(3);
@@ -313,7 +393,7 @@ void measureCurrent() {
     }
 
     currentShuntVoltage = (countI * kGainFactors[gainIndexCurrent] / 1000.0f);
-    Ireading = currentShuntVoltage;      // 1 ohm sense resistor
+    Ireading = currentShuntVoltage / cfg.iShuntR;   // Ohm's law across the shunt
   }
 
   // --- Noise floor, then min/max ---

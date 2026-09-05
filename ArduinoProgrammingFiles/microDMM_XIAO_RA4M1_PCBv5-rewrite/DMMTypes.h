@@ -50,7 +50,7 @@ enum Mode {
 #define SN_EEPROM_ADDR    768     // clear of Config; survives !DEFAULTS
 
 #define CFG_MAGIC         0x55444D31UL   // "UDM1"
-#define CFG_VERSION       1
+#define CFG_VERSION       2              // 2: current-sensor detection keys
 
 #define R_CAL_BUCKETS     15      // the CF_A..CF_O piecewise ladder
 #define VOLT_SAMPLE_MAX   100     // buffer size; cfg.vSamples is the live count
@@ -182,6 +182,23 @@ struct Config {
   uint8_t  keyboardEn;     // USB HID typing in Type / HighRMode
   uint16_t btnLongMs;      // TYPE_PIN hold that resets min/max
   uint16_t btnShortMs;     // debounce floor for a short press
+
+  // ---- Appended in CFG_VERSION 2 ------------------------------
+  // NEW FIELDS GO HERE, at the end, immediately before crc -- never spliced
+  // into the middle next to the keys they relate to.  Appending keeps every
+  // older layout a byte-exact PREFIX of this one, so a migration is one
+  // memcpy of the shared part plus defaults for the rest, instead of eighty
+  // hand-written assignments where pairing any two fields wrongly would
+  // silently corrupt a unit's calibration.  Grouping for the GUI comes from
+  // the key table, not from the order of this struct.
+  uint8_t  iDetSamples;    // reads averaged when detecting the current sensor
+  uint16_t iDetSettleMs;   // settling delay before that burst
+  float    iDetPPV;        // max peak-to-peak across it for a driven input
+  // Ohms of the low-range sense resistor.  This was a hardcoded 1.0 that had
+  // never actually run -- the shunt branch was unreachable until the Irange
+  // fix -- so it needs to be settable before a shunt that isn't 1 ohm reads
+  // amps straight off the millivolts.
+  float    iShuntR;
 
   uint16_t crc;            // MUST stay last -- see the offsetof note above
 };

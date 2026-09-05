@@ -18,6 +18,7 @@
  *   $STATUS,key=value,...
  *   $CFG,<key>,<value>  ... terminated by $CFGEND
  *   $SN,<value>
+ *   $IDET,<state>,<meanCounts>,<meanV>,<ppV>,<atGnd>,<atMid>,<steady>,<izero>
  *   $CAL,<index>,<raw>,<actual>,<factor>
  *   $LOGSTART,<n> / $LOG,<i>,<t>,<V>,<I> / $LOGEND
  *   $OK,<what> / $ERR,<what>,<why> / $INFO,<what>,...
@@ -124,7 +125,7 @@ static void emitHelp() {
   Serial.println(F("$INFO,help,config,!CFG !GET,K !SET,K,V !SAVE !LOAD !DEFAULTS !SEEDCAL,N !SN[,V]"));
   Serial.println(F("$INFO,help,live,!READ !STREAM[,0|1] !RATE,MS !STATUS !MINMAX[,0|1] !RESET"));
   Serial.println(F("$INFO,help,meter,!ZERO !ZEROCLR !MODE,N !RANGE,0|1|A !VDISP[,0|1]"));
-  Serial.println(F("$INFO,help,cal,!CAL,OHMS[,IDX] !CALV,VOLTS !CALI !DEBUG !AMPS !FAST !LOG !DUMP"));
+  Serial.println(F("$INFO,help,cal,!CAL,OHMS[,IDX] !CALV,VOLTS !CALI !IDET !DEBUG !AMPS !FAST !LOG !DUMP"));
 }
 
 // ==================================================================
@@ -361,6 +362,13 @@ void handleLine(char *line) {
   } else if (strcmp(cmd, "AMPS") == 0) {
     ampsMode = arg ? (atoi(arg) != 0) : !ampsMode;
     Serial.print(F("$OK,amps,")); Serial.println(ampsMode ? 1 : 0);
+
+  } else if (strcmp(cmd, "IDET") == 0) {
+    // Re-run current-sensor detection and report the raw numbers.  Detection
+    // is a boot decision by design, so this is a bench tool: plug a sensor in
+    // and out, watch the mean and the spread, then set IDETCNT / IDETLO /
+    // IDETHI / IDETPP from what this actually reports on this board.
+    detectCurrentSensor();
 
   } else if (strcmp(cmd, "DEBUG") == 0) {
     debugMode = arg ? (atoi(arg) != 0) : !debugMode;

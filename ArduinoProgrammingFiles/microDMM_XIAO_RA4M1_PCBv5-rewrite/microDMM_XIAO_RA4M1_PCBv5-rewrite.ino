@@ -261,27 +261,10 @@ void setup() {
   delay(300);
 
   // ---- Current sensor detection ----
-  // A grounded shunt reads near zero; a hall sensor idles at mid-rail.  Any
-  // other resting value means nothing is fitted, and current is left off so
-  // the display does not carry a channel of noise.
-  ads.setGain(GAIN_TWOTHIRDS);
-  adcReadingCurrent = ads.readADC_SingleEnded(3);
-  delay(100);
-  currentShuntVoltage = adcReadingCurrent * GAIN_FACTOR_TWOTHIRDS / 1000.0f;
-
-  bool midRail = isBetween(currentShuntVoltage, cfg.iDetLo, cfg.iDetHi);
-  if (adcReadingCurrent < (int16_t)cfg.iDetCount || midRail) {
-    Irange = midRail;
-    if (cfg.iAutoZero) cfg.iZero = midRail ? currentShuntVoltage : 0.0f;
-    currentOnOff = true;
-  } else {
-    currentOnOff = false;
-    Ireading     = 0.0f;
-  }
-  Serial.print(F("$INFO,boot,current,"));
-  Serial.print(currentOnOff ? (Irange ? "high" : "low") : "off");
-  Serial.print(',');
-  Serial.println(cfg.iZero, 4);
+  // Once, here, and never again while running: if nothing is fitted the
+  // channel stays suppressed until the next reboot.  See detectCurrentSensor
+  // in Measure.ino for what it looks at.
+  detectCurrentSensor();
 
   display.clearDisplay();
   Serial.println(F("$INFO,boot,ready"));

@@ -81,9 +81,14 @@ FLAG_BITS = [
 LAMPS = [
     ("CONT", 5, "#1faa3f"), ("VAC", 2, "#d68000"), ("FLOAT", 3, "#0b6fb8"),
     ("OPEN", 13, "#7a7a7a"), ("PWRSAVE", 1, "#8a4bbd"), ("ASLEEP", 9, "#555555"),
-    ("AUTO", 7, "#1faa3f"), ("HIGH R", 6, "#0b6fb8"), ("AMPS", 14, "#1faa3f"),
+    ("AUTO", 7, "#1faa3f"), ("HIGH R", 6, "#0b6fb8"), ("I SENSOR", 14, "#1faa3f"),
     ("DIRTY", 15, "#c02020"),
 ]
+
+# Detection is a boot decision: if no ammeter was found the channel stays
+# suppressed until the meter is power-cycled.  Bit 14 says which.
+BIT_I_SENSOR = 14
+BIT_AMPS_MODE = 12
 
 # Upper edge of each RCAL bucket -- mirrors R_CAL_EDGES in Config.ino.  Used
 # only to label the calibration rows and to show which bucket is live.
@@ -122,14 +127,18 @@ KEY_META = {
     "THERMR0":   ("Voltage calibration", "num", "Thermistor nominal resistance at 25 C."),
     "THERMB":    ("Voltage calibration", "num", "Thermistor beta."),
 
-    "ISHUNT":    ("Current", "num", "Volts per amp of the sensor."),
+    "ISHUNT":    ("Current", "num", "Hall sensor scale, volts per amp (high range)."),
+    "ISHUNTR":   ("Current", "num", "Sense resistor, ohms (low range / shunt)."),
     "IZERO":     ("Current", "num", "Zero-current baseline (set by !CALI or at boot)."),
     "IAUTOZERO": ("Current", "bool", "Re-detect the baseline at every boot."),
     "INOISEHI":  ("Current", "num", "High-range deadband, amps."),
     "INOISELO":  ("Current", "num", "Low-range deadband, amps."),
-    "IDETCNT":   ("Current", "num", "Boot: counts below this mean a grounded shunt."),
-    "IDETLO":    ("Current", "num", "Boot: mid-rail window low edge, volts."),
-    "IDETHI":    ("Current", "num", "Boot: mid-rail window high edge, volts."),
+    "IDETCNT":   ("Current", "num", "Detect: |counts| below this reads as a grounded shunt."),
+    "IDETLO":    ("Current", "num", "Detect: mid-rail window low edge, volts."),
+    "IDETHI":    ("Current", "num", "Detect: mid-rail window high edge, volts."),
+    "IDETSAMP":  ("Current", "num", "Detect: reads averaged."),
+    "IDETSETTLE":("Current", "num", "Detect: settling delay before sampling, ms."),
+    "IDETPP":    ("Current", "num", "Detect: max peak-to-peak volts for a driven input. 0 disables."),
 
     "RANGETHR":  ("Ranging", "num", "High/low resistance crossover, ohms."),
     "RANGEDB":   ("Ranging", "num", "Hysteresis around it, as a fraction."),
@@ -551,6 +560,23 @@ class App(tk.Tk):
         self.cali_lbl = tk.Label(other, text="IZERO --", font=("Consolas", 9), fg="#06a")
         self.cali_lbl.grid(row=1, column=3, sticky="w", padx=12)
 
+        det = ttk.LabelFrame(tab, text="Ammeter detection")
+        det.pack(fill="x", padx=12, pady=(0, 10))
+        ttk.Label(det, justify="left", foreground="#555", text=(
+            "The meter decides once at boot what is on the current channel, and "
+            "suppresses readings entirely if it finds nothing.\n"
+            "Run this with and without your sensor plugged in, then set "
+            "IDETCNT / IDETLO / IDETHI / IDETPP from the numbers it reports.\n"
+            "Re-detecting here is a bench aid; what the meter runs with is "
+            "whatever it decided at power-on.")
+        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=6, pady=(4, 6))
+        ttk.Button(det, text="Re-detect now (!IDET)",
+                   command=lambda: self._send("!IDET")).grid(row=1, column=0,
+                                                             sticky="w", padx=6, pady=(0, 6))
+        self.idet_lbl = tk.Label(det, text="not run this session",
+                                 font=("Consolas", 9), fg="#777", justify="left")
+        self.idet_lbl.grid(row=1, column=1, sticky="w", padx=12, pady=(0, 6))
+
     # ---------------- Log tab ----------------
     def _build_log_tab(self):
         tab = ttk.Frame(self.nb)
@@ -670,6 +696,8 @@ class App(tk.Tk):
             self.sn_lbl.config(text=f"SN {self.unit_sn or '--'}")
         elif tag == "$MODE" and len(parts) > 1:
             self._set_mode(int(parts[1]))
+        elif tag == "$IDET":
+            self._handle_idet(parts)
         elif tag == "$CAL":
             self._handle_cal(parts)
         elif tag == "$LOGSTART":
@@ -707,7 +735,11 @@ class App(tk.Tk):
 
         # Primary readout follows whatever the meter selected for itself.
         volt_disp = bool(flags & (1 << 0))
-        amps = bool(flags & (1 << 12))
+        have_i = bool(flags & (1 << BIT_I_SENSOR))
+        # Amps mode cannot promote a suppressed channel to the primary readout:
+        # with no sensor detected the firmware holds Ireading at zero, and
+        # showing a big confident 0 A would read as a measurement.
+        amps = bool(flags & (1 << BIT_AMPS_MODE)) and have_i
         r_open = bool(flags & (1 << 13))
         if amps:
             self.primary_lbl.config(text=eng(vals[6], "A"), fg="#1faa3f")
@@ -731,7 +763,12 @@ class App(tk.Tk):
                 ("Voltage", vals[3], "V"), ("Average", vals[4], "V"),
                 ("VAC rms", vals[5], "V"), ("Current", vals[6], "A"),
                 ("Ohms rail", vals[7], "V"), ("Supply", vals[8], "V")]:
-            self.sec_lbls[name].config(text=eng(val, unit_, 4))
+            if name == "Current" and not have_i:
+                # Say why there is no number rather than showing 0 A, which
+                # looks like a reading of zero current.
+                self.sec_lbls[name].config(text="no sensor", fg="#aaaaaa")
+            else:
+                self.sec_lbls[name].config(text=eng(val, unit_, 4), fg="black")
 
         for name, (lbl, bit, colour) in self.lamps.items():
             on = bool(flags & (1 << bit))
@@ -964,6 +1001,23 @@ class App(tk.Tk):
             return
         self._send(f"!CALV,{actual}")
         self._send("!GET,VSCALE")
+
+    def _handle_idet(self, p):
+        # $IDET,state,meanCounts,meanV,ppV,atGnd,atMid,steady,izero
+        if len(p) < 9:
+            return
+        state, mean, meanv, ppv, at_gnd, at_mid, steady, izero = p[1:9]
+        pretty = {"high": "hall sensor (high range)",
+                  "low": "shunt (low range)",
+                  "off": "nothing fitted -- readings suppressed"}.get(state, state)
+        colour = "#c02020" if state == "off" else "#1faa3f"
+        self.idet_lbl.config(
+            text=(f"{pretty}\n"
+                  f"mean {mean} counts / {meanv} V, peak-peak {ppv} V\n"
+                  f"at ground {at_gnd}, at mid-rail {at_mid}, steady {steady}, "
+                  f"IZERO {izero}"),
+            fg=colour)
+        self.cali_lbl.config(text=f"IZERO {izero}")
 
     def _handle_cal(self, p):
         # $CAL,IZERO carries only the new baseline, so it is shorter than the

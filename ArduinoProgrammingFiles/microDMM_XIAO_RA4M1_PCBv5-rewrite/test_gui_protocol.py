@@ -44,6 +44,35 @@ chk("OPEN lamp lit", app.lamps["OPEN"][0].cget("bg"), "#7a7a7a")
 app._handle_line("$LIVE,12745,8000000.000,8000000.000,0.010000,0.000100,120.4000,0.0000,4.99900,4.980,2,133")
 chk("ac caption", app.primary_cap.cget("text"), "AC rms")
 
+# --- ammeter suppression ----------------------------------------------
+# No sensor (bit 14 clear) while amps mode IS on (bit 12): the current channel
+# must read "no sensor", and amps mode must NOT take over the primary readout.
+app._handle_line("$LIVE,13000,4700.000,4700.000,0.001000,0.001000,0.0010,0.0000,2.50000,4.980,0,4224")
+chk("suppressed current", app.sec_lbls["Current"].cget("text"), "no sensor")
+chk("suppressed is grey", app.sec_lbls["Current"].cget("fg"), "#aaaaaa")
+chk("amps did not take primary", app.primary_cap.cget("text"), "resistance (nulled)")
+chk("sensor lamp dark", app.lamps["I SENSOR"][0].cget("bg"), "#eeeeee")
+
+# Sensor present (bits 12 and 14) -> amps becomes the primary readout again.
+app._handle_line("$LIVE,13200,4700.000,4700.000,0.001000,0.001000,0.0010,1.2500,2.50000,4.980,0,20608")
+chk("amps primary", app.primary_cap.cget("text"), "current")
+chk("amps value", app.primary_lbl.cget("text"), "1.25 A")
+chk("current shown", app.sec_lbls["Current"].cget("text"), "1.25 A")
+chk("sensor lamp lit", app.lamps["I SENSOR"][0].cget("bg"), "#1faa3f")
+
+# --- $IDET, all three outcomes ----------------------------------------
+app._handle_line("$IDET,off,-1834,-0.3439,0.2118,0,0,0,0.0000")
+if "nothing fitted" not in app.idet_lbl.cget("text"):
+    fails.append(f"idet off: {app.idet_lbl.cget('text')!r}")
+chk("idet off is red", app.idet_lbl.cget("fg"), "#c02020")
+app._handle_line("$IDET,high,13333,2.4999,0.0037,0,1,1,2.4999")
+if "hall sensor" not in app.idet_lbl.cget("text"):
+    fails.append(f"idet high: {app.idet_lbl.cget('text')!r}")
+chk("idet izero mirrored", app.cali_lbl.cget("text"), "IZERO 2.4999")
+app._handle_line("$IDET,low,12,0.0022,0.0041,1,0,1,0.0000")
+if "shunt" not in app.idet_lbl.cget("text"):
+    fails.append(f"idet low: {app.idet_lbl.cget('text')!r}")
+
 # --- $MINMAX -----------------------------------------------------------
 app._handle_line("$MINMAX,-0.001200,12.400000,0.500,8000000.000,0.0000,1.2500,00:04,01:12")
 if "12.4 V" not in app.mm_lbl.cget("text"):
