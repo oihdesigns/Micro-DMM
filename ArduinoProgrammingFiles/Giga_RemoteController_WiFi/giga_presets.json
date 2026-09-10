@@ -1,0 +1,986 @@
+{
+  "Board1": {
+    "rate": "44100",
+    "bits": "16",
+    "time": "25",
+    "smooth": "0",
+    "log": "5000",
+    "trig_enable": false,
+    "trig_mode": "Midpoint",
+    "trig_thresh": {
+      "A0": "1",
+      "A1": "0.5",
+      "A2": "0",
+      "A3": "0",
+      "A4": "0",
+      "A5": "0",
+      "A6": "0",
+      "A7": "0"
+    },
+    "pins": {
+      "A0": {
+        "active": true,
+        "type": "V",
+        "offset": "1.612548",
+        "scale": "44.462994",
+        "true_val": "20"
+      },
+      "A1": {
+        "active": true,
+        "type": "I",
+        "offset": "1.613425",
+        "scale": "10.900730",
+        "true_val": "3"
+      },
+      "A2": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A3": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A4": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A5": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A6": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A7": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      }
+    }
+  },
+  "Board1_DiffA": {
+    "rate": "44100",
+    "bits": "16",
+    "time": "25",
+    "smooth": "0",
+    "log": "5000",
+    "diff_type": "I",
+    "diff_offset": "0.0",
+    "diff_scale": "11.8",
+    "trig_enable": false,
+    "trig_mode": "Midpoint",
+    "trig_thresh": {
+      "A0": "1",
+      "A1": "0.5",
+      "A2": "0",
+      "A3": "0",
+      "A4": "0",
+      "A5": "0",
+      "A6": "0",
+      "A7": "0"
+    },
+    "pins": {
+      "A0": {
+        "active": true,
+        "type": "V",
+        "offset": "1.612548",
+        "scale": "44.462994",
+        "true_val": "20"
+      },
+      "A1": {
+        "active": true,
+        "type": "I",
+        "offset": "1.613425",
+        "scale": "10.900730",
+        "true_val": "3"
+      },
+      "A2": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A3": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A4": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A5": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A6": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A7": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      }
+    }
+  },
+  "Board1_DiffA_5mOhm": {
+    "rate": "100000",
+    "bits": "14",
+    "time": "30",
+    "smooth": "2",
+    "log": "2000",
+    "diff_enable": true,
+    "diff_pos": "A4",
+    "diff_neg": "A5",
+    "diff_type": "I",
+    "diff_offset": "0.0",
+    "diff_scale": "44.107620",
+    "diff_true": "3",
+    "diff2_enable": false,
+    "diff2_pos": "A2",
+    "diff2_neg": "A3",
+    "diff2_type": "V",
+    "diff2_offset": "0.0",
+    "diff2_scale": "1.0",
+    "diff2_true": "1.0",
+    "trig_enable": true,
+    "trig_mode": "Midpoint",
+    "trig_thresh": {
+      "A0": "1",
+      "A1": "5",
+      "A2": "0",
+      "A3": "0",
+      "A4": "0",
+      "A5": "0",
+      "A6": "0",
+      "A7": "0"
+    },
+    "pins": {
+      "A0": {
+        "active": true,
+        "type": "V",
+        "offset": "1.612548",
+        "scale": "44.462994",
+        "true_val": "20"
+      },
+      "A1": {
+        "active": false,
+        "type": "I",
+        "offset": "1.613425",
+        "scale": "41.124543",
+        "true_val": "3"
+      },
+      "A2": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A3": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A4": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A5": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A6": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A7": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      }
+    }
+  },
+  "120VAC_Board": {
+    "rate": "100000",
+    "bits": "14",
+    "time": "50",
+    "smooth": "0",
+    "log": "4000",
+    "diff_enable": true,
+    "diff_pos": "A4",
+    "diff_neg": "A5",
+    "diff_type": "I",
+    "diff_offset": "0.0",
+    "diff_scale": "1.181836",
+    "diff_true": "2.5",
+    "diff2_enable": true,
+    "diff2_pos": "A2",
+    "diff2_neg": "A3",
+    "diff2_type": "V",
+    "diff2_offset": "0.0",
+    "diff2_scale": "102.779803",
+    "diff2_true": "50",
+    "trig_enable": false,
+    "trig_mode": "Midpoint",
+    "trig_thresh": {
+      "A0": "1",
+      "A1": "5",
+      "A2": "0",
+      "A3": "0",
+      "A4": "0",
+      "A5": "0",
+      "A6": "0",
+      "A7": "0"
+    },
+    "pins": {
+      "A0": {
+        "active": true,
+        "type": "I",
+        "offset": "0",
+        "scale": "1",
+        "true_val": "20"
+      },
+      "A1": {
+        "active": false,
+        "type": "I",
+        "offset": "1.613425",
+        "scale": "41.124543",
+        "true_val": "3"
+      },
+      "A2": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A3": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A4": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A5": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A6": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A7": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      }
+    }
+  },
+  "120VAC_Board_R4Nano": {
+    "rate": "44100",
+    "bits": "16",
+    "time": "50",
+    "smooth": "0",
+    "log": "1000",
+    "diff_enable": true,
+    "diff_pos": "A4",
+    "diff_neg": "A5",
+    "diff_type": "I",
+    "diff_offset": "0.0",
+    "diff_scale": "1.623",
+    "diff_true": "2.5",
+    "diff2_enable": true,
+    "diff2_pos": "A7",
+    "diff2_neg": "A6",
+    "diff2_type": "V",
+    "diff2_offset": "0.0",
+    "diff2_scale": "166.2",
+    "diff2_true": "50",
+    "trig_enable": false,
+    "trig_mode": "Midpoint",
+    "trig_thresh": {
+      "A0": "1",
+      "A1": "5",
+      "A2": "0",
+      "A3": "0",
+      "A4": "0",
+      "A5": "0",
+      "A6": "0",
+      "A7": "0"
+    },
+    "pins": {
+      "A0": {
+        "active": false,
+        "type": "I",
+        "offset": "0",
+        "scale": "1",
+        "true_val": "20"
+      },
+      "A1": {
+        "active": false,
+        "type": "I",
+        "offset": "1.613425",
+        "scale": "41.124543",
+        "true_val": "3"
+      },
+      "A2": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A3": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A4": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A5": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A6": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A7": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      }
+    }
+  },
+  "120VAC_Board_25A": {
+    "rate": "16000",
+    "bits": "16",
+    "time": "100",
+    "smooth": "5",
+    "log": "4000",
+    "diff_enable": true,
+    "diff_pos": "A3",
+    "diff_neg": "A2",
+    "diff_type": "I",
+    "diff_offset": "0.0",
+    "diff_scale": "11.917674",
+    "diff_true": "3",
+    "diff2_enable": true,
+    "diff2_pos": "A5",
+    "diff2_neg": "A4",
+    "diff2_type": "V",
+    "diff2_offset": "0.0",
+    "diff2_scale": "102.508232",
+    "diff2_true": "50",
+    "trig_enable": false,
+    "trig_mode": "Midpoint",
+    "trig_thresh": {
+      "A0": "1",
+      "A1": "5",
+      "A2": "0",
+      "A3": "0",
+      "A4": "0",
+      "A5": "0",
+      "A6": "0",
+      "A7": "0"
+    },
+    "pins": {
+      "A0": {
+        "active": false,
+        "type": "I",
+        "offset": "0",
+        "scale": "1",
+        "true_val": "20"
+      },
+      "A1": {
+        "active": false,
+        "type": "I",
+        "offset": "1.613425",
+        "scale": "41.124543",
+        "true_val": "3"
+      },
+      "A2": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A3": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A4": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A5": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A6": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A7": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      }
+    }
+  },
+  "47V_board": {
+    "rate": "44100",
+    "bits": "16",
+    "time": "50",
+    "smooth": "3",
+    "log": "4000",
+    "diff_enable": true,
+    "diff_pos": "A3",
+    "diff_neg": "A2",
+    "diff_type": "I",
+    "diff_offset": "0.0",
+    "diff_scale": "10.603871",
+    "diff_true": "3",
+    "diff2_enable": true,
+    "diff2_pos": "A5",
+    "diff2_neg": "A4",
+    "diff2_type": "V",
+    "diff2_offset": "0.0",
+    "diff2_scale": "22.550535",
+    "diff2_true": "40",
+    "trig_enable": false,
+    "trig_mode": "Midpoint",
+    "trig_thresh": {
+      "A0": "1",
+      "A1": "5",
+      "A2": "0",
+      "A3": "0",
+      "A4": "0",
+      "A5": "0",
+      "A6": "0",
+      "A7": "0"
+    },
+    "pins": {
+      "A0": {
+        "active": false,
+        "type": "I",
+        "offset": "0",
+        "scale": "1",
+        "true_val": "20"
+      },
+      "A1": {
+        "active": false,
+        "type": "I",
+        "offset": "1.613425",
+        "scale": "41.124543",
+        "true_val": "3"
+      },
+      "A2": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A3": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A4": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A5": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A6": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A7": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      }
+    }
+  },
+  "47V_board_Vonly": {
+    "rate": "44100",
+    "bits": "16",
+    "time": "40",
+    "smooth": "7",
+    "log": "4000",
+    "diff_enable": true,
+    "diff_pos": "A3",
+    "diff_neg": "A2",
+    "diff_type": "V",
+    "diff_offset": "-0.0016",
+    "diff_scale": "22.502940",
+    "diff_true": "10",
+    "diff2_enable": false,
+    "diff2_pos": "A4",
+    "diff2_neg": "A5",
+    "diff2_type": "V",
+    "diff2_offset": "0.0",
+    "diff2_scale": "1.0",
+    "diff2_true": "1.0",
+    "trig_enable": false,
+    "trig_mode": "Normal",
+    "trig_thresh": {
+      "A0": "0.5",
+      "A1": "0.5",
+      "A2": "0.5",
+      "A3": "0.5",
+      "A4": "0.5",
+      "A5": "0.5",
+      "A6": "0.5",
+      "A7": "0.5"
+    },
+    "diff_trig_thresh": "0",
+    "diff2_trig_thresh": "0",
+    "pins": {
+      "A0": {
+        "active": false,
+        "type": "V",
+        "offset": "1.468491",
+        "scale": "4.886244",
+        "true_val": "1.0"
+      },
+      "A1": {
+        "active": false,
+        "type": "V",
+        "offset": "1.6204",
+        "scale": "10.74",
+        "true_val": "1.0"
+      },
+      "A2": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A3": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A4": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A5": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A6": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A7": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      }
+    }
+  },
+  "OpAmpBuffer": {
+    "rate": "44100",
+    "bits": "16",
+    "time": "1000",
+    "smooth": "7",
+    "log": "4000",
+    "diff_enable": true,
+    "diff_pos": "A3",
+    "diff_neg": "A2",
+    "diff_type": "V",
+    "diff_offset": "-0.0016",
+    "diff_scale": "22.502940",
+    "diff_true": "10",
+    "diff2_enable": false,
+    "diff2_pos": "A4",
+    "diff2_neg": "A5",
+    "diff2_type": "V",
+    "diff2_offset": "0.0",
+    "diff2_scale": "1.0",
+    "diff2_true": "1.0",
+    "trig_enable": false,
+    "trig_mode": "Normal",
+    "trig_thresh": {
+      "A0": "0.5",
+      "A1": "0.5",
+      "A2": "0.5",
+      "A3": "0.5",
+      "A4": "0.5",
+      "A5": "0.5",
+      "A6": "0.5",
+      "A7": "0.5"
+    },
+    "diff_trig_thresh": "0",
+    "diff2_trig_thresh": "0",
+    "pins": {
+      "A0": {
+        "active": false,
+        "type": "V",
+        "offset": "1.468491",
+        "scale": "4.886244",
+        "true_val": "1.0"
+      },
+      "A1": {
+        "active": false,
+        "type": "V",
+        "offset": "1.6204",
+        "scale": "10.74",
+        "true_val": "1.0"
+      },
+      "A2": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A3": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A4": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A5": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A6": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A7": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      }
+    }
+  },
+  "OpAmpBuffer_12vboard": {
+    "rate": "250000",
+    "bits": "12",
+    "time": "5",
+    "smooth": "0",
+    "log": "4000",
+    "diff_enable": true,
+    "diff_pos": "A2",
+    "diff_neg": "A3",
+    "diff_type": "V",
+    "diff_offset": "0",
+    "diff_scale": "7.005",
+    "diff_true": "5",
+    "diff2_enable": false,
+    "diff2_pos": "A5",
+    "diff2_neg": "A4",
+    "diff2_type": "I",
+    "diff2_offset": "0.0",
+    "diff2_scale": "0.00120926",
+    "diff2_true": "0.01",
+    "trig_enable": false,
+    "trig_mode": "Normal",
+    "trig_thresh": {
+      "A0": "0.5",
+      "A1": "0.5",
+      "A2": "0.5",
+      "A3": "0.5",
+      "A4": "0.5",
+      "A5": "0.5",
+      "A6": "0.5",
+      "A7": "0.5"
+    },
+    "diff_trig_thresh": "0",
+    "diff2_trig_thresh": "0",
+    "pins": {
+      "A0": {
+        "active": false,
+        "type": "V",
+        "offset": "1.468491",
+        "scale": "4.886244",
+        "true_val": "1.0"
+      },
+      "A1": {
+        "active": false,
+        "type": "V",
+        "offset": "1.6204",
+        "scale": "10.74",
+        "true_val": "1.0"
+      },
+      "A2": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A3": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A4": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A5": {
+        "active": false,
+        "type": "I",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A6": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A7": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      }
+    }
+  },
+  "XIAO_HighZBoard": {
+    "rate": "8000",
+    "bits": "14",
+    "time": "50",
+    "smooth": "0",
+    "log": "4000",
+    "diff_enable": true,
+    "diff_pos": "A1",
+    "diff_neg": "A0",
+    "diff_type": "V",
+    "diff_offset": "0",
+    "diff_scale": "0.082658",
+    "diff_true": "2",
+    "diff2_enable": false,
+    "diff2_pos": "A5",
+    "diff2_neg": "A4",
+    "diff2_type": "I",
+    "diff2_offset": "0.0",
+    "diff2_scale": "0.00120926",
+    "diff2_true": "0.01",
+    "trig_enable": false,
+    "trig_mode": "Normal",
+    "trig_thresh": {
+      "A0": "0.5",
+      "A1": "0.5",
+      "A2": "0.5",
+      "A3": "0.5",
+      "A4": "0.5",
+      "A5": "0.5",
+      "A6": "0.5",
+      "A7": "0.5"
+    },
+    "diff_trig_thresh": "0.5",
+    "diff2_trig_thresh": "0",
+    "pins": {
+      "A0": {
+        "active": false,
+        "type": "V",
+        "offset": "1.468491",
+        "scale": "4.886244",
+        "true_val": "1.0"
+      },
+      "A1": {
+        "active": false,
+        "type": "V",
+        "offset": "1.6204",
+        "scale": "10.74",
+        "true_val": "1.0"
+      },
+      "A2": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A3": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A4": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A5": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A6": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      },
+      "A7": {
+        "active": false,
+        "type": "V",
+        "offset": "0.0",
+        "scale": "1.0",
+        "true_val": "1.0"
+      }
+    }
+  }
+}
