@@ -1,0 +1,329 @@
+(footprint "Wuerth_691311400102_P7.62mm"
+	(version 20260206)
+	(generator "pcbnew")
+	(generator_version "10.0")
+	(layer "F.Cu")
+	(descr "1x2 Close Vertical PCB Header WR-TBL Series 3114 https://www.we-online.com/components/products/datasheet/691311400102.pdf")
+	(tags "Wuerth WR-TBL Series 3114 terminal block pitch 7.62mm")
+	(property "Reference" "REF**"
+		(at 3.81 -6 0)
+		(layer "F.SilkS")
+		(uuid "47b0bf73-1512-4fb5-b891-b22f0936f2b1")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "Wuerth_691311400102_P7.62mm"
+		(at 3.81 5 0)
+		(layer "F.Fab")
+		(uuid "99557e4a-9323-4a36-be52-6490f417d2be")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Datasheet" ""
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "63285070-9b03-4956-9e3b-422468179ed1")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Description" ""
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "49d01af9-7c1a-475b-9c00-a4fbb984f189")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
+	(attr through_hole)
+	(duplicate_pad_numbers_are_jumpers no)
+	(fp_line
+		(start -4.17 -5.07)
+		(end -4.17 -4.07)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "d3349309-d2c4-4458-be79-2382c90af505")
+	)
+	(fp_line
+		(start -4.17 -5.07)
+		(end -3.17 -5.07)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "66962c45-eb80-4463-b83f-c94d4c4b5bb4")
+	)
+	(fp_line
+		(start -3.87 3.87)
+		(end -3.87 -4.77)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "863c14fc-619a-42ee-b61e-8295d01de7c1")
+	)
+	(fp_line
+		(start -3.86 -4.77)
+		(end 11.49 -4.77)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "0dac7354-775c-4419-ae34-1ee1c266498e")
+	)
+	(fp_line
+		(start -2.89 -3.2)
+		(end -2.89 2.1)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "f0c7cba0-6b0e-493b-9ff3-f5552e7f4ab3")
+	)
+	(fp_line
+		(start -2.89 2.1)
+		(end -2.14 2.1)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "9b357531-e5ef-4919-94ff-d8084c18be53")
+	)
+	(fp_line
+		(start 2.14 2.1)
+		(end 5.46 2.1)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "931903a5-d0af-48ae-a355-8979e8a874ac")
+	)
+	(fp_line
+		(start 9.78 2.1)
+		(end 10.53 2.1)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "d40f5c93-be8d-478f-b5d9-154ad4c3c396")
+	)
+	(fp_line
+		(start 10.53 -3.2)
+		(end -2.89 -3.2)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "f3407810-59c1-4f9a-92d5-0c5f15bc34a0")
+	)
+	(fp_line
+		(start 10.53 2.1)
+		(end 10.53 -3.2)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "ed705eef-3926-4af9-8c7f-3eb4df3bc828")
+	)
+	(fp_line
+		(start 11.49 -4.77)
+		(end 11.49 3.87)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "c907436e-ee95-4747-ba7f-58032a8ebedc")
+	)
+	(fp_line
+		(start 11.49 3.87)
+		(end -3.87 3.87)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "650cba07-4552-4114-ba1d-10a2af8187bd")
+	)
+	(fp_arc
+		(start 2.140696 2.099291)
+		(mid 0.000497 2.998266)
+		(end -2.14 2.1)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "064db06f-79f6-4a0f-8579-e706d4e26a36")
+	)
+	(fp_arc
+		(start 9.779492 2.100522)
+		(mid 7.619636 3.012573)
+		(end 5.46 2.1)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "e3702176-bfae-42bc-9a7a-0f90e5b93721")
+	)
+	(fp_line
+		(start -4.3 -5.2)
+		(end 11.92 -5.2)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "0168805e-812b-42ee-9a25-0ccf69610dd7")
+	)
+	(fp_line
+		(start -4.3 4.3)
+		(end -4.3 -5.2)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "df9f7904-f11b-4e87-b681-274a9ea55e30")
+	)
+	(fp_line
+		(start 11.92 -5.2)
+		(end 11.92 4.3)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "04d2542a-2b73-48c4-92b0-92ec63a26147")
+	)
+	(fp_line
+		(start 11.92 4.3)
+		(end -4.3 4.3)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "f6b6c396-0e96-4508-bc2d-881b10479b04")
+	)
+	(fp_line
+		(start -3.8 -3.7)
+		(end -2.8 -4.7)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "11c244be-cdf0-4b99-9e35-4e782285630f")
+	)
+	(fp_line
+		(start -3.8 3.8)
+		(end -3.8 -3.7)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "d4732a05-85cb-47c4-994f-87e8ee9edf4a")
+	)
+	(fp_line
+		(start -2.8 -4.7)
+		(end 11.42 -4.7)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "660e0f32-ea79-4a2e-93ec-0403bfef9e90")
+	)
+	(fp_line
+		(start 11.42 -4.7)
+		(end 11.42 3.8)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "02f08c54-07b3-4ecf-9b93-855b5f5ceb7a")
+	)
+	(fp_line
+		(start 11.42 3.8)
+		(end -3.8 3.8)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "75e1c413-38b1-4adc-8907-c3a0741f4357")
+	)
+	(fp_text user "${REFERENCE}"
+		(at 3.81 0 0)
+		(layer "F.Fab")
+		(uuid "fe70b5de-0f22-4cfb-b257-eda2846a333d")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(pad "1" thru_hole rect
+		(at 0 0)
+		(size 2.54 2.54)
+		(drill 1.6)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "8f52c4f1-95e5-4fb8-b987-5558af5b5ddd")
+	)
+	(pad "2" thru_hole circle
+		(at 7.62 0)
+		(size 2.54 2.54)
+		(drill 1.6)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "29aafdfd-2ac9-4ac3-959d-03b117ed8ad7")
+	)
+	(embedded_fonts no)
+	(model "${KICAD10_3DMODEL_DIR}/TerminalBlock_Wuerth.3dshapes/Wuerth_691311400102_P7.62mm.step"
+		(offset
+			(xyz 0 0 0)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz 0 0 0)
+		)
+	)
+)

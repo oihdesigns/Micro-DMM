@@ -1,0 +1,9 @@
+REVISION C — BENCH PROTOTYPE
+110 x 90 mm; 2 copper layers, 35 um (1 oz) copper, 1.6 mm FR-4.
+Gerber X2; Excellon metric absolute coordinates; separate PTH/NPTH drill files.
+No internal milled slot. Four 3.2 mm mounting holes.
+All resistors/capacitors 0805. All fitted components on the top side.
+Confirm TO-220 lead fit in 1.1 mm drills and terminal-header fit in 1.6 mm drills.
+Solder-mask openings on both sides of every plated component pad.
+No hardware, surge, thermal, EMC or mains-safety qualification has been completed.
+See project README and BOM for assembly, supply and load restrictions.

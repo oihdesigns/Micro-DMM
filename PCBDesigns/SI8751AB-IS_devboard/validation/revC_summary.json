@@ -1,0 +1,16 @@
+{
+  "revision": "C",
+  "date": "2026-09-05",
+  "fitted_components": 37,
+  "all_resistors_capacitors_0805": true,
+  "erc_errors": 0,
+  "erc_warnings": 0,
+  "drc_violations": 0,
+  "unconnected_items": 0,
+  "schematic_parity_issues": 0,
+  "pth_pads_with_both_mask_openings": 20,
+  "actual_vias": 50,
+  "actual_track_segments": 532,
+  "hardware_tested": false,
+  "mains_certified": false
+}

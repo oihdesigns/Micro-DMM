@@ -1,0 +1,16 @@
+﻿manufacturer_part_number,quantity,references,stocked_alternative,inventory_match,historical_quantity
+Generic 1x10 2.54mm vertical header,1,J1,,Not found in purchase history,
+RNCF0805DTE100R,2,"R1, R3",,Exact MPN,50
+ERA-6AEB753V,2,"R2, R4",,Exact MPN,50
+SI8751AB-IS,2,"U1, U2",,Exact MPN,10
+CL21B104KACNNNC,7,"C1, C2, C15, C17, C19, C8, C13",,Exact MPN,200
+RN73H2ATTD1002B25,3,"R5, R6, R14",,Exact MPN,50
+C0805C100JDGACTU,2,"C3, C4",,Not found in purchase history,
+STP12N60M2,2,"Q1, Q2",,Not found in purchase history,
+691311400102,2,"J2, J3",,Not found in purchase history,
+ACS725LLCTR-05AB-T,1,U6,,Not found in purchase history,
+CL21B105KBFNNNE,3,"C16, C6, C12",,Exact MPN,100
+C0805C102K5HACAUTO,5,"C18, C5, C7, C11, C14",,Exact MPN,120
+RG2012P-105-B-T5,3,"R10, R11, R12",,Exact MPN,50
+RG2012P-153-B-T5,1,R13,,Exact MPN,50
+AMC3330DWER,1,U5,AMC3330QDWERQ1,Compatible automotive variant; see README,10

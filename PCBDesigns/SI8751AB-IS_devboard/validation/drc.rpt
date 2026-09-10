@@ -1,0 +1,27 @@
+** Drc report for SI8751AB-IS_devboard.kicad_pcb **
+** Created on 2026-09-04T20:24:07 **
+** Report includes: Errors, Warnings **
+
+** Found 3 DRC violations **
+[lib_footprint_mismatch]: Footprint 'PinHeader_1x05_P2.54mm_Vertical' does not match copy in library 'Devboard'
+    Local override; warning
+    @(29.0000 mm, 47.0000 mm): Footprint J1
+[lib_footprint_mismatch]: Footprint 'Wuerth_691311400102_P7.62mm' does not match copy in library 'Devboard'
+    Local override; warning
+    @(114.0000 mm, 36.0000 mm): Footprint J2
+[lib_footprint_mismatch]: Footprint 'Wuerth_691311400102_P7.62mm' does not match copy in library 'Devboard'
+    Local override; warning
+    @(114.0000 mm, 68.0000 mm): Footprint J3
+
+** Found 0 unconnected pads **
+
+** Found 0 Footprint errors **
+
+** Ignored checks **
+    - Footprint has no courtyard defined
+    - Track endpoint not centered on via
+    - Tuning profile track geometries
+    - Footprint doesn't match symbol's footprint filters
+    - Footprint component type doesn't match footprint pads
+
+** End of Report **

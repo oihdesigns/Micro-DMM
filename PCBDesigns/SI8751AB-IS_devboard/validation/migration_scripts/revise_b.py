@@ -1,0 +1,38 @@
+"""One-time migration of the revision A generators; source backup is retained."""
+from pathlib import Path
+p=Path('build_design.py');s=p.read_text()
+start=s.index("note('3. ISOLATED MEASUREMENT POWER")
+end=s.index("library='(kicad_symbol_lib",start)
+s=s[:start]+'''note('3. ISOLATED CURRENT SENSOR - positive current from Q2 to J3',380,165)
+part('U6','ACS712ELCTR-05B-T','ACS712ELCTR-05B-T',445,200,{'1':'SWITCHED_PRE','2':'SWITCHED_PRE','3':'RAIL_OUT','4':'RAIL_OUT','5':'GND_LOGIC','6':'I_FILTER','7':'I_RAW','8':'+5V'},'Package_SO:SOIC-8_3.9x4.9mm_P1.27mm','https://www.allegromicro.com/-/media/files/datasheets/acs712-datasheet.pdf','5V supply; 185mV/A nominal; internal isolated series current conductor')
+rc('C15','100n / 25V',385,245,'+5V','GND_LOGIC','ACS VCC bypass')
+rc('C16','1u / 50V',425,245,'+5V','GND_LOGIC','ACS VCC bulk')
+rc('C17','100n / 25V',470,245,'I_FILTER','GND_LOGIC','Internal 1.7k plus 100n: approximately 936Hz pole')
+rc('R15','10k / 0.1%',525,195,'I_RAW','IOUT_ADC','Current output upper divider; 20k total ACS load')
+rc('R16','10k / 0.1%',525,230,'IOUT_ADC','GND_LOGIC','Current output lower divider; nominal 1.25V zero, 92.5mV/A at VCC=5V')
+rc('C18','1n / 50V',525,267,'IOUT_ADC','GND_LOGIC','ADC reservoir; external ADC must tolerate 5k source impedance')
+note('IOUT_ADC = VCC/4 + 0.0925 * (VCC/5) * I(A).\\nUse actual 5V supply or calibrate offset and gain.\\nDo not substitute the 30A sensor without recalibration.',380,292,1.27)
+note('4. SELF-POWERED ISOLATED VOLTAGE MEASUREMENT',15,185)
+for i,x in enumerate([40,90,140]):
+    rc(f'R{10+i}','1M / 0.1%',x,217,'RAIL_OUT' if i==0 else f'DIV_{i}',f'DIV_{i+1}' if i<2 else 'SENSE_IN','RG2012P-105-B-T5; 0805, 150V limiting element voltage, 0.125W')
+rc('R13','15k / 0.1%',190,217,'SENSE_IN','GND_LOAD_RETURN','RG2012P-153-B-T5; divider factor 201; input 0.8443Vpk at 120Vac')
+part('U5','AMC3330DWER','AMC3330DWER',185,270,{'1':'AMC_HRAW','2':'GND_LOAD_RETURN','3':'AMC_HRAW','4':'GND_LOAD_RETURN','5':'AMC_HLDO','6':'SENSE_IN','7':'GND_LOAD_RETURN','8':'GND_LOAD_RETURN','9':'GND_LOGIC','10':'VOUT_N','11':'VOUT_P','12':'+3V3','13':'AMC_LLDO','14':'DIAG_N','15':'GND_LOGIC','16':'AMC_LLDO'},'Package_SO:SOIC-16W_7.5x10.3mm_P1.27mm',amc,'Integrated isolated DC/DC; fixed differential gain 2; stocked AMC3330QDWERQ1 is an assembly alternative')
+rc('C5','1n / 50V',40,327,'AMC_HRAW','GND_LOAD_RETURN','DCDC_OUT pin1 / DCDC_HGND pin2 HF bypass')
+rc('C6','1u / 50V',85,327,'AMC_HRAW','GND_LOAD_RETURN','DCDC_OUT bulk; 1u effective target')
+rc('C7','1n / 50V',130,327,'AMC_HLDO','GND_LOAD_RETURN','HLDO_OUT HF bypass')
+rc('C8','100n / 25V',175,327,'AMC_HLDO','GND_LOAD_RETURN','HLDO_OUT bypass; no external load')
+rc('C11','1n / 50V',220,327,'+3V3','GND_LOGIC','VDD HF bypass')
+rc('C12','1u / 50V',265,327,'+3V3','GND_LOGIC','VDD bulk; 1u effective target')
+rc('C13','100n / 25V',310,327,'AMC_LLDO','GND_LOGIC','DCDC_IN pin16 to DCDC_GND pin15; no external load')
+rc('C14','1n / 50V',75,270,'SENSE_IN','GND_LOAD_RETURN','Input filter: approximately 10.7kHz; return at AMC INN')
+rc('R14','10k / 0.1%',275,270,'+3V3','DIAG_N','Active-low open-drain diagnostic pullup; LOW means invalid measurement')
+note('Vrail = 100.5 * (VOUT_P - VOUT_N), with voltages in volts.\\nOUTP/OUTN require a differential ADC or external difference amplifier.\\nLoss of measurement power is not proof of a de-energized rail.',15,360,1.27)
+note('U3/U4 and C9/C10 retired from revision A. No external isolated converter required.\\nJ1 pinout changed: pin5 is now OUTN. Supply +3.3V at pin1 and +5V at pin7.\\nAll resistors and capacitors use 0805 packages. See BOM for inventory matches.',15,383,1.27)
+for i,(net,x) in enumerate([('+3V3',35),('GND_LOGIC',48),('+5V',61)]):
+    part(f'#FLG0{i+1}','PWR_FLAG','PWR_FLAG',x,173,{'1':net})
+
+'''+s[end:]
+s=s.replace('(paper "A3")','(paper "A2")').replace('2026-09-04','2026-09-05').replace('A-PROTOTYPE','B-PROTOTYPE')
+line=next(x for x in s.splitlines() if "(NAME+'.kicad_pro')).write_text" in x)
+s=s.replace(line,"if not (ROOT/(NAME+'.kicad_pro')).exists():\n    "+line)
+p.write_text(s)

@@ -1,0 +1,35 @@
+﻿reference,value,footprint,purpose,datasheet
+J1,CONTROL / ADC,Devboard:PinHeader_1x05_P2.54mm_Vertical,,
+R1,100R,Devboard:R_0805_2012Metric,Series input damping,
+R2,100k,Devboard:R_0805_2012Metric,Default OFF,
+R3,100R,Devboard:R_0805_2012Metric,Series input damping,
+R4,100k,Devboard:R_0805_2012Metric,Default OFF,
+U1,SI8751AB-IS,Devboard:SOIC-8_3.9x4.9mm_P1.27mm,One isolated gate driver per MOSFET,https://www.skyworksinc.com/-/media/SkyWorks/SL/documents/public/data-sheets/Si8751-2.pdf
+C1,100n / 16V,Devboard:C_0805_2012Metric,Place beside driver VDD / GND,
+R5,10k,Devboard:R_0805_2012Metric,TT=10k: 9V minimum unloaded gate output; qualify actual VGS under load,
+C3,10p / 1kV,Devboard:C_0805_2012Metric,0805 C0G 1kV; qualify dV/dt <=600V/us for 6mA MCAP limit,
+Q1,STP12N60M2,Devboard:TO-220-3_Vertical,600V NMOS; RDSon specified at 10V; qualify VGS and dissipation on prototype,https://www.st.com/resource/en/datasheet/stp12n60m2.pdf
+U2,SI8751AB-IS,Devboard:SOIC-8_3.9x4.9mm_P1.27mm,One isolated gate driver per MOSFET,https://www.skyworksinc.com/-/media/SkyWorks/SL/documents/public/data-sheets/Si8751-2.pdf
+C2,100n / 16V,Devboard:C_0805_2012Metric,Place beside driver VDD / GND,
+R6,10k,Devboard:R_0805_2012Metric,TT=10k: 9V minimum unloaded gate output; qualify actual VGS under load,
+C4,10p / 1kV,Devboard:C_0805_2012Metric,0805 C0G 1kV; qualify dV/dt <=600V/us for 6mA MCAP limit,
+Q2,STP12N60M2,Devboard:TO-220-3_Vertical,600V NMOS; RDSon specified at 10V; qualify VGS and dissipation on prototype,https://www.st.com/resource/en/datasheet/stp12n60m2.pdf
+J2,SOURCE,Devboard:Wuerth_691311400102_P7.62mm,"Wuerth 691311400102, 7.62mm; feed through external appropriately rated <=1A fuse",
+J3,LOAD,Devboard:Wuerth_691311400102_P7.62mm,Switched line / unswitched return; resistive loads initially,
+U3,SCT01F03S05,Devboard:SCT01F_SIP4,Unregulated isolated output; mechanical drawing bottom view converted to top view,https://www.xppower.com/storage/portals/0/pdfs/SF_SCT01F.pdf
+U4,TPS70933DBVR,Devboard:SOT-23-5,EN intentionally floating per datasheet; never tie EN to raw converter output,https://www.ti.com/lit/ds/symlink/tps709.pdf
+C5,10u / 16V,Devboard:C_0805_2012Metric,Converter input bulk,
+C6,100n / 16V,Devboard:C_0805_2012Metric,Converter input bypass,
+C7,1u / 25V,Devboard:C_0805_2012Metric,Converter output and regulator input bypass,
+C8,4.7u / 16V,Devboard:C_0805_2012Metric,X7R; >=2.2uF effective at 3.3V for regulator stability,
+R10,390k / 0.1%,Devboard:R_0805_2012Metric,"0805, >=150V working, >=0.125W, <=25ppm/K",
+R11,390k / 0.1%,Devboard:R_0805_2012Metric,"0805, >=150V working, >=0.125W, <=25ppm/K",
+R12,390k / 0.1%,Devboard:R_0805_2012Metric,"0805, >=150V working, >=0.125W, <=25ppm/K",
+R13,4.99k / 0.1%,Devboard:R_0805_2012Metric,0805 <=25ppm/K; divider factor 235.469; input 0.721Vpk at 120Vac,
+U5,AMC0330RDWVR,Devboard:SOIC-8_7.5x5.85mm_P1.27mm,SNSN Kelvin connected to divider bottom / GND1; ADC reference must equal +3V3,https://www.ti.com/lit/ds/symlink/amc0330r.pdf
+C9,100n / 16V,Devboard:C_0805_2012Metric,AMC VDD1 local bypass,
+C10,1u / 16V,Devboard:C_0805_2012Metric,AMC VDD1 bulk,
+C11,100n / 16V,Devboard:C_0805_2012Metric,AMC VDD2 local bypass,
+C12,1u / 16V,Devboard:C_0805_2012Metric,AMC VDD2 bulk,
+C13,100n / 16V,Devboard:C_0805_2012Metric,AMC REFIN local bypass,
+C14,100p / 50V,Devboard:C_0805_2012Metric,C0G input filter; bandwidth set after divider values,

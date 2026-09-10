@@ -1,0 +1,599 @@
+[
+  {
+    "reference": "J1",
+    "symbol": "Conn_01x10",
+    "value": "CONTROL / ADC",
+    "footprint": "Devboard:PinHeader_1x10_P2.54mm_Vertical",
+    "source_footprint": "Connector_PinHeader_2.54mm:PinHeader_1x10_P2.54mm_Vertical",
+    "datasheet": "",
+    "purpose": "Rev C: 3.3V only; pin7 NC (formerly 5V); current output is no longer divided",
+    "dnp": false,
+    "nets": {
+      "1": "+3V3",
+      "2": "GND_LOGIC",
+      "3": "EN",
+      "4": "VOUT_P",
+      "5": "VOUT_N",
+      "6": "GND_LOGIC",
+      "7": null,
+      "8": "IOUT_ADC",
+      "9": "DIAG_N",
+      "10": "GND_LOGIC"
+    },
+    "uuid": "38579bf7-f885-5b60-82c3-ad7d4647ee35"
+  },
+  {
+    "reference": "R1",
+    "symbol": "R",
+    "value": "100R",
+    "footprint": "Devboard:R_0805_2012Metric",
+    "source_footprint": "Resistor_SMD:R_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "Series input damping",
+    "dnp": false,
+    "nets": {
+      "1": "EN",
+      "2": "EN_A"
+    },
+    "uuid": "e58f7385-05a0-5e2f-a5ff-07e83b6b916e"
+  },
+  {
+    "reference": "R2",
+    "symbol": "R",
+    "value": "75k / 0.1%",
+    "footprint": "Devboard:R_0805_2012Metric",
+    "source_footprint": "Resistor_SMD:R_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "Default OFF; stocked ERA-6AEB753V",
+    "dnp": false,
+    "nets": {
+      "1": "EN_A",
+      "2": "GND_LOGIC"
+    },
+    "uuid": "0a44a957-fb34-5778-97d9-f45eebd65784"
+  },
+  {
+    "reference": "R3",
+    "symbol": "R",
+    "value": "100R",
+    "footprint": "Devboard:R_0805_2012Metric",
+    "source_footprint": "Resistor_SMD:R_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "Series input damping",
+    "dnp": false,
+    "nets": {
+      "1": "EN",
+      "2": "EN_B"
+    },
+    "uuid": "493dbb25-2d53-5dbb-b557-7f128b3e6ab7"
+  },
+  {
+    "reference": "R4",
+    "symbol": "R",
+    "value": "75k / 0.1%",
+    "footprint": "Devboard:R_0805_2012Metric",
+    "source_footprint": "Resistor_SMD:R_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "Default OFF; stocked ERA-6AEB753V",
+    "dnp": false,
+    "nets": {
+      "1": "EN_B",
+      "2": "GND_LOGIC"
+    },
+    "uuid": "22155983-1e94-5635-9780-bbe3b5002547"
+  },
+  {
+    "reference": "U1",
+    "symbol": "SI8751AB-IS",
+    "value": "SI8751AB-IS",
+    "footprint": "Devboard:SOIC-8_3.9x4.9mm_P1.27mm",
+    "source_footprint": "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm",
+    "datasheet": "https://www.skyworksinc.com/-/media/SkyWorks/SL/documents/public/data-sheets/Si8751-2.pdf",
+    "purpose": "One isolated gate driver per MOSFET",
+    "dnp": false,
+    "nets": {
+      "1": "+3V3",
+      "2": "TT_1",
+      "3": "EN_A",
+      "4": "GND_LOGIC",
+      "5": "SOURCE_FLOAT",
+      "6": null,
+      "7": "MCAP_1",
+      "8": "GATE_1"
+    },
+    "uuid": "ad8730b4-68ef-5624-b04f-1fafaae49793"
+  },
+  {
+    "reference": "C1",
+    "symbol": "C",
+    "value": "100n / 25V",
+    "footprint": "Devboard:C_0805_2012Metric",
+    "source_footprint": "Capacitor_SMD:C_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "Place beside driver VDD / GND",
+    "dnp": false,
+    "nets": {
+      "1": "+3V3",
+      "2": "GND_LOGIC"
+    },
+    "uuid": "97b82485-976d-5a1b-9190-bc3ee9b1e04f"
+  },
+  {
+    "reference": "R5",
+    "symbol": "R",
+    "value": "10k",
+    "footprint": "Devboard:R_0805_2012Metric",
+    "source_footprint": "Resistor_SMD:R_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "TT=10k: 9V minimum unloaded gate output; qualify actual VGS under load",
+    "dnp": false,
+    "nets": {
+      "1": "TT_1",
+      "2": "GND_LOGIC"
+    },
+    "uuid": "edb85035-68e4-5570-ae61-c87228a9f997"
+  },
+  {
+    "reference": "C3",
+    "symbol": "C",
+    "value": "10p / 1kV",
+    "footprint": "Devboard:C_0805_2012Metric",
+    "source_footprint": "Capacitor_SMD:C_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "0805 C0G 1kV; qualify dV/dt <=600V/us for 6mA MCAP limit",
+    "dnp": false,
+    "nets": {
+      "1": "RAIL_IN",
+      "2": "MCAP_1"
+    },
+    "uuid": "bdd143c7-59e1-5130-b420-efc169be8b95"
+  },
+  {
+    "reference": "Q1",
+    "symbol": "Q_NMOS_GDS",
+    "value": "STP12N60M2",
+    "footprint": "Devboard:TO-220-3_Vertical",
+    "source_footprint": "Package_TO_SOT_THT:TO-220-3_Vertical",
+    "datasheet": "https://www.st.com/resource/en/datasheet/stp12n60m2.pdf",
+    "purpose": "600V NMOS; RDSon specified at 10V; qualify VGS and dissipation on prototype",
+    "dnp": false,
+    "nets": {
+      "1": "GATE_1",
+      "2": "RAIL_IN",
+      "3": "SOURCE_FLOAT"
+    },
+    "uuid": "7faccb4f-5b8a-5c02-83e7-4a779f8722cf"
+  },
+  {
+    "reference": "U2",
+    "symbol": "SI8751AB-IS",
+    "value": "SI8751AB-IS",
+    "footprint": "Devboard:SOIC-8_3.9x4.9mm_P1.27mm",
+    "source_footprint": "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm",
+    "datasheet": "https://www.skyworksinc.com/-/media/SkyWorks/SL/documents/public/data-sheets/Si8751-2.pdf",
+    "purpose": "One isolated gate driver per MOSFET",
+    "dnp": false,
+    "nets": {
+      "1": "+3V3",
+      "2": "TT_2",
+      "3": "EN_B",
+      "4": "GND_LOGIC",
+      "5": "SOURCE_FLOAT",
+      "6": null,
+      "7": "MCAP_2",
+      "8": "GATE_2"
+    },
+    "uuid": "8aef9eb8-60c6-58b1-bf15-43aee7bd4869"
+  },
+  {
+    "reference": "C2",
+    "symbol": "C",
+    "value": "100n / 25V",
+    "footprint": "Devboard:C_0805_2012Metric",
+    "source_footprint": "Capacitor_SMD:C_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "Place beside driver VDD / GND",
+    "dnp": false,
+    "nets": {
+      "1": "+3V3",
+      "2": "GND_LOGIC"
+    },
+    "uuid": "0c4c2765-2de5-54d8-956b-8f0777961bad"
+  },
+  {
+    "reference": "R6",
+    "symbol": "R",
+    "value": "10k",
+    "footprint": "Devboard:R_0805_2012Metric",
+    "source_footprint": "Resistor_SMD:R_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "TT=10k: 9V minimum unloaded gate output; qualify actual VGS under load",
+    "dnp": false,
+    "nets": {
+      "1": "TT_2",
+      "2": "GND_LOGIC"
+    },
+    "uuid": "12455525-00ca-5032-a367-84569d3c5e0c"
+  },
+  {
+    "reference": "C4",
+    "symbol": "C",
+    "value": "10p / 1kV",
+    "footprint": "Devboard:C_0805_2012Metric",
+    "source_footprint": "Capacitor_SMD:C_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "0805 C0G 1kV; qualify dV/dt <=600V/us for 6mA MCAP limit",
+    "dnp": false,
+    "nets": {
+      "1": "SWITCHED_PRE",
+      "2": "MCAP_2"
+    },
+    "uuid": "f850f963-b933-555f-87e2-e10d561d6940"
+  },
+  {
+    "reference": "Q2",
+    "symbol": "Q_NMOS_GDS",
+    "value": "STP12N60M2",
+    "footprint": "Devboard:TO-220-3_Vertical",
+    "source_footprint": "Package_TO_SOT_THT:TO-220-3_Vertical",
+    "datasheet": "https://www.st.com/resource/en/datasheet/stp12n60m2.pdf",
+    "purpose": "600V NMOS; RDSon specified at 10V; qualify VGS and dissipation on prototype",
+    "dnp": false,
+    "nets": {
+      "1": "GATE_2",
+      "2": "SWITCHED_PRE",
+      "3": "SOURCE_FLOAT"
+    },
+    "uuid": "9b65c15d-a33c-5404-9f74-543da89d4316"
+  },
+  {
+    "reference": "J2",
+    "symbol": "Conn_01x02",
+    "value": "SOURCE",
+    "footprint": "Devboard:Wuerth_691311400102_P7.62mm",
+    "source_footprint": "TerminalBlock_Wuerth:Wuerth_691311400102_P7.62mm",
+    "datasheet": "",
+    "purpose": "Wuerth 691311400102, 7.62mm; feed through external appropriately rated <=1A fuse",
+    "dnp": false,
+    "nets": {
+      "1": "RAIL_IN",
+      "2": "GND_LOAD_RETURN"
+    },
+    "uuid": "96c81d70-9dca-5d7c-9abc-a1911e403d3b"
+  },
+  {
+    "reference": "J3",
+    "symbol": "Conn_01x02",
+    "value": "LOAD",
+    "footprint": "Devboard:Wuerth_691311400102_P7.62mm",
+    "source_footprint": "TerminalBlock_Wuerth:Wuerth_691311400102_P7.62mm",
+    "datasheet": "",
+    "purpose": "Switched line / unswitched return; resistive loads initially",
+    "dnp": false,
+    "nets": {
+      "1": "RAIL_OUT",
+      "2": "GND_LOAD_RETURN"
+    },
+    "uuid": "f35eb529-3d4d-5d5f-b6fa-a8ef08bad6a0"
+  },
+  {
+    "reference": "U6",
+    "symbol": "ACS725LLCTR-05AB-T",
+    "value": "ACS725LLCTR-05AB-T",
+    "footprint": "Devboard:SOIC-8_3.9x4.9mm_P1.27mm",
+    "source_footprint": "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm",
+    "datasheet": "https://www.allegromicro.com/-/media/files/datasheets/acs725-datasheet.ashx",
+    "purpose": "3.3V supply; 264mV/A nominal; zero-current output VCC/2; isolated series current conductor",
+    "dnp": false,
+    "nets": {
+      "1": "SWITCHED_PRE",
+      "2": "SWITCHED_PRE",
+      "3": "RAIL_OUT",
+      "4": "RAIL_OUT",
+      "5": "GND_LOGIC",
+      "6": "I_FILTER",
+      "7": "IOUT_ADC",
+      "8": "+3V3"
+    },
+    "uuid": "d6081e98-e76a-5c11-8f92-ed5dfeef7c9d"
+  },
+  {
+    "reference": "C15",
+    "symbol": "C",
+    "value": "100n / 25V",
+    "footprint": "Devboard:C_0805_2012Metric",
+    "source_footprint": "Capacitor_SMD:C_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "ACS VCC bypass",
+    "dnp": false,
+    "nets": {
+      "1": "+3V3",
+      "2": "GND_LOGIC"
+    },
+    "uuid": "ee32a753-09bb-5b73-8185-db303f206c01"
+  },
+  {
+    "reference": "C16",
+    "symbol": "C",
+    "value": "1u / 50V",
+    "footprint": "Devboard:C_0805_2012Metric",
+    "source_footprint": "Capacitor_SMD:C_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "ACS VCC bulk",
+    "dnp": false,
+    "nets": {
+      "1": "+3V3",
+      "2": "GND_LOGIC"
+    },
+    "uuid": "edc97b95-c58f-5209-a886-a30f323b9edf"
+  },
+  {
+    "reference": "C17",
+    "symbol": "C",
+    "value": "100n / 25V",
+    "footprint": "Devboard:C_0805_2012Metric",
+    "source_footprint": "Capacitor_SMD:C_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "Internal 1.8k plus 100n: approximately 884Hz pole",
+    "dnp": false,
+    "nets": {
+      "1": "I_FILTER",
+      "2": "GND_LOGIC"
+    },
+    "uuid": "e7c17e3f-9abd-5395-9133-87c949daedaf"
+  },
+  {
+    "reference": "C18",
+    "symbol": "C",
+    "value": "1n / 50V",
+    "footprint": "Devboard:C_0805_2012Metric",
+    "source_footprint": "Capacitor_SMD:C_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "Direct output load; total output capacitance <=10nF and DC load >=4.7k; qualify host ADC settling",
+    "dnp": false,
+    "nets": {
+      "1": "IOUT_ADC",
+      "2": "GND_LOGIC"
+    },
+    "uuid": "306b177f-4a84-5276-9d4d-23892844ac59"
+  },
+  {
+    "reference": "R10",
+    "symbol": "R",
+    "value": "1M / 0.1%",
+    "footprint": "Devboard:R_0805_2012Metric",
+    "source_footprint": "Resistor_SMD:R_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "RG2012P-105-B-T5; 0805, 150V limiting element voltage, 0.125W",
+    "dnp": false,
+    "nets": {
+      "1": "RAIL_OUT",
+      "2": "DIV_1"
+    },
+    "uuid": "7fe32c2b-45cd-5db2-a6db-cd97b4fd816e"
+  },
+  {
+    "reference": "R11",
+    "symbol": "R",
+    "value": "1M / 0.1%",
+    "footprint": "Devboard:R_0805_2012Metric",
+    "source_footprint": "Resistor_SMD:R_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "RG2012P-105-B-T5; 0805, 150V limiting element voltage, 0.125W",
+    "dnp": false,
+    "nets": {
+      "1": "DIV_1",
+      "2": "DIV_2"
+    },
+    "uuid": "d3ed0e83-9d88-50f1-9a4b-31570ddce11d"
+  },
+  {
+    "reference": "R12",
+    "symbol": "R",
+    "value": "1M / 0.1%",
+    "footprint": "Devboard:R_0805_2012Metric",
+    "source_footprint": "Resistor_SMD:R_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "RG2012P-105-B-T5; 0805, 150V limiting element voltage, 0.125W",
+    "dnp": false,
+    "nets": {
+      "1": "DIV_2",
+      "2": "SENSE_IN"
+    },
+    "uuid": "25381ea1-aab2-5878-8c0d-0f579da44419"
+  },
+  {
+    "reference": "R13",
+    "symbol": "R",
+    "value": "15k / 0.1%",
+    "footprint": "Devboard:R_0805_2012Metric",
+    "source_footprint": "Resistor_SMD:R_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "RG2012P-153-B-T5; divider factor 201; input 0.8443Vpk at 120Vac",
+    "dnp": false,
+    "nets": {
+      "1": "SENSE_IN",
+      "2": "GND_LOAD_RETURN"
+    },
+    "uuid": "e0b67ca4-043f-5d86-99c2-8de927dfeead"
+  },
+  {
+    "reference": "U5",
+    "symbol": "AMC3330DWER",
+    "value": "AMC3330DWER",
+    "footprint": "Devboard:SOIC-16W_7.5x10.3mm_P1.27mm",
+    "source_footprint": "Package_SO:SOIC-16W_7.5x10.3mm_P1.27mm",
+    "datasheet": "https://www.ti.com/lit/ds/symlink/amc3330.pdf",
+    "purpose": "Integrated isolated DC/DC; fixed differential gain 2; stocked AMC3330QDWERQ1 is an assembly alternative",
+    "dnp": false,
+    "nets": {
+      "1": "AMC_HRAW",
+      "2": "GND_LOAD_RETURN",
+      "3": "AMC_HRAW",
+      "4": "GND_LOAD_RETURN",
+      "5": "AMC_HLDO",
+      "6": "SENSE_IN",
+      "7": "GND_LOAD_RETURN",
+      "8": "GND_LOAD_RETURN",
+      "9": "GND_LOGIC",
+      "10": "VOUT_N",
+      "11": "VOUT_P",
+      "12": "+3V3",
+      "13": "AMC_LLDO",
+      "14": "DIAG_N",
+      "15": "GND_LOGIC",
+      "16": "AMC_LLDO"
+    },
+    "uuid": "1eb81d33-f74f-571c-847d-76e0530337e9"
+  },
+  {
+    "reference": "C5",
+    "symbol": "C",
+    "value": "1n / 50V",
+    "footprint": "Devboard:C_0805_2012Metric",
+    "source_footprint": "Capacitor_SMD:C_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "DCDC_OUT pin1 / DCDC_HGND pin2 HF bypass",
+    "dnp": false,
+    "nets": {
+      "1": "AMC_HRAW",
+      "2": "GND_LOAD_RETURN"
+    },
+    "uuid": "17527d0c-e5b7-5a8a-b8c7-4c7e5b9d13a8"
+  },
+  {
+    "reference": "C6",
+    "symbol": "C",
+    "value": "1u / 50V",
+    "footprint": "Devboard:C_0805_2012Metric",
+    "source_footprint": "Capacitor_SMD:C_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "DCDC_OUT bulk; 1u effective target",
+    "dnp": false,
+    "nets": {
+      "1": "AMC_HRAW",
+      "2": "GND_LOAD_RETURN"
+    },
+    "uuid": "394f7f2c-77f2-5f0d-be4c-24c6b07344da"
+  },
+  {
+    "reference": "C19",
+    "symbol": "C",
+    "value": "100n / 25V",
+    "footprint": "Devboard:C_0805_2012Metric",
+    "source_footprint": "Capacitor_SMD:C_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "HLDO_IN local bypass at pin3; no ferrite beads fitted",
+    "dnp": false,
+    "nets": {
+      "1": "AMC_HRAW",
+      "2": "GND_LOAD_RETURN"
+    },
+    "uuid": "661fd08d-f308-5dff-ba6c-fd6f3c0ff534"
+  },
+  {
+    "reference": "C7",
+    "symbol": "C",
+    "value": "1n / 50V",
+    "footprint": "Devboard:C_0805_2012Metric",
+    "source_footprint": "Capacitor_SMD:C_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "HLDO_OUT HF bypass",
+    "dnp": false,
+    "nets": {
+      "1": "AMC_HLDO",
+      "2": "GND_LOAD_RETURN"
+    },
+    "uuid": "d7fb34f8-e275-5af4-b96f-13cd3bdf5e90"
+  },
+  {
+    "reference": "C8",
+    "symbol": "C",
+    "value": "100n / 25V",
+    "footprint": "Devboard:C_0805_2012Metric",
+    "source_footprint": "Capacitor_SMD:C_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "HLDO_OUT bypass; no external load",
+    "dnp": false,
+    "nets": {
+      "1": "AMC_HLDO",
+      "2": "GND_LOAD_RETURN"
+    },
+    "uuid": "211f2438-bc15-5633-884e-d0ee0ac22e9a"
+  },
+  {
+    "reference": "C11",
+    "symbol": "C",
+    "value": "1n / 50V",
+    "footprint": "Devboard:C_0805_2012Metric",
+    "source_footprint": "Capacitor_SMD:C_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "VDD HF bypass",
+    "dnp": false,
+    "nets": {
+      "1": "+3V3",
+      "2": "GND_LOGIC"
+    },
+    "uuid": "184756d5-cf75-512a-accf-22eb3c7125fe"
+  },
+  {
+    "reference": "C12",
+    "symbol": "C",
+    "value": "1u / 50V",
+    "footprint": "Devboard:C_0805_2012Metric",
+    "source_footprint": "Capacitor_SMD:C_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "VDD bulk; 1u effective target",
+    "dnp": false,
+    "nets": {
+      "1": "+3V3",
+      "2": "GND_LOGIC"
+    },
+    "uuid": "f706eebf-af12-50eb-8d9e-2f36291acabe"
+  },
+  {
+    "reference": "C13",
+    "symbol": "C",
+    "value": "100n / 25V",
+    "footprint": "Devboard:C_0805_2012Metric",
+    "source_footprint": "Capacitor_SMD:C_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "DCDC_IN pin16 to DCDC_GND pin15; no external load",
+    "dnp": false,
+    "nets": {
+      "1": "AMC_LLDO",
+      "2": "GND_LOGIC"
+    },
+    "uuid": "690da2bf-1680-5f56-827e-31bf318d8235"
+  },
+  {
+    "reference": "C14",
+    "symbol": "C",
+    "value": "1n / 50V",
+    "footprint": "Devboard:C_0805_2012Metric",
+    "source_footprint": "Capacitor_SMD:C_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "Input filter: approximately 10.7kHz; return at AMC INN",
+    "dnp": false,
+    "nets": {
+      "1": "SENSE_IN",
+      "2": "GND_LOAD_RETURN"
+    },
+    "uuid": "8ac30829-d229-5bfc-8b77-158bcb0be593"
+  },
+  {
+    "reference": "R14",
+    "symbol": "R",
+    "value": "10k / 0.1%",
+    "footprint": "Devboard:R_0805_2012Metric",
+    "source_footprint": "Resistor_SMD:R_0805_2012Metric",
+    "datasheet": "",
+    "purpose": "Active-low open-drain diagnostic pullup; LOW means invalid measurement",
+    "dnp": false,
+    "nets": {
+      "1": "+3V3",
+      "2": "DIAG_N"
+    },
+    "uuid": "80ab030b-3cf8-592c-b300-a32ff5ae6100"
+  }
+]

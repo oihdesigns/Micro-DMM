@@ -1,0 +1,25 @@
+"""One-time Rev C migration, run from the project root after backing up B."""
+from pathlib import Path
+p=Path('build_design.py');s=p.read_text()
+s=s.replace('revision B','revision C').replace('REV B','REV C').replace('B-PROTOTYPE','C-PROTOTYPE')
+s=s.replace('ACS712ELCTR-05B-T','ACS725LLCTR-05AB-T').replace('acs712-datasheet.pdf','acs725-datasheet.ashx')
+s=s.replace("'7':'+5V'","'7':None")
+s=s.replace('Rev B pinout; 3.3V logic and separate regulated 5V for ACS712','Rev C: 3.3V only; pin7 NC (formerly 5V); current output is no longer divided')
+s=s.replace("'7':'I_RAW','8':'+5V'","'7':'IOUT_ADC','8':'+3V3'")
+s=s.replace('5V supply; 185mV/A nominal; internal isolated series current conductor','3.3V supply; 264mV/A nominal; zero-current output VCC/2; isolated series current conductor')
+s=s.replace("245,'+5V'","245,'+3V3'")
+s=s.replace('Internal 1.7k plus 100n: approximately 936Hz pole','Internal 1.8k plus 100n: approximately 884Hz pole')
+s='\n'.join(line for line in s.splitlines() if not line.startswith(("rc('R15'","rc('R16'")))+'\n'
+s=s.replace('ADC reservoir; external ADC must tolerate 5k source impedance','Direct output load; total output capacitance <=10nF and DC load >=4.7k; qualify host ADC settling')
+s=s.replace('IOUT_ADC = VCC/4 + 0.0925 * (VCC/5) * I(A).\\nUse actual 5V supply or calibrate offset and gain.\\nDo not substitute the 30A sensor without recalibration.','At VCC=3.3V: IOUT_ADC = 1.65V + 0.264V/A * I(A).\\nR15/R16 divider removed. Calibrate zero and gain.\\nC17=100n gives approximately 884Hz filter bandwidth.')
+s=s.replace('Supply +3.3V at pin1 and +5V at pin7.','Supply +3.3V at pin1; pin7 is now NC. Do not apply 5V.')
+s=s.replace(",('+5V',61)",'')
+assert '+5V' not in s and 'I_RAW' not in s
+p.write_text(s)
+p=Path('build_pcb.py');s=p.read_text().replace('REV B','REV C').replace('7  5V','7  NC').replace('3V3 + 5V INPUTS','3.3V INPUT ONLY')
+s=s.replace("'R15':(48,70,0),'R16':(42,75,90),'C18':(37,75,90)","'C18':(39,68,90)")
+s=s.replace("'+5V',",'').replace(",' +5V'",'').replace(",'+5V'",'').replace("'I_RAW',",'')
+s=s.replace("[('U1','6','MCAP2'),('U2','6','MCAP2')]","[('U1','6','MCAP2'),('U2','6','MCAP2'),('J1','7','Pin_7')]")
+p.write_text(s)
+p=Path('make_rules.py');s=p.read_text().replace("'+5V',",'').replace("'I_RAW',",'');p.write_text(s)
+p=Path('package_release.py');s=p.read_text().replace('revision B','revision C').replace('revB','revC').replace('REVISION B','REVISION C').replace("'revision':'B'","'revision':'C'").replace('len(parts)==39','len(parts)==37');p.write_text(s)

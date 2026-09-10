@@ -1,0 +1,1 @@
+(fp_lib_table (version 7) (lib (name "Devboard") (type "KiCad") (uri "${KIPRJMOD}/Devboard.pretty") (options "") (descr "Project-local footprints")))

@@ -1,0 +1,18 @@
+{
+  "source": "C:\\Users\\Nick\\Dropbox (Personal)\\AvaliableParts\\Combined_parts_DigiKey_and_Mouser.xlsx",
+  "sheet": "Combined parts",
+  "quantity_note": "Historical ordered/received quantities; not a physical stock count. Shared parts consume stock cumulatively.",
+  "exact_reference_matches": 28,
+  "alternative_reference_matches": 1,
+  "not_found_references": [
+    "J1",
+    "C3",
+    "Q1",
+    "C4",
+    "Q2",
+    "J2",
+    "J3",
+    "U6"
+  ],
+  "total_components": 37
+}

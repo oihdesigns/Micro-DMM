@@ -1,0 +1,20 @@
+{
+  "meta": {
+    "filename": "SI8751AB-IS_devboard.kicad_pro",
+    "version": 1
+  },
+  "net_settings": {
+    "classes": [
+      {
+        "name": "Default",
+        "clearance": 0.25,
+        "track_width": 0.25,
+        "via_diameter": 0.7,
+        "via_drill": 0.3
+      }
+    ],
+    "meta": {
+      "version": 3
+    }
+  }
+}

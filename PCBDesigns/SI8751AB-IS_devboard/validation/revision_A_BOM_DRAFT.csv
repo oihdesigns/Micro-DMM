@@ -1,0 +1,35 @@
+﻿reference,value,footprint,purpose,datasheet
+J1,CONTROL / ADC,Connector_PinHeader_2.54mm:PinHeader_1x05_P2.54mm_Vertical,,
+R1,100R,Resistor_SMD:R_0805_2012Metric,Series input damping,
+R2,100k,Resistor_SMD:R_0805_2012Metric,Default OFF,
+R3,100R,Resistor_SMD:R_0805_2012Metric,Series input damping,
+R4,100k,Resistor_SMD:R_0805_2012Metric,Default OFF,
+U1,SI8751AB-IS,Package_SO:SOIC-8_3.9x4.9mm_P1.27mm,One isolated gate driver per MOSFET,https://www.skyworksinc.com/-/media/SkyWorks/SL/documents/public/data-sheets/Si8751-2.pdf
+C1,100n / 16V,Capacitor_SMD:C_0805_2012Metric,Place beside driver VDD / GND,
+R5,0R,Resistor_SMD:R_0805_2012Metric,Maximum gate charging current; optional TT experiments,
+C3,10p / VR_TBD,Capacitor_SMD:C_0805_2012Metric,C0G; voltage and dV/dt rating pending,
+Q1,N-MOSFET_TBD,,MOSFET and package pending voltage/current/load specifications,
+U2,SI8751AB-IS,Package_SO:SOIC-8_3.9x4.9mm_P1.27mm,One isolated gate driver per MOSFET,https://www.skyworksinc.com/-/media/SkyWorks/SL/documents/public/data-sheets/Si8751-2.pdf
+C2,100n / 16V,Capacitor_SMD:C_0805_2012Metric,Place beside driver VDD / GND,
+R6,0R,Resistor_SMD:R_0805_2012Metric,Maximum gate charging current; optional TT experiments,
+C4,10p / VR_TBD,Capacitor_SMD:C_0805_2012Metric,C0G; voltage and dV/dt rating pending,
+Q2,N-MOSFET_TBD,,MOSFET and package pending voltage/current/load specifications,
+J2,SOURCE,,Power connector voltage/current/pitch pending,
+J3,LOAD,,Power connector voltage/current/pitch pending,
+U3,SCT01F03S05,,Footprint pending mechanical drawing review; unregulated isolated output,https://www.xppower.com/storage/portals/0/pdfs/SF_SCT01F.pdf
+U4,TPS70933DBVR,Package_TO_SOT_SMD:SOT-23-5,EN intentionally floating per datasheet; never tie EN to raw converter output,https://www.ti.com/lit/ds/symlink/tps709.pdf
+C5,10u / 16V,Capacitor_SMD:C_0805_2012Metric,Converter input bulk,
+C6,100n / 16V,Capacitor_SMD:C_0805_2012Metric,Converter input bypass,
+C7,1u / 25V,Capacitor_SMD:C_0805_2012Metric,Converter output and regulator input bypass,
+C8,4.7u / 16V,Capacitor_SMD:C_0805_2012Metric,X7R; >=2.2uF effective at 3.3V for regulator stability,
+R10,TBD / 0.1%,Resistor_SMD:R_0805_2012Metric,"0805 series divider; value, number and working voltage pending",
+R11,TBD / 0.1%,Resistor_SMD:R_0805_2012Metric,"0805 series divider; value, number and working voltage pending",
+R12,TBD / 0.1%,Resistor_SMD:R_0805_2012Metric,"0805 series divider; value, number and working voltage pending",
+R13,TBD / 0.1%,Resistor_SMD:R_0805_2012Metric,Lower divider resistor; target <1V magnitude at worst-case rail peak,
+U5,AMC0330RDWVR,Package_SO:SOIC-8_7.5x5.85mm_P1.27mm,SNSN Kelvin connected to divider bottom / GND1; ADC reference must equal +3V3,https://www.ti.com/lit/ds/symlink/amc0330r.pdf
+C9,100n / 16V,Capacitor_SMD:C_0805_2012Metric,AMC VDD1 local bypass,
+C10,1u / 16V,Capacitor_SMD:C_0805_2012Metric,AMC VDD1 bulk,
+C11,100n / 16V,Capacitor_SMD:C_0805_2012Metric,AMC VDD2 local bypass,
+C12,1u / 16V,Capacitor_SMD:C_0805_2012Metric,AMC VDD2 bulk,
+C13,100n / 16V,Capacitor_SMD:C_0805_2012Metric,AMC REFIN local bypass,
+C14,100p / 50V,Capacitor_SMD:C_0805_2012Metric,C0G input filter; bandwidth set after divider values,
