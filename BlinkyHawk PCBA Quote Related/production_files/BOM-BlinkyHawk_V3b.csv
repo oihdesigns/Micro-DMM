@@ -9,6 +9,5 @@ D_Schottky,"D1,D2",D_SOD-123,C8598,2
 SK6812SIDE-A_C5378721,LED1,LED-SMD_4P-L4.0-W1.6-L,C5378721,1
 TL431DBZ,U3,SOT-23,C8499,1
 Conn_01x01,J1,SolderWirePad_1x01_SMD_1.5x3mm,,1
-Battery,J4,PinHeader_1x02_P1.27mm_Vertical,,1
 Conn_01x01,J5,SolderWire-0.5sqmm_1x01_D0.9mm_OD2.1mm,,1
 Conn_01x01,J2,SolderWirePad_1x01_SMD_1.5x3mm,,1
