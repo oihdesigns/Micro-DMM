@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scope Capture Plot</title>
+<style>/*@@UPLOT_CSS@@*/</style>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface-1: #fcfcfb;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --cursor-a: #0b0b0b;
+  --wash: rgba(11,11,11,0.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface-1: #1a1a19;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255,255,255,0.10);
+    --cursor-a: #ffffff;
+    --wash: rgba(255,255,255,0.06);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface-1: #1a1a19;
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255,255,255,0.10);
+  --cursor-a: #ffffff;
+  --wash: rgba(255,255,255,0.06);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--page); color: var(--text-primary);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+main { max-width: 1400px; margin: 0 auto; padding: 24px 16px 48px; }
+header h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
+header .sub { color: var(--text-secondary); font-size: 13px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 20px 0 12px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary);
+  font: inherit; cursor: pointer;
+}
+.chip:hover { background: var(--wash); }
+.chip[aria-pressed="false"] { color: var(--text-muted); }
+.chip[aria-pressed="false"] .key { opacity: 0.25; }
+.chip .note { color: var(--text-secondary); font-size: 12px; }
+.key { display: inline-block; width: 16px; height: 3px; border-radius: 2px; }
+.spacer { flex: 1; }
+.btn {
+  padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-1);
+  color: var(--text-primary); font: inherit; cursor: pointer;
+}
+.btn:hover { background: var(--wash); }
+.hint { color: var(--text-muted); font-size: 12px; margin-bottom: 12px; }
+.panel {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+  padding: 12px 12px 4px; margin-bottom: 12px; position: relative;
+}
+.panel h2 { font-size: 14px; font-weight: 600; margin: 0 0 2px 4px; }
+.panel h2 span { font-weight: 400; color: var(--text-secondary); font-size: 12px; margin-left: 8px; }
+.plot { width: 100%; }
+.u-select { background: var(--wash); }
+.tip {
+  position: absolute; pointer-events: none; z-index: 5; display: none; min-width: 150px;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.tip .t { color: var(--text-secondary); margin-bottom: 4px; }
+.tip .row { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.tip .row b { font-weight: 600; min-width: 64px; text-align: right; }
+.tip .row span:last-child { color: var(--text-secondary); }
+section.card {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+  padding: 16px; margin-top: 12px; overflow-x: auto;
+}
+section.card h3 { font-size: 14px; margin: 0 0 8px; }
+table { border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; }
+th, td { text-align: right; padding: 4px 12px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--text-secondary); font-weight: 500; }
+.muted { color: var(--text-muted); }
+.details { color: var(--text-secondary); font-size: 13px; }
+.details div.c { margin-top: 8px; }
+.details div.c b { color: var(--text-primary); font-weight: 600; }
+.details pre { margin: 2px 0 0 24px; font: 12px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; }
+#drop {
+  border: 2px dashed var(--axis); border-radius: 12px; padding: 48px 16px; text-align: center;
+  color: var(--text-secondary); margin-top: 24px;
+}
+body.dragging main { outline: 3px dashed var(--text-muted); outline-offset: -8px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1 id="title">Scope capture</h1>
+    <div class="sub" id="sub"></div>
+  </header>
+  <div id="drop" hidden>Drop a capture CSV anywhere on this page to plot it.</div>
+  <div id="view" hidden>
+    <div class="toolbar" id="toolbar">
+      <div id="legend" style="display:contents"></div>
+      <div class="spacer"></div>
+      <button class="btn" id="clearAB">Clear A/B</button>
+      <button class="btn" id="reset">Reset zoom</button>
+    </div>
+    <div class="hint">Drag to zoom time · double-click or Reset to zoom out · click to place cursor A, click again for B · click a condition to hide it · drop another CSV to switch files</div>
+    <div id="panels"></div>
+    <section class="card" id="measure" hidden>
+      <h3 id="mhead">Cursors</h3>
+      <table id="mtable"></table>
+    </section>
+    <section class="card">
+      <h3>Capture details</h3>
+      <div class="details" id="details"></div>
+    </section>
+  </div>
+</main>
+<script>/*@@UPLOT_JS@@*/</script>
+<script id="capture-data" type="text/plain" data-name="@@NAME@@">@@CSV@@</script>
+<script>
+(function () {
+  "use strict";
+  // Categorical slots (fixed order): condition N always gets slot N.
+  const SLOTS = {
+    light: ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"],
+    dark:  ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"],
+  };
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+  let cap = null;          // parsed capture
+  let plots = [];          // uPlot instances, one per channel
+  let hidden = new Set();  // hidden condition labels
+  let cursorA = null, cursorB = null;
+  let syncing = false;
+
+  function isDark() {
+    const t = document.documentElement.getAttribute("data-theme");
+    if (t) return t === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  }
+  const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const color = (ci) => SLOTS[isDark() ? "dark" : "light"][ci % 8];
+
+  function parseLine(s) {
+    const out = []; let cur = "", q = false;
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (q) { if (c === '"') { if (s[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+      else if (c === '"') q = true;
+      else if (c === ",") { out.push(cur); cur = ""; }
+      else cur += c;
+    }
+    out.push(cur);
+    return out;
+  }
+
+  function parseCapture(text) {
+    const lines = text.replace(/^﻿/, "").split(/\r?\n/);
+    const meta = { idn: "", started: "", note: "", conds: [] };
+    let i = 0;
+    for (; i < lines.length && lines[i].startsWith("#"); i++) {
+      const raw = lines[i].slice(1);
+      if (/^\s{2,}/.test(raw)) { if (meta.conds.length) meta.conds[meta.conds.length - 1].details.push(raw.trim()); continue; }
+      const f = parseLine(raw.trim());
+      if (f[0] === "Siglent capture") meta.idn = f[1] || "";
+      else if (f[0] === "Session started") meta.started = f[1] || "";
+      else if (f[0] === "Session note") meta.note = f[1] || "";
+      else if (/^Condition \d+$/.test(f[0])) meta.conds.push({ label: f[1] || f[0], captured: (f[2] || "").replace(/^captured /, ""), note: f[3] || "", details: [] });
+    }
+    if (i >= lines.length) throw new Error("No column header row found.");
+    const header = parseLine(lines[i]);
+    const ncol = header.length;
+    const cols = header.map(() => []);
+    for (let r = i + 1; r < lines.length; r++) {
+      const L = lines[r];
+      if (!L) continue;
+      const f = L.split(",");
+      for (let c = 0; c < ncol; c++) { const v = f[c]; cols[c].push(v === undefined || v === "" ? null : +v); }
+    }
+
+    // Work out which columns are time and which are (condition, channel) voltages.
+    const timeOf = {};       // condition label -> time column index ("" = shared)
+    const series = [];       // { cond, ch, col }
+    header.forEach((h, c) => {
+      let m = /^(?:(.*) )?Time \(s\)$/.exec(h);
+      if (m) { timeOf[m[1] || ""] = c; return; }
+      m = /^(.*) (\S+) \(V\)$/.exec(h);
+      if (m) series.push({ cond: m[1], ch: m[2], col: c });
+    });
+    if (!series.length) throw new Error("No voltage columns found - is this a Capture-Scope CSV?");
+
+    const condOrder = [], chOrder = [];
+    series.forEach((s) => { if (!condOrder.includes(s.cond)) condOrder.push(s.cond); if (!chOrder.includes(s.ch)) chOrder.push(s.ch); });
+    condOrder.forEach((c) => { if (!meta.conds.find((m) => m.label === c)) meta.conds.push({ label: c, captured: "", note: "", details: [] }); });
+
+    // One common x array; conditions with their own time column are merged with uPlot.join.
+    let x, ys;
+    if ("" in timeOf) {
+      x = cols[timeOf[""]];
+      ys = series.map((s) => cols[s.col]);
+    } else {
+      const tables = condOrder.map((cond) => {
+        const tcol = cols[timeOf[cond]];
+        const ss = series.filter((s) => s.cond === cond);
+        const n = tcol.findIndex((v) => v == null); const len = n < 0 ? tcol.length : n;
+        return [tcol.slice(0, len), ...ss.map((s) => cols[s.col].slice(0, len))];
+      });
+      const joined = uPlot.join(tables);
+      x = joined[0];
+      const order = condOrder.flatMap((cond) => series.filter((s) => s.cond === cond));
+      ys = series.map((s) => joined[1 + order.indexOf(s)]);
+    }
+    while (x.length && x[x.length - 1] == null) { x.pop(); ys.forEach((y) => y.pop()); }
+
+    // Display time in a unit that suits the record length.
+    const span = Math.abs(x[x.length - 1] - x[0]);
+    const [unit, k] = span >= 1 ? ["s", 1] : span >= 1e-3 ? ["ms", 1e3] : span >= 1e-6 ? ["µs", 1e6] : ["ns", 1e9];
+    const xs = x.map((v) => v * k);
+
+    series.forEach((s, j) => { s.y = ys[j]; s.ci = condOrder.indexOf(s.cond); });
+    return { meta, x: xs, unit, k, series, condOrder, chOrder };
+  }
+
+  // ---------- formatting ----------
+  function fmtV(v) {
+    if (v == null || !isFinite(v)) return "–";
+    const a = Math.abs(v);
+    if (a !== 0 && a < 0.1) return (v * 1e3).toFixed(a < 0.01 ? 2 : 1) + " mV";
+    return v.toFixed(a < 10 ? 3 : 2) + " V";
+  }
+  function fmtT(v) { return v == null ? "–" : +v.toPrecision(6) + " " + cap.unit; }
+  function fmtF(hz) {
+    if (!isFinite(hz) || hz <= 0) return "–";
+    const u = hz >= 1e6 ? ["MHz", 1e-6] : hz >= 1e3 ? ["kHz", 1e-3] : ["Hz", 1];
+    return +(hz * u[1]).toPrecision(4) + " " + u[0];
+  }
+  function idxAt(xv) {
+    const x = cap.x; let lo = 0, hi = x.length - 1;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (x[m] < xv) lo = m; else hi = m; }
+    return Math.abs(x[lo] - xv) <= Math.abs(x[hi] - xv) ? lo : hi;
+  }
+  function valAt(arr, i) {
+    if (arr[i] != null) return arr[i];
+    for (let d = 1; d < 64; d++) { if (arr[i - d] != null) return arr[i - d]; if (arr[i + d] != null) return arr[i + d]; }
+    return null;
+  }
+
+  // ---------- rendering ----------
+  function render(text, name) {
+    cap = parseCapture(text);
+    hidden = new Set(); cursorA = cursorB = null;
+    const m = cap.meta;
+    $("title").textContent = m.note || name || "Scope capture";
+    document.title = (m.note || name || "Scope capture") + " – scope plot";
+    const sub = [];
+    if (m.idn) sub.push(m.idn.split(",")[1] || m.idn);   // "Siglent Technologies,SDS804X HD,serial,fw" -> model
+    if (m.started) sub.push(m.started);
+    if (name) sub.push(name);
+    $("sub").textContent = sub.join(" · ");
+    $("drop").hidden = true; $("view").hidden = false;
+    buildLegend(); buildDetails(); buildPlots(); updateMeasure();
+  }
+
+  function buildLegend() {
+    const lg = $("legend"); lg.textContent = "";
+    cap.condOrder.forEach((cond, ci) => {
+      const b = el("button", "chip"); b.setAttribute("aria-pressed", "true");
+      const k = el("span", "key"); k.style.background = color(ci); b.append(k, el("span", null, cond));
+      const note = (cap.meta.conds.find((c) => c.label === cond) || {}).note;
+      if (note) b.append(el("span", "note", note));
+      b.addEventListener("click", () => {
+        if (hidden.has(cond)) hidden.delete(cond); else hidden.add(cond);
+        b.setAttribute("aria-pressed", String(!hidden.has(cond)));
+        plots.forEach((u) => u._series.forEach((s, j) => { if (s.cond === cond) u.setSeries(j + 1, { show: !hidden.has(cond) }); }));
+        updateMeasure();
+      });
+      lg.append(b);
+    });
+  }
+
+  function buildDetails() {
+    const d = $("details"); d.textContent = "";
+    cap.meta.conds.forEach((c, i) => {
+      const div = el("div", "c");
+      const ci = cap.condOrder.indexOf(c.label);
+      const k = el("span", "key"); k.style.background = color(ci < 0 ? i : ci); k.style.marginRight = "8px";
+      div.append(k, el("b", null, c.label));
+      if (c.captured) div.append(document.createTextNode("  · captured " + c.captured));
+      if (c.note) div.append(document.createTextNode("  · " + c.note));
+      if (c.details.length) div.append(el("pre", null, c.details.join("\n")));
+      d.append(div);
+    });
+  }
+
+  function chSettings(ch) {
+    // e.g. "C1: 1V/div, offset -2.633V, probe 10x" from the first condition that has it
+    for (const c of cap.meta.conds) for (const l of c.details) if (l.startsWith(ch + ":")) return l.slice(ch.length + 1).trim();
+    return "";
+  }
+
+  function buildPlots() {
+    const xr = plots.length ? [plots[0].scales.x.min, plots[0].scales.x.max] : null;
+    plots.forEach((u) => u.destroy()); plots = [];
+    const host = $("panels"); host.textContent = "";
+    const ink = cssVar("--text-muted"), grid = cssVar("--grid"), axisC = cssVar("--axis"), font = "12px system-ui, -apple-system, 'Segoe UI', sans-serif";
+
+    cap.chOrder.forEach((ch, pi) => {
+      const panel = el("div", "panel");
+      const h = el("h2", null, ch); const st = chSettings(ch); if (st) h.append(el("span", null, st));
+      const plotDiv = el("div", "plot"); const tip = el("div", "tip");
+      panel.append(h, plotDiv, tip); host.append(panel);
+
+      const ss = cap.series.filter((s) => s.ch === ch);
+      const last = pi === cap.chOrder.length - 1;
+      let active = false, downAt = null;
+      const opts = {
+        width: plotDiv.clientWidth, height: 260,
+        legend: { show: false },
+        cursor: {
+          sync: { key: "scope" }, drag: { x: true, y: false, dist: 6 }, y: false,
+          points: { size: 7, width: 2, stroke: (u, i) => color(u._series[i - 1].ci), fill: cssVar("--surface-1") },
+        },
+        scales: { x: { time: false } },
+        axes: [
+          { stroke: ink, font, grid: { stroke: grid, width: 1 }, ticks: { stroke: axisC, width: 1, size: 4 },
+            label: last ? "Time (" + cap.unit + ") · trigger at 0" : null, labelFont: font, labelSize: last ? 22 : 0, size: 32 },
+          { stroke: ink, font, size: 64, grid: { stroke: grid, width: 1 }, ticks: { stroke: axisC, width: 1, size: 4 },
+            values: (u, vals) => vals.map((v) => +v.toPrecision(4) + " V") },
+        ],
+        series: [{}].concat(ss.map((s) => ({ label: s.cond, stroke: color(s.ci), width: 2, spanGaps: true, show: !hidden.has(s.cond) }))),
+        hooks: {
+          setScale: [(u, key) => {
+            if (key !== "x" || syncing) return;
+            syncing = true;
+            plots.forEach((p) => { if (p !== u) p.setScale("x", { min: u.scales.x.min, max: u.scales.x.max }); });
+            syncing = false;
+          }],
+          setCursor: [(u) => showTip(u, tip, active)],
+          draw: [(u) => drawOverlay(u)],
+          ready: [(u) => {
+            u.over.addEventListener("mouseenter", () => { active = true; });
+            u.over.addEventListener("mouseleave", () => { active = false; tip.style.display = "none"; });
+            u.over.addEventListener("mousedown", (e) => { downAt = [e.clientX, e.clientY]; });
+            u.over.addEventListener("mouseup", (e) => {
+              if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return;
+              const xv = cap.x[idxAt(u.posToVal(e.offsetX, "x"))];
+              if (cursorA == null || cursorB != null) { cursorA = xv; cursorB = null; } else cursorB = xv;
+              plots.forEach((p) => p.redraw(false)); updateMeasure();
+            });
+          }],
+        },
+      };
+      const u = new uPlot(opts, [cap.x].concat(ss.map((s) => s.y)), plotDiv);
+      u._series = ss;
+      plots.push(u);
+    });
+    if (xr && xr[0] != null) plots[0].setScale("x", { min: xr[0], max: xr[1] });
+  }
+
+  function showTip(u, tip, active) {
+    const i = u.cursor.idx;
+    if (!active || i == null || u.cursor.left < 0) { tip.style.display = "none"; return; }
+    tip.textContent = "";
+    tip.append(el("div", "t", "t = " + fmtT(cap.x[i])));
+    u._series.forEach((s) => {
+      if (hidden.has(s.cond)) return;
+      const r = el("div", "row"); const k = el("span", "key"); k.style.background = color(s.ci);
+      r.append(k, el("b", null, fmtV(valAt(s.y, i))), el("span", null, s.cond)); tip.append(r);
+    });
+    tip.style.display = "block";
+    const ov = u.over.getBoundingClientRect(), pr = tip.parentElement.getBoundingClientRect();
+    let left = ov.left - pr.left + u.cursor.left + 16;
+    if (left + tip.offsetWidth > pr.width - 8) left = ov.left - pr.left + u.cursor.left - tip.offsetWidth - 16;
+    tip.style.left = left + "px";
+    tip.style.top = (ov.top - pr.top + Math.max(0, Math.min(u.cursor.top - 20, ov.height - tip.offsetHeight))) + "px";
+  }
+
+  function drawOverlay(u) {
+    const ctx = u.ctx, { top, height } = u.bbox, dpr = devicePixelRatio || 1;
+    ctx.save();
+    // trigger reference at t = 0
+    const x0 = u.valToPos(0, "x", true);
+    if (x0 >= u.bbox.left && x0 <= u.bbox.left + u.bbox.width) {
+      ctx.strokeStyle = cssVar("--axis"); ctx.lineWidth = 1 * dpr; ctx.setLineDash([4 * dpr, 4 * dpr]);
+      ctx.beginPath(); ctx.moveTo(x0, top); ctx.lineTo(x0, top + height); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    [[cursorA, "A"], [cursorB, "B"]].forEach(([v, name]) => {
+      if (v == null) return;
+      const px = u.valToPos(v, "x", true);
+      if (px < u.bbox.left || px > u.bbox.left + u.bbox.width) return;
+      ctx.strokeStyle = cssVar("--cursor-a"); ctx.fillStyle = cssVar("--cursor-a"); ctx.lineWidth = 1 * dpr;
+      ctx.beginPath(); ctx.moveTo(px, top); ctx.lineTo(px, top + height); ctx.stroke();
+      ctx.font = `600 ${11 * dpr}px system-ui, sans-serif`; ctx.textBaseline = "top";
+      ctx.fillText(name, px + 4 * dpr, top + 4 * dpr);
+    });
+    ctx.restore();
+  }
+
+  function updateMeasure() {
+    const sec = $("measure"), tb = $("mtable");
+    if (cursorA == null) { sec.hidden = true; return; }
+    sec.hidden = false; tb.textContent = "";
+    const ia = idxAt(cursorA), ib = cursorB == null ? null : idxAt(cursorB);
+    let head = "Cursor A at " + fmtT(cursorA);
+    if (cursorB != null) {
+      const dt = cursorB - cursorA;
+      head = "A " + fmtT(cursorA) + " · B " + fmtT(cursorB) + " · Δt " + fmtT(dt) + " · 1/Δt " + fmtF(1 / Math.abs(dt / cap.k));
+    } else head += " · click again to place B";
+    $("mhead").textContent = head;
+    const tr = el("tr"); ["Channel", "Condition", "A", "B", "B − A"].forEach((t) => tr.append(el("th", null, t)));
+    tb.append(tr);
+    const rows = cap.series.slice().sort((a, b) => cap.chOrder.indexOf(a.ch) - cap.chOrder.indexOf(b.ch) || a.ci - b.ci);
+    rows.forEach((s) => {
+      if (hidden.has(s.cond)) return;
+      const va = valAt(s.y, ia), vb = ib == null ? null : valAt(s.y, ib);
+      const r = el("tr");
+      const c2 = el("td"); const k = el("span", "key"); k.style.background = color(s.ci); k.style.marginRight = "8px";
+      c2.append(k, document.createTextNode(s.cond));
+      r.append(el("td", null, s.ch), c2, el("td", null, fmtV(va)), el("td", null, ib == null ? "–" : fmtV(vb)),
+        el("td", null, ib == null || va == null || vb == null ? "–" : fmtV(vb - va)));
+      tb.append(r);
+    });
+  }
+
+  $("reset").addEventListener("click", () => { if (plots[0]) plots[0].setScale("x", { min: cap.x[0], max: cap.x[cap.x.length - 1] }); });
+  $("clearAB").addEventListener("click", () => { cursorA = cursorB = null; plots.forEach((p) => p.redraw(false)); updateMeasure(); });
+
+  new ResizeObserver(() => plots.forEach((u) => { const w = u.root.parentElement.clientWidth; if (w && w !== u.width) u.setSize({ width: w, height: 260 }); })).observe($("panels"));
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (cap) { buildLegend(); buildDetails(); buildPlots(); updateMeasure(); } });
+  new MutationObserver(() => { if (cap) { buildLegend(); buildDetails(); buildPlots(); updateMeasure(); } })
+    .observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  // Drag-and-drop another capture onto the page.
+  addEventListener("dragover", (e) => { e.preventDefault(); document.body.classList.add("dragging"); });
+  addEventListener("dragleave", (e) => { if (!e.relatedTarget) document.body.classList.remove("dragging"); });
+  addEventListener("drop", (e) => {
+    e.preventDefault(); document.body.classList.remove("dragging");
+    const f = e.dataTransfer.files[0]; if (!f) return;
+    f.text().then((t) => { try { render(t, f.name); } catch (err) { $("sub").textContent = f.name + ": " + err.message; } });
+  });
+
+  const node = $("capture-data");
+  const embedded = node.textContent.replace(/<\\\/script/gi, "</script");
+  if (embedded.trim() && embedded.trim() !== "@@CSV" + "@@") {
+    try { render(embedded, node.dataset.name); }
+    catch (err) { $("drop").hidden = false; $("drop").textContent = "Could not read the embedded capture: " + err.message; }
+  } else {
+    $("drop").hidden = false;
+  }
+})();
+</script>
+</body>
+</html>
