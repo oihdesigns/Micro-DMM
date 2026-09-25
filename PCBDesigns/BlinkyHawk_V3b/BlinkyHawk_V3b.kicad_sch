@@ -8760,7 +8760,7 @@
 		(body_style 1)
 		(exclude_from_sim no)
 		(in_bom yes)
-		(on_board yes)
+		(on_board no)
 		(in_pos_files yes)
 		(dnp yes)
 		(uuid "0e9acb48-b27d-4e95-89c8-a89cdd11d283")
@@ -10222,7 +10222,7 @@
 				)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Seeed_XIAO:XIAO-R4-DIP"
 			(at 215.9 40.64 0)
 			(hide yes)
 			(show_name no)
@@ -11255,7 +11255,7 @@
 		(body_style 1)
 		(exclude_from_sim no)
 		(in_bom yes)
-		(on_board yes)
+		(on_board no)
 		(in_pos_files yes)
 		(dnp yes)
 		(uuid "741ad424-651e-4c69-b7e2-9f96ddcd7219")
@@ -13978,7 +13978,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "0.47uF"
+		(property "Value" "1uF"
 			(at 27.432 149.098 0)
 			(show_name no)
 			(do_not_autoplace no)

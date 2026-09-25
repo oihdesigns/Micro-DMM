@@ -1,0 +1,4 @@
+(fp_lib_table
+	(version 7)
+	(lib (name "Seeed_XIAO")(type "KiCad")(uri "${KIPRJMOD}/../Seeed_XIAO.pretty")(options "")(descr "Seeed XIAO modules, solder-down, with 3D model"))
+)

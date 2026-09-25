@@ -1,0 +1,10121 @@
+(kicad_sch
+	(version 20260306)
+	(generator "eeschema")
+	(generator_version "10.0")
+	(uuid "699a5243-12e4-5848-93c2-c488107778bb")
+	(paper "A3")
+	(title_block
+		(title "AD8237 Sensor Development Board")
+		(date "2026-09-20")
+		(rev "B")
+		(company "Micro-DMM")
+		(comment 1 "I2C gain | Buffered midsupply | 3.3 / 5 V | 60 x 50 mm | Prototype")
+	)
+	(lib_symbols
+		(symbol "AD8237DevBoard:AD8237"
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "U"
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "AD8237"
+				(at 0 -5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "AD8237_0_1"
+				(rectangle
+					(start -10.16 12.7)
+					(end 10.16 -12.7)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+			)
+			(symbol "AD8237_1_1"
+				(pin input line
+					(at -15.24 -10.16 0)
+					(length 5.08)
+					(name "BW"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin input line
+					(at -15.24 5.08 0)
+					(length 5.08)
+					(name "+IN"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin input line
+					(at -15.24 -5.08 0)
+					(length 5.08)
+					(name "-IN"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 0 -20.32 90)
+					(length 7.62)
+					(name "-VS"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "4"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 0 20.32 270)
+					(length 7.62)
+					(name "+VS"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "5"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin input line
+					(at 15.24 -7.62 180)
+					(length 5.08)
+					(name "REF"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "6"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin input line
+					(at 15.24 0 180)
+					(length 5.08)
+					(name "FB"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "7"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin output line
+					(at 15.24 7.62 180)
+					(length 5.08)
+					(name "OUT"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "8"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "AD8237DevBoard:C"
+			(pin_names
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "C"
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "C"
+				(at 0 -5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "C_0_1"
+				(polyline
+					(pts
+						(xy -2.54 0.762) (xy 2.54 0.762)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -2.54 -0.762) (xy 2.54 -0.762)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "C_1_1"
+				(pin passive line
+					(at 0 5.08 270)
+					(length 4.318)
+					(name ""
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 0 -5.08 90)
+					(length 4.318)
+					(name ""
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "AD8237DevBoard:Conn2"
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "J"
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "Conn2"
+				(at 0 -5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "Conn2_0_1"
+				(rectangle
+					(start -5.08 6.35)
+					(end 0 -6.35)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+			)
+			(symbol "Conn2_1_1"
+				(pin passive line
+					(at -7.62 1.27 0)
+					(length 2.54)
+					(name "1"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -7.62 -1.27 0)
+					(length 2.54)
+					(name "2"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "AD8237DevBoard:Conn3"
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "J"
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "Conn3"
+				(at 0 -5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "Conn3_0_1"
+				(rectangle
+					(start -5.08 6.35)
+					(end 0 -6.35)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+			)
+			(symbol "Conn3_1_1"
+				(pin passive line
+					(at -7.62 2.54 0)
+					(length 2.54)
+					(name "1"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -7.62 0 0)
+					(length 2.54)
+					(name "2"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -7.62 -2.54 0)
+					(length 2.54)
+					(name "3"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "AD8237DevBoard:Conn4"
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "J"
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "Conn4"
+				(at 0 -5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "Conn4_0_1"
+				(rectangle
+					(start -5.08 6.35)
+					(end 0 -6.35)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+			)
+			(symbol "Conn4_1_1"
+				(pin passive line
+					(at -7.62 3.81 0)
+					(length 2.54)
+					(name "1"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -7.62 1.27 0)
+					(length 2.54)
+					(name "2"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -7.62 -1.27 0)
+					(length 2.54)
+					(name "3"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -7.62 -3.81 0)
+					(length 2.54)
+					(name "4"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "4"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "AD8237DevBoard:Flag"
+			(pin_names
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "#FLG"
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "Flag"
+				(at 0 -5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "Flag_0_1"
+				(polyline
+					(pts
+						(xy 0 0) (xy 0 2.54) (xy -1.27 2.54) (xy 0 3.81) (xy 1.27 2.54) (xy 0 2.54)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "Flag_1_1"
+				(pin power_out line
+					(at 0 0 90)
+					(length 0)
+					(name "pwr"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "AD8237DevBoard:Gain"
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "J"
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "Gain"
+				(at 0 -5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "Gain_0_1"
+				(rectangle
+					(start -7.62 8.89)
+					(end 7.62 -8.89)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+			)
+			(symbol "Gain_1_1"
+				(pin passive line
+					(at -10.16 5.08 0)
+					(length 2.54)
+					(name "FB"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 10.16 5.08 180)
+					(length 2.54)
+					(name "1"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -10.16 0 0)
+					(length 2.54)
+					(name "FB"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 10.16 0 180)
+					(length 2.54)
+					(name "10.09"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "4"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -10.16 -5.08 0)
+					(length 2.54)
+					(name "FB"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "5"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 10.16 -5.08 180)
+					(length 2.54)
+					(name "101"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "6"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "AD8237DevBoard:Hole"
+			(pin_names
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "H"
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "Hole"
+				(at 0 -5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "Hole_0_1"
+				(circle
+					(center 0 0)
+					(radius 2.54)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "AD8237DevBoard:OPA333"
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "J"
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "OPA333"
+				(at 0 -5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "OPA333_0_1"
+				(polyline
+					(pts
+						(xy -10.16 10.16) (xy -10.16 -10.16) (xy 10.16 0) (xy -10.16 10.16)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "OPA333_1_1"
+				(pin output line
+					(at 15.24 0 180)
+					(length 5.08)
+					(name "OUT"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 0 -15.24 90)
+					(length 5.08)
+					(name "V-"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin input line
+					(at -15.24 5.08 0)
+					(length 5.08)
+					(name "+IN"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin input line
+					(at -15.24 -5.08 0)
+					(length 5.08)
+					(name "-IN"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "4"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 0 15.24 270)
+					(length 5.08)
+					(name "V+"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "5"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "AD8237DevBoard:R"
+			(pin_names
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "R"
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "R"
+				(at 0 -5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "R_0_1"
+				(rectangle
+					(start -2.54 1.016)
+					(end 2.54 -1.016)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+			)
+			(symbol "R_1_1"
+				(pin passive line
+					(at -5.08 0 0)
+					(length 2.54)
+					(name ""
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 5.08 0 180)
+					(length 2.54)
+					(name ""
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "AD8237DevBoard:RefSelect"
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "J"
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "RefSelect"
+				(at 0 -5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "RefSelect_0_1"
+				(rectangle
+					(start -7.62 8.89)
+					(end 7.62 -8.89)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+			)
+			(symbol "RefSelect_1_1"
+				(pin passive line
+					(at -10.16 5.08 0)
+					(length 2.54)
+					(name "REF"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 10.16 5.08 180)
+					(length 2.54)
+					(name "GND"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -10.16 0 0)
+					(length 2.54)
+					(name "REF"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 10.16 0 180)
+					(length 2.54)
+					(name "MID"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "4"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -10.16 -5.08 0)
+					(length 2.54)
+					(name "REF"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "5"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 10.16 -5.08 180)
+					(length 2.54)
+					(name "EXT"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "6"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "AD8237DevBoard:TCA9536"
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "J"
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "TCA9536"
+				(at 0 -5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "TCA9536_0_1"
+				(rectangle
+					(start -10.16 12.7)
+					(end 10.16 -12.7)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+			)
+			(symbol "TCA9536_1_1"
+				(pin bidirectional line
+					(at 15.24 7.62 180)
+					(length 5.08)
+					(name "P0"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at 15.24 2.54 180)
+					(length 5.08)
+					(name "P1"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at 15.24 -2.54 180)
+					(length 5.08)
+					(name "P2"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 0 -17.78 90)
+					(length 5.08)
+					(name "GND"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "4"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at 15.24 -7.62 180)
+					(length 5.08)
+					(name "P3/INT"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "5"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin input line
+					(at -15.24 -5.08 0)
+					(length 5.08)
+					(name "SCL"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "6"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at -15.24 5.08 0)
+					(length 5.08)
+					(name "SDA"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "7"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 0 17.78 270)
+					(length 5.08)
+					(name "VCC"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "8"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "AD8237DevBoard:TMUX1104"
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "J"
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "TMUX1104"
+				(at 0 -5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "TMUX1104_0_1"
+				(rectangle
+					(start -12.7 17.78)
+					(end 12.7 -17.78)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+			)
+			(symbol "TMUX1104_1_1"
+				(pin input line
+					(at -20.32 -12.7 0)
+					(length 7.62)
+					(name "A0"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -20.32 10.16 0)
+					(length 7.62)
+					(name "S1"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 0 -22.86 90)
+					(length 5.08)
+					(name "GND"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -20.32 0 0)
+					(length 7.62)
+					(name "S3"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "4"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin input line
+					(at 20.32 -12.7 180)
+					(length 7.62)
+					(name "EN"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "5"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 0 22.86 270)
+					(length 5.08)
+					(name "VDD"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "6"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -20.32 -5.08 0)
+					(length 7.62)
+					(name "S4"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "7"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 20.32 5.08 180)
+					(length 7.62)
+					(name "D"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "8"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -20.32 5.08 0)
+					(length 7.62)
+					(name "S2"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "9"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin input line
+					(at -20.32 -17.78 0)
+					(length 7.62)
+					(name "A1"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "10"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "AD8237DevBoard:TP"
+			(pin_names
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "TP"
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "TP"
+				(at 0 -5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "TP_0_1"
+				(circle
+					(center 0 3.3)
+					(radius 0.76)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "TP_1_1"
+				(pin passive line
+					(at 0 0 90)
+					(length 2.54)
+					(name ""
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+	)
+	(text "AD8237 | I2C SENSOR DEVELOPMENT | REV B"
+		(exclude_from_sim no)
+		(at 20.32 15.24 0)
+		(effects
+			(font
+				(size 2.286 2.286)
+			)
+			(justify left top)
+		)
+		(uuid "215f51b5-b69c-4a28-8d4f-a00621eb5109")
+	)
+	(text "ANALOG SIGNAL PATH"
+		(exclude_from_sim no)
+		(at 20.32 93.98 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left top)
+		)
+		(uuid "22b6b0c4-5915-40e3-9d95-ddbe9691c010")
+	)
+	(text "I2C init: reg 0x01=0x00 BEFORE reg 0x03=0xF0.\nThen reg 0x50=0x40 disables port pull-ups.\nGain: reg 0x01 = 0 / 1 / 2 / 3 -> 1 / 10.09 / 101 / 1001.\n4.7k address pull-downs select unity before initialization."
+		(exclude_from_sim no)
+		(at 241.3 233.68 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left top)
+		)
+		(uuid "4717f04c-805a-4f2b-909b-5696d147d311")
+	)
+	(text "HIGH-IMPEDANCE FEEDBACK MULTIPLEXER"
+		(exclude_from_sim no)
+		(at 248.92 95.25 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left top)
+		)
+		(uuid "4e49b044-e586-4b37-ab41-3be1e75505d8")
+	)
+	(text "JP1 2-3: VIO (default); 1-2: external J1"
+		(exclude_from_sim no)
+		(at 91.44 68.58 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left top)
+		)
+		(uuid "4ef32970-934a-41e7-84e6-4d0755b586ca")
+	)
+	(text "I2C LOGIC DOMAIN - power VIO at the host I/O voltage"
+		(exclude_from_sim no)
+		(at 223.52 22.86 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left top)
+		)
+		(uuid "5bc0ddee-9415-4ef3-a425-45050dbe9b6f")
+	)
+	(text "GAIN DIVIDERS (0.1%)"
+		(exclude_from_sim no)
+		(at 246.38 172.72 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left top)
+		)
+		(uuid "706d8b78-48a0-47d7-b593-728da549c150")
+	)
+	(text "OPTIONAL INPUT FILTERS / BIAS RETURNS (DNP)"
+		(exclude_from_sim no)
+		(at 20.32 151.13 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left top)
+		)
+		(uuid "a6a9517b-5134-4b10-946b-5ca3e1de8583")
+	)
+	(text "VMID = VS/2: 1.65 V at 3.3 V; 2.5 V at 5 V"
+		(exclude_from_sim no)
+		(at 81.28 201.93 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left top)
+		)
+		(uuid "b499756d-099b-43f4-9c43-eabc428a6dca")
+	)
+	(text "BUFFERED HALF-SUPPLY REFERENCE"
+		(exclude_from_sim no)
+		(at 20.32 191.77 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left top)
+		)
+		(uuid "b74964a7-a3d7-4718-84be-4c8d68ea7b0d")
+	)
+	(text "ANALOG POWER: 3.3 V nominal / 5 V option"
+		(exclude_from_sim no)
+		(at 20.32 22.86 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left top)
+		)
+		(uuid "bc4b4947-45e5-4d17-af0f-d162299aa118")
+	)
+	(text "JP3: ONE shunt\n1-2 GND; 3-4 MID (default); 5-6 EXT"
+		(exclude_from_sim no)
+		(at 170.18 239.39 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left top)
+		)
+		(uuid "c855093a-b4bd-4686-bcee-1352bdac7276")
+	)
+	(text "TEST POINTS"
+		(exclude_from_sim no)
+		(at 20.32 252.73 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left top)
+		)
+		(uuid "cdd4b176-0909-4fcf-8ff8-9c56756d67e1")
+	)
+	(text "VOUT_RAW = VREF + G x (VIN+ - VIN-). REF source drives ALL divider returns.\nC3-C6 and R9/R10 are DNP. C7 is FITTED. Change supply/reference jumpers with power off.\nKeep sensor, reference and output voltages within analog supply rails. Host VIO and analog VS may differ.\nPower-up: unity, LOW bandwidth, MID reference. Wait 50 ms after power-up; discard samples after gain changes."
+		(exclude_from_sim no)
+		(at 20.32 278.13 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left top)
+		)
+		(uuid "e78b2f78-ad4f-4f74-b764-ab2542603cdd")
+	)
+	(text "0x41 | P0=A0, P1=A1 | P2/P3 unused"
+		(exclude_from_sim no)
+		(at 248.92 89.54 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left top)
+		)
+		(uuid "ed649f45-5130-47b3-afcf-1115873bfe12")
+	)
+	(text "C7: Figure 76 HF compensation"
+		(exclude_from_sim no)
+		(at 160.02 192.4 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left top)
+		)
+		(uuid "eef771a3-1de1-44d3-832a-0d5848873340")
+	)
+	(text "JP2: LOW only at unity gain / startup. HIGH requires G>=10."
+		(exclude_from_sim no)
+		(at 166.878 159.004 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left top)
+		)
+		(uuid "f819652d-efdf-4d90-9c1f-8f508a38ae15")
+	)
+	(no_connect
+		(at 294.64 57.15)
+		(uuid "a1b6bbb0-5b3d-4e77-a606-b2c65093d002")
+	)
+	(no_connect
+		(at 294.64 62.23)
+		(uuid "fd03c471-0454-41a9-aa82-7d794c421ba4")
+	)
+	(wire
+		(pts
+			(xy 345.44 195.58) (xy 345.44 208.28)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "00440f12-6d0d-4874-a297-c804b6773920")
+	)
+	(wire
+		(pts
+			(xy 186.69 149.86) (xy 180.34 149.86)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "01820082-b704-4a65-8c93-4b7dfb6fe5b1")
+	)
+	(wire
+		(pts
+			(xy 165.1 246.38) (xy 171.45 246.38)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "050d4754-7f75-47e3-a190-dde48f0ff678")
+	)
+	(wire
+		(pts
+			(xy 104.14 264.16) (xy 104.14 270.51)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "0b7f9351-8676-4993-a928-a5f82fe982d4")
+	)
+	(wire
+		(pts
+			(xy 185.42 228.6) (xy 179.07 228.6)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "19df4ddb-91ef-4f9f-840f-e9076cfd99df")
+	)
+	(wire
+		(pts
+			(xy 111.76 43.18) (xy 105.41 43.18)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1c0ce43d-6bb2-48b0-a833-95b5073e74f2")
+	)
+	(wire
+		(pts
+			(xy 156.21 154.94) (xy 156.21 161.29)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1c9ccb09-2657-42b0-bc02-a25f898cdfe2")
+	)
+	(wire
+		(pts
+			(xy 76.2 45.72) (xy 76.2 39.37)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1d36d693-113e-49d7-b47f-5514f1da9377")
+	)
+	(wire
+		(pts
+			(xy 228.6 46.99) (xy 222.25 46.99)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1fe30e2c-3a75-42cd-bff1-8ed54adabd5c")
+	)
+	(wire
+		(pts
+			(xy 182.88 119.38) (xy 189.23 119.38)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "20a4036f-1d41-4444-83d7-c17a3d5b9fb3")
+	)
+	(wire
+		(pts
+			(xy 40.64 203.2) (xy 40.64 196.85)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "20dcd406-751d-4f84-9986-0979814ac972")
+	)
+	(wire
+		(pts
+			(xy 152.4 226.06) (xy 152.4 232.41)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "225d5948-ee4a-492b-bde7-0082dbe41eff")
+	)
+	(wire
+		(pts
+			(xy 30.48 176.53) (xy 30.48 182.88)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "2274e6aa-96fc-4ef3-b1a9-d6cf05c18b15")
+	)
+	(wire
+		(pts
+			(xy 330.2 74.93) (xy 330.2 68.58)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "22dcd459-b9f1-4fa6-a645-b1c4aebc166c")
+	)
+	(wire
+		(pts
+			(xy 186.69 147.32) (xy 180.34 147.32)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "24d7c512-02b7-4adf-91e8-081b820e4782")
+	)
+	(wire
+		(pts
+			(xy 63.5 27.94) (xy 63.5 30.48)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "2771c7d0-a023-4b73-ad1f-45a0af082fd8")
+	)
+	(wire
+		(pts
+			(xy 264.16 59.69) (xy 257.81 59.69)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "289b7ff2-b8bc-4f0a-a681-a57e0c632b51")
+	)
+	(wire
+		(pts
+			(xy 142.24 127) (xy 148.59 127)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "2bd254dd-0415-4978-b007-980276d3acc6")
+	)
+	(wire
+		(pts
+			(xy 127 147.32) (xy 127 153.67)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "2c0ed26d-1f1c-47f0-b2fe-9d953f3a24db")
+	)
+	(wire
+		(pts
+			(xy 190.5 45.72) (xy 190.5 39.37)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "2fea8b1e-1cb6-44f2-939c-df097d39c396")
+	)
+	(wire
+		(pts
+			(xy 27.94 124.46) (xy 21.59 124.46)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "31d3eb52-660c-4b57-bb39-b70ec097577a")
+	)
+	(wire
+		(pts
+			(xy 205.74 223.52) (xy 212.09 223.52)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3adaa052-10fb-47ec-81a1-8ee7737a24d1")
+	)
+	(wire
+		(pts
+			(xy 218.44 149.86) (xy 218.44 156.21)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3b66e16e-33b4-4b0a-b22f-131822522bd4")
+	)
+	(wire
+		(pts
+			(xy 186.69 152.4) (xy 180.34 152.4)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3e3151dc-4e63-4d84-a4cd-5dc30f614890")
+	)
+	(wire
+		(pts
+			(xy 142.24 134.62) (xy 148.59 134.62)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "41121bf2-3576-4102-a619-2179c753d415")
+	)
+	(wire
+		(pts
+			(xy 358.14 43.18) (xy 358.14 36.83)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4379b3d3-0db9-4ae8-bc4f-b0ca24c97d49")
+	)
+	(wire
+		(pts
+			(xy 78.74 215.9) (xy 78.74 209.55)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4454c32f-0a8b-4f4f-bbb0-908f67b4ffe8")
+	)
+	(wire
+		(pts
+			(xy 330.2 85.09) (xy 330.2 91.44)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "48878cd0-0d0a-4158-b4fa-a68f25e5d12f")
+	)
+	(wire
+		(pts
+			(xy 53.34 264.16) (xy 53.34 270.51)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4a2fab8e-9fa9-47c9-b692-7ff2c18fca4a")
+	)
+	(wire
+		(pts
+			(xy 83.82 121.92) (xy 111.76 121.92)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4ace06db-3666-4873-9a9c-b22b086c0909")
+	)
+	(wire
+		(pts
+			(xy 78.74 264.16) (xy 78.74 270.51)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4cbc0921-ca54-4977-9e66-21f4ee68b2a4")
+	)
+	(wire
+		(pts
+			(xy 78.74 226.06) (xy 78.74 232.41)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4eb7ae72-9016-45bd-b932-e3d6da80ddaa")
+	)
+	(wire
+		(pts
+			(xy 27.94 44.45) (xy 21.59 44.45)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "50938dcc-17c7-4cda-a041-80e6d83c5230")
+	)
+	(wire
+		(pts
+			(xy 228.6 49.53) (xy 222.25 49.53)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "50c91418-d0bd-4488-b3a1-7db5f22db054")
+	)
+	(wire
+		(pts
+			(xy 345.44 185.42) (xy 345.44 179.07)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "527196a6-363d-4276-821c-567a3b48013c")
+	)
+	(wire
+		(pts
+			(xy 228.6 52.07) (xy 222.25 52.07)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5545e24b-a68d-40b9-8129-76950bac0306")
+	)
+	(wire
+		(pts
+			(xy 259.08 185.42) (xy 259.08 179.07)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "569f0567-15a8-450a-8da3-8f43676b3c57")
+	)
+	(wire
+		(pts
+			(xy 350.52 119.38) (xy 356.87 119.38)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "594c1357-4598-4312-8842-52d71b9fc3ba")
+	)
+	(wire
+		(pts
+			(xy 40.64 236.22) (xy 40.64 242.57)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "59adb323-2061-45fc-8d01-6198f4d73b8a")
+	)
+	(wire
+		(pts
+			(xy 330.2 43.18) (xy 330.2 36.83)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5cb72bcf-caf6-4215-8df0-4ec570e71ce3")
+	)
+	(wire
+		(pts
+			(xy 259.08 116.84) (xy 252.73 116.84)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "6041bfdb-3920-4dc4-9a51-f780e6753e88")
+	)
+	(wire
+		(pts
+			(xy 259.08 121.92) (xy 252.73 121.92)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "65fd3f60-0c68-4ccd-87cb-1f61e3eda64b")
+	)
+	(wire
+		(pts
+			(xy 180.34 27.94) (xy 180.34 30.48)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "66f3cb43-7fc7-4ee7-93c5-de025164d786")
+	)
+	(wire
+		(pts
+			(xy 177.8 182.88) (xy 177.8 189.23)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "6b736f00-3987-4e12-96cd-0567bc8cc7ed")
+	)
+	(wire
+		(pts
+			(xy 177.8 172.72) (xy 177.8 166.37)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "6cfa11ea-cc92-4408-a747-dad2ac88bf4b")
+	)
+	(wire
+		(pts
+			(xy 210.82 119.38) (xy 204.47 119.38)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7082aa24-ba0f-4057-9a26-78accdddda8b")
+	)
+	(wire
+		(pts
+			(xy 27.94 46.99) (xy 21.59 46.99)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "710e3192-7715-4b24-88dc-bf2cda9c3abf")
+	)
+	(wire
+		(pts
+			(xy 154.94 246.38) (xy 148.59 246.38)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "71f134fd-fa91-43eb-96a7-d0f1b33b8f4c")
+	)
+	(wire
+		(pts
+			(xy 205.74 218.44) (xy 212.09 218.44)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7245b5d0-5adf-4050-9a98-1444a6a67cea")
+	)
+	(wire
+		(pts
+			(xy 312.42 68.58) (xy 312.42 62.23)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "73b88122-61f5-4aac-ad4a-a1958a02c430")
+	)
+	(wire
+		(pts
+			(xy 190.5 55.88) (xy 190.5 62.23)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "74b23574-50b6-4943-8f60-24f38621d60a")
+	)
+	(wire
+		(pts
+			(xy 137.16 176.53) (xy 137.16 182.88)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "752ddee2-7151-4e4e-9876-4422d447506a")
+	)
+	(wire
+		(pts
+			(xy 154.94 264.16) (xy 154.94 270.51)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "78de0b57-655e-4223-81ed-b4daa399d444")
+	)
+	(wire
+		(pts
+			(xy 111.76 48.26) (xy 105.41 48.26)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "792aba42-61b3-4b6f-a15c-d5cce2848e38")
+	)
+	(wire
+		(pts
+			(xy 106.68 166.37) (xy 106.68 160.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7a4d65ea-173d-4bc0-a6ba-cc651a5ff5ee")
+	)
+	(wire
+		(pts
+			(xy 345.44 218.44) (xy 345.44 224.79)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "811a6cc0-cbc2-40ca-9fa9-485e0815759b")
+	)
+	(wire
+		(pts
+			(xy 27.94 129.54) (xy 21.59 129.54)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "83c7ec5b-fd23-4972-a942-94cf543759b5")
+	)
+	(wire
+		(pts
+			(xy 340.36 119.38) (xy 334.01 119.38)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "8562783a-81a0-4e0f-ac63-75c1df7659ba")
+	)
+	(wire
+		(pts
+			(xy 119.38 238.76) (xy 119.38 245.11)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "86dffb54-1189-4339-825f-00fdfa0a6b52")
+	)
+	(wire
+		(pts
+			(xy 358.14 74.93) (xy 358.14 68.58)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "874aed4b-5227-4bc8-a39d-a0bfcb2a290e")
+	)
+	(wire
+		(pts
+			(xy 383.54 77.47) (xy 377.19 77.47)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "88014dc5-46b5-4bfa-b124-3186bb735e6d")
+	)
+	(wire
+		(pts
+			(xy 279.4 36.83) (xy 279.4 30.48)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "88a5a495-3ebd-4687-ac8b-42e39a72569e")
+	)
+	(wire
+		(pts
+			(xy 383.54 80.01) (xy 377.19 80.01)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "8900f4c9-708e-4eaf-ab99-500a2304293b")
+	)
+	(wire
+		(pts
+			(xy 358.14 53.34) (xy 358.14 59.69)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "89d91070-f922-430f-93ce-7fa80343ad5d")
+	)
+	(wire
+		(pts
+			(xy 302.26 195.58) (xy 302.26 208.28)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "8bd1f935-3cbd-434c-84e3-844d77abcbc8")
+	)
+	(wire
+		(pts
+			(xy 129.54 264.16) (xy 129.54 270.51)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "9013cb89-c06f-4698-a2d5-bd95f947700c")
+	)
+	(wire
+		(pts
+			(xy 299.72 121.92) (xy 306.07 121.92)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "92af7f20-63ea-4ec1-b46b-fe92a403e559")
+	)
+	(wire
+		(pts
+			(xy 119.38 208.28) (xy 119.38 201.93)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "938665b3-b1d5-4951-bb7c-2e9eed3be8af")
+	)
+	(wire
+		(pts
+			(xy 111.76 45.72) (xy 105.41 45.72)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "94a0b14b-a880-4e65-b3af-6135012ad5bf")
+	)
+	(wire
+		(pts
+			(xy 264.16 49.53) (xy 257.81 49.53)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "94ae5322-90a2-4e59-888d-8d5d05980153")
+	)
+	(wire
+		(pts
+			(xy 259.08 144.78) (xy 252.73 144.78)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "95b4ab6c-d545-41bc-9f48-b43c90b70614")
+	)
+	(wire
+		(pts
+			(xy 27.94 127) (xy 21.59 127)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "95fd2c29-1b89-4166-9827-ee8ca7179c11")
+	)
+	(wire
+		(pts
+			(xy 73.66 132.08) (xy 67.31 132.08)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "9688da7b-1c09-4cd3-ad2e-579a4d951c11")
+	)
+	(wire
+		(pts
+			(xy 279.4 104.14) (xy 279.4 97.79)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "9dbddfea-3489-402f-8bd3-db7b349879ac")
+	)
+	(wire
+		(pts
+			(xy 172.72 119.38) (xy 166.37 119.38)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a0d1f32d-c962-4e81-98dd-8a4cbf7e215b")
+	)
+	(wire
+		(pts
+			(xy 205.74 228.6) (xy 212.09 228.6)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a201a15e-50b7-419d-9b54-e250fc1cdc14")
+	)
+	(wire
+		(pts
+			(xy 152.4 55.88) (xy 152.4 62.23)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a276ab6c-1dd2-40c6-ac63-ddedc065d29a")
+	)
+	(wire
+		(pts
+			(xy 381 139.7) (xy 381 133.35)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a2fb1198-f0b3-41d7-8dd5-be3dbc2da026")
+	)
+	(wire
+		(pts
+			(xy 381 149.86) (xy 381 156.21)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a59b3269-b89d-45d0-93e6-b95ce3c2b569")
+	)
+	(wire
+		(pts
+			(xy 228.6 44.45) (xy 222.25 44.45)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a67f242d-ea21-493f-81ea-c669359e7711")
+	)
+	(wire
+		(pts
+			(xy 294.64 52.07) (xy 300.99 52.07)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a9378891-6e28-49ea-a2c4-67cf309fb569")
+	)
+	(wire
+		(pts
+			(xy 55.88 166.37) (xy 55.88 160.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "aad7820b-9e1a-4002-b650-d1b9288d2029")
+	)
+	(wire
+		(pts
+			(xy 302.26 218.44) (xy 302.26 224.79)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "abf6c33e-6acf-4103-bd79-b1dabf300dd8")
+	)
+	(wire
+		(pts
+			(xy 302.26 185.42) (xy 302.26 179.07)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "aea65f8d-4b13-41cc-9694-aa539c8cc62d")
+	)
+	(wire
+		(pts
+			(xy 185.42 218.44) (xy 179.07 218.44)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b5e6bb0d-8abd-4c86-8516-24aed5a68e29")
+	)
+	(wire
+		(pts
+			(xy 259.08 218.44) (xy 259.08 224.79)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b6623f37-910e-41d8-b340-7d2af88fecfb")
+	)
+	(wire
+		(pts
+			(xy 259.08 139.7) (xy 252.73 139.7)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bd02f1bf-4de5-40d1-97e3-22d573b8739a")
+	)
+	(wire
+		(pts
+			(xy 279.4 72.39) (xy 279.4 78.74)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "be07aa93-1535-4a4f-8b81-ee621463b4bf")
+	)
+	(wire
+		(pts
+			(xy 83.82 132.08) (xy 111.76 132.08)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "be539426-5405-472a-930e-eadcc161fd8a")
+	)
+	(wire
+		(pts
+			(xy 210.82 121.92) (xy 204.47 121.92)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bf1e3a23-e185-47f7-bf03-ce4166c4b3f9")
+	)
+	(wire
+		(pts
+			(xy 299.72 139.7) (xy 306.07 139.7)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bf2b04fd-299a-4add-a2b3-5741e27c7199")
+	)
+	(wire
+		(pts
+			(xy 205.74 264.16) (xy 205.74 270.51)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "c1acc138-62c8-4986-becf-17203c735750")
+	)
+	(wire
+		(pts
+			(xy 330.2 53.34) (xy 330.2 59.69)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "c1f3d025-29d7-4f7a-97ff-38a1dccb960f")
+	)
+	(wire
+		(pts
+			(xy 81.28 166.37) (xy 81.28 160.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "c29ca643-4c34-42bd-8ce3-c83cf2addae4")
+	)
+	(wire
+		(pts
+			(xy 27.94 264.16) (xy 27.94 270.51)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "c34ac6e9-5713-4c97-88d1-667c71415a16")
+	)
+	(wire
+		(pts
+			(xy 185.42 223.52) (xy 179.07 223.52)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "c4e77e0e-b3f7-42c9-a8f1-51cfe77e29dc")
+	)
+	(wire
+		(pts
+			(xy 127 106.68) (xy 127 100.33)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "c9247744-dbcf-4d73-9333-0f8a50ed0a21")
+	)
+	(wire
+		(pts
+			(xy 111.76 137.16) (xy 105.41 137.16)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "cc46974e-b636-4bf0-812e-781f32185c21")
+	)
+	(wire
+		(pts
+			(xy 259.08 127) (xy 252.73 127)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ce5575d9-a655-407a-b708-e38f13c76b0f")
+	)
+	(wire
+		(pts
+			(xy 104.14 218.44) (xy 97.79 218.44)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "cf3bfa2a-d2fa-48bc-82d5-4eceb714e432")
+	)
+	(wire
+		(pts
+			(xy 312.42 78.74) (xy 312.42 85.09)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "cf6801d9-91d9-42bc-b6a6-4f26aad54df6")
+	)
+	(wire
+		(pts
+			(xy 294.64 46.99) (xy 300.99 46.99)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d0320526-7c6a-4fe3-b630-2bd5d1d7b6c1")
+	)
+	(wire
+		(pts
+			(xy 30.48 166.37) (xy 30.48 160.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d2bdb73a-398f-4506-9401-4ad1ccb39d23")
+	)
+	(wire
+		(pts
+			(xy 55.88 176.53) (xy 55.88 182.88)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d3eb7694-8fb0-4c84-8541-fc77818f7094")
+	)
+	(wire
+		(pts
+			(xy 279.4 149.86) (xy 279.4 156.21)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d4093767-67b3-47cd-bf2a-8da44246e097")
+	)
+	(wire
+		(pts
+			(xy 259.08 132.08) (xy 252.73 132.08)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d6c7a4b1-2f7b-4429-8754-837731a5a6f8")
+	)
+	(wire
+		(pts
+			(xy 137.16 166.37) (xy 137.16 160.02)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d7dbe944-806b-4010-bde5-b49eb2892de1")
+	)
+	(wire
+		(pts
+			(xy 73.66 121.92) (xy 67.31 121.92)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d7ef4d33-4abd-47e3-9c79-d59d94f4530d")
+	)
+	(wire
+		(pts
+			(xy 180.34 264.16) (xy 180.34 270.51)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d846249f-9bd4-4350-bf7c-b84fb8440e86")
+	)
+	(wire
+		(pts
+			(xy 259.08 195.58) (xy 259.08 208.28)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d9dfd759-4900-4330-bfe3-069277bb51a2")
+	)
+	(wire
+		(pts
+			(xy 88.9 27.94) (xy 88.9 30.48)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e1ddb67c-6a8b-465e-ae83-04ad6812cb13")
+	)
+	(wire
+		(pts
+			(xy 358.14 85.09) (xy 358.14 91.44)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e32ff492-44b3-4fa6-a733-7ca06dbbba69")
+	)
+	(wire
+		(pts
+			(xy 152.4 215.9) (xy 152.4 209.55)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e5887e4d-456c-4409-a50c-12f8a5c0124f")
+	)
+	(wire
+		(pts
+			(xy 81.28 176.53) (xy 81.28 182.88)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e9c24c79-8c8e-4219-bb19-26425cc17c76")
+	)
+	(wire
+		(pts
+			(xy 106.68 176.53) (xy 106.68 182.88)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ea4d4d1a-b6ac-4f7c-b6fb-a75dccfe1f46")
+	)
+	(wire
+		(pts
+			(xy 156.21 144.78) (xy 156.21 138.43)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ef15a35b-0786-45fe-959b-4c1ac55d1e06")
+	)
+	(wire
+		(pts
+			(xy 134.62 223.52) (xy 140.97 223.52)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f61ba149-3e51-46de-9fef-2a300306df0f")
+	)
+	(wire
+		(pts
+			(xy 142.24 119.38) (xy 148.59 119.38)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f8146bbc-15dc-4d1a-a4ea-5c1293bd2809")
+	)
+	(wire
+		(pts
+			(xy 218.44 139.7) (xy 218.44 133.35)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f8536b18-03e8-44a9-b6c7-1a7a12a9a0a5")
+	)
+	(wire
+		(pts
+			(xy 104.14 228.6) (xy 97.79 228.6)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "faca77b4-2f52-4f99-be2f-eb2a03fa24f0")
+	)
+	(wire
+		(pts
+			(xy 40.64 213.36) (xy 40.64 226.06)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "fb7e928b-a2c6-4758-ae4f-c8aea7b767ca")
+	)
+	(wire
+		(pts
+			(xy 76.2 55.88) (xy 76.2 62.23)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "fdd2840d-7c5a-4a14-bab2-332ec35f7030")
+	)
+	(wire
+		(pts
+			(xy 152.4 45.72) (xy 152.4 39.37)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "fe2294ec-ac45-440a-ad9f-6ba5618af70d")
+	)
+	(wire
+		(pts
+			(xy 210.82 116.84) (xy 204.47 116.84)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "fefea30d-d872-4e0b-98d9-7f526d5da96a")
+	)
+	(label "OUT"
+		(at 204.47 116.84 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "02dbc8b3-8cb4-433e-8085-579460091019")
+	)
+	(label "VS"
+		(at 152.4 39.37 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "0392c98d-a525-4609-a1d9-612b3a870352")
+	)
+	(label "VS"
+		(at 76.2 39.37 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "04cd4763-42d4-41d1-8568-139e77155573")
+	)
+	(label "VS"
+		(at 180.34 152.4 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "05099ae8-b09d-4f22-84bf-928698a4e116")
+	)
+	(label "REF_PIN"
+		(at 171.45 246.38 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "05d0754e-1ef7-4170-8e8a-af34f7a6b5c6")
+	)
+	(label "IN_N"
+		(at 67.31 132.08 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "062d39c6-a76a-4f36-9972-b3a1bca60c96")
+	)
+	(label "MID_DIV"
+		(at 97.79 218.44 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "0a2d0fc3-2605-4ccf-a534-fd985e60ce8e")
+	)
+	(label "GND"
+		(at 21.59 46.99 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "0ac67d79-3383-4559-a2ed-e684b1eebf7e")
+	)
+	(label "SCL"
+		(at 257.81 59.69 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "0b36309a-3149-447c-a605-09f48d331265")
+	)
+	(label "FB"
+		(at 148.59 127 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "0c1219dd-0600-4f44-aa4e-b8285c7c7f10")
+	)
+	(label "GND"
+		(at 180.34 147.32 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "143fb1e0-af17-4e16-8d23-2c8fc36dbb6a")
+	)
+	(label "VIO"
+		(at 105.41 48.26 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "185dd07f-2c1b-431a-aaef-fbb3092d039b")
+	)
+	(label "IN_P"
+		(at 67.31 121.92 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "19e9b67f-31d0-4c50-b18c-3959a3671802")
+	)
+	(label "OUT_RAW"
+		(at 334.01 119.38 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "1df4f4e9-aadb-40ab-b876-aa254ab9e98f")
+	)
+	(label "VMID"
+		(at 212.09 223.52 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "1e8e0076-9d11-4c15-83f8-b45f1217d802")
+	)
+	(label "GND"
+		(at 212.09 218.44 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "20764b47-cf78-4c43-baa5-8eea777c4cb3")
+	)
+	(label "IN_N"
+		(at 21.59 127 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "210df80b-7051-4259-b213-2b4cf281f81d")
+	)
+	(label "OUT_RAW"
+		(at 148.59 119.38 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "212cc125-2601-45cf-a986-09347c249ff0")
+	)
+	(label "GND"
+		(at 358.14 59.69 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "22219e7d-3846-4af6-83d3-bd1707700ce9")
+	)
+	(label "VIO"
+		(at 377.19 77.47 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "244281b6-86a2-4278-a635-6f50ef19e4ab")
+	)
+	(label "REF"
+		(at 180.34 270.51 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "250053a3-18a7-47eb-9c58-c322184ddde2")
+	)
+	(label "OUT_RAW"
+		(at 129.54 270.51 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "258b8a5e-e155-4b3e-8315-81b392369c01")
+	)
+	(label "BW"
+		(at 156.21 138.43 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "272983fa-c034-456a-8f28-7ad8ccd29a8a")
+	)
+	(label "UNITY"
+		(at 356.87 119.38 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "28480e7b-0f9c-4d4e-86b0-ce8420299022")
+	)
+	(label "IN_P_F"
+		(at 90.17 121.92 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "2b6788bd-d166-47fd-a2a2-73d90f9b1624")
+	)
+	(label "SEL1"
+		(at 358.14 36.83 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "2b7f64ce-40b8-475b-a01c-19d52aaecce1")
+	)
+	(label "GND"
+		(at 222.25 44.45 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "2c716dbd-37d2-410b-b27e-346f0fe1a87e")
+	)
+	(label "GND"
+		(at 21.59 129.54 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "3179c1ec-2ca9-401c-b5a2-8f498ca86d77")
+	)
+	(label "IN_P"
+		(at 21.59 124.46 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "31b97439-bae8-4362-b16b-6292cc697e3d")
+	)
+	(label "IN_N_F"
+		(at 30.48 182.88 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "32ce9dd1-5876-49eb-ad25-6691b92401a4")
+	)
+	(label "SEL0"
+		(at 300.99 46.99 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "367ac1c2-a41f-4f3a-82f7-267db8e7d4e8")
+	)
+	(label "FB"
+		(at 306.07 121.92 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "3b246001-3531-4b41-bbb0-affeab60b159")
+	)
+	(label "SDA"
+		(at 330.2 91.44 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "3df89f3e-6e89-436c-a106-8acce7af9053")
+	)
+	(label "VS_EXT"
+		(at 105.41 43.18 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "3f3d0a8f-03c4-4da0-89e9-2d611b3093ae")
+	)
+	(label "GND"
+		(at 312.42 85.09 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "3fb7b226-1577-4a1a-8c8d-e3015c60139c")
+	)
+	(label "VS"
+		(at 152.4 209.55 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "4233d7d7-c913-4396-bb79-a1bad4cbefc4")
+	)
+	(label "GND"
+		(at 330.2 59.69 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "465630a8-ab7d-4c3f-a2bf-7f06c0b11453")
+	)
+	(label "VS"
+		(at 40.64 196.85 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "4c8d244a-783a-4b70-b569-ab66d1ff329c")
+	)
+	(label "IN_P_F"
+		(at 30.48 160.02 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "4d98d4d5-7a52-4b68-9452-4bf43ff465d3")
+	)
+	(label "VIO"
+		(at 190.5 39.37 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "4df13685-9192-4c5a-835c-b8dbb1c216d9")
+	)
+	(label "GND"
+		(at 76.2 62.23 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "4fb48bfa-218f-4b64-a3b3-cacdd2135fde")
+	)
+	(label "GND"
+		(at 156.21 161.29 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "506e9738-797d-4d7e-8304-85003322f2f6")
+	)
+	(label "OUT_RAW"
+		(at 177.8 166.37 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "5190cb06-d879-4383-bf0c-aae49b303e9c")
+	)
+	(label "IN_N_F"
+		(at 81.28 160.02 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "52763327-7cc0-4b45-99c2-0e848e2d104c")
+	)
+	(label "GND"
+		(at 204.47 119.38 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "551dd9a7-ce1d-49da-b0a0-b4245e071c69")
+	)
+	(label "GND"
+		(at 190.5 62.23 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "589d1d70-f3b3-487f-a826-2e426d249a0d")
+	)
+	(label "REF_EXT"
+		(at 212.09 228.6 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "5a44bb69-b862-4b7a-a201-677d21df3587")
+	)
+	(label "REF"
+		(at 259.08 224.79 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "5b891949-680a-4c57-aece-aff159164691")
+	)
+	(label "GAIN10"
+		(at 252.73 121.92 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "5ee4bb7b-8cce-492b-a282-45ddf0a696a3")
+	)
+	(label "VIO"
+		(at 180.34 30.48 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "60cae2e4-2985-4578-bfe4-cf75efaae9fb")
+	)
+	(label "SDA"
+		(at 222.25 49.53 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "6801376b-7ac6-4c8c-8edf-7496500231df")
+	)
+	(label "OUT"
+		(at 218.44 133.35 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "694bdf80-e001-4a56-821e-9a8a36531c8e")
+	)
+	(label "GAIN101"
+		(at 252.73 127 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "6d28f31b-2334-4dcd-ac5e-c3d5163e065c")
+	)
+	(label "MID_DIV"
+		(at 78.74 209.55 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "6ee25323-8176-4839-ac2d-0481204c4fd2")
+	)
+	(label "VS_EXT"
+		(at 21.59 44.45 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "70a18baa-e4fa-4de8-ae62-268bb8e67a7d")
+	)
+	(label "UNITY"
+		(at 252.73 116.84 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "776ac57f-73a6-47dd-9887-b95e26a10c8d")
+	)
+	(label "GAIN101"
+		(at 302.26 201.93 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "78c35464-538b-4434-b6b1-5f8d93434a1c")
+	)
+	(label "GND"
+		(at 152.4 232.41 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "8331ba64-0fb3-41c1-9cc5-7c82dfe0a6ea")
+	)
+	(label "REF"
+		(at 179.07 223.52 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "87ef53f6-8ab3-445b-a7e3-8ad0ef268489")
+	)
+	(label "IN_N_F"
+		(at 137.16 160.02 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "8bd29fea-a258-480e-b0fc-c7c4090943fa")
+	)
+	(label "GND"
+		(at 78.74 232.41 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "8e78ba88-4148-472f-ac8c-4a3d5b58df3e")
+	)
+	(label "VMID"
+		(at 140.97 223.52 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "8f0d5a47-bd29-4f6c-a408-d405dcd463b9")
+	)
+	(label "GND"
+		(at 381 156.21 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "8f16be0e-35a4-47d2-9abf-12a5c4b6c7ce")
+	)
+	(label "SCL"
+		(at 358.14 91.44 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "8f8ec1de-f210-4212-94a5-e90564800768")
+	)
+	(label "PULL_V"
+		(at 330.2 68.58 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "90c872db-06c3-4a34-a07e-ec5f0a599244")
+	)
+	(label "BW"
+		(at 180.34 149.86 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "94938142-848d-4527-833a-cc4ca8492123")
+	)
+	(label "SEL1"
+		(at 300.99 52.07 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "95376a8b-8d14-4fb3-b97c-69048c5a764d")
+	)
+	(label "IN_P_F"
+		(at 55.88 160.02 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "99f877c8-d10d-49d9-b5d7-fe4ec402ea8b")
+	)
+	(label "SCL"
+		(at 222.25 52.07 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "9bf55baa-c9d4-4e22-b928-fba3d5b55532")
+	)
+	(label "REF_EXT"
+		(at 204.47 121.92 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "9c1e46aa-6532-4c95-8afa-dbb6db2f1bd2")
+	)
+	(label "IN_P_F"
+		(at 105.41 121.92 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "a3590b58-1766-4a5d-98a9-6d13552f9e83")
+	)
+	(label "IN_P_F"
+		(at 106.68 160.02 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "a3b03904-65d6-410d-96c8-d08807c5ee0f")
+	)
+	(label "OUT"
+		(at 189.23 119.38 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "a3fa22c9-ab70-480f-a941-d2fd38f54f1f")
+	)
+	(label "GND"
+		(at 88.9 30.48 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "a59467ed-f757-48bd-b78c-e70b566bd666")
+	)
+	(label "GND"
+		(at 55.88 182.88 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "a62a8bf1-aae5-41b2-88df-ffbd75325746")
+	)
+	(label "GND"
+		(at 127 153.67 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "a6bbd52c-aefe-40f7-9c77-24116f923297")
+	)
+	(label "GAIN1001"
+		(at 252.73 132.08 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "a7214ae2-d5a1-4c71-9bdd-ec4c62649c21")
+	)
+	(label "REF"
+		(at 302.26 224.79 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "ac6e5bc8-66e9-4c27-afc5-08085f8fd171")
+	)
+	(label "GND"
+		(at 40.64 242.57 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "acd4342c-1566-4658-93f1-c50f25a5d3ca")
+	)
+	(label "GND"
+		(at 279.4 78.74 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "b3c438ff-9b75-44da-a7fc-90f66cd09c8d")
+	)
+	(label "VMID"
+		(at 97.79 228.6 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "b3d83045-edd8-4034-b3f3-e9f7cb3f87c0")
+	)
+	(label "PULL_V"
+		(at 377.19 80.01 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "b4c99b1e-eb72-4463-b659-d8172b25db31")
+	)
+	(label "MID_DIV"
+		(at 40.64 219.71 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "b89cc742-ecef-4a82-beb5-440064d58345")
+	)
+	(label "VS"
+		(at 105.41 45.72 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "bdc82766-7e6f-4848-9f05-5065ee5f2e10")
+	)
+	(label "OUT_RAW"
+		(at 302.26 179.07 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "bdee700c-2450-4319-9613-be9c8426b7c6")
+	)
+	(label "GND"
+		(at 152.4 62.23 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "bf0d2ca7-f411-4413-9774-56c0a68a82af")
+	)
+	(label "VS"
+		(at 27.94 270.51 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "c1f4eb75-f4c8-4c55-b1a3-c5e115efc7aa")
+	)
+	(label "IN_N_F"
+		(at 105.41 132.08 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "c2870d9b-e0f7-4906-a347-41e4882ddbee")
+	)
+	(label "OUT_RAW"
+		(at 166.37 119.38 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "c42c9d5d-9ee4-4281-a2c1-012b4986172c")
+	)
+	(label "SEL1"
+		(at 252.73 144.78 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "c4c8a8b8-a044-4200-bdaa-e006c1cb36ce")
+	)
+	(label "REF_PIN"
+		(at 148.59 134.62 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "c7ff8bcb-3a4d-4754-8411-91d4e719710f")
+	)
+	(label "VIO"
+		(at 312.42 62.23 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "cdd88fac-c424-4458-8bf5-2ce9465d9ddd")
+	)
+	(label "BW"
+		(at 105.41 137.16 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "ce53ba87-b609-40bd-aaed-983ecaa32a19")
+	)
+	(label "OUT_RAW"
+		(at 259.08 179.07 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "cef6d27b-6fdc-4bd9-996c-43028355c01d")
+	)
+	(label "GAIN10"
+		(at 259.08 201.93 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "cf8ced0e-57ba-4355-9a10-1d92d010e6f3")
+	)
+	(label "VS"
+		(at 119.38 201.93 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "cfecdfb6-3599-4cab-8d68-15ab07d3cbbf")
+	)
+	(label "REF"
+		(at 179.07 228.6 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "d0abb464-78a0-4286-93be-19c91464f52e")
+	)
+	(label "GND"
+		(at 279.4 156.21 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "d379f096-6d0f-428c-a2f3-7804bc94d625")
+	)
+	(label "SEL0"
+		(at 330.2 36.83 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "d3bd7f8b-80a5-496c-a897-208d00bdf2fb")
+	)
+	(label "FB"
+		(at 177.8 189.23 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "d435cdbf-42c3-47b3-90ba-01971ba693aa")
+	)
+	(label "VS"
+		(at 127 100.33 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "d7e7bed3-7153-4253-bf6f-819e013012c1")
+	)
+	(label "VS"
+		(at 63.5 30.48 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "d81b02ed-3b8c-48f7-bfad-613df9272ba8")
+	)
+	(label "GND"
+		(at 218.44 156.21 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "d8a96e91-728d-49a9-9d96-c6e26d9226c5")
+	)
+	(label "VMID"
+		(at 205.74 270.51 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "da9cd1db-c64d-4f27-97a9-03b69f6b0170")
+	)
+	(label "REF"
+		(at 106.68 182.88 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "db56b1cc-9f63-4d64-9b62-4f8fe7e15aa7")
+	)
+	(label "IN_N_F"
+		(at 104.14 270.51 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "dc10b668-84e5-46e0-8ed4-1a3a73479c0f")
+	)
+	(label "FB"
+		(at 154.94 270.51 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "dc5bc7c7-22e9-4c3d-9f65-0a60b2600835")
+	)
+	(label "REF"
+		(at 345.44 224.79 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "dd085fbe-6376-443e-96ef-01ebb1447e55")
+	)
+	(label "VIO"
+		(at 279.4 30.48 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "de2be009-2667-464c-b88e-7f91c8930608")
+	)
+	(label "GAIN1001"
+		(at 345.44 201.93 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "df548db1-706e-4d2c-aacb-a4f3a394d88e")
+	)
+	(label "IN_P_F"
+		(at 78.74 270.51 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "e0f5ec6c-8cc7-42ab-ac96-80374a211076")
+	)
+	(label "IN_N_F"
+		(at 90.17 132.08 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "e4405c82-e312-4208-a326-7a998c056727")
+	)
+	(label "REF"
+		(at 148.59 246.38 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "e682da21-22d0-4f63-9d21-108218ce9cca")
+	)
+	(label "GND"
+		(at 119.38 245.11 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "e6eb1c3b-228d-4543-8946-073d8f39bcb1")
+	)
+	(label "SDA"
+		(at 257.81 49.53 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "e8956ccf-ca3c-4d37-ae28-077d62d94e32")
+	)
+	(label "VS"
+		(at 306.07 139.7 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "e9099e90-8420-4447-a393-9682ae05353d")
+	)
+	(label "PULL_V"
+		(at 358.14 68.58 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "ea70a137-479d-4f13-ba0c-490616df1fe6")
+	)
+	(label "REF"
+		(at 179.07 218.44 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "ecf3b790-5664-4e8c-86f1-4acee44bd900")
+	)
+	(label "GND"
+		(at 53.34 270.51 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "ef17ac04-7fc1-4fae-a8aa-53f94368c19d")
+	)
+	(label "VS"
+		(at 279.4 97.79 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "efc7bf3d-4d2c-402b-a54e-3013b11021ff")
+	)
+	(label "SEL0"
+		(at 252.73 139.7 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "f01260c1-779c-4d9a-abd2-cc65402036ac")
+	)
+	(label "VS"
+		(at 381 133.35 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "f46cb502-4d6d-462c-8d65-f6a7c51490f3")
+	)
+	(label "GND"
+		(at 81.28 182.88 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "f99da7ad-679a-4067-9edf-f337e526b5b5")
+	)
+	(label "REF"
+		(at 137.16 182.88 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "fb3e5975-259e-4267-88b9-5adb10fc57d9")
+	)
+	(label "VIO"
+		(at 222.25 46.99 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "fcba1bb7-5eef-4d39-a3a7-be6a65f18329")
+	)
+	(label "OUT_RAW"
+		(at 345.44 179.07 0)
+		(effects
+			(font
+				(size 1.016 1.016)
+			)
+			(justify left bottom)
+		)
+		(uuid "fdee7b31-a31e-4492-99c5-51acd8c71db8")
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:R")
+		(at 358.14 80.01 270)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "093f85c6-2cf0-54e4-8ee5-52eefcafb77e")
+		(property "Reference" "R20"
+			(at 367.03 78.105 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "4.7k"
+			(at 367.03 80.645 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:R_0805_2012Metric"
+			(at 358.14 80.01 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 358.14 80.01 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 358.14 80.01 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "1%, 0805"
+			(at 358.14 80.01 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "1e92f85e-39ff-5f96-8742-fa21c3341174")
+		)
+		(pin "2"
+			(uuid "349612ab-2458-543b-93c6-19246c89a0b8")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "R20")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:C")
+		(at 81.28 171.45 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp yes)
+		(uuid "098f5ae8-07c8-550f-a958-469aaf8f576a")
+		(property "Reference" "C5"
+			(at 90.17 169.545 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "1nF (DNP)"
+			(at 90.17 172.085 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:C_0805_2012Metric"
+			(at 81.28 171.45 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 81.28 171.45 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 81.28 171.45 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "DNP; optional C0G filter; match C4/C5 1% if populated"
+			(at 81.28 171.45 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "19de25a9-e654-5340-af7f-45ff646f76c8")
+		)
+		(pin "2"
+			(uuid "47f13799-591c-5301-9ea2-16f97435f9d9")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "C5")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:TP")
+		(at 205.74 264.16 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "11acf2cd-4356-5382-9a09-163566f56416")
+		(property "Reference" "TP8"
+			(at 205.74 256.54 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "VMID"
+			(at 205.74 269.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:TestPoint_Pad_D1.5mm"
+			(at 205.74 264.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 205.74 264.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 205.74 264.16 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "Exposed 1.5 mm probe pad"
+			(at 205.74 264.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "2908a4bb-d1e9-58f5-8edb-b98ff2727d92")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "TP8")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:TP")
+		(at 104.14 264.16 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "14415601-8b51-5331-899e-6dc920606197")
+		(property "Reference" "TP4"
+			(at 104.14 256.54 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "IN_N_F"
+			(at 104.14 269.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:TestPoint_Pad_D1.5mm"
+			(at 104.14 264.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 104.14 264.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 104.14 264.16 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "Exposed 1.5 mm probe pad"
+			(at 104.14 264.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "791661db-27b0-58db-9111-2b029c159b43")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "TP4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:TP")
+		(at 53.34 264.16 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "155a53dd-0b3b-54c2-b04a-4dd3ed4bc16c")
+		(property "Reference" "TP2"
+			(at 53.34 256.54 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 53.34 269.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:TestPoint_Pad_D1.5mm"
+			(at 53.34 264.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 53.34 264.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 53.34 264.16 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "Exposed 1.5 mm probe pad"
+			(at 53.34 264.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "be4cde10-7072-5fd3-b1e7-fd580d87244f")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "TP2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:R")
+		(at 156.21 149.86 270)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "1dd96db1-e251-569f-b314-45853d36329a")
+		(property "Reference" "R7"
+			(at 165.1 147.955 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "100k"
+			(at 165.1 150.495 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:R_0805_2012Metric"
+			(at 156.21 149.86 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 156.21 149.86 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 156.21 149.86 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "1%, 0805"
+			(at 156.21 149.86 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "75bb7892-6a21-57af-b05b-47c5c1a1bf05")
+		)
+		(pin "2"
+			(uuid "ff8ab598-3eda-587a-b072-ee4b7e24870f")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "R7")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:TP")
+		(at 78.74 264.16 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "244199c1-12af-50db-9fd4-4362a03d73e1")
+		(property "Reference" "TP3"
+			(at 78.74 256.54 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "IN_P_F"
+			(at 78.74 269.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:TestPoint_Pad_D1.5mm"
+			(at 78.74 264.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 78.74 264.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 78.74 264.16 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "Exposed 1.5 mm probe pad"
+			(at 78.74 264.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "fcfa783b-f48d-52fb-8c31-a0b44d4d9b0b")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "TP3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:C")
+		(at 55.88 171.45 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp yes)
+		(uuid "278937bd-c5ca-5486-9dc1-d6922a6edb6a")
+		(property "Reference" "C4"
+			(at 64.77 169.545 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "1nF (DNP)"
+			(at 64.77 172.085 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:C_0805_2012Metric"
+			(at 55.88 171.45 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 55.88 171.45 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 55.88 171.45 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "DNP; optional C0G filter; match C4/C5 1% if populated"
+			(at 55.88 171.45 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "ad93f7f7-5d86-59d2-a34d-c43c930fa542")
+		)
+		(pin "2"
+			(uuid "70034e92-0412-5d58-9e2f-d5f71d21d978")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "C4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:Conn3")
+		(at 119.38 45.72 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "28c60a7d-7dc4-5876-a0eb-2961a2ea0100")
+		(property "Reference" "JP1"
+			(at 119.38 35.56 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "ANALOG SUPPLY"
+			(at 119.38 38.1 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:PinHeader_1x03_P2.54mm_Vertical"
+			(at 119.38 45.72 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 119.38 45.72 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 119.38 45.72 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "ONE shunt: 2-3 default powers analog from VIO; 1-2 selects external J1 supply"
+			(at 119.38 45.72 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "66d6c744-62cf-56e7-bb5f-b424a25e6858")
+		)
+		(pin "2"
+			(uuid "7d51e793-239b-57c0-9ab1-01da311f503e")
+		)
+		(pin "3"
+			(uuid "ccb7914b-6558-5c9b-84b9-3c23404333ad")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "JP1")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:Conn3")
+		(at 35.56 127 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "2aa662a8-92ec-509b-8db8-8bb46d910e40")
+		(property "Reference" "J2"
+			(at 35.56 116.84 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "SENSOR"
+			(at 35.56 119.38 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:PinHeader_1x03_P2.54mm_Vertical"
+			(at 35.56 127 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 35.56 127 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 35.56 127 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "1 IN+, 2 IN-, 3 GND"
+			(at 35.56 127 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "f75b5456-b2a4-5837-97a7-e9605c4f66bf")
+		)
+		(pin "2"
+			(uuid "faeaaa94-2612-505d-abe7-5a4c92fd30db")
+		)
+		(pin "3"
+			(uuid "3439bbab-687c-58f2-9810-0ade780943a5")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "J2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:C")
+		(at 78.74 220.98 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "2d8353a8-f01a-5df4-a88e-20e164dabe7d")
+		(property "Reference" "C8"
+			(at 87.63 219.075 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "1uF / 16V"
+			(at 87.63 221.615 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:C_0805_2012Metric"
+			(at 78.74 220.98 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 78.74 220.98 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 78.74 220.98 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "X7R 16 V; midpoint divider filter, nominal 5 ms time constant"
+			(at 78.74 220.98 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "1046d2dc-8be0-5a43-8693-a6cbd7a0931f")
+		)
+		(pin "2"
+			(uuid "baba384c-37df-55af-9d29-bb74bcc86a97")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "C8")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:R")
+		(at 330.2 48.26 270)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "2dd7b9f9-476b-5fc4-9c69-e88dddfc8b07")
+		(property "Reference" "R17"
+			(at 339.09 46.355 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "4.7k"
+			(at 339.09 48.895 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:R_0805_2012Metric"
+			(at 330.2 48.26 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 330.2 48.26 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 330.2 48.26 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "1% pull-down: <=0.475 V with expander maximum 100 uA internal pull-up; default unity"
+			(at 330.2 48.26 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "ecca2c17-f0dd-50d8-afe3-438fb7786581")
+		)
+		(pin "2"
+			(uuid "b37f6ec5-7847-523d-91cb-11667b647d29")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "R17")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:C")
+		(at 152.4 50.8 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "330bb949-4404-511e-b281-ff642062758e")
+		(property "Reference" "C2"
+			(at 161.29 48.895 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "100nF / 16V"
+			(at 161.29 51.435 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:C_0805_2012Metric"
+			(at 152.4 50.8 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 152.4 50.8 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 152.4 50.8 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "X7R, 16 V; local supply bypass"
+			(at 152.4 50.8 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "a985b570-d351-5fff-a60b-fbfbe914d6f1")
+		)
+		(pin "2"
+			(uuid "7313c5b9-1597-548a-ab6d-cff3bb579c86")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "C2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:R")
+		(at 259.08 213.36 270)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "3504a9a8-9562-55f4-b3f5-b17f5bb705ef")
+		(property "Reference" "R3"
+			(at 267.97 211.455 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "10k 0.1%"
+			(at 267.97 213.995 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:R_0805_2012Metric"
+			(at 259.08 213.36 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 259.08 213.36 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 259.08 213.36 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "Thin film, 0.1%, <=25 ppm/C"
+			(at 259.08 213.36 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "dee177be-ad75-5eb0-b287-d33b4b39a33f")
+		)
+		(pin "2"
+			(uuid "eaf239eb-3e02-5356-b265-88c44101d7e9")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "R3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:R")
+		(at 78.74 132.08 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "35e67d57-0ac5-5c29-9a4b-0274503be441")
+		(property "Reference" "R2"
+			(at 78.74 125.73 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "100R 0.1%"
+			(at 78.74 128.27 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:R_0805_2012Metric"
+			(at 78.74 132.08 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 78.74 132.08 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 78.74 132.08 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "Thin film, 0.1%, <=25 ppm/C"
+			(at 78.74 132.08 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "b1906a58-80f1-5274-bff9-1b9cd07cd74b")
+		)
+		(pin "2"
+			(uuid "0367198d-817e-51ae-afb8-ca5f79a4e736")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "R2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:R")
+		(at 345.44 119.38 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "3988c279-619c-5f02-8c59-11992410bff2")
+		(property "Reference" "R13"
+			(at 345.44 113.03 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "2k"
+			(at 345.44 115.57 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:R_0805_2012Metric"
+			(at 345.44 119.38 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 345.44 119.38 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 345.44 119.38 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "Unity sense series resistor, as in AD8237 Figure 76"
+			(at 345.44 119.38 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "d5791dab-a9c8-547a-bbdc-918d80a9d5ee")
+		)
+		(pin "2"
+			(uuid "8c83f0c8-1633-54d8-9172-7d35f57aa284")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "R13")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:R")
+		(at 177.8 119.38 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "3c4eb7c2-759d-52e0-b613-1092e4688348")
+		(property "Reference" "R8"
+			(at 177.8 113.03 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "100R"
+			(at 177.8 115.57 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:R_0805_2012Metric"
+			(at 177.8 119.38 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 177.8 119.38 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 177.8 119.38 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "1%, 0805"
+			(at 177.8 119.38 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "a91fd636-3644-569e-811b-79fdaa339c56")
+		)
+		(pin "2"
+			(uuid "1d7f9360-5cff-5335-955a-632928bd1e69")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "R8")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:R")
+		(at 330.2 80.01 270)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "3e239a13-d0c5-53df-9bdf-7fcc0d7f691b")
+		(property "Reference" "R19"
+			(at 339.09 78.105 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "4.7k"
+			(at 339.09 80.645 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:R_0805_2012Metric"
+			(at 330.2 80.01 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 330.2 80.01 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 330.2 80.01 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "1%, 0805"
+			(at 330.2 80.01 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "02040cdc-8530-548b-8fb6-cce98ec729f6")
+		)
+		(pin "2"
+			(uuid "45f164f3-43ed-57a9-a96d-23a31d521d94")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "R19")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:R")
+		(at 160.02 246.38 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "40b5f731-fb5f-5a49-94dc-f8a65d042a9b")
+		(property "Reference" "R14"
+			(at 160.02 240.03 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "200R"
+			(at 160.02 242.57 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:R_0805_2012Metric"
+			(at 160.02 246.38 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 160.02 246.38 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 160.02 246.38 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "REF input bias compensation; divider returns use REF before this resistor"
+			(at 160.02 246.38 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "abf10bb4-2b66-5e0d-8a63-a3ee205e2f5e")
+		)
+		(pin "2"
+			(uuid "963ddf9f-41af-5e44-b6f5-80a718ba8343")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "R14")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:Conn3")
+		(at 194.31 149.86 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "42342d66-a98e-5ae0-840f-9dd906c8ad38")
+		(property "Reference" "JP2"
+			(at 194.31 139.7 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "BW: LOW / HIGH"
+			(at 194.31 142.24 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:PinHeader_1x03_P2.54mm_Vertical"
+			(at 194.31 149.86 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 194.31 149.86 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 194.31 149.86 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "1-2 LOW default, valid for every gain. 2-3 HIGH requires gain >=10, including at startup"
+			(at 194.31 149.86 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "fe5bc7df-a8d7-59af-84ea-6da09f46e355")
+		)
+		(pin "2"
+			(uuid "1b479efa-7aa3-5545-87cc-d1d53f758e56")
+		)
+		(pin "3"
+			(uuid "238c37c9-52e6-5396-a4cf-9f514c8013ea")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "JP2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:R")
+		(at 345.44 213.36 270)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "4665b1fe-c772-5529-bc19-d1c1c4c1bfd1")
+		(property "Reference" "R11"
+			(at 354.33 211.455 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "1k 0.1%"
+			(at 354.33 213.995 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:R_0805_2012Metric"
+			(at 345.44 213.36 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 345.44 213.36 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 345.44 213.36 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "Thin film, 0.1%, <=25 ppm/C"
+			(at 345.44 213.36 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "35f3a928-70fb-55da-b47e-3b6a6a18ec15")
+		)
+		(pin "2"
+			(uuid "21f11571-1e9e-5fe9-b7fa-4cae441020cb")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "R11")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:C")
+		(at 152.4 220.98 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "46bb32dd-4808-557c-9e72-c77fe2198b16")
+		(property "Reference" "C9"
+			(at 161.29 219.075 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "100nF / 16V"
+			(at 161.29 221.615 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:C_0805_2012Metric"
+			(at 152.4 220.98 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 152.4 220.98 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 152.4 220.98 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "X7R, 16 V; local supply bypass"
+			(at 152.4 220.98 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "a9f46f2e-f771-5894-bf69-c2b391976780")
+		)
+		(pin "2"
+			(uuid "1fc78f3b-10d8-56ba-ba0b-3ab41ce4f29c")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "C9")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:TP")
+		(at 180.34 264.16 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "4f052144-ee88-5454-980b-e13a9e800a35")
+		(property "Reference" "TP7"
+			(at 180.34 256.54 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "REF"
+			(at 180.34 269.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:TestPoint_Pad_D1.5mm"
+			(at 180.34 264.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 180.34 264.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 180.34 264.16 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "Exposed 1.5 mm probe pad"
+			(at 180.34 264.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "ea9e90ab-a7bf-5a9b-8b2b-89ab7fe14105")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "TP7")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:Flag")
+		(at 63.5 27.94 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board no)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "58235a34-c205-526c-a484-9a2dec8dd9ec")
+		(property "Reference" "#FLG01"
+			(at 63.5 27.94 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "PWR_FLAG"
+			(at 63.5 22.86 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 63.5 27.94 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 63.5 27.94 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 63.5 27.94 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "2e76d712-53c4-5afc-918d-2b46959e7a36")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "#FLG01")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:C")
+		(at 76.2 50.8 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "5ab8fef3-585b-5a0c-80c5-078f4dfe63cf")
+		(property "Reference" "C1"
+			(at 85.09 48.895 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "10uF / 16V"
+			(at 85.09 51.435 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:C_0805_2012Metric"
+			(at 76.2 50.8 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 76.2 50.8 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 76.2 50.8 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "X7R, 16 V; local supply bypass"
+			(at 76.2 50.8 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "8e43e6b2-13a9-55b9-9336-499bc9fe182d")
+		)
+		(pin "2"
+			(uuid "4270fb0b-0ddf-50e6-b771-369044b8b35e")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "C1")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:RefSelect")
+		(at 195.58 223.52 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "60399fee-defe-5102-b8ba-ccaf6d3bd25b")
+		(property "Reference" "JP3"
+			(at 195.58 210.82 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "REFERENCE SELECT"
+			(at 195.58 236.22 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:PinHeader_2x03_P2.54mm_Vertical"
+			(at 195.58 223.52 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 195.58 223.52 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 195.58 223.52 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "ONE shunt: 1-2 GND; 3-4 MID default; 5-6 external J3.3"
+			(at 195.58 223.52 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "e3aeb22a-f6ba-5a05-8457-edf26ac51717")
+		)
+		(pin "2"
+			(uuid "da45b68f-8f66-5652-98b6-26f069e52f2b")
+		)
+		(pin "3"
+			(uuid "916eb62e-b702-5ddd-b7e1-fd45ef3e97c1")
+		)
+		(pin "4"
+			(uuid "06c952b0-029b-5ab1-8019-84543772f6c6")
+		)
+		(pin "5"
+			(uuid "b1de540d-8eb8-5b00-b75f-bf433bfb99ab")
+		)
+		(pin "6"
+			(uuid "5f1dd8e1-9a5d-5ff5-9996-7136274394c9")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "JP3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:R")
+		(at 40.64 208.28 270)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "6a19348f-cde0-5e9d-8ab2-b29e493fac36")
+		(property "Reference" "R15"
+			(at 49.53 206.375 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "10k 0.1%"
+			(at 49.53 208.915 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:R_0805_2012Metric"
+			(at 40.64 208.28 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 40.64 208.28 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 40.64 208.28 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "Thin film, 0.1%, <=25 ppm/C"
+			(at 40.64 208.28 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "f29cf943-6e4e-5f20-9d94-12730f930249")
+		)
+		(pin "2"
+			(uuid "504ffd1b-e2af-5294-8d89-6716ae21010b")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "R15")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:C")
+		(at 30.48 171.45 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp yes)
+		(uuid "6aa7deb6-3cf2-5a42-b4bc-1c7ca594352f")
+		(property "Reference" "C3"
+			(at 39.37 169.545 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "10nF (DNP)"
+			(at 39.37 172.085 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:C_0805_2012Metric"
+			(at 30.48 171.45 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 30.48 171.45 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 30.48 171.45 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "DNP; optional C0G filter; match C4/C5 1% if populated"
+			(at 30.48 171.45 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "209d4d69-eae1-5e17-8e7e-de133908bb1c")
+		)
+		(pin "2"
+			(uuid "62ba2d3b-7b75-506c-97e8-24b23a8b3666")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "C3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:C")
+		(at 381 144.78 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "6bbd6d46-0147-5383-b18b-4aca59c3a673")
+		(property "Reference" "C10"
+			(at 389.89 142.875 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "100nF / 16V"
+			(at 389.89 145.415 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:C_0805_2012Metric"
+			(at 381 144.78 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 381 144.78 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 381 144.78 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "X7R, 16 V; local supply bypass"
+			(at 381 144.78 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "45c3340d-4fda-5081-81b7-eb6a5c18960f")
+		)
+		(pin "2"
+			(uuid "3b8d18c9-c20e-5aae-af47-8cc7c5814113")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "C10")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:R")
+		(at 40.64 231.14 270)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "702ab9e1-97ee-5dee-abda-cde6986729b1")
+		(property "Reference" "R16"
+			(at 49.53 229.235 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "10k 0.1%"
+			(at 49.53 231.775 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:R_0805_2012Metric"
+			(at 40.64 231.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 40.64 231.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 40.64 231.14 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "Thin film, 0.1%, <=25 ppm/C"
+			(at 40.64 231.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "4a0392c4-42c7-5420-92a1-01efe076cdee")
+		)
+		(pin "2"
+			(uuid "7e050eea-ebe2-56d7-8137-f4e41362c139")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "R16")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:TP")
+		(at 154.94 264.16 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "7346d762-c37f-5ae6-acb7-1110b53e76f0")
+		(property "Reference" "TP6"
+			(at 154.94 256.54 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "FB"
+			(at 154.94 269.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:TestPoint_Pad_D1.5mm"
+			(at 154.94 264.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 154.94 264.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 154.94 264.16 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "Exposed 1.5 mm probe pad"
+			(at 154.94 264.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "b774338c-7b95-551b-bc4c-6d6fb8f5c879")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "TP6")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:Conn2")
+		(at 35.56 45.72 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "7544f94c-96ce-58b3-9786-555f3d6b1abe")
+		(property "Reference" "J1"
+			(at 35.56 35.56 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "EXT ANALOG POWER"
+			(at 35.56 38.1 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:PinHeader_1x02_P2.54mm_Vertical"
+			(at 35.56 45.72 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 35.56 45.72 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 35.56 45.72 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "External regulated analog supply input; select JP1 EXT"
+			(at 35.56 45.72 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "fe8583a2-a202-5f1e-82d6-5a232a5c37a2")
+		)
+		(pin "2"
+			(uuid "a7f3219a-2a0b-52f2-b072-0fd1769d300f")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "J1")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:TMUX1104")
+		(at 279.4 127 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "755a5b71-5801-58eb-bd8c-1b691254cdff")
+		(property "Reference" "U2"
+			(at 294.64 102.87 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "TMUX1104DGS"
+			(at 294.64 105.41 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:MSOP-10_3x3mm_P0.5mm"
+			(at 279.4 127 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://www.ti.com/lit/ds/symlink/tmux1104.pdf"
+			(at 279.4 127 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 279.4 127 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "TI TMUX1104DGS, 10-pin VSSOP; EN permanently high; fail-safe logic inputs"
+			(at 279.4 127 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "d51d4427-8a78-591b-b6b0-78de0926604a")
+		)
+		(pin "2"
+			(uuid "e95a40a5-ff38-5518-8e33-85e8a580ae5c")
+		)
+		(pin "3"
+			(uuid "9d54929d-72f2-57be-9543-d335579c7502")
+		)
+		(pin "4"
+			(uuid "3c6fc6f7-125f-524f-810f-6adcc01b3af2")
+		)
+		(pin "5"
+			(uuid "54c57d5d-fd4c-5948-9659-7e65632bdfe2")
+		)
+		(pin "6"
+			(uuid "6d1b511e-9532-5a23-bf5c-ca1034a35318")
+		)
+		(pin "7"
+			(uuid "a01c7196-a0ce-50ba-a023-a1d49b294ffe")
+		)
+		(pin "8"
+			(uuid "24645210-bc72-530b-a92a-b34137de1fc8")
+		)
+		(pin "9"
+			(uuid "b8cf4618-4e8e-5da0-b592-1e14c9b938c5")
+		)
+		(pin "10"
+			(uuid "cdb12187-e7b1-5612-97f5-afad189feb95")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "U2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:AD8237")
+		(at 127 127 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "7c6a3ed3-01e7-59bf-a2d1-e5c7d9e40e46")
+		(property "Reference" "U1"
+			(at 139.7 107.95 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "AD8237ARMZ"
+			(at 139.7 110.49 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:MSOP-8_3x3mm_P0.65mm"
+			(at 127 127 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://www.analog.com/media/en/technical-documentation/data-sheets/ad8237.pdf"
+			(at 127 127 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 127 127 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "Analog Devices AD8237ARMZ, RM-8"
+			(at 127 127 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "b1f5dcc1-0e51-53ff-8343-79c32f070739")
+		)
+		(pin "2"
+			(uuid "7e9d97f6-550c-51e2-89c7-adfadaad1de4")
+		)
+		(pin "3"
+			(uuid "a196abbd-99a4-54cd-bff5-12206b63f78c")
+		)
+		(pin "4"
+			(uuid "5ee2d226-c03d-5000-a416-d07052c7483f")
+		)
+		(pin "5"
+			(uuid "b242bae4-cdee-5d2a-bc49-1cff1045c35e")
+		)
+		(pin "6"
+			(uuid "24e13f40-1887-5789-8450-5b41e7ab0cc0")
+		)
+		(pin "7"
+			(uuid "5c310828-c893-5ffb-8eb2-14ff4b7c6b45")
+		)
+		(pin "8"
+			(uuid "4116c942-9752-5cd2-8139-7d47a5dd1ca1")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "U1")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:C")
+		(at 312.42 73.66 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "7fb3b9b7-1afe-5439-95c5-3465ab6d0e68")
+		(property "Reference" "C11"
+			(at 321.31 71.755 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "100nF / 16V"
+			(at 321.31 74.295 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:C_0805_2012Metric"
+			(at 312.42 73.66 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 312.42 73.66 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 312.42 73.66 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "X7R, 16 V; local supply bypass"
+			(at 312.42 73.66 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "7414c6e7-8f61-505f-8d84-d47b1041a4c1")
+		)
+		(pin "2"
+			(uuid "c27d82e1-03f6-5919-b05f-e21020b1b436")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "C11")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:Conn3")
+		(at 218.44 119.38 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "819463b6-7017-51a8-a068-bb2065c10b14")
+		(property "Reference" "J3"
+			(at 218.44 109.22 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "OUTPUT / EXT REF"
+			(at 218.44 111.76 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:PinHeader_1x03_P2.54mm_Vertical"
+			(at 218.44 119.38 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 218.44 119.38 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 218.44 119.38 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "1 OUT after R8, 2 GND, 3 external reference input"
+			(at 218.44 119.38 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "f76f9d84-2e7d-5030-883d-ac240c44ae6d")
+		)
+		(pin "2"
+			(uuid "efbf0dc5-94bf-515c-9045-3d269db2419f")
+		)
+		(pin "3"
+			(uuid "ac534d12-5e72-52ff-b9bd-d4886a43b747")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "J3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:C")
+		(at 218.44 144.78 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp yes)
+		(uuid "826bc570-ca43-523e-b936-fed31c019388")
+		(property "Reference" "C6"
+			(at 227.33 142.875 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "10nF (DNP)"
+			(at 227.33 145.415 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:C_0805_2012Metric"
+			(at 218.44 144.78 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 218.44 144.78 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 218.44 144.78 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "DNP; optional C0G filter; match C4/C5 1% if populated"
+			(at 218.44 144.78 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "a73255a2-52bd-5161-bf62-a3d4de93365f")
+		)
+		(pin "2"
+			(uuid "3bfcef54-1d16-5a5b-8ecf-b5e18a31510f")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "C6")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:R")
+		(at 358.14 48.26 270)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "85651ea5-33b0-5a91-8911-126126024add")
+		(property "Reference" "R18"
+			(at 367.03 46.355 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "4.7k"
+			(at 367.03 48.895 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:R_0805_2012Metric"
+			(at 358.14 48.26 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 358.14 48.26 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 358.14 48.26 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "1% pull-down: <=0.475 V with expander maximum 100 uA internal pull-up; default unity"
+			(at 358.14 48.26 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "13bce711-52fe-518c-b9f0-3318ace88618")
+		)
+		(pin "2"
+			(uuid "7664701a-2421-51e1-85c9-0ef23c56a596")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "R18")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:TP")
+		(at 129.54 264.16 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "870ebcad-8663-54bb-b511-ab81cdabc19a")
+		(property "Reference" "TP5"
+			(at 129.54 256.54 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "OUT_RAW"
+			(at 129.54 269.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:TestPoint_Pad_D1.5mm"
+			(at 129.54 264.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 129.54 264.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 129.54 264.16 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "Exposed 1.5 mm probe pad"
+			(at 129.54 264.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "a6c556f6-07b8-5023-85a8-a568e6285673")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "TP5")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:R")
+		(at 345.44 190.5 270)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "8c08213a-f8d9-546f-b5d0-95a255a0c6f9")
+		(property "Reference" "R12"
+			(at 354.33 188.595 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "1M 0.1%"
+			(at 354.33 191.135 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:R_0805_2012Metric"
+			(at 345.44 190.5 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 345.44 190.5 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 345.44 190.5 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "Thin film, 0.1%, <=25 ppm/C"
+			(at 345.44 190.5 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "e7eb8b30-fa96-5c42-b573-ca0b31df7786")
+		)
+		(pin "2"
+			(uuid "890c87c8-2f4e-5cf5-8c2b-70b77ad9261c")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "R12")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:R")
+		(at 137.16 171.45 270)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp yes)
+		(uuid "9231ae91-cbfc-5828-a145-151794ef9136")
+		(property "Reference" "R10"
+			(at 146.05 169.545 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "1M (DNP)"
+			(at 146.05 172.085 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:R_0805_2012Metric"
+			(at 137.16 171.45 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 137.16 171.45 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 137.16 171.45 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "Optional sensor DC bias return to selected REF; not fitted"
+			(at 137.16 171.45 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "3ccdc146-afbf-5693-9bcb-42bfe8256ada")
+		)
+		(pin "2"
+			(uuid "8eaf746f-a47a-5e73-be26-74452ea82436")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "R10")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:Flag")
+		(at 88.9 27.94 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board no)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "990e5bdd-d475-55f2-b70e-06ab17dfc527")
+		(property "Reference" "#FLG02"
+			(at 88.9 27.94 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "PWR_FLAG"
+			(at 88.9 22.86 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 88.9 27.94 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 88.9 27.94 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 88.9 27.94 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "00877c67-4b7b-5d96-b36c-76e4b76a0ff1")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "#FLG02")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:Flag")
+		(at 180.34 27.94 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board no)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "a0de83a7-186c-5795-83bc-62b79642a969")
+		(property "Reference" "#FLG03"
+			(at 180.34 27.94 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "PWR_FLAG"
+			(at 180.34 22.86 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 180.34 27.94 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 180.34 27.94 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 180.34 27.94 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "32d15785-4df2-5692-b22d-c1b0358053af")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "#FLG03")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:Hole")
+		(at 241.3 259.08 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "ab69b65f-523b-5b6f-9cc8-4d6a4fc61e8e")
+		(property "Reference" "H1"
+			(at 241.3 252.73 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "M3 NPTH"
+			(at 241.3 255.27 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:MountingHole_3.2mm_M3"
+			(at 241.3 259.08 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 241.3 259.08 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 241.3 259.08 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "3.2 mm non-plated mounting hole"
+			(at 241.3 259.08 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "H1")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:TCA9536")
+		(at 279.4 54.61 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "bd7d5a38-f286-57c7-844d-002e4534eff9")
+		(property "Reference" "U3"
+			(at 292.1 35.56 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "TCA9536DGKR"
+			(at 292.1 38.1 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:VSSOP-8_3x3mm_P0.65mm"
+			(at 279.4 54.61 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://www.ti.com/lit/ds/symlink/tca9536.pdf"
+			(at 279.4 54.61 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 279.4 54.61 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "TI TCA9536DGKR; I2C 7-bit address 0x41; P2/P3 unused"
+			(at 279.4 54.61 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "a50ed842-908b-5ed7-9c5f-6c9a98009a4b")
+		)
+		(pin "2"
+			(uuid "da25099f-f75d-576a-8e5e-2081cf836689")
+		)
+		(pin "3"
+			(uuid "42c97778-6464-5d29-8cc6-13e879529cd9")
+		)
+		(pin "4"
+			(uuid "2d2ad68e-a54f-5d2d-91b1-8795349ba723")
+		)
+		(pin "5"
+			(uuid "43978783-74cb-590f-877a-d75a69c907de")
+		)
+		(pin "6"
+			(uuid "e6c89ca6-e122-5056-931d-24301f12da5f")
+		)
+		(pin "7"
+			(uuid "228200a7-4568-5a0f-8b18-705b8484ef8c")
+		)
+		(pin "8"
+			(uuid "91b24e68-b1a1-5850-86ca-4d27aed6208d")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "U3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:R")
+		(at 259.08 190.5 270)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "bf8efea0-8185-5faa-aa8f-b0c4abfad2d0")
+		(property "Reference" "R4"
+			(at 267.97 188.595 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "90.9k 0.1%"
+			(at 267.97 191.135 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:R_0805_2012Metric"
+			(at 259.08 190.5 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 259.08 190.5 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 259.08 190.5 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "Thin film, 0.1%, <=25 ppm/C"
+			(at 259.08 190.5 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "fd74c284-21d7-51c5-ba73-f3ecf2f56271")
+		)
+		(pin "2"
+			(uuid "0902a8ad-ddb0-5835-af76-4abe4419549a")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "R4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:Conn4")
+		(at 236.22 48.26 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "c0577a64-a826-54b9-a4d7-27aa6a3a669f")
+		(property "Reference" "J4"
+			(at 236.22 38.1 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "I2C / LOGIC POWER"
+			(at 236.22 40.64 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:PinHeader_1x04_P2.54mm_Vertical"
+			(at 236.22 48.26 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 236.22 48.26 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 236.22 48.26 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "1 GND, 2 VIO input (host 3.3 V or 5 V), 3 SDA, 4 SCL; match VIO to host"
+			(at 236.22 48.26 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "f5344499-0c04-5c8e-8532-7fc2a45f9675")
+		)
+		(pin "2"
+			(uuid "f5f0696e-54ec-5bbb-8703-2ca443c85373")
+		)
+		(pin "3"
+			(uuid "c6067f61-e813-5b36-ba0f-20275b1e3250")
+		)
+		(pin "4"
+			(uuid "3899d7cc-7445-5d67-8cae-dc9db5926684")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "J4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:C")
+		(at 177.8 177.8 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "c1739b22-2022-57c2-800b-354d972cfec0")
+		(property "Reference" "C7"
+			(at 186.69 175.895 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "470pF C0G"
+			(at 186.69 178.435 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:C_0805_2012Metric"
+			(at 177.8 177.8 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 177.8 177.8 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 177.8 177.8 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "C0G 5%, >=16 V; high-frequency feedback compensation, AD8237 Figure 76"
+			(at 177.8 177.8 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "27cc9495-9f2d-5fb6-81eb-2703151d511b")
+		)
+		(pin "2"
+			(uuid "24232086-a311-5ada-867f-c69cd000c261")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "C7")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:R")
+		(at 106.68 171.45 270)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp yes)
+		(uuid "cb6f4bf1-31bd-58f9-bce0-d7967790d7ce")
+		(property "Reference" "R9"
+			(at 115.57 169.545 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "1M (DNP)"
+			(at 115.57 172.085 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:R_0805_2012Metric"
+			(at 106.68 171.45 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 106.68 171.45 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 106.68 171.45 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "Optional sensor DC bias return to selected REF; not fitted"
+			(at 106.68 171.45 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "2c6988da-0da2-5c91-bd2a-7893c2d0b141")
+		)
+		(pin "2"
+			(uuid "0af7fb30-ab86-500c-8e92-f6bedae12839")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "R9")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:R")
+		(at 78.74 121.92 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "cb80e0ce-d013-5ba4-8563-6c30b9bd6008")
+		(property "Reference" "R1"
+			(at 78.74 115.57 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "100R 0.1%"
+			(at 78.74 118.11 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:R_0805_2012Metric"
+			(at 78.74 121.92 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 78.74 121.92 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 78.74 121.92 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "Thin film, 0.1%, <=25 ppm/C"
+			(at 78.74 121.92 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "560a4757-d159-555f-950d-36b5b18a3db8")
+		)
+		(pin "2"
+			(uuid "2520ed2f-fc70-5876-9169-8d64888e8925")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "R1")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:C")
+		(at 190.5 50.8 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "cda55f4c-80ff-5f57-ad44-7113bacfbda4")
+		(property "Reference" "C12"
+			(at 199.39 48.895 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "1uF / 16V"
+			(at 199.39 51.435 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:C_0805_2012Metric"
+			(at 190.5 50.8 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 190.5 50.8 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 190.5 50.8 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "X7R, 16 V; local supply bypass"
+			(at 190.5 50.8 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "a346bd6c-3122-516e-ad37-9dfb54ffa0df")
+		)
+		(pin "2"
+			(uuid "f0c52439-1ed4-5d3f-a84e-c83b2eca5485")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "C12")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:Hole")
+		(at 287.02 259.08 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "da092c88-8aac-5415-9636-f91d9d34fca8")
+		(property "Reference" "H4"
+			(at 287.02 252.73 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "M3 NPTH"
+			(at 287.02 255.27 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:MountingHole_3.2mm_M3"
+			(at 287.02 259.08 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 287.02 259.08 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 287.02 259.08 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "3.2 mm non-plated mounting hole"
+			(at 287.02 259.08 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "H4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:TP")
+		(at 27.94 264.16 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "db9592b8-caa8-5432-bad8-da88215cf64f")
+		(property "Reference" "TP1"
+			(at 27.94 256.54 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "VS"
+			(at 27.94 269.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:TestPoint_Pad_D1.5mm"
+			(at 27.94 264.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 27.94 264.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 27.94 264.16 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "Exposed 1.5 mm probe pad"
+			(at 27.94 264.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "45f1b6cc-c484-58b8-a75c-7b0bbf5e9aa2")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "TP1")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:Hole")
+		(at 256.54 259.08 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "e4034fea-df77-5a6a-b74e-c27f97d773c0")
+		(property "Reference" "H2"
+			(at 256.54 252.73 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "M3 NPTH"
+			(at 256.54 255.27 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:MountingHole_3.2mm_M3"
+			(at 256.54 259.08 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 256.54 259.08 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 256.54 259.08 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "3.2 mm non-plated mounting hole"
+			(at 256.54 259.08 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "H2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:Hole")
+		(at 271.78 259.08 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "e44a0bb7-4cb1-5e73-8181-d12995ef9e8c")
+		(property "Reference" "H3"
+			(at 271.78 252.73 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "M3 NPTH"
+			(at 271.78 255.27 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:MountingHole_3.2mm_M3"
+			(at 271.78 259.08 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 271.78 259.08 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 271.78 259.08 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "3.2 mm non-plated mounting hole"
+			(at 271.78 259.08 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "H3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:R")
+		(at 302.26 190.5 270)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "e61ebf56-10d2-5de2-adb1-c54b4cf5e916")
+		(property "Reference" "R6"
+			(at 311.15 188.595 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "100k 0.1%"
+			(at 311.15 191.135 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:R_0805_2012Metric"
+			(at 302.26 190.5 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 302.26 190.5 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 302.26 190.5 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "Thin film, 0.1%, <=25 ppm/C"
+			(at 302.26 190.5 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "219bb8c2-028b-51a0-b4b9-dd7efadc3e95")
+		)
+		(pin "2"
+			(uuid "3ac51d91-763c-561b-8c3a-abd8b2041b1f")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "R6")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:OPA333")
+		(at 119.38 223.52 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "efee3fb4-64de-517d-8e29-cfbaa6e5101c")
+		(property "Reference" "U4"
+			(at 132.08 204.47 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "OPA333AIDBVR"
+			(at 132.08 207.01 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:SOT-23-5"
+			(at 119.38 223.52 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://www.ti.com/lit/ds/symlink/opa333.pdf"
+			(at 119.38 223.52 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 119.38 223.52 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "TI OPA333AIDBVR, SOT-23-5; unity-gain midpoint buffer"
+			(at 119.38 223.52 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "9b13143f-cb65-5ff5-af78-d0322569eac8")
+		)
+		(pin "2"
+			(uuid "e7d201fb-be87-576c-8589-0c2dff24cf4b")
+		)
+		(pin "3"
+			(uuid "a99d1831-8bed-5fb2-8a3a-fb98f3728fae")
+		)
+		(pin "4"
+			(uuid "8a8969b4-1de9-5b19-97a9-06d07eca9192")
+		)
+		(pin "5"
+			(uuid "8b727f5c-ee2c-5631-9eaf-9f2b0d082bfa")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "U4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:R")
+		(at 302.26 213.36 270)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "f322d110-c911-5554-9e44-621d6c4f6c37")
+		(property "Reference" "R5"
+			(at 311.15 211.455 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "1k 0.1%"
+			(at 311.15 213.995 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:R_0805_2012Metric"
+			(at 302.26 213.36 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 302.26 213.36 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 302.26 213.36 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "Thin film, 0.1%, <=25 ppm/C"
+			(at 302.26 213.36 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "1663659f-ee80-5e53-9100-628f0d71738c")
+		)
+		(pin "2"
+			(uuid "f0d34294-e38e-51f7-befd-dcf776cb36e4")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "R5")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "AD8237DevBoard:Conn2")
+		(at 391.16 78.74 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "f9a50529-1e9e-5b32-8131-ac79c9ca323b")
+		(property "Reference" "JP4"
+			(at 391.16 68.58 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Value" "I2C PULL-UPS"
+			(at 391.16 71.12 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+			)
+		)
+		(property "Footprint" "AD8237DevBoard:PinHeader_1x02_P2.54mm_Vertical"
+			(at 391.16 78.74 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 391.16 78.74 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 391.16 78.74 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Assembly" "Fit shunt to enable 4.7k pull-ups to VIO. Remove when host provides sufficient pull-ups"
+			(at 391.16 78.74 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "0579b6ac-6463-5f95-bce9-377f5678b9f5")
+		)
+		(pin "2"
+			(uuid "9d15b922-aabe-5437-90b7-3f1c4addb7ac")
+		)
+		(instances
+			(project "AD8237DevBoard"
+				(path "/699a5243-12e4-5848-93c2-c488107778bb"
+					(reference "JP4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(sheet_instances
+		(path "/"
+			(page "1")
+		)
+	)
+	(embedded_fonts no)
+)

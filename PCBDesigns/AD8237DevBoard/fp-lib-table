@@ -1,0 +1,1 @@
+(fp_lib_table (version 7) (lib (name "AD8237DevBoard") (type "KiCad") (uri "${KIPRJMOD}/AD8237DevBoard.pretty") (options "") (descr "Project-local copies of official KiCad footprints")))

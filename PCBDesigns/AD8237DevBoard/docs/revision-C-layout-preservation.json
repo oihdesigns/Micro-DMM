@@ -1,0 +1,22 @@
+{
+  "revision": "C",
+  "original_footprints": 56,
+  "final_footprints": 65,
+  "replaced_footprint": "U2: TMUX1104DGS to TMUX1108PWR",
+  "moved_original_footprints": {
+    "C10": {
+      "old_mm": [
+        135.5,
+        123.0
+      ],
+      "new_mm": [
+        136.0,
+        124.3
+      ]
+    }
+  },
+  "original_tracks": 581,
+  "retained_original_tracks": 518,
+  "retained_track_geometry_unchanged": true,
+  "original_board_backup": "archive/pre-eight-gain/AD8237DevBoard.kicad_pcb"
+}

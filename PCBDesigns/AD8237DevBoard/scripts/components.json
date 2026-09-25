@@ -1,0 +1,1581 @@
+[
+  {
+    "ref": "U1",
+    "value": "AD8237ARMZ",
+    "kind": "AD8237",
+    "source_fp": "Package_SO:MSOP-8_3x3mm_P0.65mm",
+    "fp": "AD8237DevBoard:MSOP-8_3x3mm_P0.65mm",
+    "nets": {
+      "1": "BW",
+      "2": "IN_P_F",
+      "3": "IN_N_F",
+      "4": "GND",
+      "5": "VS",
+      "6": "REF_PIN",
+      "7": "FB",
+      "8": "OUT_RAW"
+    },
+    "sch": [
+      127.0,
+      127.0,
+      0
+    ],
+    "pcb": [
+      122,
+      121,
+      0
+    ],
+    "dnp": false,
+    "notes": "Analog Devices AD8237ARMZ, RM-8",
+    "uuid": "7c6a3ed3-01e7-59bf-a2d1-e5c7d9e40e46"
+  },
+  {
+    "ref": "U2",
+    "value": "TMUX1108PWR",
+    "kind": "TMUX1108",
+    "source_fp": "Package_SO:TSSOP-16_4.4x5mm_P0.65mm",
+    "fp": "AD8237DevBoard:TSSOP-16_4.4x5mm_P0.65mm",
+    "nets": {
+      "1": "SEL0",
+      "2": "VS",
+      "3": "GND",
+      "4": "UNITY",
+      "5": "GAIN2_5",
+      "6": "GAIN5",
+      "7": "GAIN10",
+      "8": "FB",
+      "9": "GAIN1001",
+      "10": "GAIN101",
+      "11": "GAIN50",
+      "12": "GAIN25",
+      "13": "VS",
+      "14": "GND",
+      "15": "SEL2",
+      "16": "SEL1"
+    },
+    "sch": [
+      279.4,
+      130.81,
+      0
+    ],
+    "pcb": [
+      133,
+      119.5,
+      0
+    ],
+    "dnp": false,
+    "notes": "TI TMUX1108PWR, PW TSSOP-16; EN tied high; VSS tied GND; fail-safe logic",
+    "uuid": "755a5b71-5801-58eb-bd8c-1b691254cdff"
+  },
+  {
+    "ref": "U3",
+    "value": "TCA9536DGKR",
+    "kind": "TCA9536",
+    "source_fp": "Package_SO:VSSOP-8_3x3mm_P0.65mm",
+    "fp": "AD8237DevBoard:VSSOP-8_3x3mm_P0.65mm",
+    "nets": {
+      "1": "SEL0",
+      "2": "SEL1",
+      "3": "SEL2",
+      "4": "GND",
+      "5": null,
+      "6": "SCL",
+      "7": "SDA",
+      "8": "VIO"
+    },
+    "sch": [
+      279.4,
+      54.61,
+      0
+    ],
+    "pcb": [
+      149,
+      113.5,
+      0
+    ],
+    "dnp": false,
+    "notes": "TI TCA9536DGKR; I2C 7-bit address 0x41; P0-P2 select gain; P3 unused",
+    "uuid": "bd7d5a38-f286-57c7-844d-002e4534eff9"
+  },
+  {
+    "ref": "U4",
+    "value": "OPA333AIDBVR",
+    "kind": "OPA333",
+    "source_fp": "Package_TO_SOT_SMD:SOT-23-5",
+    "fp": "AD8237DevBoard:SOT-23-5",
+    "nets": {
+      "1": "VMID",
+      "2": "GND",
+      "3": "MID_DIV",
+      "4": "VMID",
+      "5": "VS"
+    },
+    "sch": [
+      119.38,
+      223.52,
+      0
+    ],
+    "pcb": [
+      119,
+      140,
+      0
+    ],
+    "dnp": false,
+    "notes": "TI OPA333AIDBVR, SOT-23-5; unity-gain midpoint buffer",
+    "uuid": "efee3fb4-64de-517d-8e29-cfbaa6e5101c"
+  },
+  {
+    "ref": "J1",
+    "value": "EXT ANALOG POWER",
+    "kind": "Conn2",
+    "source_fp": "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+    "fp": "AD8237DevBoard:PinHeader_1x02_P2.54mm_Vertical",
+    "nets": {
+      "1": "VS_EXT",
+      "2": "GND"
+    },
+    "sch": [
+      35.56,
+      45.72,
+      0
+    ],
+    "pcb": [
+      105,
+      109.5,
+      0
+    ],
+    "dnp": false,
+    "notes": "External regulated analog supply input; select JP1 EXT",
+    "uuid": "7544f94c-96ce-58b3-9786-555f3d6b1abe"
+  },
+  {
+    "ref": "J2",
+    "value": "SENSOR",
+    "kind": "Conn3",
+    "source_fp": "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical",
+    "fp": "AD8237DevBoard:PinHeader_1x03_P2.54mm_Vertical",
+    "nets": {
+      "1": "IN_P",
+      "2": "IN_N",
+      "3": "GND"
+    },
+    "sch": [
+      35.56,
+      127.0,
+      0
+    ],
+    "pcb": [
+      105,
+      118,
+      0
+    ],
+    "dnp": false,
+    "notes": "1 IN+, 2 IN-, 3 GND",
+    "uuid": "2aa662a8-92ec-509b-8db8-8bb46d910e40"
+  },
+  {
+    "ref": "J3",
+    "value": "OUTPUT / EXT REF",
+    "kind": "Conn3",
+    "source_fp": "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical",
+    "fp": "AD8237DevBoard:PinHeader_1x03_P2.54mm_Vertical",
+    "nets": {
+      "1": "OUT",
+      "2": "GND",
+      "3": "REF_EXT"
+    },
+    "sch": [
+      218.44,
+      119.38,
+      0
+    ],
+    "pcb": [
+      156,
+      129,
+      0
+    ],
+    "dnp": false,
+    "notes": "1 OUT after R8, 2 GND, 3 external reference input",
+    "uuid": "819463b6-7017-51a8-a068-bb2065c10b14"
+  },
+  {
+    "ref": "J4",
+    "value": "I2C / LOGIC POWER",
+    "kind": "Conn4",
+    "source_fp": "Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical",
+    "fp": "AD8237DevBoard:PinHeader_1x04_P2.54mm_Vertical",
+    "nets": {
+      "1": "GND",
+      "2": "VIO",
+      "3": "SDA",
+      "4": "SCL"
+    },
+    "sch": [
+      236.22,
+      48.26,
+      0
+    ],
+    "pcb": [
+      143,
+      106,
+      90
+    ],
+    "dnp": false,
+    "notes": "1 GND, 2 VIO input (host 3.3 V or 5 V), 3 SDA, 4 SCL; match VIO to host",
+    "uuid": "c0577a64-a826-54b9-a4d7-27aa6a3a669f"
+  },
+  {
+    "ref": "JP1",
+    "value": "ANALOG SUPPLY",
+    "kind": "Conn3",
+    "source_fp": "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical",
+    "fp": "AD8237DevBoard:PinHeader_1x03_P2.54mm_Vertical",
+    "nets": {
+      "1": "VS_EXT",
+      "2": "VS",
+      "3": "VIO"
+    },
+    "sch": [
+      119.38,
+      45.72,
+      0
+    ],
+    "pcb": [
+      110,
+      106,
+      90
+    ],
+    "dnp": false,
+    "notes": "ONE shunt: 2-3 default powers analog from VIO; 1-2 selects external J1 supply",
+    "uuid": "28c60a7d-7dc4-5876-a0eb-2961a2ea0100"
+  },
+  {
+    "ref": "JP2",
+    "value": "BW: LOW / HIGH",
+    "kind": "Conn3",
+    "source_fp": "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical",
+    "fp": "AD8237DevBoard:PinHeader_1x03_P2.54mm_Vertical",
+    "nets": {
+      "1": "GND",
+      "2": "BW",
+      "3": "VS"
+    },
+    "sch": [
+      194.31,
+      149.86,
+      0
+    ],
+    "pcb": [
+      122,
+      108,
+      90
+    ],
+    "dnp": false,
+    "notes": "1-2 LOW default, valid for every gain. 2-3 HIGH requires gain >=10, including at startup",
+    "uuid": "42342d66-a98e-5ae0-840f-9dd906c8ad38"
+  },
+  {
+    "ref": "JP3",
+    "value": "REFERENCE SELECT",
+    "kind": "RefSelect",
+    "source_fp": "Connector_PinHeader_2.54mm:PinHeader_2x03_P2.54mm_Vertical",
+    "fp": "AD8237DevBoard:PinHeader_2x03_P2.54mm_Vertical",
+    "nets": {
+      "1": "REF",
+      "2": "GND",
+      "3": "REF",
+      "4": "VMID",
+      "5": "REF",
+      "6": "REF_EXT"
+    },
+    "sch": [
+      195.58,
+      223.52,
+      0
+    ],
+    "pcb": [
+      139,
+      140,
+      0
+    ],
+    "dnp": false,
+    "notes": "ONE shunt: 1-2 GND; 3-4 MID default; 5-6 external J3.3",
+    "uuid": "60399fee-defe-5102-b8ba-ccaf6d3bd25b"
+  },
+  {
+    "ref": "JP4",
+    "value": "I2C PULL-UPS",
+    "kind": "Conn2",
+    "source_fp": "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+    "fp": "AD8237DevBoard:PinHeader_1x02_P2.54mm_Vertical",
+    "nets": {
+      "1": "VIO",
+      "2": "PULL_V"
+    },
+    "sch": [
+      391.16,
+      78.74,
+      0
+    ],
+    "pcb": [
+      154,
+      113,
+      90
+    ],
+    "dnp": false,
+    "notes": "Fit shunt to enable 4.7k pull-ups to VIO. Remove when host provides sufficient pull-ups",
+    "uuid": "f9a50529-1e9e-5b32-8131-ac79c9ca323b"
+  },
+  {
+    "ref": "R1",
+    "value": "100R 0.1%",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "IN_P",
+      "2": "IN_P_F"
+    },
+    "sch": [
+      78.74,
+      121.92,
+      0
+    ],
+    "pcb": [
+      115.5,
+      118.8,
+      0
+    ],
+    "dnp": false,
+    "notes": "Thin film, 0.1%, <=25 ppm/C",
+    "uuid": "cb80e0ce-d013-5ba4-8563-6c30b9bd6008"
+  },
+  {
+    "ref": "R2",
+    "value": "100R 0.1%",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "IN_N",
+      "2": "IN_N_F"
+    },
+    "sch": [
+      78.74,
+      132.08,
+      0
+    ],
+    "pcb": [
+      115.5,
+      123.2,
+      0
+    ],
+    "dnp": false,
+    "notes": "Thin film, 0.1%, <=25 ppm/C",
+    "uuid": "35e67d57-0ac5-5c29-9a4b-0274503be441"
+  },
+  {
+    "ref": "R3",
+    "value": "10k 0.1%",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "GAIN10",
+      "2": "REF"
+    },
+    "sch": [
+      284.48,
+      213.36,
+      270
+    ],
+    "pcb": [
+      141,
+      121,
+      0
+    ],
+    "dnp": false,
+    "notes": "Thin film, 0.1%, <=25 ppm/C",
+    "uuid": "3504a9a8-9562-55f4-b3f5-b17f5bb705ef"
+  },
+  {
+    "ref": "R4",
+    "value": "90.9k 0.1%",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "OUT_RAW",
+      "2": "GAIN10"
+    },
+    "sch": [
+      284.48,
+      190.5,
+      270
+    ],
+    "pcb": [
+      141,
+      117.5,
+      0
+    ],
+    "dnp": false,
+    "notes": "Thin film, 0.1%, <=25 ppm/C",
+    "uuid": "bf8efea0-8185-5faa-aa8f-b0c4abfad2d0"
+  },
+  {
+    "ref": "R5",
+    "value": "1k 0.1%",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "GAIN101",
+      "2": "REF"
+    },
+    "sch": [
+      353.06,
+      213.36,
+      270
+    ],
+    "pcb": [
+      142,
+      128.5,
+      0
+    ],
+    "dnp": false,
+    "notes": "Thin film, 0.1%, <=25 ppm/C",
+    "uuid": "f322d110-c911-5554-9e44-621d6c4f6c37"
+  },
+  {
+    "ref": "R6",
+    "value": "100k 0.1%",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "OUT_RAW",
+      "2": "GAIN101"
+    },
+    "sch": [
+      353.06,
+      190.5,
+      270
+    ],
+    "pcb": [
+      142,
+      125,
+      0
+    ],
+    "dnp": false,
+    "notes": "Thin film, 0.1%, <=25 ppm/C",
+    "uuid": "e61ebf56-10d2-5de2-adb1-c54b4cf5e916"
+  },
+  {
+    "ref": "R7",
+    "value": "100k",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "BW",
+      "2": "GND"
+    },
+    "sch": [
+      156.21,
+      149.86,
+      270
+    ],
+    "pcb": [
+      120,
+      112,
+      0
+    ],
+    "dnp": false,
+    "notes": "1%, 0805",
+    "uuid": "1dd96db1-e251-569f-b314-45853d36329a"
+  },
+  {
+    "ref": "R8",
+    "value": "100R",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "OUT_RAW",
+      "2": "OUT"
+    },
+    "sch": [
+      177.8,
+      119.38,
+      0
+    ],
+    "pcb": [
+      150,
+      128.5,
+      0
+    ],
+    "dnp": false,
+    "notes": "1%, 0805",
+    "uuid": "3c4eb7c2-759d-52e0-b613-1092e4688348"
+  },
+  {
+    "ref": "R9",
+    "value": "1M (DNP)",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "IN_P_F",
+      "2": "REF"
+    },
+    "sch": [
+      106.68,
+      171.45,
+      270
+    ],
+    "pcb": [
+      110,
+      133,
+      0
+    ],
+    "dnp": true,
+    "notes": "Optional sensor DC bias return to selected REF; not fitted",
+    "uuid": "cb6f4bf1-31bd-58f9-bce0-d7967790d7ce"
+  },
+  {
+    "ref": "R10",
+    "value": "1M (DNP)",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "IN_N_F",
+      "2": "REF"
+    },
+    "sch": [
+      137.16,
+      171.45,
+      270
+    ],
+    "pcb": [
+      115,
+      133,
+      0
+    ],
+    "dnp": true,
+    "notes": "Optional sensor DC bias return to selected REF; not fitted",
+    "uuid": "9231ae91-cbfc-5828-a145-151794ef9136"
+  },
+  {
+    "ref": "R11",
+    "value": "1k 0.1%",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "GAIN1001",
+      "2": "REF"
+    },
+    "sch": [
+      375.92,
+      213.36,
+      270
+    ],
+    "pcb": [
+      149,
+      136,
+      0
+    ],
+    "dnp": false,
+    "notes": "Thin film, 0.1%, <=25 ppm/C",
+    "uuid": "4665b1fe-c772-5529-bc19-d1c1c4c1bfd1"
+  },
+  {
+    "ref": "R12",
+    "value": "1M 0.1%",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "OUT_RAW",
+      "2": "GAIN1001"
+    },
+    "sch": [
+      375.92,
+      190.5,
+      270
+    ],
+    "pcb": [
+      149,
+      132.5,
+      0
+    ],
+    "dnp": false,
+    "notes": "Thin film, 0.1%, <=25 ppm/C",
+    "uuid": "8c08213a-f8d9-546f-b5d0-95a255a0c6f9"
+  },
+  {
+    "ref": "R13",
+    "value": "2k",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "OUT_RAW",
+      "2": "UNITY"
+    },
+    "sch": [
+      345.44,
+      119.38,
+      0
+    ],
+    "pcb": [
+      137,
+      113.5,
+      0
+    ],
+    "dnp": false,
+    "notes": "Unity sense series resistor, as in AD8237 Figure 76",
+    "uuid": "3988c279-619c-5f02-8c59-11992410bff2"
+  },
+  {
+    "ref": "R14",
+    "value": "200R",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "REF",
+      "2": "REF_PIN"
+    },
+    "sch": [
+      160.02,
+      246.38,
+      0
+    ],
+    "pcb": [
+      126,
+      128.5,
+      0
+    ],
+    "dnp": false,
+    "notes": "REF input bias compensation; divider returns use REF before this resistor",
+    "uuid": "40b5f731-fb5f-5a49-94dc-f8a65d042a9b"
+  },
+  {
+    "ref": "R15",
+    "value": "10k 0.1%",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "VS",
+      "2": "MID_DIV"
+    },
+    "sch": [
+      40.64,
+      208.28,
+      270
+    ],
+    "pcb": [
+      111,
+      137,
+      0
+    ],
+    "dnp": false,
+    "notes": "Thin film, 0.1%, <=25 ppm/C",
+    "uuid": "6a19348f-cde0-5e9d-8ab2-b29e493fac36"
+  },
+  {
+    "ref": "R16",
+    "value": "10k 0.1%",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "MID_DIV",
+      "2": "GND"
+    },
+    "sch": [
+      40.64,
+      231.14,
+      270
+    ],
+    "pcb": [
+      111,
+      142,
+      0
+    ],
+    "dnp": false,
+    "notes": "Thin film, 0.1%, <=25 ppm/C",
+    "uuid": "702ab9e1-97ee-5dee-abda-cde6986729b1"
+  },
+  {
+    "ref": "R17",
+    "value": "4.7k",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "SEL0",
+      "2": "GND"
+    },
+    "sch": [
+      330.2,
+      48.26,
+      270
+    ],
+    "pcb": [
+      141,
+      111,
+      0
+    ],
+    "dnp": false,
+    "notes": "1% pull-down: <=0.475 V with expander maximum 100 uA internal pull-up; default unity",
+    "uuid": "2dd7b9f9-476b-5fc4-9c69-e88dddfc8b07"
+  },
+  {
+    "ref": "R18",
+    "value": "4.7k",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "SEL1",
+      "2": "GND"
+    },
+    "sch": [
+      358.14,
+      48.26,
+      270
+    ],
+    "pcb": [
+      141,
+      108,
+      0
+    ],
+    "dnp": false,
+    "notes": "1% pull-down: <=0.475 V with expander maximum 100 uA internal pull-up; default unity",
+    "uuid": "85651ea5-33b0-5a91-8911-126126024add"
+  },
+  {
+    "ref": "R19",
+    "value": "4.7k",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "PULL_V",
+      "2": "SDA"
+    },
+    "sch": [
+      330.2,
+      80.01,
+      270
+    ],
+    "pcb": [
+      155,
+      120,
+      0
+    ],
+    "dnp": false,
+    "notes": "1%, 0805",
+    "uuid": "3e239a13-d0c5-53df-9bdf-7fcc0d7f691b"
+  },
+  {
+    "ref": "R20",
+    "value": "4.7k",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "PULL_V",
+      "2": "SCL"
+    },
+    "sch": [
+      358.14,
+      80.01,
+      270
+    ],
+    "pcb": [
+      155,
+      124,
+      0
+    ],
+    "dnp": false,
+    "notes": "1%, 0805",
+    "uuid": "093f85c6-2cf0-54e4-8ee5-52eefcafb77e"
+  },
+  {
+    "ref": "R21",
+    "value": "30k 0.1%",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "OUT_RAW",
+      "2": "GAIN2_5"
+    },
+    "sch": [
+      238.76,
+      190.5,
+      270
+    ],
+    "pcb": [
+      130.5,
+      132,
+      0
+    ],
+    "dnp": false,
+    "notes": "Thin film, 0.1%, <=25 ppm/C",
+    "uuid": "0d5ce5f4-94c3-568d-9287-7e1dc61d48ec"
+  },
+  {
+    "ref": "R22",
+    "value": "20k 0.1%",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "GAIN2_5",
+      "2": "REF"
+    },
+    "sch": [
+      238.76,
+      213.36,
+      270
+    ],
+    "pcb": [
+      135.5,
+      132,
+      0
+    ],
+    "dnp": false,
+    "notes": "Thin film, 0.1%, <=25 ppm/C",
+    "uuid": "f43942d6-0b12-5b41-9352-66970e7680fa"
+  },
+  {
+    "ref": "R23",
+    "value": "40.2k 0.1%",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "OUT_RAW",
+      "2": "GAIN5"
+    },
+    "sch": [
+      261.62,
+      190.5,
+      270
+    ],
+    "pcb": [
+      130.5,
+      135,
+      0
+    ],
+    "dnp": false,
+    "notes": "Thin film, 0.1%, <=25 ppm/C",
+    "uuid": "cb7aaebd-eb9e-5d6c-ba55-0a6ef1db6c7f"
+  },
+  {
+    "ref": "R24",
+    "value": "10k 0.1%",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "GAIN5",
+      "2": "REF"
+    },
+    "sch": [
+      261.62,
+      213.36,
+      270
+    ],
+    "pcb": [
+      135.5,
+      135,
+      0
+    ],
+    "dnp": false,
+    "notes": "Thin film, 0.1%, <=25 ppm/C",
+    "uuid": "9bf19045-7f4c-561e-b354-5c39372a9a1c"
+  },
+  {
+    "ref": "R25",
+    "value": "120k 0.1%",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "OUT_RAW",
+      "2": "GAIN25"
+    },
+    "sch": [
+      307.34,
+      190.5,
+      270
+    ],
+    "pcb": [
+      130.5,
+      138,
+      0
+    ],
+    "dnp": false,
+    "notes": "Thin film, 0.1%, <=25 ppm/C",
+    "uuid": "55ff259d-185c-5a09-a182-bf3e127338e5"
+  },
+  {
+    "ref": "R26",
+    "value": "4.99k 0.1%",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "GAIN25",
+      "2": "REF"
+    },
+    "sch": [
+      307.34,
+      213.36,
+      270
+    ],
+    "pcb": [
+      135.5,
+      138,
+      0
+    ],
+    "dnp": false,
+    "notes": "Thin film, 0.1%, <=25 ppm/C",
+    "uuid": "74c5ba1c-23d0-5f63-bd3e-95bf8aa41ab8"
+  },
+  {
+    "ref": "R27",
+    "value": "100k 0.1%",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "OUT_RAW",
+      "2": "GAIN50"
+    },
+    "sch": [
+      330.2,
+      190.5,
+      270
+    ],
+    "pcb": [
+      129.5,
+      145,
+      0
+    ],
+    "dnp": false,
+    "notes": "Thin film, 0.1%, <=25 ppm/C",
+    "uuid": "3b077558-d687-5134-88df-139016bb0584"
+  },
+  {
+    "ref": "R28",
+    "value": "2.05k 0.1%",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "GAIN50",
+      "2": "REF"
+    },
+    "sch": [
+      330.2,
+      213.36,
+      270
+    ],
+    "pcb": [
+      134.5,
+      145,
+      0
+    ],
+    "dnp": false,
+    "notes": "Thin film, 0.1%, <=25 ppm/C",
+    "uuid": "4ffefce6-56a9-5e43-831b-d49d848be72a"
+  },
+  {
+    "ref": "R29",
+    "value": "4.7k",
+    "kind": "R",
+    "source_fp": "Resistor_SMD:R_0805_2012Metric",
+    "fp": "AD8237DevBoard:R_0805_2012Metric",
+    "nets": {
+      "1": "SEL2",
+      "2": "GND"
+    },
+    "sch": [
+      386.08,
+      48.26,
+      270
+    ],
+    "pcb": [
+      143,
+      114.5,
+      0
+    ],
+    "dnp": false,
+    "notes": "1% pull-down: <=0.475 V with expander maximum 100 uA internal pull-up; default unity",
+    "uuid": "f07e47ef-ce83-5e17-913c-62f2915a0835"
+  },
+  {
+    "ref": "C1",
+    "value": "10uF / 16V",
+    "kind": "C",
+    "source_fp": "Capacitor_SMD:C_0805_2012Metric",
+    "fp": "AD8237DevBoard:C_0805_2012Metric",
+    "nets": {
+      "1": "VS",
+      "2": "GND"
+    },
+    "sch": [
+      76.2,
+      50.8,
+      0
+    ],
+    "pcb": [
+      112,
+      110.5,
+      0
+    ],
+    "dnp": false,
+    "notes": "X7R, 16 V; local supply bypass",
+    "uuid": "5ab8fef3-585b-5a0c-80c5-078f4dfe63cf"
+  },
+  {
+    "ref": "C2",
+    "value": "100nF / 16V",
+    "kind": "C",
+    "source_fp": "Capacitor_SMD:C_0805_2012Metric",
+    "fp": "AD8237DevBoard:C_0805_2012Metric",
+    "nets": {
+      "1": "VS",
+      "2": "GND"
+    },
+    "sch": [
+      152.4,
+      50.8,
+      0
+    ],
+    "pcb": [
+      125,
+      125,
+      0
+    ],
+    "dnp": false,
+    "notes": "X7R, 16 V; local supply bypass",
+    "uuid": "330bb949-4404-511e-b281-ff642062758e"
+  },
+  {
+    "ref": "C3",
+    "value": "10nF (DNP)",
+    "kind": "C",
+    "source_fp": "Capacitor_SMD:C_0805_2012Metric",
+    "fp": "AD8237DevBoard:C_0805_2012Metric",
+    "nets": {
+      "1": "IN_P_F",
+      "2": "IN_N_F"
+    },
+    "sch": [
+      30.48,
+      171.45,
+      0
+    ],
+    "pcb": [
+      110,
+      121.5,
+      270
+    ],
+    "dnp": true,
+    "notes": "DNP; optional C0G filter; match C4/C5 1% if populated",
+    "uuid": "6aa7deb6-3cf2-5a42-b4bc-1c7ca594352f"
+  },
+  {
+    "ref": "C4",
+    "value": "1nF (DNP)",
+    "kind": "C",
+    "source_fp": "Capacitor_SMD:C_0805_2012Metric",
+    "fp": "AD8237DevBoard:C_0805_2012Metric",
+    "nets": {
+      "1": "IN_P_F",
+      "2": "GND"
+    },
+    "sch": [
+      55.88,
+      171.45,
+      0
+    ],
+    "pcb": [
+      109,
+      128,
+      0
+    ],
+    "dnp": true,
+    "notes": "DNP; optional C0G filter; match C4/C5 1% if populated",
+    "uuid": "278937bd-c5ca-5486-9dc1-d6922a6edb6a"
+  },
+  {
+    "ref": "C5",
+    "value": "1nF (DNP)",
+    "kind": "C",
+    "source_fp": "Capacitor_SMD:C_0805_2012Metric",
+    "fp": "AD8237DevBoard:C_0805_2012Metric",
+    "nets": {
+      "1": "IN_N_F",
+      "2": "GND"
+    },
+    "sch": [
+      81.28,
+      171.45,
+      0
+    ],
+    "pcb": [
+      114,
+      128.5,
+      0
+    ],
+    "dnp": true,
+    "notes": "DNP; optional C0G filter; match C4/C5 1% if populated",
+    "uuid": "098f5ae8-07c8-550f-a958-469aaf8f576a"
+  },
+  {
+    "ref": "C6",
+    "value": "10nF (DNP)",
+    "kind": "C",
+    "source_fp": "Capacitor_SMD:C_0805_2012Metric",
+    "fp": "AD8237DevBoard:C_0805_2012Metric",
+    "nets": {
+      "1": "OUT",
+      "2": "GND"
+    },
+    "sch": [
+      218.44,
+      144.78,
+      0
+    ],
+    "pcb": [
+      151,
+      139.5,
+      0
+    ],
+    "dnp": true,
+    "notes": "DNP; optional C0G filter; match C4/C5 1% if populated",
+    "uuid": "826bc570-ca43-523e-b936-fed31c019388"
+  },
+  {
+    "ref": "C7",
+    "value": "470pF C0G",
+    "kind": "C",
+    "source_fp": "Capacitor_SMD:C_0805_2012Metric",
+    "fp": "AD8237DevBoard:C_0805_2012Metric",
+    "nets": {
+      "1": "OUT_RAW",
+      "2": "FB"
+    },
+    "sch": [
+      177.8,
+      177.8,
+      0
+    ],
+    "pcb": [
+      125.5,
+      117,
+      0
+    ],
+    "dnp": false,
+    "notes": "C0G 5%, >=16 V; high-frequency feedback compensation, AD8237 Figure 76",
+    "uuid": "c1739b22-2022-57c2-800b-354d972cfec0"
+  },
+  {
+    "ref": "C8",
+    "value": "1uF / 16V",
+    "kind": "C",
+    "source_fp": "Capacitor_SMD:C_0805_2012Metric",
+    "fp": "AD8237DevBoard:C_0805_2012Metric",
+    "nets": {
+      "1": "MID_DIV",
+      "2": "GND"
+    },
+    "sch": [
+      78.74,
+      220.98,
+      0
+    ],
+    "pcb": [
+      115,
+      140,
+      0
+    ],
+    "dnp": false,
+    "notes": "X7R 16 V; midpoint divider filter, nominal 5 ms time constant",
+    "uuid": "2d8353a8-f01a-5df4-a88e-20e164dabe7d"
+  },
+  {
+    "ref": "C9",
+    "value": "100nF / 16V",
+    "kind": "C",
+    "source_fp": "Capacitor_SMD:C_0805_2012Metric",
+    "fp": "AD8237DevBoard:C_0805_2012Metric",
+    "nets": {
+      "1": "VS",
+      "2": "GND"
+    },
+    "sch": [
+      152.4,
+      220.98,
+      0
+    ],
+    "pcb": [
+      121,
+      145,
+      0
+    ],
+    "dnp": false,
+    "notes": "X7R, 16 V; local supply bypass",
+    "uuid": "46bb32dd-4808-557c-9e72-c77fe2198b16"
+  },
+  {
+    "ref": "C10",
+    "value": "100nF / 16V",
+    "kind": "C",
+    "source_fp": "Capacitor_SMD:C_0805_2012Metric",
+    "fp": "AD8237DevBoard:C_0805_2012Metric",
+    "nets": {
+      "1": "VS",
+      "2": "GND"
+    },
+    "sch": [
+      381.0,
+      144.78,
+      0
+    ],
+    "pcb": [
+      135.5,
+      123,
+      0
+    ],
+    "dnp": false,
+    "notes": "X7R, 16 V; local supply bypass",
+    "uuid": "6bbd6d46-0147-5383-b18b-4aca59c3a673"
+  },
+  {
+    "ref": "C11",
+    "value": "100nF / 16V",
+    "kind": "C",
+    "source_fp": "Capacitor_SMD:C_0805_2012Metric",
+    "fp": "AD8237DevBoard:C_0805_2012Metric",
+    "nets": {
+      "1": "VIO",
+      "2": "GND"
+    },
+    "sch": [
+      312.42,
+      73.66,
+      0
+    ],
+    "pcb": [
+      153,
+      116.5,
+      0
+    ],
+    "dnp": false,
+    "notes": "X7R, 16 V; local supply bypass",
+    "uuid": "7fb3b9b7-1afe-5439-95c5-3465ab6d0e68"
+  },
+  {
+    "ref": "C12",
+    "value": "1uF / 16V",
+    "kind": "C",
+    "source_fp": "Capacitor_SMD:C_0805_2012Metric",
+    "fp": "AD8237DevBoard:C_0805_2012Metric",
+    "nets": {
+      "1": "VIO",
+      "2": "GND"
+    },
+    "sch": [
+      190.5,
+      50.8,
+      0
+    ],
+    "pcb": [
+      155,
+      109.5,
+      90
+    ],
+    "dnp": false,
+    "notes": "X7R, 16 V; local supply bypass",
+    "uuid": "cda55f4c-80ff-5f57-ad44-7113bacfbda4"
+  },
+  {
+    "ref": "TP1",
+    "value": "VS",
+    "kind": "TP",
+    "source_fp": "TestPoint:TestPoint_Pad_D1.5mm",
+    "fp": "AD8237DevBoard:TestPoint_Pad_D1.5mm",
+    "nets": {
+      "1": "VS"
+    },
+    "sch": [
+      27.94,
+      264.16,
+      0
+    ],
+    "pcb": [
+      124,
+      113,
+      0
+    ],
+    "dnp": false,
+    "notes": "Exposed 1.5 mm probe pad",
+    "uuid": "db9592b8-caa8-5432-bad8-da88215cf64f"
+  },
+  {
+    "ref": "TP2",
+    "value": "GND",
+    "kind": "TP",
+    "source_fp": "TestPoint:TestPoint_Pad_D1.5mm",
+    "fp": "AD8237DevBoard:TestPoint_Pad_D1.5mm",
+    "nets": {
+      "1": "GND"
+    },
+    "sch": [
+      53.34,
+      264.16,
+      0
+    ],
+    "pcb": [
+      107,
+      137,
+      0
+    ],
+    "dnp": false,
+    "notes": "Exposed 1.5 mm probe pad",
+    "uuid": "155a53dd-0b3b-54c2-b04a-4dd3ed4bc16c"
+  },
+  {
+    "ref": "TP3",
+    "value": "IN_P_F",
+    "kind": "TP",
+    "source_fp": "TestPoint:TestPoint_Pad_D1.5mm",
+    "fp": "AD8237DevBoard:TestPoint_Pad_D1.5mm",
+    "nets": {
+      "1": "IN_P_F"
+    },
+    "sch": [
+      78.74,
+      264.16,
+      0
+    ],
+    "pcb": [
+      120,
+      131,
+      0
+    ],
+    "dnp": false,
+    "notes": "Exposed 1.5 mm probe pad",
+    "uuid": "244199c1-12af-50db-9fd4-4362a03d73e1"
+  },
+  {
+    "ref": "TP4",
+    "value": "IN_N_F",
+    "kind": "TP",
+    "source_fp": "TestPoint:TestPoint_Pad_D1.5mm",
+    "fp": "AD8237DevBoard:TestPoint_Pad_D1.5mm",
+    "nets": {
+      "1": "IN_N_F"
+    },
+    "sch": [
+      104.14,
+      264.16,
+      0
+    ],
+    "pcb": [
+      120,
+      135,
+      0
+    ],
+    "dnp": false,
+    "notes": "Exposed 1.5 mm probe pad",
+    "uuid": "14415601-8b51-5331-899e-6dc920606197"
+  },
+  {
+    "ref": "TP5",
+    "value": "OUT_RAW",
+    "kind": "TP",
+    "source_fp": "TestPoint:TestPoint_Pad_D1.5mm",
+    "fp": "AD8237DevBoard:TestPoint_Pad_D1.5mm",
+    "nets": {
+      "1": "OUT_RAW"
+    },
+    "sch": [
+      129.54,
+      264.16,
+      0
+    ],
+    "pcb": [
+      134,
+      109,
+      0
+    ],
+    "dnp": false,
+    "notes": "Exposed 1.5 mm probe pad",
+    "uuid": "870ebcad-8663-54bb-b511-ab81cdabc19a"
+  },
+  {
+    "ref": "TP6",
+    "value": "FB",
+    "kind": "TP",
+    "source_fp": "TestPoint:TestPoint_Pad_D1.5mm",
+    "fp": "AD8237DevBoard:TestPoint_Pad_D1.5mm",
+    "nets": {
+      "1": "FB"
+    },
+    "sch": [
+      154.94,
+      264.16,
+      0
+    ],
+    "pcb": [
+      135,
+      128,
+      0
+    ],
+    "dnp": false,
+    "notes": "Exposed 1.5 mm probe pad",
+    "uuid": "7346d762-c37f-5ae6-acb7-1110b53e76f0"
+  },
+  {
+    "ref": "TP7",
+    "value": "REF",
+    "kind": "TP",
+    "source_fp": "TestPoint:TestPoint_Pad_D1.5mm",
+    "fp": "AD8237DevBoard:TestPoint_Pad_D1.5mm",
+    "nets": {
+      "1": "REF"
+    },
+    "sch": [
+      180.34,
+      264.16,
+      0
+    ],
+    "pcb": [
+      129,
+      141,
+      0
+    ],
+    "dnp": false,
+    "notes": "Exposed 1.5 mm probe pad",
+    "uuid": "4f052144-ee88-5454-980b-e13a9e800a35"
+  },
+  {
+    "ref": "TP8",
+    "value": "VMID",
+    "kind": "TP",
+    "source_fp": "TestPoint:TestPoint_Pad_D1.5mm",
+    "fp": "AD8237DevBoard:TestPoint_Pad_D1.5mm",
+    "nets": {
+      "1": "VMID"
+    },
+    "sch": [
+      205.74,
+      264.16,
+      0
+    ],
+    "pcb": [
+      124,
+      141,
+      0
+    ],
+    "dnp": false,
+    "notes": "Exposed 1.5 mm probe pad",
+    "uuid": "11acf2cd-4356-5382-9a09-163566f56416"
+  },
+  {
+    "ref": "H1",
+    "value": "M3 NPTH",
+    "kind": "Hole",
+    "source_fp": "MountingHole:MountingHole_3.2mm_M3",
+    "fp": "AD8237DevBoard:MountingHole_3.2mm_M3",
+    "nets": {},
+    "sch": [
+      241.3,
+      259.08,
+      0
+    ],
+    "pcb": [
+      103.5,
+      103.5,
+      0
+    ],
+    "dnp": false,
+    "notes": "3.2 mm non-plated mounting hole",
+    "uuid": "ab69b65f-523b-5b6f-9cc8-4d6a4fc61e8e"
+  },
+  {
+    "ref": "H2",
+    "value": "M3 NPTH",
+    "kind": "Hole",
+    "source_fp": "MountingHole:MountingHole_3.2mm_M3",
+    "fp": "AD8237DevBoard:MountingHole_3.2mm_M3",
+    "nets": {},
+    "sch": [
+      256.54,
+      259.08,
+      0
+    ],
+    "pcb": [
+      156.5,
+      103.5,
+      0
+    ],
+    "dnp": false,
+    "notes": "3.2 mm non-plated mounting hole",
+    "uuid": "e4034fea-df77-5a6a-b74e-c27f97d773c0"
+  },
+  {
+    "ref": "H3",
+    "value": "M3 NPTH",
+    "kind": "Hole",
+    "source_fp": "MountingHole:MountingHole_3.2mm_M3",
+    "fp": "AD8237DevBoard:MountingHole_3.2mm_M3",
+    "nets": {},
+    "sch": [
+      271.78,
+      259.08,
+      0
+    ],
+    "pcb": [
+      103.5,
+      146.5,
+      0
+    ],
+    "dnp": false,
+    "notes": "3.2 mm non-plated mounting hole",
+    "uuid": "e44a0bb7-4cb1-5e73-8181-d12995ef9e8c"
+  },
+  {
+    "ref": "H4",
+    "value": "M3 NPTH",
+    "kind": "Hole",
+    "source_fp": "MountingHole:MountingHole_3.2mm_M3",
+    "fp": "AD8237DevBoard:MountingHole_3.2mm_M3",
+    "nets": {},
+    "sch": [
+      287.02,
+      259.08,
+      0
+    ],
+    "pcb": [
+      156.5,
+      146.5,
+      0
+    ],
+    "dnp": false,
+    "notes": "3.2 mm non-plated mounting hole",
+    "uuid": "da092c88-8aac-5415-9636-f91d9d34fca8"
+  }
+]

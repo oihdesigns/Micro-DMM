@@ -1,0 +1,67 @@
+Reference,Value,Footprint,Fit,Specification / assembly note
+U1,AD8237ARMZ,AD8237DevBoard:MSOP-8_3x3mm_P0.65mm,YES,"Analog Devices AD8237ARMZ, RM-8"
+U2,TMUX1108PWR,AD8237DevBoard:TSSOP-16_4.4x5mm_P0.65mm,YES,"TI TMUX1108PWR, PW TSSOP-16; EN tied high; VSS tied GND; fail-safe logic"
+U3,TCA9536DGKR,AD8237DevBoard:VSSOP-8_3x3mm_P0.65mm,YES,TI TCA9536DGKR; I2C 7-bit address 0x41; P0-P2 select gain; P3 unused
+U4,OPA333AIDBVR,AD8237DevBoard:SOT-23-5,YES,"TI OPA333AIDBVR, SOT-23-5; unity-gain midpoint buffer"
+J1,EXT ANALOG POWER,AD8237DevBoard:PinHeader_1x02_P2.54mm_Vertical,YES,External regulated analog supply input; select JP1 EXT
+J2,SENSOR,AD8237DevBoard:PinHeader_1x03_P2.54mm_Vertical,YES,"1 IN+, 2 IN-, 3 GND"
+J3,OUTPUT / EXT REF,AD8237DevBoard:PinHeader_1x03_P2.54mm_Vertical,YES,"1 OUT after R8, 2 GND, 3 external reference input"
+J4,I2C / LOGIC POWER,AD8237DevBoard:PinHeader_1x04_P2.54mm_Vertical,YES,"1 GND, 2 VIO input (host 3.3 V or 5 V), 3 SDA, 4 SCL; match VIO to host"
+JP1,ANALOG SUPPLY,AD8237DevBoard:PinHeader_1x03_P2.54mm_Vertical,YES,ONE shunt: 2-3 default powers analog from VIO; 1-2 selects external J1 supply
+JP2,BW: LOW / HIGH,AD8237DevBoard:PinHeader_1x03_P2.54mm_Vertical,YES,"1-2 LOW default, valid for every gain. 2-3 HIGH requires gain >=10, including at startup"
+JP3,REFERENCE SELECT,AD8237DevBoard:PinHeader_2x03_P2.54mm_Vertical,YES,ONE shunt: 1-2 GND; 3-4 MID default; 5-6 external J3.3
+JP4,I2C PULL-UPS,AD8237DevBoard:PinHeader_1x02_P2.54mm_Vertical,YES,Fit shunt to enable 4.7k pull-ups to VIO. Remove when host provides sufficient pull-ups
+R1,100R 0.1%,AD8237DevBoard:R_0805_2012Metric,YES,"Thin film, 0.1%, <=25 ppm/C"
+R2,100R 0.1%,AD8237DevBoard:R_0805_2012Metric,YES,"Thin film, 0.1%, <=25 ppm/C"
+R3,10k 0.1%,AD8237DevBoard:R_0805_2012Metric,YES,"Thin film, 0.1%, <=25 ppm/C"
+R4,90.9k 0.1%,AD8237DevBoard:R_0805_2012Metric,YES,"Thin film, 0.1%, <=25 ppm/C"
+R5,1k 0.1%,AD8237DevBoard:R_0805_2012Metric,YES,"Thin film, 0.1%, <=25 ppm/C"
+R6,100k 0.1%,AD8237DevBoard:R_0805_2012Metric,YES,"Thin film, 0.1%, <=25 ppm/C"
+R7,100k,AD8237DevBoard:R_0805_2012Metric,YES,"1%, 0805"
+R8,100R,AD8237DevBoard:R_0805_2012Metric,YES,"1%, 0805"
+R9,1M (DNP),AD8237DevBoard:R_0805_2012Metric,DNP,Optional sensor DC bias return to selected REF; not fitted
+R10,1M (DNP),AD8237DevBoard:R_0805_2012Metric,DNP,Optional sensor DC bias return to selected REF; not fitted
+R11,1k 0.1%,AD8237DevBoard:R_0805_2012Metric,YES,"Thin film, 0.1%, <=25 ppm/C"
+R12,1M 0.1%,AD8237DevBoard:R_0805_2012Metric,YES,"Thin film, 0.1%, <=25 ppm/C"
+R13,2k,AD8237DevBoard:R_0805_2012Metric,YES,"Unity sense series resistor, as in AD8237 Figure 76"
+R14,200R,AD8237DevBoard:R_0805_2012Metric,YES,REF input bias compensation; divider returns use REF before this resistor
+R15,10k 0.1%,AD8237DevBoard:R_0805_2012Metric,YES,"Thin film, 0.1%, <=25 ppm/C"
+R16,10k 0.1%,AD8237DevBoard:R_0805_2012Metric,YES,"Thin film, 0.1%, <=25 ppm/C"
+R17,4.7k,AD8237DevBoard:R_0805_2012Metric,YES,1% pull-down: <=0.475 V with expander maximum 100 uA internal pull-up; default unity
+R18,4.7k,AD8237DevBoard:R_0805_2012Metric,YES,1% pull-down: <=0.475 V with expander maximum 100 uA internal pull-up; default unity
+R19,4.7k,AD8237DevBoard:R_0805_2012Metric,YES,"1%, 0805"
+R20,4.7k,AD8237DevBoard:R_0805_2012Metric,YES,"1%, 0805"
+R21,30k 0.1%,AD8237DevBoard:R_0805_2012Metric,YES,"Thin film, 0.1%, <=25 ppm/C"
+R22,20k 0.1%,AD8237DevBoard:R_0805_2012Metric,YES,"Thin film, 0.1%, <=25 ppm/C"
+R23,40.2k 0.1%,AD8237DevBoard:R_0805_2012Metric,YES,"Thin film, 0.1%, <=25 ppm/C"
+R24,10k 0.1%,AD8237DevBoard:R_0805_2012Metric,YES,"Thin film, 0.1%, <=25 ppm/C"
+R25,120k 0.1%,AD8237DevBoard:R_0805_2012Metric,YES,"Thin film, 0.1%, <=25 ppm/C"
+R26,4.99k 0.1%,AD8237DevBoard:R_0805_2012Metric,YES,"Thin film, 0.1%, <=25 ppm/C"
+R27,100k 0.1%,AD8237DevBoard:R_0805_2012Metric,YES,"Thin film, 0.1%, <=25 ppm/C"
+R28,2.05k 0.1%,AD8237DevBoard:R_0805_2012Metric,YES,"Thin film, 0.1%, <=25 ppm/C"
+R29,4.7k,AD8237DevBoard:R_0805_2012Metric,YES,1% pull-down: <=0.475 V with expander maximum 100 uA internal pull-up; default unity
+C1,10uF / 16V,AD8237DevBoard:C_0805_2012Metric,YES,"X7R, 16 V; local supply bypass"
+C2,100nF / 16V,AD8237DevBoard:C_0805_2012Metric,YES,"X7R, 16 V; local supply bypass"
+C3,10nF (DNP),AD8237DevBoard:C_0805_2012Metric,DNP,DNP; optional C0G filter; match C4/C5 1% if populated
+C4,1nF (DNP),AD8237DevBoard:C_0805_2012Metric,DNP,DNP; optional C0G filter; match C4/C5 1% if populated
+C5,1nF (DNP),AD8237DevBoard:C_0805_2012Metric,DNP,DNP; optional C0G filter; match C4/C5 1% if populated
+C6,10nF (DNP),AD8237DevBoard:C_0805_2012Metric,DNP,DNP; optional C0G filter; match C4/C5 1% if populated
+C7,470pF C0G,AD8237DevBoard:C_0805_2012Metric,YES,"C0G 5%, >=16 V; high-frequency feedback compensation, AD8237 Figure 76"
+C8,1uF / 16V,AD8237DevBoard:C_0805_2012Metric,YES,"X7R 16 V; midpoint divider filter, nominal 5 ms time constant"
+C9,100nF / 16V,AD8237DevBoard:C_0805_2012Metric,YES,"X7R, 16 V; local supply bypass"
+C10,100nF / 16V,AD8237DevBoard:C_0805_2012Metric,YES,"X7R, 16 V; local supply bypass"
+C11,100nF / 16V,AD8237DevBoard:C_0805_2012Metric,YES,"X7R, 16 V; local supply bypass"
+C12,1uF / 16V,AD8237DevBoard:C_0805_2012Metric,YES,"X7R, 16 V; local supply bypass"
+TP1,VS,AD8237DevBoard:TestPoint_Pad_D1.5mm,PCB feature,Exposed 1.5 mm probe pad
+TP2,GND,AD8237DevBoard:TestPoint_Pad_D1.5mm,PCB feature,Exposed 1.5 mm probe pad
+TP3,IN_P_F,AD8237DevBoard:TestPoint_Pad_D1.5mm,PCB feature,Exposed 1.5 mm probe pad
+TP4,IN_N_F,AD8237DevBoard:TestPoint_Pad_D1.5mm,PCB feature,Exposed 1.5 mm probe pad
+TP5,OUT_RAW,AD8237DevBoard:TestPoint_Pad_D1.5mm,PCB feature,Exposed 1.5 mm probe pad
+TP6,FB,AD8237DevBoard:TestPoint_Pad_D1.5mm,PCB feature,Exposed 1.5 mm probe pad
+TP7,REF,AD8237DevBoard:TestPoint_Pad_D1.5mm,PCB feature,Exposed 1.5 mm probe pad
+TP8,VMID,AD8237DevBoard:TestPoint_Pad_D1.5mm,PCB feature,Exposed 1.5 mm probe pad
+H1,M3 NPTH,AD8237DevBoard:MountingHole_3.2mm_M3,PCB feature,3.2 mm non-plated mounting hole
+H2,M3 NPTH,AD8237DevBoard:MountingHole_3.2mm_M3,PCB feature,3.2 mm non-plated mounting hole
+H3,M3 NPTH,AD8237DevBoard:MountingHole_3.2mm_M3,PCB feature,3.2 mm non-plated mounting hole
+H4,M3 NPTH,AD8237DevBoard:MountingHole_3.2mm_M3,PCB feature,3.2 mm non-plated mounting hole
+SH1-SH4,2.54 mm jumper shunt,Accessory,YES,"Four shunts: JP1 2-3 (VIO), JP2 1-2 (LOW), JP3 3-4 (MID), JP4 1-2 (pull-ups enabled)"

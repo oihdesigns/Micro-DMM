@@ -1,0 +1,338 @@
+{
+  "status": "PASS",
+  "revision": "C",
+  "pin_connections_checked": 121,
+  "erc_violations": 0,
+  "drc_violations": 0,
+  "unconnected_items": 0,
+  "schematic_parity_issues": 0,
+  "nominal_gains": [
+    1,
+    2.5,
+    5.02,
+    10.09,
+    25.04809619238477,
+    49.78048780487805,
+    101.0,
+    1001.0
+  ],
+  "gain_network_parallel_load_ohm": 12733.845820384911,
+  "effective_load_with_100k_output_ohm": 11295.494913456003,
+  "resistor_ratio_checks": [
+    {
+      "net": "GAIN2_5",
+      "gain": 2.5,
+      "divider_load_ohm": 50000.0,
+      "thevenin_ohm": 12000.0,
+      "gain_min_resistors_only": 2.497002997002997,
+      "gain_max_resistors_only": 2.503003003003003
+    },
+    {
+      "net": "GAIN5",
+      "gain": 5.02,
+      "divider_load_ohm": 50200.0,
+      "thevenin_ohm": 8007.9681274900395,
+      "gain_min_resistors_only": 5.011968031968033,
+      "gain_max_resistors_only": 5.028048048048047
+    },
+    {
+      "net": "GAIN10",
+      "gain": 10.09,
+      "divider_load_ohm": 100900.0,
+      "thevenin_ohm": 9008.919722497521,
+      "gain_min_resistors_only": 10.071838161838164,
+      "gain_max_resistors_only": 10.108198198198197
+    },
+    {
+      "net": "GAIN25",
+      "gain": 25.04809619238477,
+      "divider_load_ohm": 124990.0,
+      "thevenin_ohm": 4790.7832626610125,
+      "gain_min_resistors_only": 25.00004804814424,
+      "gain_max_resistors_only": 25.096240529106257
+    },
+    {
+      "net": "GAIN50",
+      "gain": 49.78048780487805,
+      "divider_load_ohm": 102050.0,
+      "thevenin_ohm": 2008.8192062714356,
+      "gain_min_resistors_only": 49.683024292780395,
+      "gain_max_resistors_only": 49.87814643912204
+    },
+    {
+      "net": "GAIN101",
+      "gain": 101.0,
+      "divider_load_ohm": 101000.0,
+      "thevenin_ohm": 990.0990099009902,
+      "gain_min_resistors_only": 100.8001998001998,
+      "gain_max_resistors_only": 101.20020020020019
+    },
+    {
+      "net": "GAIN1001",
+      "gain": 1001.0,
+      "divider_load_ohm": 1001000.0,
+      "thevenin_ohm": 999.000999000999,
+      "gain_min_resistors_only": 999.0019980019981,
+      "gain_max_resistors_only": 1003.0020020020019
+    }
+  ],
+  "ideal_dc_cases": [
+    {
+      "supply_V": 3.3,
+      "code": 0,
+      "gain": 1,
+      "input_difference_V": -0.5,
+      "reference_V": 1.65,
+      "output_V": 1.15
+    },
+    {
+      "supply_V": 3.3,
+      "code": 0,
+      "gain": 1,
+      "input_difference_V": 0.5,
+      "reference_V": 1.65,
+      "output_V": 2.15
+    },
+    {
+      "supply_V": 3.3,
+      "code": 1,
+      "gain": 2.5,
+      "input_difference_V": -0.2,
+      "reference_V": 1.65,
+      "output_V": 1.15
+    },
+    {
+      "supply_V": 3.3,
+      "code": 1,
+      "gain": 2.5,
+      "input_difference_V": 0.2,
+      "reference_V": 1.65,
+      "output_V": 2.15
+    },
+    {
+      "supply_V": 3.3,
+      "code": 2,
+      "gain": 5.02,
+      "input_difference_V": -0.09960159362549802,
+      "reference_V": 1.65,
+      "output_V": 1.15
+    },
+    {
+      "supply_V": 3.3,
+      "code": 2,
+      "gain": 5.02,
+      "input_difference_V": 0.09960159362549802,
+      "reference_V": 1.65,
+      "output_V": 2.15
+    },
+    {
+      "supply_V": 3.3,
+      "code": 3,
+      "gain": 10.09,
+      "input_difference_V": -0.049554013875123884,
+      "reference_V": 1.65,
+      "output_V": 1.15
+    },
+    {
+      "supply_V": 3.3,
+      "code": 3,
+      "gain": 10.09,
+      "input_difference_V": 0.049554013875123884,
+      "reference_V": 1.65,
+      "output_V": 2.15
+    },
+    {
+      "supply_V": 3.3,
+      "code": 4,
+      "gain": 25.04809619238477,
+      "input_difference_V": -0.019961596927754222,
+      "reference_V": 1.65,
+      "output_V": 1.15
+    },
+    {
+      "supply_V": 3.3,
+      "code": 4,
+      "gain": 25.04809619238477,
+      "input_difference_V": 0.019961596927754222,
+      "reference_V": 1.65,
+      "output_V": 2.15
+    },
+    {
+      "supply_V": 3.3,
+      "code": 5,
+      "gain": 49.78048780487805,
+      "input_difference_V": -0.010044096031357178,
+      "reference_V": 1.65,
+      "output_V": 1.15
+    },
+    {
+      "supply_V": 3.3,
+      "code": 5,
+      "gain": 49.78048780487805,
+      "input_difference_V": 0.010044096031357178,
+      "reference_V": 1.65,
+      "output_V": 2.15
+    },
+    {
+      "supply_V": 3.3,
+      "code": 6,
+      "gain": 101.0,
+      "input_difference_V": -0.0049504950495049506,
+      "reference_V": 1.65,
+      "output_V": 1.15
+    },
+    {
+      "supply_V": 3.3,
+      "code": 6,
+      "gain": 101.0,
+      "input_difference_V": 0.0049504950495049506,
+      "reference_V": 1.65,
+      "output_V": 2.15
+    },
+    {
+      "supply_V": 3.3,
+      "code": 7,
+      "gain": 1001.0,
+      "input_difference_V": -0.0004995004995004995,
+      "reference_V": 1.65,
+      "output_V": 1.15
+    },
+    {
+      "supply_V": 3.3,
+      "code": 7,
+      "gain": 1001.0,
+      "input_difference_V": 0.0004995004995004995,
+      "reference_V": 1.65,
+      "output_V": 2.15
+    },
+    {
+      "supply_V": 5,
+      "code": 0,
+      "gain": 1,
+      "input_difference_V": -0.5,
+      "reference_V": 2.5,
+      "output_V": 2.0
+    },
+    {
+      "supply_V": 5,
+      "code": 0,
+      "gain": 1,
+      "input_difference_V": 0.5,
+      "reference_V": 2.5,
+      "output_V": 3.0
+    },
+    {
+      "supply_V": 5,
+      "code": 1,
+      "gain": 2.5,
+      "input_difference_V": -0.2,
+      "reference_V": 2.5,
+      "output_V": 2.0
+    },
+    {
+      "supply_V": 5,
+      "code": 1,
+      "gain": 2.5,
+      "input_difference_V": 0.2,
+      "reference_V": 2.5,
+      "output_V": 3.0
+    },
+    {
+      "supply_V": 5,
+      "code": 2,
+      "gain": 5.02,
+      "input_difference_V": -0.09960159362549802,
+      "reference_V": 2.5,
+      "output_V": 2.0
+    },
+    {
+      "supply_V": 5,
+      "code": 2,
+      "gain": 5.02,
+      "input_difference_V": 0.09960159362549802,
+      "reference_V": 2.5,
+      "output_V": 3.0
+    },
+    {
+      "supply_V": 5,
+      "code": 3,
+      "gain": 10.09,
+      "input_difference_V": -0.049554013875123884,
+      "reference_V": 2.5,
+      "output_V": 2.0
+    },
+    {
+      "supply_V": 5,
+      "code": 3,
+      "gain": 10.09,
+      "input_difference_V": 0.049554013875123884,
+      "reference_V": 2.5,
+      "output_V": 3.0
+    },
+    {
+      "supply_V": 5,
+      "code": 4,
+      "gain": 25.04809619238477,
+      "input_difference_V": -0.019961596927754222,
+      "reference_V": 2.5,
+      "output_V": 2.0
+    },
+    {
+      "supply_V": 5,
+      "code": 4,
+      "gain": 25.04809619238477,
+      "input_difference_V": 0.019961596927754222,
+      "reference_V": 2.5,
+      "output_V": 3.0
+    },
+    {
+      "supply_V": 5,
+      "code": 5,
+      "gain": 49.78048780487805,
+      "input_difference_V": -0.010044096031357178,
+      "reference_V": 2.5,
+      "output_V": 2.0
+    },
+    {
+      "supply_V": 5,
+      "code": 5,
+      "gain": 49.78048780487805,
+      "input_difference_V": 0.010044096031357178,
+      "reference_V": 2.5,
+      "output_V": 3.0
+    },
+    {
+      "supply_V": 5,
+      "code": 6,
+      "gain": 101.0,
+      "input_difference_V": -0.0049504950495049506,
+      "reference_V": 2.5,
+      "output_V": 2.0
+    },
+    {
+      "supply_V": 5,
+      "code": 6,
+      "gain": 101.0,
+      "input_difference_V": 0.0049504950495049506,
+      "reference_V": 2.5,
+      "output_V": 3.0
+    },
+    {
+      "supply_V": 5,
+      "code": 7,
+      "gain": 1001.0,
+      "input_difference_V": -0.0004995004995004995,
+      "reference_V": 2.5,
+      "output_V": 2.0
+    },
+    {
+      "supply_V": 5,
+      "code": 7,
+      "gain": 1001.0,
+      "input_difference_V": 0.0004995004995004995,
+      "reference_V": 2.5,
+      "output_V": 3.0
+    }
+  ],
+  "limitations": "Ideal DC checks only. No assembled-board measurement or device-level transient/noise simulation. Firmware example not compiled for a specific controller."
+}
