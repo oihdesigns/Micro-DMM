@@ -270,10 +270,35 @@ Everything the production firmware has, plus:
 | `!DEEP` | Report the two-stage sleep schedule |
 | `!DEEP,<0\|1>` | While asleep: force stage 2 (`1`) or go back to stage 1 (`0`) |
 | `!EXPT[,<sec>]` | Run the ten-step power profile, `<sec>` per step (10 default). `!EXPT,0` aborts |
+| `!DETLOG[,0\|1]` | One `$DET` line per detection pass, for the automated test suite (`TestBench/BlinkyHawkTestSuite`). RAM only, off at boot |
 
 A `!GATE` hold is RAM only and **survives into sleep and `!FLOOR`** — that is
 how the sleeping current for a given scheme gets measured: set the holds, then
 `!SLEEP` or `!FLOOR`, then unplug.
+
+## Per-pass detection log (`!DETLOG`)
+
+Added for `TestBench/BlinkyHawkTestSuite`. While it is on, every detection pass
+prints
+
+```
+$DET,<ms>,<raw>,<lead>,<vpath>,<n>,<restMean>,<restMin>,<restMax>,<metric>,<retms>,<areavms>,<thr>
+```
+
+`raw`/`lead` are F/C/V (lead is after the STABLECOUNT debounce). `vpath` is how
+the voltage decision was reached: `F` fast single-read trip, `A` averaged trip,
+`-` none, `L`/`D` = VMODE 1/2. Rest fields are blank when no resting reads were
+taken, and metric fields are blank when the MOSFET test did not run. `$STATUS`
+also gains `lead=` and `detlog=`.
+
+One behavioural difference, deliberately: with the log on, `voltagePresent()`
+takes **all** VOLTAVG reads instead of returning at the first fast-band trip, so
+the reported min/max/mean cover the full set and the host can replay the
+decision offline for any REFCENTER/REFBAND/VOLTFAST. The **decision is
+identical** ("any read beyond the fast band, else the mean beyond the band");
+only a voltage-present pass runs a few hundred microseconds longer, and such a
+pass skips the MOSFET test anyway. With the log off, the loop is exactly the
+production one. No config key was added, so there is no CFG_VERSION bump.
 
 ## Measuring
 

@@ -1,0 +1,17 @@
+BlinkyHawk test suite -- test run 2026-09-27 15:18:43.043754
+note: 
+relay:  $ID,RelayJig,1.0
+fgen:   RIGOL TECHNOLOGIES,DG852 Pro,DG8R273M00069,00.01.00.00.22
+scope:  not connected
+dwell 3.0 s, settle 0.5 s, scope grab
+conditions:
+  load SHORT: relay load SHORT (short), expect C
+  load 10K: relay load 10K (10k), expect C
+  load 150K: relay load 150K (150k), expect C
+  load 1M: relay load 1M (1M), expect F
+  load 10.6M: relay load 10.6M (10.6M), expect F
+  load OPEN: relay load OPEN (open), expect F
+  DC +0.800V: generator DC +0.800 V, expect -
+  DC -0.800V: generator DC -0.800 V, expect -
+  AC 5Vrms 60Hz: generator sine 5 Vrms 60 Hz, expect V
+  gen output off: generator path, output OFF, expect F

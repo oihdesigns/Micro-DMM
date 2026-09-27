@@ -177,6 +177,8 @@
  *                       step); !EXPT,0 aborts.  Prints the whole plan up
  *                       front so a PPK2 capture can be sliced by time even
  *                       though USB is unplugged for the run itself.
+ *   !DETLOG[,0|1]       one $DET line per detection pass, for the automated
+ *                       test suite (TestBench/BlinkyHawkTestSuite); RAM only
  *   !STATUS  / !?       print current status
  * Data out:
  *   $STATUS,...                          current mode/state summary
@@ -191,6 +193,8 @@
  *   $CAPSTART,<n>,<toggleUs>,<durMs>,<fullScale>,<vref>   (capture header)
  *   $CAP,<t_us>,<rawPos>,<rawNeg>                         (capture rows)
  *   $CAPEND
+ *   $DET,<ms>,<raw>,<lead>,<vpath>,<n>,<restMean>,<restMin>,<restMax>,
+ *        <metric>,<retms>,<areavms>,<thr>          (!DETLOG; see printDetLine)
  *
  * ── Alerts ────────────────────────────────────────────────────────
  * NeoPixel: dim-blue flash = floating, green flash = closed, red flash =
@@ -1432,6 +1436,21 @@ float lastRestV = 0.0f, lastTestV = 0.0f;
 float lastMetric = 0.0f;      // scalar actually compared to the threshold
 float lastReturnMs = 0.0f;    // method 1 result (ms), or window on timeout
 float lastAreaVms  = 0.0f;    // method 2 result (V*ms)
+
+// BENCH: !DETLOG -- one $DET line per detection pass, for the automated test
+// suite (TestBench/BlinkyHawkTestSuite).  RAM only, off at boot.  While on,
+// voltagePresent() takes all VOLTAVG reads instead of returning at the first
+// fast-band trip, so every pass reports the full mean/min/max of its resting
+// reads and the host can re-evaluate the voltage decision offline for any
+// REFCENTER/REFBAND/VOLTFAST.  The DECISION is unchanged -- "any read beyond
+// the fast band, else the average beyond the band" -- only a voltage-present
+// pass runs up to VOLTAVG-1 reads longer, and on such a pass the MOSFET test
+// is skipped anyway, so the open/closed metric is not disturbed.
+bool    detLogOn    = false;
+uint8_t detRestN    = 0;       // resting reads taken this pass
+float   detRestMean = 0.0f, detRestMin = 0.0f, detRestMax = 0.0f;
+char    detVoltPath = '-';     // F fast trip, A averaged trip, - none, L locked on, D disabled
+bool    detTestRan  = false;   // the open/closed test ran this pass (metric is fresh)
 unsigned long lastSerialTime = 0;
 const unsigned long serialInterval = 250;
 
@@ -1697,6 +1716,8 @@ void exitLowPower();
 void serviceLowPower();
 void serviceFloorMode();
 void pollSerial();
+void printDetLine(LeadState rawState);
+static char stateChar(LeadState s);
 
 // Bring up the RTC periodic interrupt and open the LPM driver.  Returns false
 // if either fails, in which case lowPowerTick() degrades to a WFI idle -- the
@@ -2138,16 +2159,33 @@ float readVoltage() {
 // otherwise average voltAvgSamples reads and test against refBand.
 bool voltagePresent() {
   float sum = 0.0f;
+  // BENCH: with !DETLOG off this is the production loop exactly.  With it on,
+  // a fast trip is remembered rather than returned, so the remaining reads
+  // still land in the mean/min/max the $DET line reports (see detLogOn).
+  bool  fastTrip = false;
+  float vmin = 1e9f, vmax = -1e9f;
+  int   n = 0;
   for (int i = 0; i < cfg.voltAvgSamples; i++) {
     float v = readVoltage();
-    if (fabs(v - cfg.refCenterV) > cfg.voltFastMult * cfg.refBandV) {
-      lastRestV = v;
-      return true;
-    }
+    n++;
     sum += v;
+    if (v < vmin) vmin = v;
+    if (v > vmax) vmax = v;
+    if (!fastTrip && fabs(v - cfg.refCenterV) > cfg.voltFastMult * cfg.refBandV) {
+      lastRestV = v;
+      fastTrip  = true;
+      if (!detLogOn) break;
+    }
   }
-  lastRestV = sum / cfg.voltAvgSamples;
-  return (fabs(lastRestV - cfg.refCenterV) > cfg.refBandV);
+  detRestN    = n;
+  detRestMean = sum / n;
+  detRestMin  = vmin;
+  detRestMax  = vmax;
+  if (fastTrip) { detVoltPath = 'F'; return true; }
+  lastRestV = detRestMean;               // n == voltAvgSamples here
+  bool present = (fabs(lastRestV - cfg.refCenterV) > cfg.refBandV);
+  detVoltPath = present ? 'A' : '-';
+  return present;
 }
 
 // Voltage check used ONLY by the sleeping probe.  Same reads as
@@ -2650,15 +2688,19 @@ void runDetection() {
   digitalWrite(MOSFET_PIN, MOSFET_ON);   // resting state
 
   bool present;
+  detRestN = 0;                          // BENCH: $DET reports no rest stats unless read
   if (voltOverride == VOLT_FORCE_ON) {
     lastRestV = readVoltage();           // keep a fresh reading for debug
     present = true;
+    detVoltPath = 'L';
   } else if (voltOverride == VOLT_DISABLED) {
     present = false;
+    detVoltPath = 'D';
   } else {
     present = voltagePresent();
   }
 
+  detTestRan = !present;
   LeadState rawState = present ? STATE_VOLTAGE : runMosfetTestStable();
 
   // Display debounce: commit to leadState only after the raw result repeats
@@ -2678,6 +2720,46 @@ void runDetection() {
   }
 
   gatesMeasureEnd(gatesRaised);          // BENCH: drop the pulsed gates again
+
+  if (detLogOn) printDetLine(rawState);  // BENCH: after the MOSFET is back on
+}
+
+// BENCH: one detection pass for the test suite.
+//   $DET,<ms>,<raw>,<lead>,<vpath>,<n>,<restMean>,<restMin>,<restMax>,
+//        <metric>,<retms>,<areavms>,<thr>
+// raw/lead: F float, C closed, V voltage (lead = after STABLECOUNT debounce).
+// vpath: F fast single-read trip, A averaged trip, - no voltage, L VMODE 1
+// (locked on), D VMODE 2 (disabled).  n = 0 means no resting reads were taken
+// this pass, and the three rest fields are then blank.  The metric fields are
+// blank when the open/closed test did not run (voltage present).  In method 1
+// the recovery loop stops at the return, so areavms is only complete in
+// method 2 -- which is why the suite characterises under method 2.
+static char stateChar(LeadState s) {
+  return s == STATE_FLOAT ? 'F' : (s == STATE_CLOSED ? 'C' : 'V');
+}
+
+void printDetLine(LeadState rawState) {
+  Serial.print("$DET,");
+  Serial.print(millis());             Serial.print(',');
+  Serial.print(stateChar(rawState));  Serial.print(',');
+  Serial.print(stateChar(leadState)); Serial.print(',');
+  Serial.print(detVoltPath);          Serial.print(',');
+  Serial.print(detRestN);             Serial.print(',');
+  if (detRestN) {
+    Serial.print(detRestMean, 5); Serial.print(',');
+    Serial.print(detRestMin, 5);  Serial.print(',');
+    Serial.print(detRestMax, 5);  Serial.print(',');
+  } else {
+    Serial.print(",,,");
+  }
+  if (detTestRan) {
+    Serial.print(lastMetric, 5);   Serial.print(',');
+    Serial.print(lastReturnMs, 4); Serial.print(',');
+    Serial.print(lastAreaVms, 5);  Serial.print(',');
+  } else {
+    Serial.print(",,,");
+  }
+  Serial.println(activeThreshV, 5);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -2728,6 +2810,9 @@ void printStatus() {
   for (uint8_t i = 0; i < GATE_COUNT; i++)
     Serial.print(gateForce[i] < 0 ? "a" : (gateForce[i] ? "1" : "0"));
   Serial.print(",expt=");         Serial.print(exptStep);
+  // BENCH: debounced lead state (F/C/V) and whether !DETLOG is streaming.
+  Serial.print(",lead=");         Serial.print(stateChar(leadState));
+  Serial.print(",detlog=");       Serial.print(detLogOn ? 1 : 0);
   Serial.print(",sn=");           Serial.println(unitSN);  // last: may be empty
 }
 
@@ -3331,6 +3416,11 @@ void handleLine(char *line) {
     if (d < 1) d = 1;
     capDurationMs = d;
     runCapture(d);
+  } else if (strcmp(cmd, "DETLOG") == 0) {
+    // BENCH: !DETLOG[,0|1] -- one $DET line per detection pass (see
+    // printDetLine).  Bare = toggle.  RAM only; off after a reset.
+    detLogOn = arg ? (atoi(arg) != 0) : !detLogOn;
+    Serial.print("$OK,detlog,"); Serial.println(detLogOn ? 1 : 0);
   } else if (strcmp(cmd, "STATUS") == 0 || strcmp(cmd, "?") == 0) {
     printStatus();
   } else {
