@@ -1974,8 +1974,15 @@ static void sleepHeartbeat() {
 // awake for the first SLEEP_BOOT_GRACE_MS guarantees a window to connect and
 // send !SET,SLEEPSEC,0.  (Recovery does not depend on this -- the DFU
 // bootloader runs before the sketch, so a double-tap of RESET always works.)
+//
+// BENCH: an open host port (DTR asserted) also holds it awake, independently of
+// CHGINHIBIT.  With CHGINHIBIT=0 the charge detect no longer stands in for "on
+// USB", and Standby stops the USB peripheral -- so without this the board slept
+// SLEEPSEC after the !SET and the COM port vanished, which looks like a crash.
+// Arm with !SLEEP as before; it now fires when the host closes the port.
 static bool lowPowerAllowed() {
   if (millis() < SLEEP_BOOT_GRACE_MS) return false;
+  if (Serial) return false;
   return (cfg.idleTimeoutS > 0) && !diagMode && !chargeInhibits();
 }
 

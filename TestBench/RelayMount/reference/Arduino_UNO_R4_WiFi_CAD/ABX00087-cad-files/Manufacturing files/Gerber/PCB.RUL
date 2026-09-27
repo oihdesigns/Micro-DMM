@@ -1,0 +1,12 @@
+DRC Rules Export File for PCB: C:\Users\Public\Documents\Altium\UNO R4 WiFi\PCB.PcbDoc
+RuleKind=Clearance|RuleName=ArduinoSymbolLayerCopper|Scope=Board|Minimum=5.91
+RuleKind=Clearance|RuleName=MH|Scope=Board|Minimum=19.69
+RuleKind=Clearance|RuleName=COPPER_0.3mm_VIN|Scope=Board|Minimum=19.69
+RuleKind=ShortCircuit|RuleName=SolderJumper|Scope=Board|Allowed=1
+RuleKind=MinimumAnnularRing|RuleName=MinimumAnnularRing|Scope=Board|Minimum=5.91
+RuleKind=ShortCircuit|RuleName=ShortCircuit|Scope=Board|Allowed=0
+RuleKind=SolderMaskExpansion|RuleName=SolderMaskExpansion|Scope=Board|Minimum=1.97
+RuleKind=SolderMaskExpansion|RuleName=VIAtented|Scope=Board|Minimum=4.00
+RuleKind=Width|RuleName=StandardTraces|Scope=Board|Minimum=5.91
+RuleKind=Clearance|RuleName=Generic clearance 0.15mm|Scope=Board|Minimum=5.91
+RuleKind=Clearance|RuleName=COPPER_0.3mm|Scope=Board|Minimum=5.00

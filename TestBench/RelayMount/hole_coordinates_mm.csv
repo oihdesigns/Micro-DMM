@@ -1,0 +1,13 @@
+hole,x_from_left_mm,y_from_bottom_mm,bore_diameter_mm,standoff_diameter_mm
+Relay_1_LL,9.85,80.0,2.0,6.0
+Relay_1_LR,76.55,80.0,2.0,6.0
+Relay_1_UR,76.55,125.0,2.0,6.0
+Relay_1_UL,9.85,125.0,2.0,6.0
+Relay_2_LL,88.55,80.0,2.0,6.0
+Relay_2_LR,155.25,80.0,2.0,6.0
+Relay_2_UR,155.25,125.0,2.0,6.0
+Relay_2_UL,88.55,125.0,2.0,6.0
+UNO_LL,62.23,16.54,2.0,6.0
+UNO_LR,114.3,21.62,2.0,6.0
+UNO_UR,114.3,49.56,2.0,6.0
+UNO_UL,63.5,64.8,2.0,6.0
