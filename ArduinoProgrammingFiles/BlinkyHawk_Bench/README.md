@@ -69,6 +69,7 @@ CRC does not match, the migration declines, and the board falls back to defaults
 | 2 | Deep-sleep stage (`DEEPSEC`, `DEEPHZ`) |
 | 3 | `DEEPPARK` |
 | 4 | `CHGINHIBIT` |
+| 5 | Voltage kind: `VCLASS`, `ACWINMS`, `ACBAND`, `VOLTLONGMS`, `VACPULSES` (ported from production v8) |
 
 ### Recovering a config that was already lost
 
@@ -276,16 +277,52 @@ A `!GATE` hold is RAM only and **survives into sleep and `!FLOOR`** — that is
 how the sleeping current for a given scheme gets measured: set the holds, then
 `!SLEEP` or `!FLOOR`, then unplug.
 
+## Voltage kind: VDC+ / VDC- / VAC (config v5)
+
+Ported from the production firmware (commit `4f4fecf`, its CFG_VERSION 8), and
+the behaviour is identical. Once voltage is present, a peak hunt over
+`ACWINMS` (25 ms, which spans a full mains cycle) decides the kind: both peaks
+past the band means **VAC**, otherwise the larger side gives **VDC+** or
+**VDC-**. Presence itself is untouched. A wrong kind plays the wrong pattern,
+never the wrong alert. The patterns:
+
+| Kind | LED (one colour per flash) | Beep |
+|---|---|---|
+| VDC+ | red, red (the old voltage alert) | short-short |
+| VDC- | red, blue | short-LONG (`VOLTLONGMS`) |
+| VAC | red, blue, green | three shorts (`VACPULSES`) |
+
+`VCLASS=0` reverts to the plain all-red alert. `!VTEST` runs one
+classification on demand and prints the peaks (`$VTEST,<kind>,vpos=..,vneg=..,
+band=..,winms=..,n=..`). `$STATUS` gains `vkind=`, `vpos=` and `vneg=`.
+
+Bench-specific differences:
+
+- **Fields are appended** before `crc` rather than placed in the Detection and
+  Alerts sections as production has them, because the bench migration relies
+  on append-only (see above). A v4 unit migrates, keeps all its tuning, and
+  gains the classifier with production's defaults.
+- **`!VTEST` raises the pulsed analog gate** around its reads, like every other
+  ADC consumer. In `runDetection()` the classification sits inside the pass's
+  existing gate window.
+
+Cost: a voltage-present pass is `ACWINMS` longer. On such a pass the MOSFET
+test is skipped anyway, so the open/closed metric is unaffected.
+
 ## Per-pass detection log (`!DETLOG`)
 
 Added for `TestBench/BlinkyHawkTestSuite`. While it is on, every detection pass
 prints
 
 ```
-$DET,<ms>,<raw>,<lead>,<vpath>,<n>,<restMean>,<restMin>,<restMax>,<metric>,<retms>,<areavms>,<thr>
+$DET,<ms>,<raw>,<lead>,<vpath>,<n>,<restMean>,<restMin>,<restMax>,<metric>,<retms>,<areavms>,<thr>,
+     <rawkind>,<kind>,<vpos>,<vneg>
 ```
 
-`raw`/`lead` are F/C/V (lead is after the STABLECOUNT debounce). `vpath` is how
+`raw`/`lead` are F/C/V (lead is after the STABLECOUNT debounce). The last four
+(config v5) are the voltage kind: `rawkind` is this pass's classification (blank
+when none ran), `kind` is the debounced one the alert is playing, and
+`vpos`/`vneg` are the peaks it was decided on. `vpath` is how
 the voltage decision was reached: `F` fast single-read trip, `A` averaged trip,
 `-` none, `L`/`D` = VMODE 1/2. Rest fields are blank when no resting reads were
 taken, and metric fields are blank when the MOSFET test did not run. `$STATUS`
@@ -347,10 +384,10 @@ Two things it deliberately keeps separate from the production tooling:
 
 ## Config version
 
-See "Config versions and migration" above. This fork has **no migrations** by
-design, so a board holding a v1 bench block is reseeded with defaults on the
-first boot of this firmware — re-enter any bench tuning. (Production config at
-address 0 is untouched either way.)
+Currently **v5**. See "Config versions and migration" above: older bench
+layouts are migrated, not reseeded. (The earlier note here saying the fork had
+no migrations was out of date once `configMigrateBench()` went in.) Production
+config at address 0 is untouched either way.
 
 ## Building
 

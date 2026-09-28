@@ -7,13 +7,14 @@ BlinkyHawk_Bench and subclassed, not copied -- so its Diagnostics /
 Configuration / Bench tabs, and its per-unit CSV log, are the same ones), with
 three more tabs:
 
-  Test Rig        connect and drive the relay jig, the Rigol DG852 Pro and the
-                  Siglent scope by hand.  Type SIM in any port/IP box (or press
+  Test Rig        connect and drive the relay jig (and its AS7343 LED watcher),
+                  the Rigol DG852 Pro and the Siglent scope by hand.  Type SIM in any port/IP box (or press
                   "Simulate everything") to dry-run with nothing plugged in.
   Test Sequence   the big test: every selected load / DC level / AC level in
                   turn, the BlinkyHawk's own readings + decisions logged per
                   detection pass, a scope capture per condition, a pass/fail
-                  table, and a run folder under Runs/.
+                  table, and a run folder under Runs/.  "Unit on battery"
+                  judges by the LED watcher alone, with no serial link at all.
   Auto-Tune       finds REFCENTER/REFBAND for a target trip voltage and the
                   detection method + threshold that reads CLOSED at the chosen
                   resistance and OPEN above it -- or says it cannot, and shows
@@ -33,6 +34,8 @@ import sys
 import threading
 import time
 import tkinter as tk
+import traceback
+from datetime import datetime
 from tkinter import messagebox, ttk
 
 import serial
@@ -52,7 +55,12 @@ import bh_sequencer as S
 import bh_tuner as T
 from bh_instruments import (JIG_LOADS, InstrumentError, RelayJig, RigolDG800, SiglentSDS,
                             SimFGen, SimRelayJig, SimScope, fmt_ohms)
+from bh_led import COLOURS, STATE_NAMES, LedDecoder
 from bh_sim import SimBench, SimBlinkyHawk
+
+# AS7343 gain codes (!LEDCFG) -> label
+LED_GAINS = ["0.5x", "1x", "2x", "4x", "8x", "16x", "32x", "64x", "128x", "256x", "512x",
+             "1024x", "2048x"]
 
 INF = float("inf")
 SIM = "SIM"
@@ -61,6 +69,10 @@ DEFAULT_SCOPE_IP = "192.168.10.2"
 
 CLOSED_CHOICES = [("SHORT", 0.0), ("10K", 10e3), ("150K", 150e3)]
 OPEN_CHOICES = [("1M", 1e6), ("10.6M", 10.6e6), ("OPEN", INF)]
+
+# pythonw has no console, so an exception in a Tk callback would otherwise
+# vanish without a trace.  Every one is appended here AND shown in the log.
+ERROR_LOG = os.path.join(HERE, "suite_errors.log")
 
 # Seconds to wait for the BlinkyHawk's first $STATUS after the port opens.
 REPLY_TIMEOUT_S = 3.0
@@ -145,6 +157,7 @@ class SuiteApp(bench.App):
         # Keep both port lists current: refresh when a dropdown is opened.
         self.port_cb.configure(postcommand=self._refresh_ports)
         self.title("Blinky Hawk TEST SUITE -- bench GUI + relay jig / generator / scope")
+        self.report_callback_exception = self._tk_error
         w = min(1280, self.winfo_screenwidth() - 60)
         h = min(940, self.winfo_screenheight() - 80)
         self.geometry(f"{w}x{h}+20+10")
@@ -163,6 +176,9 @@ class SuiteApp(bench.App):
         self.det_count = 0
         self.last_run_dir = None
         self.tune_state = None
+        self.decoder = LedDecoder()
+        self.led_q = None               # GUI's own flash subscription (live readout)
+        self.led_recent = []            # flashes of the last few seconds
         super()._build_ui()
         self.rig_tab = ttk.Frame(self.nb)
         self.seq_tab = ttk.Frame(self.nb)
@@ -237,6 +253,52 @@ class SuiteApp(bench.App):
                        command=lambda n=name: self._bg(lambda: self.relay.set_mode(n),
                                                        f"relay -> {n}", need="relay")
                        ).pack(side="left", padx=2)
+
+        # --- LED watcher (AS7343 on the relay jig) ---
+        lf = ttk.LabelFrame(t, text="LED watcher (AS7343 over the BlinkyHawk's LED, on the "
+                                    "relay jig's I2C)", padding=6)
+        lf.pack(fill="x", padx=6, pady=4)
+        row = ttk.Frame(lf)
+        row.pack(fill="x")
+        self.led_on_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(row, text="report flashes", variable=self.led_on_var,
+                        command=lambda: self._bg(lambda: self.relay.led_enable(
+                            self.led_on_var.get()), "LED watcher on/off", need="relay")
+                        ).pack(side="left")
+        ttk.Label(row, text="   gain").pack(side="left")
+        self.led_gain = ttk.Combobox(row, width=6, state="readonly", values=LED_GAINS)
+        self.led_gain.set("16x")
+        self.led_gain.pack(side="left", padx=2)
+        self.led_atime = tk.StringVar(value="0")
+        self.led_astep = tk.StringVar(value="999")
+        self.led_thr = tk.StringVar(value="20")
+        for txt, var, w in (("ATIME", self.led_atime, 4), ("ASTEP", self.led_astep, 6),
+                            ("threshold (counts)", self.led_thr, 5)):
+            ttk.Label(row, text=f"  {txt}").pack(side="left")
+            ttk.Entry(row, width=w, textvariable=var).pack(side="left", padx=2)
+        ttk.Button(row, text="Apply", command=self._led_apply).pack(side="left", padx=6)
+        self.led_raw_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(row, text="raw counts (for aiming)", variable=self.led_raw_var,
+                        command=lambda: self._bg(lambda: self.relay.led_raw(
+                            200 if self.led_raw_var.get() else 0), "LED raw stream",
+                            need="relay")).pack(side="left", padx=8)
+        row = ttk.Frame(lf)
+        row.pack(fill="x", pady=(6, 0))
+        ttk.Label(row, text="Calibrate colours:").pack(side="left")
+        ttk.Label(row, text="red from DC").pack(side="left", padx=(6, 0))
+        self.led_cal_v = tk.StringVar(value="1.0")
+        ttk.Entry(row, width=5, textvariable=self.led_cal_v).pack(side="left", padx=2)
+        ttk.Label(row, text="V").pack(side="left")
+        ttk.Button(row, text="Auto-calibrate (OPEN -> blue, SHORT -> green, DC -> red)",
+                   command=self._led_calibrate).pack(side="left", padx=6)
+        self.led_cal_lbl = ttk.Label(row, text="", foreground="#555")
+        self.led_cal_lbl.pack(side="left", padx=6)
+        self.led_lbl = ttk.Label(lf, text="relay jig not connected", font=("Consolas", 10),
+                                 foreground="#555")
+        self.led_lbl.pack(anchor="w", pady=(6, 0))
+        self.led_live = ttk.Label(lf, text="", font=("Consolas", 11, "bold"))
+        self.led_live.pack(anchor="w")
+        self._led_cal_text()
 
         # --- generator ---
         gf = ttk.LabelFrame(t, text="Function generator (Rigol DG852 Pro, LAN SCPI)", padding=6)
@@ -350,6 +412,19 @@ class SuiteApp(bench.App):
             self.fg_lbl.config(text="not connected", foreground="#a60")
         self.sc_lbl.config(text=self.scope.ident if self.scope else "not connected",
                            foreground="#0a0" if self.scope else "#a60")
+        info = getattr(self.relay, "led_info", {}) if self.relay is not None else {}
+        if self.relay is None:
+            self.led_lbl.config(text="relay jig not connected", foreground="#555")
+        elif info.get("sensor") != "1":
+            self.led_lbl.config(text="no AS7343 on the relay jig (needs jig firmware 1.1 and "
+                                     "the sensor on I2C)", foreground="#a60")
+        else:
+            g = int(info.get("gain", 5))
+            self.led_lbl.config(foreground="#0a0", text=(
+                f"sensor OK   reporting {'ON' if info.get('on') == '1' else 'off'}   gain "
+                f"{LED_GAINS[g] if 0 <= g < len(LED_GAINS) else g}   "
+                f"{info.get('hz', '?')} samples/s   dark {info.get('base', '?')} of "
+                f"{info.get('fullscale', '?')} counts   threshold {info.get('thr', '?')}"))
 
     def _jig_refresh(self):
         self.jig_port["values"] = port_choices() + [SIM]
@@ -365,19 +440,98 @@ class SuiteApp(bench.App):
         self._jig_disconnect()
         if port.upper() == SIM:
             self.relay = SimRelayJig(self.sim_bench)
+            self._led_subscribe()
             self._refresh_rig_labels()
             return
         jig = RelayJig()
 
         def done(_):
             self.relay = jig
+            self._led_subscribe()
         self._bg(lambda: jig.connect(port), f"relay jig on {port}", done=done)
 
     def _jig_disconnect(self):
         if self.relay is not None:
+            if self.led_q is not None:
+                self.relay.unsubscribe_flashes(self.led_q)
+                self.led_q = None
             self.relay.close()
         self.relay = None
         self._refresh_rig_labels()
+
+    def _led_apply(self):
+        try:
+            gain = LED_GAINS.index(self.led_gain.get())
+            atime, astep = int(self.led_atime.get()), int(self.led_astep.get())
+            thr = float(self.led_thr.get())
+        except ValueError:
+            self._rig_say("** LED: gain/ATIME/ASTEP/threshold must be numbers")
+            return
+        self._bg(lambda: self.relay.led_config(gain, atime, astep, thr), "LED sensor config",
+                 need="relay")
+
+    def _led_cal_text(self):
+        cal = self.decoder.calibrated
+        done = ", ".join(f"{k} {cal[k]}" for k in COLOURS if k in cal)
+        self.led_cal_lbl.config(
+            text=(f"calibrated: {done}   separation {self.decoder.separation():.3f}"
+                  if done else "NOT calibrated -- using rough default colours"),
+            foreground="#0a0" if len(cal) == 3 else "#a60")
+
+    def _led_calibrate(self):
+        if self.relay is None or not getattr(self.relay, "has_led", False):
+            messagebox.showerror("LED calibration", "Connect the relay jig with its AS7343 first.")
+            return
+        try:
+            v = float(self.led_cal_v.get())
+        except ValueError:
+            return
+        if not messagebox.askokcancel(
+                "LED calibration",
+                "The jig will go OPEN (blue float alert), SHORT (green), then the generator "
+                f"at {v:+g} V DC (red VDC+ alert), recording each for 5 s.\n\nThe unit must be "
+                "alerting normally -- LED on, not locked out by charging -- and tuned so "
+                f"{v:+g} V reads as voltage.  With serial connected, a condition the unit is "
+                "not actually alerting is skipped rather than learned."):
+            return
+        self._start_job(lambda r: r.run_led_calibration(v, 5.0, 1.0),
+                        need_serial=False, use_led=True)
+
+    def _led_subscribe(self):
+        if self.relay is not None and getattr(self.relay, "has_led", False):
+            self.led_q = self.relay.subscribe_flashes()
+
+    def _led_pump(self):
+        """Live readout: last flash + what the last 3 s decode to."""
+        if self.led_q is None:
+            return
+        got = False
+        while True:
+            try:
+                f = self.led_q.get_nowait()
+            except queue.Empty:
+                break
+            self.led_recent.append(self.decoder.classify(f))
+            got = True
+        now = time.time()
+        # Age by when the flash ENDED: a long one (room light over the threshold,
+        # or a solid-on LED the jig reports in 5 s pieces) STARTED more than 3 s
+        # ago the moment it arrives.  Ageing by start emptied this list under
+        # the [-1] below, and that exception stopped the whole GUI updating.
+        self.led_recent = [f for f in self.led_recent
+                           if now - (f.t + f.dur_ms / 1000.0) < 3.0]
+        if got and self.led_recent:
+            f = self.led_recent[-1]
+            d = self.decoder.decode(self.led_recent)
+            self.led_live.config(text=(
+                f"last flash: {f.colour} (cos {f.cos:.2f}, {f.dur_ms} ms, peak {f.peak:.0f}"
+                f"{', SATURATED' if f.sat else ''})     last 3 s: "
+                f"{STATE_NAMES.get(d['state'], d['state'])}  [{d['colours']}]"),
+                foreground="#c00" if f.sat else "#06a")
+        raw = getattr(self.relay, "raw_last", None)
+        if raw and self.led_raw_var.get():
+            self.led_lbl.config(text="raw  FZ {1}  FY {2}  FXL {3}  NIR {4}  VIS {5}".format(*raw)
+                                if len(raw) >= 6 else str(raw))
 
     def _fg_connect(self):
         ip = self.fg_ip.get().strip()
@@ -569,6 +723,18 @@ class SuiteApp(bench.App):
         self.seq_off_on = tk.BooleanVar(value=True)
         ttk.Checkbutton(r, text="Generator path with output OFF (expect OPEN)",
                         variable=self.seq_off_on).pack(side="left", padx=20)
+        r = ttk.Frame(cf)
+        r.pack(fill="x", pady=(4, 0))
+        ttk.Label(r, text="Judge by:").pack(side="left")
+        self.seq_battery = tk.BooleanVar(value=False)
+        ttk.Checkbutton(r, text="unit on battery -- NO serial link, LED watcher only",
+                        variable=self.seq_battery).pack(side="left", padx=6)
+        self.seq_use_led = tk.BooleanVar(value=True)
+        ttk.Checkbutton(r, text="use the LED watcher when available",
+                        variable=self.seq_use_led).pack(side="left", padx=6)
+        ttk.Label(r, foreground="#555",
+                  text="(the LED needs >= ~2.5 s dwell: the float blink is ~1 per second)"
+                  ).pack(side="left")
 
         of = ttk.LabelFrame(t, text="Timing, scope, run", padding=6)
         of.pack(fill="x", padx=6, pady=4)
@@ -602,10 +768,11 @@ class SuiteApp(bench.App):
         self.det_lbl = ttk.Label(r, text="$DET passes: 0", foreground="#555")
         self.det_lbl.pack(side="right")
 
-        cols = ("cond", "exp", "res", "n", "C", "F", "V", "rest", "metric", "scope")
+        cols = ("cond", "exp", "res", "n", "C", "F", "V", "kind", "led", "ledc", "rest",
+                "metric", "scope")
         heads = ("condition", "expect", "result", "passes", "CLOSED %", "OPEN %", "VOLT %",
-                 "rest diff V", "metric", "scope")
-        widths = (170, 55, 60, 55, 70, 70, 70, 95, 80, 420)
+                 "kind", "LED says", "LED flashes", "rest diff V", "metric", "scope")
+        widths = (170, 55, 60, 50, 65, 60, 60, 55, 70, 120, 85, 70, 300)
         tf = ttk.Frame(t)
         tf.pack(fill="both", expand=True, padx=6, pady=4)
         self.seq_tree = ttk.Treeview(tf, columns=cols, show="headings", height=12)
@@ -639,6 +806,19 @@ class SuiteApp(bench.App):
             return
         if not conds:
             return
+        battery = self.seq_battery.get()
+        use_led = self.seq_use_led.get()
+        has_led = self.relay is not None and getattr(self.relay, "has_led", False)
+        if battery and not (use_led and has_led):
+            messagebox.showerror("Test", "Battery mode judges by the LED watcher alone, and "
+                                         "the relay jig has no AS7343 connected (or it is "
+                                         "switched off here).")
+            return
+        if battery and dwell < 2.5:
+            if not messagebox.askyesno("Test", f"A {dwell:g} s dwell may catch fewer than two "
+                                               "float blinks, so those conditions would come "
+                                               "out NO DATA.  Run anyway?"):
+                return
         if self.fgen is None and any(c.kind in ("dc", "ac") for c in conds):
             if not messagebox.askyesno(
                     "Test", "The function generator is not connected, so the DC/AC "
@@ -648,7 +828,9 @@ class SuiteApp(bench.App):
         self.seq_prog.config(maximum=len(conds), value=0)
         scope_mode = self.seq_scope.get() or None
         note = self.seq_note.get()
-        self._start_job(lambda r: r.run_plan(conds, dwell, settle, scope_mode, sto, note))
+        self._start_job(lambda r: r.run_plan(conds, dwell, settle, scope_mode, sto, note),
+                        need_serial=not battery, use_led=use_led,
+                        serial_if_open=not battery)
 
     # ----------------------------------------------------------- tune tab
     def _build_tune_tab(self):
@@ -859,18 +1041,23 @@ class SuiteApp(bench.App):
         self.tu_canvas.draw_idle()
 
     # ------------------------------------------------------------ jobs
-    def _start_job(self, job):
+    def _start_job(self, job, need_serial=True, use_led=True, serial_if_open=True):
+        """need_serial     the job cannot run without the BlinkyHawk's serial link
+        serial_if_open  use the link when it happens to be open.  Battery mode
+                        passes False: no $DET at all, the LED is the only judge."""
         if self.worker and self.worker.is_alive():
             messagebox.showinfo("Busy", "A run is already in progress.")
             return
-        if not self.serial.is_open:
+        if need_serial and not self.serial.is_open:
             messagebox.showerror("Not connected", "Connect the BlinkyHawk first.")
             return
         self.stop_event.clear()
-        dev = S.DeviceClient(lambda: self.serial, self.line_queue, self.stop_event)
+        dev = (S.DeviceClient(lambda: self.serial, self.line_queue, self.stop_event)
+               if (need_serial or serial_if_open) and self.serial.is_open else None)
         relay = self.relay if self.relay is not None else S.ManualRelay(self._worker_prompt)
         runner = S.Runner(dev, relay, self.fgen, self.scope,
-                          lambda k, p: self.wq.put((k, p)), self.stop_event)
+                          lambda k, p: self.wq.put((k, p)), self.stop_event,
+                          use_led=use_led, decoder=self.decoder)
 
         def run():
             try:
@@ -910,53 +1097,110 @@ class SuiteApp(bench.App):
             os.startfile(d)
 
     def _pump_worker(self):
+        """Drain the worker queue into the UI.
+
+        Everything the background threads show -- result rows, status, the
+        instrument connect replies -- comes through here, so this must survive
+        any one bad message: each is handled in its own try, and the loop is
+        rescheduled in a finally.  (An exception here once stopped all output
+        for the rest of the session, which looked like the test and the scope
+        connect doing nothing.)"""
         try:
-            while True:
-                kind, p = self.wq.get_nowait()
-                if kind == "log":
-                    self._log(p)
-                    self._tune_say(p)
-                elif kind == "rig":
-                    self._rig_say(p)
-                elif kind == "call":
-                    p()
-                elif kind in ("status", "stage"):
-                    self.seq_status.config(text=p)
-                    self.tu_status.config(text=p)
-                elif kind == "progress":
-                    self.seq_prog.config(value=p[0], maximum=p[1])
-                elif kind == "summary":
-                    self._add_summary(p)
-                elif kind == "tune_voltage":
-                    self._plot_voltage(p)
-                elif kind == "tune_threshold":
-                    self._plot_metric(p)
-                elif kind == "report":
-                    self.tu_text.delete("1.0", "end")
-                    self._tune_say(p)
-                elif kind == "tune_done":
-                    self.tune_state = p
-                    if p["applied"]:
-                        self.tu_save.config(state="normal")
-                        self.tu_revert.config(state="normal")
-                    self._send("!CFG")
-                elif kind == "rundir":
-                    if p:
-                        self.last_run_dir = p
-                elif kind == "finished":
-                    self.seq_status.config(text=p)
-                    self.tu_status.config(text=p)
-                    self._send("!STATUS")
-        except queue.Empty:
+            for _ in range(500):          # bounded, so a flood cannot starve Tk
+                try:
+                    kind, p = self.wq.get_nowait()
+                except queue.Empty:
+                    break
+                try:
+                    self._handle_wq(kind, p)
+                except Exception:
+                    self._report_error(f"handling '{kind}' from the worker")
+            try:
+                self._led_pump()
+            except Exception:
+                self._report_error("updating the LED readout")
+        finally:
+            self.after(100, self._pump_worker)
+
+    def _handle_wq(self, kind, p):
+        if kind == "log":
+            self._log(p)
+            self._tune_say(p)
+        elif kind == "rig":
+            self._rig_say(p)
+        elif kind == "call":
+            p()
+        elif kind in ("status", "stage"):
+            self.seq_status.config(text=p)
+            self.tu_status.config(text=p)
+        elif kind == "progress":
+            self.seq_prog.config(value=p[0], maximum=p[1])
+        elif kind == "summary":
+            self._add_summary(p)
+        elif kind == "tune_voltage":
+            self._plot_voltage(p)
+        elif kind == "tune_threshold":
+            self._plot_metric(p)
+        elif kind == "report":
+            self.tu_text.delete("1.0", "end")
+            self._tune_say(p)
+        elif kind == "tune_done":
+            self.tune_state = p
+            if p["applied"]:
+                self.tu_save.config(state="normal")
+                self.tu_revert.config(state="normal")
+            self._send("!CFG")
+        elif kind == "ledcal":
+            self.decoder.load()
+            self._led_cal_text()
+            messagebox.showinfo("LED calibration", "\n".join(p))
+        elif kind == "rundir":
+            if p:
+                self.last_run_dir = p
+        elif kind == "finished":
+            self.seq_status.config(text=p)
+            self.tu_status.config(text=p)
+            self._send("!STATUS")
+
+    def _report_error(self, where):
+        """Show a caught exception in the logs and append it to ERROR_LOG."""
+        tb = traceback.format_exc()
+        try:
+            with open(ERROR_LOG, "a", encoding="utf-8") as fh:
+                fh.write(f"--- {datetime.now():%Y-%m-%d %H:%M:%S}  {where}\n{tb}\n")
+        except OSError:
             pass
-        self.after(100, self._pump_worker)
+        last = tb.strip().splitlines()[-1]
+        msg = f"!! GUI error while {where}: {last}   (details: {ERROR_LOG})"
+        for fn in (self._log, self._rig_say, self._tune_say):
+            try:
+                fn(msg)
+            except Exception:
+                pass
+        try:
+            self.seq_status.config(text="GUI error -- see log")
+        except Exception:
+            pass
+
+    def _tk_error(self, exc, val, tb):
+        """Tk callback exceptions (button handlers etc.) -- same treatment."""
+        try:
+            raise val
+        except Exception:
+            self._report_error("running a button/timer callback")
 
     def _add_summary(self, s):
         pct = lambda x: f"{x * 100:.0f}"
         num = lambda x, f: "" if x is None else format(x, f)
+        has_serial = s["n"] > 0
         self.seq_tree.insert("", "end", tags=(s["result"],), values=(
-            f"{s['phase']}: {s['label']}", s["expected"], s["result"], s["n"],
-            pct(s["lead_C"]), pct(s["lead_F"]), pct(s["lead_V"]),
+            f"{s['phase']}: {s['label']}", s["expected"], s["result"],
+            s["n"] if has_serial else "-",
+            pct(s["lead_C"]) if has_serial else "", pct(s["lead_F"]) if has_serial else "",
+            pct(s["lead_V"]) if has_serial else "",
+            s["kind"] if has_serial and s["lead_V"] else "",
+            STATE_NAMES.get(s.get("led_state", ""), s.get("led_state", "")),
+            s.get("led_colours", ""),
             num(s["rest_mean"], "+.4f"), num(s["metric_mean"], ".4f"), s.get("scope", "")))
         kids = self.seq_tree.get_children()
         if kids:

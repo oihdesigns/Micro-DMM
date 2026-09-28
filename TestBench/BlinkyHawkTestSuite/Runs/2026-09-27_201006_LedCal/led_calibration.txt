@@ -1,0 +1,4 @@
+B: only 0 usable flash(es)
+G: only 0 usable flash(es)
+R: only 0 usable flash(es)
+closest two references differ by 0.481 in cosine (good)

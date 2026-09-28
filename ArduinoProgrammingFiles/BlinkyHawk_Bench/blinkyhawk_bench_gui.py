@@ -180,6 +180,15 @@ KEY_META = {
     "DETBAND":      ("Detection", "num",  "Method 1: |diff-centre| within this = 'returned' (V)"),
     "DETWINUS":     ("Detection", "num",  "Methods 1&2: max sample window / timeout (us)"),
     "DETAREAUS":    ("Detection", "num",  "Method 2: tail-area integration start (us from toggle)"),
+    # Voltage kind (bench v5, ported from production).  These do not change
+    # WHETHER voltage alerts, only which of the three patterns it plays --
+    # VCLASS=0 reverts to the single all-red "voltage present" alert.
+    "VCLASS":       ("Detection", "bool", "Classify voltage as VDC+ / VDC- / VAC; "
+                                          "0 = every voltage alerts as VDC+ (legacy)"),
+    "ACWINMS":      ("Detection", "num",  "Classification sampling window (ms). Must span a "
+                                          "full mains cycle -- below 20 ms, AC can read as DC"),
+    "ACBAND":       ("Detection", "num",  "Peak needed on BOTH sides to call AC (V). "
+                                          "0 = use VOLTFAST x REFBAND"),
     # --- Alerts ---
     "LED":          ("Alerts", "bool", "Master enable: detection LED alerts"),
     "BEEP":         ("Alerts", "bool", "Master enable: speaker"),
@@ -202,6 +211,12 @@ KEY_META = {
     "CONTOFFMS":    ("Alerts", "num",  "Gap between continuity pulses (ms)"),
     "VOLTONMS":     ("Alerts", "num",  "Voltage pulse on-time (ms)"),
     "VOLTOFFMS":    ("Alerts", "num",  "Gap between voltage pulses (ms)"),
+    # The rhythms that separate the three voltage kinds: VDC+ short-short,
+    # VDC- short-long, VAC three shorts.  The LED spells the same thing:
+    # red-red, red-blue, red-blue-green.
+    "VOLTLONGMS":   ("Alerts", "num",  "VDC-: on-time of the final, LONG pulse (ms). "
+                                       "VOLTPULSES still sets how many pulses"),
+    "VACPULSES":    ("Alerts", "num",  "VAC: pulses per beep (each VOLTONMS long)"),
     # --- Alert LED --- (hue is fixed in firmware: blue/green/red = the meaning)
     "LEDFLOATBR":   ("Alert LED", "num", "Floating (blue) brightness 0-255; 0 = this state dark"),
     "LEDCLOSEDBR":  ("Alert LED", "num", "Closed (green) brightness 0-255; 0 = this state dark"),
@@ -508,6 +523,14 @@ class App(tk.Tk):
 
         # charge lockout: while USB-powered the device suppresses normal alerts
         # and shows the charging blink.  These drive !ALERTS.
+        # voltage kind: one classification pass, reported as $VTEST in the log.
+        # The peaks it prints are the only view of what the VDC+/VDC-/VAC
+        # decision is actually made on.
+        vk = ttk.LabelFrame(ctl, text="Voltage kind", padding=4)
+        vk.grid(row=1, column=6, padx=4, pady=4, sticky="w")
+        ttk.Button(vk, text="Classify now",
+                   command=lambda: self._send("!VTEST")).pack(side="left", padx=2)
+
         cf = ttk.LabelFrame(ctl, text="Charge lockout", padding=4)
         cf.grid(row=2, column=0, columnspan=4, padx=4, pady=4, sticky="w")
         ttk.Button(cf, text="Re-enable LED alerts",

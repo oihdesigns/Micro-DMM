@@ -57,19 +57,24 @@ def _f(s):
 
 
 DET_FIELDS = ["ms", "raw", "lead", "vpath", "n", "mean", "min", "max",
-              "metric", "retms", "area", "thr"]
+              "metric", "retms", "area", "thr", "rawkind", "kind", "vpos", "vneg"]
+
+VOLT_KINDS = ("VDC+", "VDC-", "VAC")
 
 
 def parse_det(line):
-    """$DET,<ms>,<raw>,<lead>,<vpath>,<n>,<mean>,<min>,<max>,<metric>,<retms>,<area>,<thr>"""
+    """$DET,<ms>,<raw>,<lead>,<vpath>,<n>,<mean>,<min>,<max>,<metric>,<retms>,<area>,<thr>
+           [,<rawkind>,<kind>,<vpos>,<vneg>]   (voltage kind: bench firmware v5+)"""
     f = line.split(",")
     if len(f) < 13 or f[0] != "$DET":
         return None
+    f += [""] * (17 - len(f))
     try:
         return {"ms": int(f[1]), "raw": f[2], "lead": f[3], "vpath": f[4],
                 "n": int(f[5]), "mean": _f(f[6]), "min": _f(f[7]), "max": _f(f[8]),
                 "metric": _f(f[9]), "retms": _f(f[10]), "area": _f(f[11]),
-                "thr": _f(f[12])}
+                "thr": _f(f[12]), "rawkind": f[13].strip() or None,
+                "kind": f[14].strip() or None, "vpos": _f(f[15]), "vneg": _f(f[16])}
     except ValueError:
         return None
 
@@ -479,30 +484,79 @@ def tune_threshold(candidates, closed_max, open_min):
 # ---------------------------------------------------------------------------
 # per-condition summary (used by the sequencer and the verify pass)
 # ---------------------------------------------------------------------------
-def summarize(label, expected, passes, stable_count=2):
-    """expected: 'C' | 'F' | 'V' | '!V' (anything but voltage) | None (don't care)."""
+def _combine(*results):
+    r = [x for x in results if x]
+    if not r:
+        return ""
+    return "FAIL" if "FAIL" in r else "PASS"
+
+
+def summarize(label, expected, passes, stable_count=2, led=None):
+    """One condition's verdict.
+
+    expected: 'C' | 'F' | 'V' (any voltage) | 'VDC+' | 'VDC-' | 'VAC' |
+              '!V' (anything but voltage) | None (don't care)
+    passes:   $DET passes (empty when the BlinkyHawk is on battery, no serial)
+    led:      bh_led.LedDecoder.decode() result, or None without the LED sensor
+
+    The serial verdict uses the DEBOUNCED lead state -- what the unit alerts --
+    and, for a voltage kind, the debounced kind while lead is VOLTAGE (skipped
+    if the firmware predates the classifier).  The LED verdict is what the
+    unit actually showed.  Both must pass when both are available.
+    """
+    from bh_led import led_matches
     skip = stable_count + 2           # let the debounce catch up with the new condition
     use = passes[skip:] if len(passes) > skip + 3 else passes
     n = len(use)
     frac = lambda key, s: (sum(1 for p in use if p[key] == s) / n) if n else 0.0
     rest = stats([p["mean"] for p in use if p.get("n")])
     met = stats([p["metric"] for p in use])
+    kinds = [p.get("kind") for p in use if p["lead"] == "V" and p.get("kind")]
+    kind_major = max(set(kinds), key=kinds.count) if kinds else ""
+    vpos = stats([p.get("vpos") for p in use])
+    vneg = stats([p.get("vneg") for p in use])
     out = {"label": label, "expected": expected or "", "n": n,
            "lead_C": frac("lead", "C"), "lead_F": frac("lead", "F"), "lead_V": frac("lead", "V"),
            "raw_C": frac("raw", "C"), "raw_F": frac("raw", "F"), "raw_V": frac("raw", "V"),
+           "kind": kind_major,
+           "kind_frac": (kinds.count(kind_major) / len(kinds)) if kinds else None,
+           "vpos_max": vpos.get("max"), "vneg_max": vneg.get("max"),
            "rest_mean": rest.get("mean"), "rest_sd": rest.get("std"),
            "rest_min": rest.get("min"), "rest_max": rest.get("max"),
            "metric_mean": met.get("mean"), "metric_sd": met.get("std"),
            "metric_min": met.get("min"), "metric_max": met.get("max")}
-    if not n or not expected:
-        out["result"] = "" if n else "NO DATA"
-    elif expected == "!V":
-        out["result"] = "PASS" if out["lead_V"] == 0 else "FAIL"
-    else:
-        out["result"] = "PASS" if out["lead_" + expected] == 1.0 else "FAIL"
+
+    serial_res = ""
+    if n and expected:
+        if expected == "!V":
+            serial_res = "PASS" if out["lead_V"] == 0 else "FAIL"
+        elif expected in ("C", "F"):
+            serial_res = "PASS" if out["lead_" + expected] == 1.0 else "FAIL"
+        else:                                        # V or a voltage kind
+            ok = out["lead_V"] == 1.0
+            if ok and expected in VOLT_KINDS and kinds:
+                ok = all(k == expected for k in kinds)
+            serial_res = "PASS" if ok else "FAIL"
+    out["serial_result"] = serial_res
+
+    led_res = ""
+    if led is not None:
+        out["led_state"] = led.get("state", "")
+        out["led_colours"] = led.get("colours", "")
+        out["led_n"] = led.get("n", 0)
+        m = led_matches(expected, out["led_state"])
+        led_res = "" if m is None else ("PASS" if m else "FAIL")
+    out["led_result"] = led_res
+
+    # Nothing judged although something was expected (e.g. battery mode with a
+    # window too short for the LED) is NO DATA, never a silent blank.
+    out["result"] = _combine(serial_res, led_res) or ("NO DATA" if expected else "")
     return out
 
 
-SUMMARY_COLS = ["label", "expected", "result", "n", "lead_C", "lead_F", "lead_V",
-                "raw_C", "raw_F", "raw_V", "rest_mean", "rest_sd", "rest_min", "rest_max",
+SUMMARY_COLS = ["label", "expected", "result", "serial_result", "led_result", "n",
+                "lead_C", "lead_F", "lead_V", "raw_C", "raw_F", "raw_V",
+                "kind", "kind_frac", "vpos_max", "vneg_max",
+                "led_state", "led_colours", "led_n",
+                "rest_mean", "rest_sd", "rest_min", "rest_max",
                 "metric_mean", "metric_sd", "metric_min", "metric_max"]

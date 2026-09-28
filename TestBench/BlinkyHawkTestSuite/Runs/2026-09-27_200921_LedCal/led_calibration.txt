@@ -1,0 +1,4 @@
+B: only 0 usable flash(es)
+G: 10 flashes, ref FZ/FY/FXL = 0.242/0.964/0.109, worst cosine 1.000
+R: 9 flashes, ref FZ/FY/FXL = 0.052/0.422/0.905, worst cosine 1.000
+closest two references differ by 0.481 in cosine (good)

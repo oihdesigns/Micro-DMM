@@ -52,9 +52,9 @@
  * ** ITS EEPROM IS A SEPARATE BLOCK. **  Magic "BHKX" at address 1024, not
  * "BHK1" at 0, so flashing this onto a real unit does NOT touch that unit's
  * production config, and flashing production back restores it untouched.  The
- * unit serial-number block (512) is shared and read normally.  There are no
- * config migrations here: a bench config is not worth carrying forward, and an
- * unrecognised image is simply replaced with defaults.
+ * unit serial-number block (512) is shared and read normally.  Older bench
+ * layouts ARE migrated (configMigrateBench, append-only); only an image that
+ * cannot be read is replaced with defaults.
  *
  * ------------------------------------------------------------------
  * Target: Seeed XIAO RA4M1 ONLY (Renesas RA4M1, 14-bit ADC).
@@ -153,6 +153,10 @@
  *   !STREAM[,0|1]       continuous raw streaming on/off (diag only)
  *   !RATE,<ms>          stream interval in ms
  *   !VMODE,<0|1|2>      voltage mode: 0=auto  1=lock ON  2=disable
+ *   !VTEST              classify the voltage on the leads now and report the
+ *                       peaks the decision was made on ($VTEST,<kind>,vpos=..,
+ *                       vneg=..,band=..,winms=..,n=..).  Ignores VCLASS, so it
+ *                       measures even with classification switched off.
  *   !MOSFET,<-1|0|1>    MOSFET: -1=auto(run detection) 0=hold off 1=hold on
  *   !ALERTS[,0|1]       re-enable normal alerts while charging (1=on,0=blink)
  *   !CAP[,<ms>]         capture ADC across a MOSFET toggle, then dump
@@ -189,6 +193,7 @@
  *   $DIP,<idx>,<threshV>                 threshold position changed (live).
  *                                        HWREV 2: a DIP switch moved.
  *                                        HWREV 3: THRESHSEL was set.
+ *   $VTEST,<VDC+|VDC-|VAC>,...           one voltage classification (!VTEST)
  *   $DIAG,<ms>,<rawPos>,<rawNeg>,<posV>,<negV>,<diffV>    (streaming)
  *   $CAPSTART,<n>,<toggleUs>,<durMs>,<fullScale>,<vref>   (capture header)
  *   $CAP,<t_us>,<rawPos>,<rawNeg>                         (capture rows)
@@ -346,11 +351,12 @@ const float ADC_FULL_SCALE  = 16383.0f;
 // two builds freely and each keeps its own settings.  Config is ~200 bytes and
 // the SN block lives at 512, so 1024 is clear of both.
 #define CFG_MAGIC   0x42484B58UL   // "BHKX" -- bench, deliberately not "BHK1"
-#define CFG_VERSION 4              // bench layout v4 (adds chargeInhibit; v3
-                                   //  added deepParkOff, v2 the deep-sleep
-                                   //  stage, v1 the pin map + power gates).
-                                   //  No migration by design -- an older bench
-                                   //  block is simply replaced with defaults.
+#define CFG_VERSION 5              // bench layout v5 (adds the VDC+/VDC-/VAC
+                                   //  voltage-kind keys, ported from production
+                                   //  v8; v4 added chargeInhibit, v3 deepParkOff,
+                                   //  v2 the deep-sleep stage, v1 the pin map +
+                                   //  power gates).  Older bench layouts are
+                                   //  MIGRATED -- see configMigrateBench().
 #define CFG_EEPROM_ADDR 1024
 
 struct Config {
@@ -586,6 +592,27 @@ struct Config {
   // between a working boost supply and a disconnected one.
   uint8_t  chargeInhibit;
 
+  // -- Voltage kind (VDC+ / VDC- / VAC) -- bench v5 ------------------
+  // Ported from the production firmware (its CFG_VERSION 8).  There these keys
+  // sit in the Detection and Alerts sections; here they are APPENDED, because
+  // the bench migration only works if every new field goes immediately before
+  // crc (see BENCH_LAYOUTS).  Semantics are identical to production:
+  //
+  // Once voltage is present, a second pass decides WHICH kind it is, so the
+  // alert can carry polarity as well as presence.  SENSE_POS rests near mid-rail
+  // (negFixV + refCenterV) behind nothing but two Schottky clamps to the rails,
+  // with no filter capacitor on the node, so the ADC sees the instantaneous
+  // waveform and the sign of (v - refCenterV) is real information.
+  //   both peaks past acBandV -> the waveform crosses the centre -> VAC
+  //   otherwise               -> the larger peak's side gives the polarity
+  uint8_t  voltClassify;   // 1 = classify; 0 = every voltage alerts as VDC+ (legacy)
+  uint16_t acWindowMs;     // classification window; must span a full mains cycle
+  float    acBandV;        // per-side peak needed to call AC; 0 = voltFastMult*refBandV
+  // VDC- is short-LONG: every pulse but the last uses voltOnMs and the final one
+  // stretches to voltNegLongMs.  VAC keeps the short pulse and adds a third.
+  uint16_t voltNegLongMs;  // VDC-: on-time of the final (long) pulse
+  uint8_t  voltAcPulses;   // VAC: pulses per beep (each short, at voltOnMs)
+
   uint16_t crc;            // CRC16 over everything above (must stay LAST)
 };
 
@@ -717,6 +744,15 @@ void configDefaults() {
   cfg.deepHz  = 1.0f;                // stage 2 probes once a second
   cfg.deepParkOff = 2;               // 2 = follow SLEEPPARK (no change by default)
   cfg.chargeInhibit = 1;             // production behaviour until told otherwise
+
+  // Voltage kind: production v8 defaults.  A unit migrated from bench v4 gains
+  // VDC-/VAC discrimination, and its VDC+ alert -- the only one v4 could
+  // produce -- is unchanged (red-red at voltPulses x voltOnMs).
+  cfg.voltClassify  = 1;
+  cfg.acWindowMs    = 25;            // > one 50 Hz cycle; 1.5 cycles at 60 Hz
+  cfg.acBandV       = 0.0f;          // 0 = voltFastMult * refBandV
+  cfg.voltNegLongMs = 150;           // ~7x voltOnMs: unmistakably the long one
+  cfg.voltAcPulses  = 3;             // triple short
 }
 
 // CRC16-CCITT over an arbitrary byte range (shared by Config and SerialId).
@@ -802,6 +838,7 @@ const BenchLayout BENCH_LAYOUTS[] = {
   { 1, (uint16_t)offsetof(Config, deepSec)       },  // v1: pin map + power gates
   { 2, (uint16_t)offsetof(Config, deepParkOff)   },  // v2: + the deep-sleep stage
   { 3, (uint16_t)offsetof(Config, chargeInhibit) },  // v3: + DEEPPARK
+  { 4, (uint16_t)offsetof(Config, voltClassify)  },  // v4: + CHGINHIBIT
 };
 const int BENCH_LAYOUT_COUNT = sizeof(BENCH_LAYOUTS) / sizeof(BENCH_LAYOUTS[0]);
 
@@ -811,7 +848,9 @@ static_assert(offsetof(Config, deepSec) < offsetof(Config, deepParkOff),
               "bench layout table: deepSec must precede deepParkOff");
 static_assert(offsetof(Config, deepParkOff) < offsetof(Config, chargeInhibit),
               "bench layout table: deepParkOff must precede chargeInhibit");
-static_assert(offsetof(Config, chargeInhibit) < offsetof(Config, crc),
+static_assert(offsetof(Config, chargeInhibit) < offsetof(Config, voltClassify),
+              "bench layout table: chargeInhibit must precede voltClassify");
+static_assert(offsetof(Config, voltClassify) < offsetof(Config, crc),
               "bench layout table: every listed field must precede crc");
 
 // Where that version's crc sat in its own image: immediately after its last
@@ -959,6 +998,14 @@ const ConfigField CFG_FIELDS[] = {
   { "DETBAND",     FT_FLOAT, &cfg.detReturnBand,   0.005f, 1.0f   },
   { "DETWINUS",    FT_U16,   &cfg.detWindowUs,     200,    5000   },
   { "DETAREAUS",   FT_U16,   &cfg.detAreaStartUs,  0,      5000   },
+  // Voltage kind (VDC+ / VDC- / VAC).  VCLASS=0 reverts to the single all-red
+  // "voltage present" alert, which is the escape hatch if a unit's front end
+  // turns out not to resolve polarity cleanly -- no reflash needed.
+  { "VCLASS",      FT_BOOL,  &cfg.voltClassify,    0,      1      },
+  // Lower bound 20 ms is not padding: the window has to cover a full 50 Hz
+  // cycle or a half cycle can be all that is sampled, and AC reads as DC.
+  { "ACWINMS",     FT_U16,   &cfg.acWindowMs,      20,     200    },
+  { "ACBAND",      FT_FLOAT, &cfg.acBandV,         0.0f,   3.3f   },
   // Alerts
   { "LED",         FT_BOOL,  &cfg.ledEnable,       0,      1      },
   { "BEEP",        FT_BOOL,  &cfg.beepEnable,      0,      1      },
@@ -982,6 +1029,10 @@ const ConfigField CFG_FIELDS[] = {
   { "CONTOFFMS",   FT_U16,   &cfg.contOffMs,       1,      2000   },
   { "VOLTONMS",    FT_U16,   &cfg.voltOnMs,        1,      2000   },
   { "VOLTOFFMS",   FT_U16,   &cfg.voltOffMs,       1,      2000   },
+  // VDC- final pulse, and the VAC pulse count -- the rhythms that separate the
+  // three voltage kinds.  VOLTPULSES still sets the count for VDC+ and VDC-.
+  { "VOLTLONGMS",  FT_U16,   &cfg.voltNegLongMs,   1,      2000   },
+  { "VACPULSES",   FT_U8,    &cfg.voltAcPulses,    1,      5      },
   // Alert LED: brightness (0 = that state's LED off), flash on-time, and the
   // minimum gap between flash starts.  0 brightness is allowed -- it silences
   // one state's LED without disabling the other two, which LED cannot do.
@@ -1380,6 +1431,38 @@ LeadState runMosfetTestStable();
 LeadState lowPowerProbe();
 void      slogRecord(LeadState s, bool awake);
 
+// Sub-classification of STATE_VOLTAGE (ported from production).  leadState
+// still means only "voltage is present", and every detection, debounce, sleep
+// and logging path keys off that alone -- this decides nothing except which
+// alert pattern is played.  It defaults to VKIND_DCP, whose LED sequence and
+// beep are byte-for-byte the plain voltage alert, so any path that reaches the
+// voltage alert without a fresh classification behaves exactly as before.
+enum VoltKind { VKIND_DCP, VKIND_DCN, VKIND_AC };
+VoltKind voltKind = VKIND_DCP;
+// False means voltKind does NOT describe whatever is on the leads right now,
+// so the next classification is adopted outright instead of being debounced.
+// Cleared whenever the voltage goes away, and on a wake from low power -- the
+// sleeping probe decides only that voltage is PRESENT and never classifies it.
+bool voltKindValid = false;
+// Raw (per-pass, undebounced) kind of the last classification, for $DET.
+VoltKind voltKindRaw = VKIND_DCP;
+bool     voltKindRawFresh = false;   // a classification ran this pass
+
+// LED colour sequence per kind.  One flash shows one step and the step advances
+// per flash, at the existing ledVoltMs / ledVoltPerMs cadence.  Each value is a
+// colour CHANNEL (0 = red, 1 = green, 2 = blue) lit at cfg.ledVoltBright.  Red
+// leads every sequence, because "voltage" has to read at the first flash.
+const uint8_t VKIND_SEQ[3][3] = {
+  { 0, 0, 0 },        // VKIND_DCP: red, red
+  { 0, 2, 0 },        // VKIND_DCN: red, blue
+  { 0, 2, 1 },        // VKIND_AC : red, blue, green
+};
+const uint8_t VKIND_SEQ_LEN[3] = { 2, 2, 3 };
+uint8_t voltSeqIdx = 0;         // next step of the active sequence
+
+VoltKind    classifyVoltage();
+const char *voltKindName(VoltKind k);
+
 // Active open/closed threshold, refreshed from the DIP switches + cfg.thresh
 // table every detection pass.
 float   activeThreshV = 0.5f;
@@ -1428,6 +1511,10 @@ int           beepPulsesLeft   = 0;
 unsigned long beepPhaseStart   = 0;
 unsigned long lastBeepSeqStart = 0;
 unsigned long beepOnMs = 20, beepOffMs = 10;
+// On-time of the FINAL pulse of a sequence; 0 = every pulse uses beepOnMs.
+// This is the whole of what makes VDC- a short-LONG beep while VDC+ stays
+// short-short -- the voltage alerts differ in rhythm, not pitch.
+unsigned long beepLastOnMs = 0;
 unsigned int  beepFreq = 0;
 bool speakerMuted = false;    // session mute (leads closed at boot)
 
@@ -1436,6 +1523,12 @@ float lastRestV = 0.0f, lastTestV = 0.0f;
 float lastMetric = 0.0f;      // scalar actually compared to the threshold
 float lastReturnMs = 0.0f;    // method 1 result (ms), or window on timeout
 float lastAreaVms  = 0.0f;    // method 2 result (V*ms)
+// Voltage classifier, for $STATUS / !VTEST / $DET / the debug line.  Peaks are
+// signed excursions from cfg.refCenterV, each measured as a positive magnitude
+// on its own side, so both being large is what "AC" means.
+float lastVPosPeakV = 0.0f;   // largest excursion above the resting centre
+float lastVNegPeakV = 0.0f;   // largest excursion below it
+int   lastVSamples  = 0;      // reads taken in the last classification window
 
 // BENCH: !DETLOG -- one $DET line per detection pass, for the automated test
 // suite (TestBench/BlinkyHawkTestSuite).  RAM only, off at boot.  While on,
@@ -1848,6 +1941,11 @@ void exitLowPower() {
   // millis() froze while we were in Standby, so the idle timer has to be
   // re-based here rather than carried across the sleep.
   idleSinceMs = millis();
+
+  // The probe that woke us can report STATE_VOLTAGE without having classified
+  // it, so whatever voltKind holds is the PREVIOUS contact's.  Mark it stale
+  // and let the first awake detection pass adopt the real one.
+  voltKindValid = false;
 }
 
 // One probe pass: is anything still there?  Runs the real runMosfetTest() so
@@ -2217,6 +2315,59 @@ bool voltagePresentSleep() {
   return false;
 }
 
+// Name a kind for the serial output.
+const char *voltKindName(VoltKind k) {
+  return (k == VKIND_AC) ? "VAC" : ((k == VKIND_DCN) ? "VDC-" : "VDC+");
+}
+
+// Decide WHICH kind of voltage is on the leads, once voltagePresent() has said
+// there is one (ported verbatim from production).  Presence itself is untouched
+// by this -- it is the safety-critical decision, and this runs after it.
+//
+// A peak hunt, not an average: sampling for acWindowMs -- which must cover a
+// full mains cycle -- catches both peaks of a 50/60 Hz waveform whatever its
+// phase when the window opens:
+//   both peaks past the band -> the waveform crosses the resting centre -> VAC
+//   otherwise                -> the side with the larger peak gives the polarity
+// A large input CLAMPS rather than rectifies, which is why this survives one:
+// AC flat-tops symmetrically and still reads two-sided, while DC of either
+// polarity clamps on one side only.
+//
+// The band defaults to voltFastMult * refBandV -- the wide "instant bypass"
+// band, NOT the tighter refBandV the averaged presence test uses: a peak over
+// hundreds of samples is a far noisier statistic than a mean over ten.  The
+// cost is that AC whose peaks fall between the two bands classifies as DC (it
+// still alerts as voltage, with the wrong sub-pattern).  ACBAND overrides.
+//
+// BENCH: the caller must have the analog gate raised -- runDetection() does
+// (the whole pass sits inside gatesMeasureBegin/End) and !VTEST does its own.
+VoltKind classifyVoltage() {
+  if (!cfg.voltClassify) return VKIND_DCP;      // legacy: every voltage is VDC+
+
+  float band = (cfg.acBandV > 0.0f) ? cfg.acBandV
+                                    : cfg.voltFastMult * cfg.refBandV;
+  float vMax = -1.0e6f, vMin = 1.0e6f;
+  int   n    = 0;
+
+  // Bounded by TIME, not by a sample count: the mains-cycle argument above is
+  // about wall clock.
+  unsigned long windowUs = (unsigned long)cfg.acWindowMs * 1000UL;
+  unsigned long t0 = micros();
+  while (micros() - t0 < windowUs) {
+    float v = readVoltage();
+    if (v > vMax) vMax = v;
+    if (v < vMin) vMin = v;
+    n++;
+  }
+
+  lastVPosPeakV = vMax - cfg.refCenterV;
+  lastVNegPeakV = cfg.refCenterV - vMin;
+  lastVSamples  = n;
+
+  if (lastVPosPeakV > band && lastVNegPeakV > band) return VKIND_AC;
+  return (lastVPosPeakV >= lastVNegPeakV) ? VKIND_DCP : VKIND_DCN;
+}
+
 // Sample the recovery transient once (methods 1 & 2).  MOSFET is assumed to
 // have just been switched OFF by the caller; timing starts here.  In a single
 // pass this computes BOTH candidate metrics so either can be thresholded and
@@ -2328,7 +2479,9 @@ void setPixel(uint8_t r, uint8_t g, uint8_t b) {
 
 // Rate-limited flash: on for onMs, then off, and no new flash until minGapMs
 // after the last one began.  Flags/timestamps owned per-state by the caller.
-void flashState(unsigned long now,
+// Returns true on the pass that STARTS a flash, and only then -- that is what
+// lets the voltage alert step through a colour sequence one flash at a time.
+bool flashState(unsigned long now,
                 uint8_t r, uint8_t g, uint8_t b,
                 unsigned long onMs, unsigned long minGapMs,
                 bool &flashing, unsigned long &lastFlash) {
@@ -2336,30 +2489,39 @@ void flashState(unsigned long now,
     flashing  = true;
     lastFlash = now;
     setPixel(r, g, b);
+    return true;
   } else if (flashing && (now - lastFlash >= onMs)) {
     flashing = false;
     setPixel(0, 0, 0);
   }
+  return false;
 }
 
 void updateLed() {
   static LeadState prevState = STATE_VOLTAGE;
+  static VoltKind  prevKind  = VKIND_DCP;
   unsigned long now = millis();
 
-  // On a state change, end any in-progress flash but keep the lastXFlash
-  // timestamps: each state's rate limit persists across transitions so a
-  // bouncing state can't re-fire immediately.
-  if (leadState != prevState) {
+  // On a state change -- or a change of voltage KIND, which is a different
+  // pattern and has to restart on red rather than resume mid-sequence -- end
+  // any in-progress flash but keep the lastXFlash timestamps: each state's
+  // rate limit persists across transitions so a bouncing state can't re-fire
+  // immediately.
+  if (leadState != prevState || voltKind != prevKind) {
     prevState      = leadState;
+    prevKind       = voltKind;
     floatFlashing  = false;
     closedFlashing = false;
     voltFlashing   = false;
+    voltSeqIdx     = 0;
     setPixel(0, 0, 0);
   }
 
   if (!cfg.ledEnable) { setPixel(0, 0, 0); return; }
 
-  // One channel per state: blue = floating, green = closed, red = voltage.
+  // One channel per state: blue = floating, green = closed, red = voltage --
+  // except that the voltage alert spells its KIND out across successive
+  // flashes (VKIND_SEQ), always starting on red.
   switch (leadState) {
     case STATE_FLOAT:
       flashState(now, 0, 0, cfg.ledFloatBright,
@@ -2369,10 +2531,18 @@ void updateLed() {
       flashState(now, 0, cfg.ledClosedBright, 0,
                  cfg.ledClosedMs, cfg.ledClosedPerMs, closedFlashing, lastClosedFlash);
       break;
-    case STATE_VOLTAGE:
-      flashState(now, cfg.ledVoltBright, 0, 0,
-                 cfg.ledVoltMs, cfg.ledVoltPerMs, voltFlashing, lastVoltFlash);
+    case STATE_VOLTAGE: {
+      // One flash = one step of this kind's sequence.  Advance only when a
+      // flash actually started, so the pattern tracks what was shown.
+      uint8_t ch = VKIND_SEQ[voltKind][voltSeqIdx];
+      if (flashState(now,
+                     (ch == 0) ? cfg.ledVoltBright : 0,
+                     (ch == 1) ? cfg.ledVoltBright : 0,
+                     (ch == 2) ? cfg.ledVoltBright : 0,
+                     cfg.ledVoltMs, cfg.ledVoltPerMs, voltFlashing, lastVoltFlash))
+        voltSeqIdx = (voltSeqIdx + 1) % VKIND_SEQ_LEN[voltKind];
       break;
+    }
   }
 }
 
@@ -2507,8 +2677,9 @@ void speakerOff() {
 
 // Begin a rate-limited sequence of `pulses` beeps.  `force` preempts any
 // in-progress sequence and ignores the rate cap (priority alerts).
+// `lastOnMs` is the on-time of the final pulse; 0 means every pulse uses onMs.
 void startBeep(unsigned long now, int pulses, unsigned long onMs, unsigned long offMs,
-               bool force, unsigned int freq) {
+               bool force, unsigned int freq, unsigned long lastOnMs) {
   if (!force) {
     if (beepOn || beepPulsesLeft > 0)             return;
     if (now - lastBeepSeqStart < cfg.beepMinMs)   return;
@@ -2517,6 +2688,7 @@ void startBeep(unsigned long now, int pulses, unsigned long onMs, unsigned long 
   beepPulsesLeft   = pulses;
   beepOnMs         = onMs;
   beepOffMs        = offMs;
+  beepLastOnMs     = lastOnMs;
   beepFreq         = freq;
   beepPhaseStart   = now;
   beepOn           = true;
@@ -2527,7 +2699,11 @@ void startBeep(unsigned long now, int pulses, unsigned long onMs, unsigned long 
 void updateBeep(unsigned long now) {
   if (!beepOn && beepPulsesLeft == 0) return;
   if (beepOn) {
-    if (now - beepPhaseStart >= beepOnMs) {
+    // The final pulse may be a different length.  beepPulsesLeft is decremented
+    // when a pulse STARTS, so 0 here means "the pulse now sounding is the last".
+    unsigned long onMs = (beepPulsesLeft == 0 && beepLastOnMs > 0) ? beepLastOnMs
+                                                                   : beepOnMs;
+    if (now - beepPhaseStart >= onMs) {
       speakerOff();
       beepOn         = false;
       beepPhaseStart = now;
@@ -2548,35 +2724,54 @@ void silenceSpeaker() {
 
 // Map the detection state to audio, mirroring updateLed().
 //   CLOSED  -> continuity beep;  VOLTAGE -> voltage beep;  FLOAT -> silent.
+// The voltage beep's RHYTHM carries the same information as the LED sequence:
+//   VDC+  short-short        VDC-  short-long        VAC  three shorts
 // Suppressed while charging (same lockout as the LED) and when muted/disabled.
 void updateSpeaker() {
   static LeadState prevState = STATE_VOLTAGE;
+  static VoltKind  prevKind  = VKIND_DCP;
   unsigned long now = millis();
 
   if (!cfg.beepEnable || speakerMuted) {
     silenceSpeaker();
     prevState = leadState;
+    prevKind  = voltKind;
     return;
   }
   if (chargeInhibits() && !alertOverride) {
     silenceSpeaker();
     prevState = leadState;      // avoid a stale beep on unplug
+    prevKind  = voltKind;
     return;
   }
 
-  bool entered = (leadState != prevState);
+  // A change of voltage KIND re-beeps too -- the rhythm is the message -- but
+  // it is NOT a priority alert the way entering the state is: it goes through
+  // the rate cap, which stops a signal on the classifier's boundary beeping
+  // every couple of hundred milliseconds.
+  bool entered     = (leadState != prevState);
+  bool kindChanged = (leadState == STATE_VOLTAGE && !entered &&
+                      voltKind != prevKind);
   prevState = leadState;
+  prevKind  = voltKind;
 
   if (leadState == STATE_CLOSED) {
     if (entered)
-      startBeep(now, cfg.contPulses, cfg.contOnMs, cfg.contOffMs, false, cfg.contFreqHz);
+      startBeep(now, cfg.contPulses, cfg.contOnMs, cfg.contOffMs, false, cfg.contFreqHz, 0);
     else if (cfg.contRepeat && now - lastBeepSeqStart >= cfg.contRepeatMs)
-      startBeep(now, cfg.contPulses, cfg.contHoldMs, cfg.contOffMs, false, cfg.contFreqHz);
+      startBeep(now, cfg.contPulses, cfg.contHoldMs, cfg.contOffMs, false, cfg.contFreqHz, 0);
   } else if (leadState == STATE_VOLTAGE) {
+    // Pulse count and shape per kind.  VDC- stretches the LAST pulse rather
+    // than pinning the count at two, so raising VOLTPULSES gives
+    // short-short-long instead of breaking the pattern.
+    int           pulses = (voltKind == VKIND_AC) ? cfg.voltAcPulses : cfg.voltPulses;
+    unsigned long lastMs = (voltKind == VKIND_DCN) ? cfg.voltNegLongMs : 0;
     if (entered)                // priority alert: always sounds on entry
-      startBeep(now, cfg.voltPulses, cfg.voltOnMs, cfg.voltOffMs, true, cfg.voltFreqHz);
+      startBeep(now, pulses, cfg.voltOnMs, cfg.voltOffMs, true, cfg.voltFreqHz, lastMs);
+    else if (kindChanged)       // informational: goes through the rate cap
+      startBeep(now, pulses, cfg.voltOnMs, cfg.voltOffMs, false, cfg.voltFreqHz, lastMs);
     else if (cfg.voltRepeat && now - lastBeepSeqStart >= cfg.voltRepeatMs)
-      startBeep(now, cfg.voltPulses, cfg.voltOnMs, cfg.voltOffMs, false, cfg.voltFreqHz);
+      startBeep(now, pulses, cfg.voltOnMs, cfg.voltOffMs, false, cfg.voltFreqHz, lastMs);
   }
 
   updateBeep(now);
@@ -2703,6 +2898,42 @@ void runDetection() {
   detTestRan = !present;
   LeadState rawState = present ? STATE_VOLTAGE : runMosfetTestStable();
 
+  // Sub-classify while the voltage is actually on the leads -- the MOSFET is
+  // still at rest from the presence test, which is the condition the classifier
+  // wants, and (BENCH) the analog gate is still raised.  Nothing here can change
+  // rawState: getting the kind wrong picks the wrong alert pattern, never the
+  // wrong alert.
+  //
+  // The FIRST classification of a new contact is adopted outright; after that a
+  // change has to repeat cfg.stableCount times, the same debounce leadState
+  // uses.  The immediate adopt makes the very first beep the right rhythm
+  // (leadState still needs its own stableCount passes before it commits to
+  // STATE_VOLTAGE); the debounce afterwards stops a reading on the boundary
+  // flickering the pattern.  While no voltage is present the kind is marked
+  // stale, so the next contact starts clean.
+  static VoltKind kindCandidate = VKIND_DCP;
+  static int      kindStable    = 0;
+  voltKindRawFresh = false;
+  if (present) {
+    VoltKind rawKind = classifyVoltage();
+    voltKindRaw      = rawKind;
+    voltKindRawFresh = cfg.voltClassify;
+    if (!voltKindValid) {
+      voltKind      = rawKind;
+      voltKindValid = true;
+      kindCandidate = rawKind;
+      kindStable    = 0;
+    } else if (rawKind == voltKind) {
+      kindCandidate = rawKind;
+      kindStable    = 0;
+    } else {
+      if (rawKind != kindCandidate) { kindCandidate = rawKind; kindStable = 0; }
+      if (++kindStable >= cfg.stableCount) { voltKind = rawKind; kindStable = 0; }
+    }
+  } else {
+    voltKindValid = false;
+  }
+
   // Display debounce: commit to leadState only after the raw result repeats
   // cfg.stableCount passes in a row, so a single noisy test can't flip the
   // alert and cancel an in-progress LED flash.
@@ -2726,7 +2957,7 @@ void runDetection() {
 
 // BENCH: one detection pass for the test suite.
 //   $DET,<ms>,<raw>,<lead>,<vpath>,<n>,<restMean>,<restMin>,<restMax>,
-//        <metric>,<retms>,<areavms>,<thr>
+//        <metric>,<retms>,<areavms>,<thr>,<rawkind>,<kind>,<vpos>,<vneg>
 // raw/lead: F float, C closed, V voltage (lead = after STABLECOUNT debounce).
 // vpath: F fast single-read trip, A averaged trip, - no voltage, L VMODE 1
 // (locked on), D VMODE 2 (disabled).  n = 0 means no resting reads were taken
@@ -2759,7 +2990,22 @@ void printDetLine(LeadState rawState) {
   } else {
     Serial.print(",,,");
   }
-  Serial.println(activeThreshV, 5);
+  Serial.print(activeThreshV, 5);
+  // Voltage kind, appended (a host that stops at <thr> is unaffected).
+  // rawkind = this pass's classification, blank if none ran (no voltage, or
+  // VCLASS=0); kind = the debounced one the alert is playing (always shown,
+  // meaningful only while lead is V); vpos/vneg = the peaks, blank with rawkind.
+  Serial.print(',');
+  if (voltKindRawFresh) Serial.print(voltKindName(voltKindRaw));
+  Serial.print(',');
+  Serial.print(voltKindName(voltKind));
+  Serial.print(',');
+  if (voltKindRawFresh) {
+    Serial.print(lastVPosPeakV, 4); Serial.print(',');
+    Serial.println(lastVNegPeakV, 4);
+  } else {
+    Serial.println(',');
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -2782,6 +3028,9 @@ void printStatus() {
   Serial.print(",metric=");       Serial.print(lastMetric, 4);
   Serial.print(",retms=");        Serial.print(lastReturnMs, 3);
   Serial.print(",areavms=");      Serial.print(lastAreaVms, 4);
+  Serial.print(",vkind=");        Serial.print(voltKindName(voltKind));
+  Serial.print(",vpos=");         Serial.print(lastVPosPeakV, 4);
+  Serial.print(",vneg=");         Serial.print(lastVNegPeakV, 4);
   Serial.print(",negfix=");       Serial.print(cfg.negFix ? 1 : 0);
   Serial.print(",negv=");         Serial.print(cfg.negFixV, 3);
   Serial.print(",charge=");       Serial.print(chargeActive ? 1 : 0);
@@ -3335,6 +3584,30 @@ void handleLine(char *line) {
     Serial.print(",retms=");   Serial.print(lastReturnMs, 3);
     Serial.print(",areavms="); Serial.print(lastAreaVms, 4);
     Serial.print(",method=");  Serial.println(cfg.detectMethod);
+  } else if (strcmp(cmd, "VTEST") == 0) {
+    // Run one voltage classification right now and report the peaks it decided
+    // on.  Verify on the bench that a known DC source reads one-sided and that
+    // mains reads two-sided BEFORE trusting the pattern, and use vpos/vneg
+    // against band to pick an ACBAND.  Runs regardless of VCLASS.
+    // BENCH: this reads the ADC, so it raises the pulsed analog gate like every
+    // other ADC consumer -- missing that is what flat-lined !CAP and !STREAM.
+    uint8_t gatesRaised = gatesMeasureBegin();
+    uint8_t savedClassify = cfg.voltClassify;
+    cfg.voltClassify = 1;
+    digitalWrite(MOSFET_PIN, MOSFET_ON);      // resting, as the normal path is
+    VoltKind k = classifyVoltage();
+    cfg.voltClassify = savedClassify;
+    gatesMeasureEnd(gatesRaised);
+    float band = (cfg.acBandV > 0.0f) ? cfg.acBandV
+                                      : cfg.voltFastMult * cfg.refBandV;
+    Serial.print("$VTEST,");
+    Serial.print(voltKindName(k));
+    Serial.print(",vpos=");     Serial.print(lastVPosPeakV, 4);
+    Serial.print(",vneg=");     Serial.print(lastVNegPeakV, 4);
+    Serial.print(",band=");     Serial.print(band, 4);
+    Serial.print(",winms=");    Serial.print(cfg.acWindowMs);
+    Serial.print(",n=");        Serial.print(lastVSamples);
+    Serial.print(",classify="); Serial.println(savedClassify ? 1 : 0);
   } else if (strcmp(cmd, "FLOOR") == 0) {
     // !FLOOR,<0-3>  park the board in a fixed state for a current measurement:
     //   0 = exit    1 = parked, bridge resting, standby
@@ -3628,7 +3901,13 @@ void loop() {
     Serial.print(lastRestV, 3);
     Serial.print("V  ");
     if (leadState == STATE_VOLTAGE) {
-      Serial.println("-> VOLTAGE (bypass)");
+      // Peaks alongside the kind: the two numbers are what the call was made
+      // on, so a wrong pattern can be diagnosed from this line alone.
+      Serial.print("-> VOLTAGE (bypass) ");
+      Serial.print(voltKindName(voltKind));
+      Serial.print("  +pk:"); Serial.print(lastVPosPeakV, 3);
+      Serial.print("V -pk:"); Serial.print(lastVNegPeakV, 3);
+      Serial.println("V");
     } else {
       // Metric + units depend on the active detection method; print the metric
       // that was actually thresholded plus the raw return/area for tuning.

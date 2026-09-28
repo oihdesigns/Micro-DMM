@@ -19,6 +19,7 @@ Needs `pip install pyserial matplotlib`, and the **bench firmware with
 | `bh_instruments.py` | Relay jig (USB), Rigol DG800 Pro (SCPI socket), Siglent SDS800X HD (a Python port of `../Scope/ScopeLib.ps1`), and a writer for Capture-Scope's CSV layout |
 | `bh_sequencer.py` | Condition runner, the big-test job and the auto-tune job, and the run-folder writer |
 | `bh_tuner.py` | The analysis. Pure functions with no I/O |
+| `bh_led.py` | Turns the relay jig's AS7343 flash reports into the alert the unit is showing |
 | `bh_sim.py` | A simulated BlinkyHawk and bench, for dry runs |
 
 ## The three new tabs
@@ -49,13 +50,85 @@ If the relay jig isn't connected, a run pops up a box asking you to move the
 leads by hand, then carries on. Conditions that need the generator are
 skipped, and marked as skipped, when it isn't connected.
 
+## Voltage kind: VDC+, VDC−, VAC
+
+The bench firmware now has the production classifier (ported from production
+commit `4f4fecf`; bench config v5, keys `VCLASS`, `ACWINMS`, `ACBAND`,
+`VOLTLONGMS`, `VACPULSES`). The expectations follow it:
+
+- DC more than 10 % above the trip voltage must read **VDC+** or **VDC−**
+  according to its sign.
+- The sine must read **VAC**.
+
+A voltage condition passes only if the unit says voltage **and** names the
+right kind. The table's `kind` column is the debounced kind while the lead
+state is VOLTAGE. `$DET` carries the raw and debounced kind and the two peaks
+(`vpos`/`vneg`) the decision was made on.
+
+## LED watcher and battery mode
+
+A scope probe on the BlinkyHawk would clip its ground to earth, and that
+defeats the point of testing it on its own battery. Instead, an **Adafruit
+AS7343** held over the SK6812 watches the alert the unit is actually giving.
+It has no electrical contact with the unit and takes no current from it.
+
+**Wiring:** STEMMA QT / I2C to the relay jig's UNO R4: VIN to 5 V (the Adafruit
+board regulates and level-shifts), GND, SDA, SCL on the header pins. On a
+Qwiic cable to a board that has the connector, change `LED_WIRE` to `Wire1` in
+`RelayMountTestJig.ino`. **Flash jig firmware 1.1.** The Test Rig tab then
+shows "sensor OK" with its sample rate (about 200 per second at the default
+2.8 ms integration).
+
+**Aim and shield it.** Tape or a short tube over the LED keeps room light out.
+Tick "raw counts" and check that the LED lifts the counts well clear of the
+dark level without reaching full scale. A flash marked SATURATED means lower
+the gain. The flash threshold is in counts above the tracked dark level
+(default 20).
+
+**Calibrate once per aim**, with the unit tuned and alerting normally:
+**Auto-calibrate** runs OPEN (float = blue), SHORT (closed = green) and a DC
+level (VDC+ = red), and learns each colour's FZ/FY/FXL signature. It is saved
+in `led_calibration.json`. If the serial link is up, a condition the unit
+isn't actually alerting is skipped rather than learned. Until you calibrate,
+rough default colours are used.
+
+**How the alert is read** (from the firmware's own patterns):
+
+| Flashes seen | Alert |
+|---|---|
+| blue | FLOAT |
+| green | CLOSED |
+| red, red… | VDC+ |
+| red, blue, red, blue… | VDC− |
+| red, blue, green… | VAC |
+
+- **Order is checked, not just colour:** a VDC+ alert followed by a blue float
+  blink is also "red + blue", and would otherwise read as VDC−.
+- **Mixed windows:** a window that is still showing the previous condition's
+  tail has leading flashes dropped (up to half), and the table says so. If it
+  still fits no alert, it reads `?`.
+- **Too few flashes:** fewer than two flashes is not judged (NO DATA), so give
+  the LED **≥ 2.5 s of dwell**, because the float blink is about once a
+  second.
+
+**Battery mode** (Test Sequence, "unit on battery"): the run doesn't touch the
+serial port at all. The LED is the only judge, and the pass/fail table shows
+what it saw. With serial up and the watcher on, both must agree for a PASS,
+which also tests that what the firmware decides is what the user sees.
+
+What still touches the unit on battery: the test leads themselves. The relay
+network floats, but the generator's output return is earthed, so generator
+conditions are "measuring an earth-referenced source". That is realistic for
+mains and bench supplies, but it isn't a fully floating system.
+
 ## Run folders (`Runs/<date>_<kind>_<note>/`)
 
 | File | Contents |
 |---|---|
 | `run_info.txt` | instruments, timing, the condition list with expectations |
 | `config_before.csv` | the BlinkyHawk's full `!CFG` at the start |
-| `passes.csv` | every `$DET` pass: rest mean/min/max, metric, time-to-return, area, raw and debounced state |
+| `passes.csv` | every `$DET` pass: rest mean/min/max, metric, time-to-return, area, raw and debounced state, voltage kind and its peaks |
+| `flashes.csv` | every LED flash the AS7343 saw: timing, FZ/FY/FXL counts, decoded colour and how close it was |
 | `summary.csv` | one row per condition, pass/fail, scope stats |
 | `scope.csv` + `scope.html` | **Capture-Scope.ps1's layout**, so `..\Scope\Plot-Capture.ps1` renders it. The suite runs it for you; `scope.html` is the plot |
 | `tuning_report.txt` | auto-tune only: the whole reasoning, with verdicts |
@@ -177,3 +250,17 @@ state: the relay jig rests on FGEN and the generator output is off.
 - The port can move to a new COM number after an upload. Both port lists
   refresh when you open the dropdown, and the relay jig has a **Refresh**
   button.
+
+## Troubleshooting: runs but shows nothing, or an instrument won't connect
+
+- **Every on-screen update from a background job goes through one polling
+  loop:** result rows, status, and the instrument connect replies. An
+  exception there used to stop the loop for good. The run carried on and wrote
+  its files, but the window stopped changing. Errors are now caught one
+  message at a time, shown in the logs as `!! GUI error ...`, and appended to
+  `suite_errors.log` next to the script. Send me that file if you see one.
+- **The scope and generator serve one SCPI client at a time.** A second client
+  connects, but nothing answers it. The suite now says so ("accepted the
+  connection but did not answer *IDN?"). Close whatever else holds the
+  session: another copy of this GUI, `Capture-Scope.ps1`, or the instrument's
+  web page.

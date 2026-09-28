@@ -26,6 +26,9 @@ class SimBench:
     def __init__(self):
         self.relay = "FGEN"
         self.fgen = None          # None = output off, ("dc", V, 0) or ("sine", Vrms, Hz)
+        # SimRelayJig registers here to "see" the simulated LED:
+        # flash_sink(colour 'R'|'G'|'B', t_start, dur_ms, brightness)
+        self.flash_sink = None
 
 
 SIM_DEFAULTS = {
@@ -34,7 +37,14 @@ SIM_DEFAULTS = {
     "TESTAGREE": 1, "STABLECOUNT": 2, "SETTLEPREUS": 300, "SETTLEPOSTMS": 3, "NEGFIX": 1,
     "NEGV": 1.25, "DETMETHOD": 1, "DETBAND": 0.05, "DETWINUS": 1500, "DETAREAUS": 400,
     "LOOPMS": 50, "CHGINHIBIT": 0,
+    "VCLASS": 1, "ACWINMS": 25, "ACBAND": 0.0, "VOLTLONGMS": 150, "VACPULSES": 3,
+    "LED": 1, "LEDFLOATBR": 20, "LEDCLOSEDBR": 64, "LEDVOLTBR": 64,
+    "LEDFLOATMS": 50, "LEDCLOSEDMS": 50, "LEDVOLTMS": 50,
+    "LEDFLOATPER": 1000, "LEDCLOSEDPER": 500, "LEDVOLTPER": 250,
 }
+
+# The firmware's VKIND_SEQ, as colour letters.
+KIND_SEQ = {"VDC+": "RR", "VDC-": "RB", "VAC": "RBG"}
 
 
 class SimBlinkyHawk:
@@ -56,6 +66,14 @@ class SimBlinkyHawk:
         self.vmode = 0
         self.lead = "V"
         self._cand, self._cnt = "V", 0
+        self.kind, self.kind_valid = "VDC+", False
+        self._kcand, self._kcnt = "VDC+", 0
+        self._vpos = self._vneg = 0.0
+        self._led_on = False            # a flash is lit
+        self._led_last = {}             # state -> last flash start
+        self._led_colour, self._led_t0, self._led_br = "", 0.0, 0
+        self._led_seq = 0
+        self._led_prev = None
         self._stop = threading.Event()
         self._thread = None
         self._rx = []
@@ -126,6 +144,53 @@ class SimBlinkyHawk:
         m0 = 0.05 + 0.6 * rr / (rr + 2e6) + random.gauss(0, 0.05)
         return max(0.0, area), max(0.0, ret), abs(m0)
 
+    def _classify(self):
+        """classifyVoltage(): peak hunt over ACWINMS, as the firmware does."""
+        c = self.cfg
+        t0 = time.time()
+        vals = [self._rest_read(t0 + k * 1e-4) for k in range(int(c["ACWINMS"] * 10))]
+        self._vpos = max(vals) - c["REFCENTER"]
+        self._vneg = c["REFCENTER"] - min(vals)
+        band = c["ACBAND"] if c["ACBAND"] > 0 else c["VOLTFAST"] * c["REFBAND"]
+        if self._vpos > band and self._vneg > band:
+            return "VAC"
+        return "VDC+" if self._vpos >= self._vneg else "VDC-"
+
+    def _led_tick(self):
+        """updateLed(): rate-limited flashes, the voltage kind as a colour sequence."""
+        c = self.cfg
+        now = time.time()
+        key = (self.lead, self.kind if self.lead == "V" else None)
+        if key != self._led_prev:
+            self._led_prev = key
+            self._led_seq = 0
+            self._end_flash(now)
+        if not c["LED"]:
+            return
+        on_ms, per_ms, br, colour = {
+            "F": (c["LEDFLOATMS"], c["LEDFLOATPER"], c["LEDFLOATBR"], "B"),
+            "C": (c["LEDCLOSEDMS"], c["LEDCLOSEDPER"], c["LEDCLOSEDBR"], "G"),
+            "V": (c["LEDVOLTMS"], c["LEDVOLTPER"], c["LEDVOLTBR"], None),
+        }[self.lead]
+        if self._led_on:
+            if (now - self._led_t0) * 1000 >= on_ms:
+                self._end_flash(now)
+        elif (now - self._led_last.get(self.lead, 0)) * 1000 >= per_ms and br > 0:
+            if colour is None:
+                seq = KIND_SEQ[self.kind if c["VCLASS"] else "VDC+"]
+                colour = seq[self._led_seq % len(seq)]
+                self._led_seq += 1
+            self._led_on, self._led_t0, self._led_br = True, now, br
+            self._led_colour = colour
+            self._led_last[self.lead] = now
+
+    def _end_flash(self, now):
+        if self._led_on:
+            self._led_on = False
+            sink = self.bench.flash_sink
+            if sink:
+                sink(self._led_colour, self._led_t0, (now - self._led_t0) * 1000, self._led_br)
+
     def _thr(self):
         return self.cfg["THRESH" + ["00", "01", "10", "11"][int(self.cfg["THRESHSEL"])]]
 
@@ -148,9 +213,24 @@ class SimBlinkyHawk:
                 present = abs(mean - c["REFCENTER"]) > c["REFBAND"]
                 path = "A" if present else "-"
         metric = ret = area = None
+        rawkind = None
         if present:
             raw = "V"
+            if c["VCLASS"]:
+                rawkind = self._classify()
+            k = rawkind or "VDC+"
+            if not self.kind_valid:
+                self.kind, self.kind_valid, self._kcand, self._kcnt = k, True, k, 0
+            elif k == self.kind:
+                self._kcand, self._kcnt = k, 0
+            else:
+                if k != self._kcand:
+                    self._kcand, self._kcnt = k, 0
+                self._kcnt += 1
+                if self._kcnt >= c["STABLECOUNT"]:
+                    self.kind, self._kcnt = k, 0
         else:
+            self.kind_valid = False
             area, ret, m0 = self._metrics()
             metric = {0: m0, 1: ret, 2: area}[int(c["DETMETHOD"])]
             raw = "F" if metric > self._thr() else "C"
@@ -166,14 +246,16 @@ class SimBlinkyHawk:
             ms = int(time.time() * 1000) & 0x7FFFFFFF
             rest = f"{mean:.5f},{lo:.5f},{hi:.5f}" if n else ",,"
             met = f"{metric:.5f},{ret:.4f},{area:.5f}" if metric is not None else ",,"
-            self._out(f"$DET,{ms},{raw},{self.lead},{path},{n},{rest},{met},{self._thr():.5f}")
+            kx = (f"{rawkind},{self.kind},{self._vpos:.4f},{self._vneg:.4f}" if rawkind
+                  else f",{self.kind},,")
+            self._out(f"$DET,{ms},{raw},{self.lead},{path},{n},{rest},{met},{self._thr():.5f},{kx}")
 
     def _status(self):
         self._out(f"$STATUS,diag=0,hwrev=3,vmode={self.vmode},mosfet=-1,stream=0,rate=20,"
                   f"capms=5,dip={int(self.cfg['THRESHSEL'])},openthr={self._thr():.3f},"
                   f"detmethod={int(self.cfg['DETMETHOD'])},charge=1,chginhibit=0,"
                   f"dirty={int(self.cfg != self.saved)},lpstage=0,gates=111,gforce=aaa,"
-                  f"expt=-1,lead={self.lead},detlog={int(self.detlog)},battpct=100,"
+                  f"expt=-1,lead={self.lead},vkind={self.kind},detlog={int(self.detlog)},battpct=100,"
                   f"battv=4.100,sn={self.sn}")
 
     def _cfg_line(self, k):
@@ -239,4 +321,5 @@ class SimBlinkyHawk:
             if now >= next_t:
                 self._pass()
                 next_t = now + self.cfg["LOOPMS"] / 1000.0 + 0.002
+            self._led_tick()
             time.sleep(0.003)

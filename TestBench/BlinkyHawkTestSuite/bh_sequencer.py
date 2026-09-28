@@ -8,15 +8,20 @@ off.  For each one the runner
     2. moves the relay jig (break-before-make is the jig firmware's job)
     3. programs the generator and turns it on, if the condition needs it
     4. waits the settle time
-    5. records $DET passes from the BlinkyHawk for the dwell time
+    5. records $DET passes from the BlinkyHawk for the dwell time, AND/OR the
+       LED flashes the relay jig's AS7343 sees over the same window
     6. optionally captures the scope
     7. turns the generator off again
-Two jobs are built on that: run_plan() (the "big test") and run_autotune().
+With no serial link (the unit on its own battery) step 5 is the LED alone --
+that is the only honest view of a floating unit, since any wire to it would
+re-ground it.  Jobs built on this: run_plan() (the "big test"),
+run_autotune(), and run_led_calibration().
 
 Everything lands in a run folder under Runs/:
     run_info.txt       instruments, settings, timing
     config_before.csv  the BlinkyHawk's full !CFG at the start
     passes.csv         every $DET pass, tagged with its condition
+    flashes.csv        every LED flash the sensor saw, with its decoded colour
     summary.csv        one row per condition (bh_tuner.summarize)
     scope.csv          Capture-Scope.ps1 layout -> ..\\Scope\\Plot-Capture.ps1 renders it
     tuning_report.txt  (auto-tune only) the full reasoning, verdicts, proposal
@@ -34,6 +39,7 @@ from datetime import datetime
 
 import bh_tuner as T
 from bh_instruments import JIG_LOADS, fmt_ohms, write_scope_csv, InstrumentError
+from bh_led import LedDecoder
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUNS_DIR = os.path.join(HERE, "Runs")
@@ -232,15 +238,19 @@ def load_conditions(names, closed_max, open_min):
 
 
 def dc_condition(v, vt=None):
+    """Above the trip (+10 %) the unit must alert AND name the polarity."""
     exp = None
     if vt:
-        exp = "V" if abs(v) >= vt * 1.1 else ("!V" if abs(v) <= vt * 0.9 else None)
+        if abs(v) >= vt * 1.1:
+            exp = "VDC+" if v > 0 else "VDC-"
+        elif abs(v) <= vt * 0.9:
+            exp = "!V"
     return Cond(f"DC {v:+.3f}V", "dc", "FGEN", value=v, expected=exp)
 
 
 def ac_condition(vrms, freq):
     return Cond(f"AC {vrms:g}Vrms {freq:g}Hz", "ac", "FGEN", value=vrms, freq=freq,
-                expected="V")
+                expected="VAC")
 
 
 def parse_levels(text):
@@ -287,11 +297,16 @@ class ManualRelay:
 # runner
 # ---------------------------------------------------------------------------
 class Runner:
-    def __init__(self, device, relay, fgen, scope, emit, stop_event):
+    def __init__(self, device, relay, fgen, scope, emit, stop_event, use_led=True,
+                 decoder=None):
+        """device None = the BlinkyHawk has no serial link (battery): LED only."""
         self.dev, self.relay, self.fgen, self.scope = device, relay, fgen, scope
         self.emit = emit             # callable(kind, payload) -> GUI queue
         self.stop = stop_event
+        self.led = relay if (use_led and getattr(relay, "has_led", False)) else None
+        self.decoder = decoder or LedDecoder()
         self.dir = None
+        self.flash_rows = []
         self.pass_rows = []
         self.summaries = []
         self.scope_conds = []
@@ -348,7 +363,7 @@ class Runner:
         """Apply, record, (scope), summarise.  Returns (passes, summary)."""
         self.emit("status", f"{phase}: {cond.label}")
         self.apply(cond, settle_s)
-        passes = self.dev.collect(dwell_s, min_passes)
+        flashes, passes = self.record(dwell_s, min_passes)
         cap = None
         if scope_mode and self.scope is not None:
             try:
@@ -361,7 +376,16 @@ class Runner:
 
         for i, p in enumerate(passes):
             self.pass_rows.append([phase, cond.label, i] + [p[k] for k in T.DET_FIELDS])
-        s = T.summarize(cond.label, cond.expected, passes, stable_count)
+        led = None
+        if self.led is not None:
+            led = self.decoder.decode(flashes)
+            t0 = flashes[0].t if flashes else 0
+            for f in flashes:
+                self.flash_rows.append([phase, cond.label, f"{f.t - t0:.3f}", f.dur_ms, f.n,
+                                        f"{f.fz:.1f}", f"{f.fy:.1f}", f"{f.fxl:.1f}",
+                                        f"{f.vis:.1f}", f"{f.peak:.1f}", int(f.sat),
+                                        f.colour, f"{f.cos:.3f}"])
+        s = T.summarize(cond.label, cond.expected, passes, stable_count, led)
         s["phase"] = phase
         self.summaries.append(s)
         if cap:
@@ -375,12 +399,45 @@ class Runner:
                                      "tdiv": tdiv, "trigger": trig, "waves": waves})
             self.log(f"   scope: {st}")
         self.emit("summary", s)
-        self.log(f"   {cond.label:>20}: n={s['n']:3d}  lead C/F/V "
-                 f"{s['lead_C'] * 100:3.0f}/{s['lead_F'] * 100:3.0f}/{s['lead_V'] * 100:3.0f} %"
-                 f"  rest {s['rest_mean'] if s['rest_mean'] is not None else float('nan'):+.4f} V"
-                 f"  {s['result']}")
+        parts = [f"   {cond.label:>20}:"]
+        if passes:
+            parts.append(f"n={s['n']:3d}  lead C/F/V {s['lead_C'] * 100:3.0f}/"
+                         f"{s['lead_F'] * 100:3.0f}/{s['lead_V'] * 100:3.0f} %"
+                         + (f" {s['kind']}" if s["kind"] and s["lead_V"] else ""))
+        if led is not None:
+            parts.append(f"LED {led['state']} ({led['colours'] or 'no flashes'})"
+                         + ("  SATURATED" if led.get("sat") else ""))
+        parts.append(s["result"])
+        self.log("  ".join(parts))
         self.write_files()
         return passes, s
+
+    def record(self, dwell_s, min_passes=0):
+        """Record for the dwell: $DET passes (if there is a serial link) and LED
+        flashes (if the jig has the sensor) over the same window."""
+        q = self.led.subscribe_flashes() if self.led is not None else None
+        t0 = time.time()
+        try:
+            if self.dev is not None:
+                passes = self.dev.collect(dwell_s, min_passes)
+            else:
+                passes = []
+                self.sleep(dwell_s)
+        finally:
+            if q is not None:
+                self.led.unsubscribe_flashes(q)
+        flashes = []
+        while q is not None:
+            try:
+                f = q.get_nowait()
+            except queue.Empty:
+                break
+            if f.t >= t0 - 0.05:          # a flash begun before the window is not ours
+                flashes.append(f)
+        flashes.sort(key=lambda f: f.t)
+        if self.dev is None and self.led is None:
+            raise InstrumentError("nothing to record: no serial link and no LED sensor")
+        return flashes, passes
 
     # ---------- files ----------
     def write_files(self):
@@ -390,6 +447,12 @@ class Runner:
             w = csv.writer(fh)
             w.writerow(["phase", "condition", "i"] + T.DET_FIELDS)
             w.writerows(self.pass_rows)
+        if self.flash_rows:
+            with open(os.path.join(self.dir, "flashes.csv"), "w", newline="") as fh:
+                w = csv.writer(fh)
+                w.writerow(["phase", "condition", "t_s", "dur_ms", "samples", "fz", "fy",
+                            "fxl", "vis", "peak", "saturated", "colour", "cosine"])
+                w.writerows(self.flash_rows)
         with open(os.path.join(self.dir, "summary.csv"), "w", newline="") as fh:
             cols = ["phase"] + T.SUMMARY_COLS + ["scope"]
             w = csv.DictWriter(fh, fieldnames=cols, extrasaction="ignore")
@@ -433,15 +496,23 @@ class Runner:
     def run_plan(self, conds, dwell_s, settle_s, scope_mode, scope_timeout, note):
         self.open_run("Test", note)
         self.log(f"== test run -> {self.dir}")
-        cfg = self.dev.get_cfg()
-        self.write_cfg(cfg, "config_before.csv")
-        stable = int(float(cfg.get("STABLECOUNT", 2)))
+        if self.dev is not None:
+            cfg = self.dev.get_cfg()
+            self.write_cfg(cfg, "config_before.csv")
+            stable = int(float(cfg.get("STABLECOUNT", 2)))
+        else:
+            stable = 2
+            self.log("   no serial link: judging by the LED alone (unit on battery)")
         self.write_info([f"BlinkyHawk test suite -- test run {self.started}", f"note: {note}",
                          *self.instrument_lines(),
                          f"dwell {dwell_s} s, settle {settle_s} s, scope {scope_mode or 'off'}",
+                         "judged by: " + " + ".join(
+                             x for x, on in (("serial $DET", self.dev is not None),
+                                             ("LED sensor", self.led is not None)) if on),
                          "conditions:", *[f"  {c.label}: {c.describe()}, expect "
                                           f"{c.expected or '-'}" for c in conds]])
-        self.dev.prepare()
+        if self.dev is not None:
+            self.dev.prepare()
         try:
             for i, c in enumerate(conds, 1):
                 self.emit("progress", (i, len(conds)))
@@ -452,7 +523,8 @@ class Runner:
                     self.log(f"   {c.label}: SKIPPED -- {exc}")
         finally:
             self.fgen_off()
-            self.dev.release()
+            if self.dev is not None:
+                self.dev.release()
             self.write_files()
             self.write_scope()
         fails = [s["label"] for s in self.summaries if s["result"] == "FAIL"]
@@ -612,6 +684,56 @@ class Runner:
             self.emit("report", "\n".join(report))
         self.emit("tune_done", {"original": original, "applied": applied, "ok": ok,
                                 "dir": self.dir})
+        return self.dir
+
+    # ---------- job 3: teach the LED decoder the three colours ----------
+    def run_led_calibration(self, dc_volts, dwell_s, settle_s):
+        """OPEN -> the float alert is blue; SHORT -> closed is green; a DC level
+        well over the trip -> VDC+ is red-red.  Each is recorded and becomes
+        that colour's reference.  Needs the unit to be alerting normally (LED
+        on, not locked out by charging)."""
+        if self.led is None:
+            raise InstrumentError("the relay jig has no LED sensor (jig firmware 1.1 + AS7343)")
+        self.open_run("LedCal", "")
+        plan = [("B", Cond("cal OPEN", "load", "OPEN", ohms=None, expected="F")),
+                ("G", Cond("cal SHORT", "load", "SHORT", ohms=0.0, expected="C"))]
+        if self.fgen is not None:
+            plan.append(("R", Cond(f"cal DC {dc_volts:+g}V", "dc", "FGEN", value=dc_volts,
+                                   expected="VDC+")))
+        else:
+            self.log("   no generator: red cannot be calibrated (needs a VDC+ alert)")
+        lines = []
+        try:
+            if self.dev is not None:
+                self.dev.prepare()
+            for colour, c in plan:
+                self.emit("status", f"LED calibration: {c.label}")
+                self.apply(c, settle_s)
+                flashes, passes = self.record(dwell_s)
+                self.fgen_off()
+                if passes:
+                    s = T.summarize(c.label, c.expected, passes)
+                    if s["serial_result"] == "FAIL":
+                        lines.append(f"{colour}: SKIPPED -- the unit was not alerting "
+                                     f"{c.expected} (lead C/F/V {s['lead_C']:.0%}/"
+                                     f"{s['lead_F']:.0%}/{s['lead_V']:.0%})")
+                        continue
+                ok, msg = self.decoder.learn(colour, flashes)
+                lines.append(msg)
+        finally:
+            self.fgen_off()
+            if self.dev is not None:
+                self.dev.release()
+        self.decoder.save()
+        sep = self.decoder.separation()
+        lines.append(f"closest two references differ by {sep:.3f} in cosine "
+                     + ("(good)" if sep > 0.1 else "(TOO CLOSE -- re-aim the sensor or "
+                                                   "try 12-channel mode)"))
+        with open(os.path.join(self.dir, "led_calibration.txt"), "w", encoding="utf-8") as fh:
+            fh.write("\n".join(lines) + "\n")
+        for l in lines:
+            self.log("   " + l)
+        self.emit("ledcal", lines)
         return self.dir
 
     def revert(self, original, keys):

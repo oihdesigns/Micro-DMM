@@ -1,7 +1,8 @@
 """
 bh_instruments.py  --  bench instrument drivers for the BlinkyHawk test suite.
 
-  RelayJig      the RelayMount UNO R4 load selector (USB serial, !MODE / $STATE)
+  RelayJig      the RelayMount UNO R4 load selector (USB serial, !MODE / $STATE),
+                plus its AS7343 LED watcher ($FLASH, see bh_led.py)
   RigolDG800    Rigol DG852 Pro function generator (SCPI over a raw LAN socket)
   SiglentSDS    Siglent SDS800X HD scope (SCPI over a raw LAN socket) -- a
                 Python port of TestBench/Scope/ScopeLib.ps1, and
@@ -14,10 +15,13 @@ All drivers are safe to call from a worker thread; each holds its own lock.
 """
 
 import math
+import queue
 import socket
 import struct
 import threading
 import time
+
+from bh_led import Flash, parse_flash
 
 try:
     import serial
@@ -57,38 +61,63 @@ class InstrumentError(Exception):
 # Relay jig
 # ---------------------------------------------------------------------------
 class RelayJig:
-    """RelayMountTestJig firmware: !MODE,<name> -> $STATE,<mode>,<bits>,<load>,<settle>.
+    """RelayMountTestJig firmware over USB serial.
 
-    The firmware walks every change through OPEN (break-before-make), so a mode
-    change takes a few relay settle times; set_mode() waits for the $STATE that
-    confirms the load the DUT actually sees.
+    Relays: !MODE,<name> -> $STATE,<mode>,<bits>,<load>,<settle>.  The firmware
+    walks every change through OPEN (break-before-make), so set_mode() waits for
+    the $STATE that confirms the load the DUT actually sees.
+
+    LED watcher (jig firmware 1.1+): an AS7343 over the BlinkyHawk's LED sends
+    $FLASH lines at any moment, so a reader thread owns the port: command
+    replies go to whoever is waiting for them, flashes to every subscriber.
     """
     name = "Relay jig"
 
     def __init__(self):
         self.ser = None
-        self.lock = threading.Lock()
         self.ident = ""
         self.mode = None
+        self.led_info = {}          # last $LEDSTATE, as key -> str
+        self.raw_last = None        # last $LEDRAW fields
+        self._wlock = threading.Lock()
+        self._waiters = []          # [(prefix, queue)]
+        self._flash_subs = []
+        self._slock = threading.Lock()
+        self._stop = threading.Event()
+        self._thread = None
+        self._boot = threading.Event()
 
     @property
     def connected(self):
         return self.ser is not None and self.ser.is_open
+
+    @property
+    def has_led(self):
+        return self.led_info.get("sensor") == "1"
 
     def connect(self, port):
         if serial is None:
             raise InstrumentError("pyserial is not installed (pip install pyserial)")
         self.close()
         self.ser = serial.Serial(port, 115200, timeout=0.1, write_timeout=1.0)
-        # Opening the port resets the UNO R4: wait for $BOOT, then identify.
-        self._read_until(lambda l: l.startswith("$BOOT"), 2.5, quiet=True)
-        self.ident = self._query("!ID", "$ID", 2.0) or "RelayJig (no $ID)"
-        st = self._query("!STATE", "$STATE", 2.0)
+        self._stop.clear()
+        self._boot.clear()
+        self._thread = threading.Thread(target=self._read_loop, daemon=True)
+        self._thread.start()
+        # Opening the port may reset the board: give it the chance to boot.
+        self._boot.wait(2.5)
+        self.ident = self.request("!ID", "$ID", 2.0, quiet=True) or "RelayJig (no $ID)"
+        st = self.request("!STATE", "$STATE", 2.0, quiet=True)
         if st:
             self.mode = st.split(",")[1]
-        return self.ident
+        self.request("!LEDSTAT", "$LEDSTATE", 1.5, quiet=True)   # absent on fw 1.0
+        return self.ident + ("   LED sensor OK" if self.has_led else "   (no LED sensor)")
 
     def close(self):
+        self._stop.set()
+        if self._thread:
+            self._thread.join(timeout=1)
+            self._thread = None
         if self.ser:
             try:
                 self.ser.close()
@@ -96,38 +125,69 @@ class RelayJig:
                 pass
         self.ser = None
 
-    def _read_until(self, pred, timeout, quiet=False):
-        end = time.time() + timeout
+    # --- reader ---
+    def _read_loop(self):
         buf = b""
-        while time.time() < end:
-            chunk = self.ser.read(256)
+        while not self._stop.is_set():
+            try:
+                chunk = self.ser.read(256)
+            except Exception:
+                return
             if not chunk:
                 continue
             buf += chunk
             while b"\n" in buf:
                 raw, buf = buf.split(b"\n", 1)
-                line = raw.decode("ascii", "replace").strip()
-                if line.startswith("$ERR"):
-                    raise InstrumentError(f"relay jig: {line}")
-                if pred(line):
-                    return line
-        if quiet:
-            return None
-        raise InstrumentError("relay jig: no reply")
+                self._dispatch(raw.decode("ascii", "replace").strip(), time.time())
 
-    def _query(self, cmd, head, timeout):
-        with self.lock:
-            self.ser.reset_input_buffer()
-            self.ser.write((cmd + "\n").encode("ascii"))
-            return self._read_until(lambda l: l.startswith(head), timeout, quiet=True)
+    def _dispatch(self, line, arrival):
+        if not line:
+            return
+        if line.startswith("$FLASH,"):
+            f = parse_flash(line, arrival)
+            if f:
+                with self._slock:
+                    subs = list(self._flash_subs)
+                for q in subs:
+                    q.put(f)
+            return
+        if line.startswith("$BOOT"):
+            self._boot.set()
+        elif line.startswith("$LEDSTATE,"):
+            self.led_info = dict(t.split("=", 1) for t in line.split(",")[1:] if "=" in t)
+        elif line.startswith("$LEDRAW,"):
+            self.raw_last = line.split(",")[1:]
+        with self._slock:
+            for prefix, q in list(self._waiters):
+                if line.startswith(prefix) or line.startswith("$ERR"):
+                    q.put(line)
+                    self._waiters.remove((prefix, q))
+                    break
 
-    def set_mode(self, mode, timeout=5.0):
+    def request(self, cmd, head, timeout, quiet=False):
         if not self.connected:
             raise InstrumentError("relay jig not connected")
-        with self.lock:
-            self.ser.reset_input_buffer()
-            self.ser.write(f"!MODE,{mode}\n".encode("ascii"))
-            line = self._read_until(lambda l: l.startswith("$STATE"), timeout)
+        q = queue.Queue()
+        with self._slock:
+            self._waiters.append((head, q))
+        try:
+            with self._wlock:
+                self.ser.write((cmd + "\n").encode("ascii"))
+            line = q.get(timeout=timeout)
+        except queue.Empty:
+            with self._slock:
+                if (head, q) in self._waiters:
+                    self._waiters.remove((head, q))
+            if quiet:
+                return None
+            raise InstrumentError(f"relay jig: no reply to {cmd}")
+        if line.startswith("$ERR"):
+            raise InstrumentError(f"relay jig: {line}")
+        return line
+
+    # --- relays ---
+    def set_mode(self, mode, timeout=5.0):
+        line = self.request(f"!MODE,{mode}", "$STATE", timeout)
         f = line.split(",")
         # $STATE,<mode>,<bits>,<load>,<settle>: trust the decoded load, not the echo
         if len(f) < 4 or f[3] != mode:
@@ -135,27 +195,108 @@ class RelayJig:
         self.mode = mode
         return line
 
+    # --- LED watcher ---
+    def subscribe_flashes(self):
+        q = queue.Queue()
+        with self._slock:
+            self._flash_subs.append(q)
+        return q
+
+    def unsubscribe_flashes(self, q):
+        with self._slock:
+            if q in self._flash_subs:
+                self._flash_subs.remove(q)
+
+    def led_enable(self, on):
+        return self.request(f"!LED,{1 if on else 0}", "$LEDSTATE", 2.0)
+
+    def led_config(self, gain, atime, astep, thr):
+        return self.request(f"!LEDCFG,{int(gain)},{int(atime)},{int(astep)},{thr:g}",
+                            "$LEDSTATE", 2.0)
+
+    def led_raw(self, ms):
+        return self.request(f"!LEDRAW,{int(ms)}", "$LEDSTATE", 2.0)
+
+    def led_status(self):
+        return self.request("!LEDSTAT", "$LEDSTATE", 2.0)
+
 
 class SimRelayJig:
+    """Relay jig + LED sensor stand-in.  The simulated BlinkyHawk pushes its
+    flashes into SimBench; they come out here with invented AS7343 counts."""
     name = "Relay jig (sim)"
+
+    # (FZ, FY, FXL) counts per LED colour at full brightness -- invented
+    SIM_COUNTS = {"B": (520, 70, 15), "G": (90, 430, 60), "R": (10, 60, 480)}
 
     def __init__(self, bench):
         self.bench = bench
         self.ident = "RelayJig SIM"
         self.mode = "FGEN"
         self.connected = True
+        self.led_info = {"sensor": "1", "on": "1", "gain": "5", "atime": "0",
+                         "astep": "999", "thr": "20", "hz": "240.0", "base": "12",
+                         "fullscale": "1000"}
+        self.raw_last = None
+        self._subs = []
+        self._lock = threading.Lock()
+        bench.flash_sink = self._on_sim_flash
+
+    @property
+    def has_led(self):
+        return True
 
     def connect(self, port=None):
-        return self.ident
+        return self.ident + "   LED sensor OK"
 
     def close(self):
-        pass
+        if self.bench.flash_sink == self._on_sim_flash:
+            self.bench.flash_sink = None
 
     def set_mode(self, mode, timeout=5.0):
         time.sleep(0.05)
         self.mode = mode
         self.bench.relay = mode
         return f"$STATE,{mode},sim,{mode},25"
+
+    def _on_sim_flash(self, colour, t_start, dur_ms, brightness):
+        import random
+        if self.led_info.get("on") != "1":
+            return
+        base = self.SIM_COUNTS[colour]
+        k = brightness / 64.0
+        c = [max(0.0, x * k * random.uniform(0.9, 1.1) + random.gauss(0, 3)) for x in base]
+        f = Flash(t_start, int(dur_ms), max(1, int(dur_ms / 4)), c[0], c[1], c[2],
+                  sum(c) * 0.8, sum(c) * 1.1, False)
+        with self._lock:
+            subs = list(self._subs)
+        for q in subs:
+            q.put(f)
+
+    def subscribe_flashes(self):
+        q = queue.Queue()
+        with self._lock:
+            self._subs.append(q)
+        return q
+
+    def unsubscribe_flashes(self, q):
+        with self._lock:
+            if q in self._subs:
+                self._subs.remove(q)
+
+    def led_enable(self, on):
+        self.led_info["on"] = "1" if on else "0"
+        return "$LEDSTATE,sim"
+
+    def led_config(self, gain, atime, astep, thr):
+        self.led_info.update(gain=str(gain), atime=str(atime), astep=str(astep), thr=f"{thr:g}")
+        return "$LEDSTATE,sim"
+
+    def led_raw(self, ms):
+        return "$LEDSTATE,sim"
+
+    def led_status(self):
+        return "$LEDSTATE,sim"
 
 
 # ---------------------------------------------------------------------------
@@ -186,6 +327,25 @@ class ScpiSocket:
             except OSError:
                 pass
         self.sock = None
+
+    def identify(self, what):
+        """*IDN? with a short timeout and a useful failure.  These instruments
+        accept a TCP connection and then serve ONE SCPI client at a time, so a
+        second client connects fine and is simply never answered."""
+        old = self.sock.gettimeout()
+        self.sock.settimeout(3.0)
+        try:
+            return self.query("*IDN?")
+        except (socket.timeout, TimeoutError):
+            self.close()
+            raise InstrumentError(
+                f"the {what} accepted the connection but did not answer *IDN? -- another "
+                "program probably holds its SCPI session (another copy of this GUI, "
+                "Capture-Scope.ps1, or the instrument's web control page).  Close that "
+                "and connect again.")
+        finally:
+            if self.sock:
+                self.sock.settimeout(old)
 
     def write(self, cmd):
         with self.lock:
@@ -261,7 +421,7 @@ class RigolDG800(ScpiSocket):
 
     def connect(self, host, port=5025):
         self.open(host, port)
-        self.ident = self.query("*IDN?")
+        self.ident = self.identify("generator")
         self.setup()
         return self.ident
 
@@ -404,7 +564,7 @@ class SiglentSDS(ScpiSocket):
 
     def connect(self, host, port=5025):
         self.open(host, port)
-        self.ident = self.query("*IDN?")
+        self.ident = self.identify("scope")
         self.orig_mode = self.query(":TRIG:MODE?")
         self.was_running = self.query(":TRIG:STAT?") != "Stop"
         return self.ident
