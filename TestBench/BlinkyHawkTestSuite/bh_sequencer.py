@@ -17,6 +17,10 @@ that is the only honest view of a floating unit, since any wire to it would
 re-ground it.  Jobs built on this: run_plan() (the "big test"),
 run_autotune(), and run_led_calibration().
 
+run_autotune() can also measure ON BATTERY (p["battery"]): the unit logs its
+own passes to RAM with USB unplugged and they are read back afterwards -- see
+bh_battery.py for why that is the only trustworthy way to tune.
+
 Everything lands in a run folder under Runs/:
     run_info.txt       instruments, settings, timing
     config_before.csv  the BlinkyHawk's full !CFG at the start
@@ -38,6 +42,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 import bh_tuner as T
+from bh_battery import BatteryBench
 from bh_instruments import JIG_LOADS, fmt_ohms, write_scope_csv, InstrumentError
 from bh_led import LedDecoder
 
@@ -191,8 +196,8 @@ class DeviceClient:
         finally:
             self.tee.unsubscribe(q)
         if not out:
-            raise InstrumentError("no $DET lines -- is this the bench firmware with !DETLOG "
-                                  "(flash BlinkyHawk_Bench from this commit)?")
+            raise InstrumentError("no $DET lines -- is this BlinkyHawk_Unified (or Bench) "
+                                  "firmware with !DETLOG?")
         return out
 
 
@@ -235,6 +240,16 @@ def load_conditions(names, closed_max, open_min):
             out.append(Cond(f"load {name}", "load", name, ohms=ohms,
                             expected=expected_for_load(ohms, closed_max, open_min)))
     return out
+
+
+def wake_loads(loads, closed_max, open_min):
+    """(stay, wake) for the sleep/wake check: the OPEN-side load nearest the
+    boundary (must NOT wake a sleeping unit) and the CLOSED-side load nearest
+    it (must).  Either may be None."""
+    r = lambda c: float("inf") if c.ohms is None else c.ohms
+    opn = sorted((c for c in loads if r(c) >= open_min), key=r)
+    cls = sorted((c for c in loads if r(c) <= closed_max), key=r)
+    return (opn[0] if opn else None), (cls[-1] if cls else None)
 
 
 def dc_condition(v, vt=None):
@@ -533,6 +548,26 @@ class Runner:
                  + (f": {', '.join(fails)}" if fails else ""))
         return self.dir
 
+    # ---------- battery captures (see bh_battery.py) ----------
+    def bat_measure(self, conds, phase, dwell, settle, samples, vmode, stable):
+        """Battery twin of measure() for a whole list: one or more unplug
+        cycles, then the same summaries / passes.csv rows.  -> {label: passes}"""
+        res = self.bat.capture(conds, dwell, settle, samples, vmode=vmode, phase=phase)
+        for c in conds:
+            passes = res.get(c.label, [])
+            for i, p in enumerate(passes):
+                self.pass_rows.append([phase, c.label, i] + [p.get(k) for k in T.DET_FIELDS])
+            s = T.summarize(c.label, c.expected, passes, stable, None, skip=0)
+            s["phase"] = phase
+            self.summaries.append(s)
+            self.emit("summary", s)
+            self.log(f"   {c.label:>20}:  n={s['n']:3d}  lead C/F/V {s['lead_C'] * 100:3.0f}/"
+                     f"{s['lead_F'] * 100:3.0f}/{s['lead_V'] * 100:3.0f} %"
+                     + (f" {s['kind']}" if s["kind"] and s["lead_V"] else "")
+                     + f"  {s['result']}")
+        self.write_files()
+        return res
+
     # ---------- job 2: auto-tune ----------
     def run_autotune(self, p):
         """p: dict of the Auto-Tune tab's settings (see the GUI)."""
@@ -546,7 +581,15 @@ class Runner:
         slot = int(st.get("dip", original.get("THRESHSEL", 3)))
         thresh_key = "THRESH" + format(slot, "02b")
         N, dwell, settle = p["passes"], p["dwell"], p["settle"]
+        battery = bool(p.get("battery"))
+        if battery:
+            self.bat = BatteryBench(self, p["host"])
+            dwell, settle, N = p["bat_dwell"], p["bat_settle"], p["bat_samples"]
         report = [f"BlinkyHawk auto-tune  {self.started:%Y-%m-%d %H:%M:%S}",
+                  ("MODE: ON BATTERY, floating -- passes read back from the unit's RAM log "
+                   "after each unplug cycle" if battery else
+                   "MODE: over USB -- WARNING: USB earths the board, and numbers taken this "
+                   "way do not hold on battery (see README)"),
                   *self.instrument_lines(),
                   f"target trip +/-{p['vt']} V; CLOSED <= {fmt_ohms(p['closed_max'])}, "
                   f"OPEN >= {fmt_ohms(p['open_min'] if p['open_min'] != float('inf') else None)}",
@@ -560,7 +603,8 @@ class Runner:
             touched.add(k)
             return self.dev.set(k, v)
         self.write_info(report)
-        self.dev.prepare()
+        if not battery:
+            self.dev.prepare()
         loads = load_conditions(p["loads"], p["closed_max"], p["open_min"])
         try:
             # ---- 1. voltage ----
@@ -571,14 +615,22 @@ class Runner:
                 else:
                     self.emit("stage", "Voltage: characterising")
                     novolt, dc, ac = {}, {}, {}
-                    for c in loads:
+                    levels = sorted(set(p["dc_levels"]) | {0.0, p["vt"], -p["vt"]})
+                    if battery:
+                        dcc = {v: dc_condition(v) for v in levels}
+                        acc = [ac_condition(vrms, f) for vrms, f in p["ac"]]
+                        res = self.bat_measure(loads + list(dcc.values()) + acc, "volt",
+                                               dwell, settle, N, 0, stable)
+                        novolt = {c.relay: res.get(c.label, []) for c in loads}
+                        dc = {v: res.get(c.label, []) for v, c in dcc.items()}
+                        ac = {c.label: res.get(c.label, []) for c in acc}
+                    for c in (loads if not battery else []):
                         novolt[c.relay], _ = self.measure(c, "volt", dwell, settle,
                                                           min_passes=N, stable_count=stable)
-                    levels = sorted(set(p["dc_levels"]) | {0.0, p["vt"], -p["vt"]})
-                    for v in levels:
+                    for v in (levels if not battery else []):
                         dc[v], _ = self.measure(dc_condition(v), "volt", dwell, settle,
                                                 min_passes=N, stable_count=stable)
-                    for vrms, f in p["ac"]:
+                    for vrms, f in (p["ac"] if not battery else []):
                         c = ac_condition(vrms, f)
                         ac[c.label], _ = self.measure(c, "volt", dwell * 2, settle,
                                                       min_passes=2 * N, stable_count=stable)
@@ -594,8 +646,18 @@ class Runner:
             # ---- 2. open / closed ----
             if p["do_threshold"]:
                 self.emit("stage", "Open/closed: characterising")
-                self.dev.send("!VMODE,2")       # voltage check off: every pass runs the test
-                groups = [({"DETMETHOD": 2, "DETBAND": b}, b) for b in p["detbands"]]
+                if not battery:
+                    self.dev.send("!VMODE,2")   # voltage check off: every pass runs the test
+                bands = p["detbands"]
+                if battery and len(bands) > 1:
+                    # Each group is its own unplug cycle on battery.  The tail area
+                    # is identical in every group (it does not depend on DETBAND),
+                    # and time-to-return is the metric that fails on battery, so
+                    # one band is enough to decide between them.
+                    report.append(f"   battery mode: DETBAND {bands[0]:g} only (each extra "
+                                  "candidate would cost another unplug cycle)")
+                    bands = bands[:1]
+                groups = [({"DETMETHOD": 2, "DETBAND": b}, b) for b in bands]
                 if p["include_m0"]:
                     groups.append(({"DETMETHOD": 0}, None))
                 cands = []
@@ -603,7 +665,10 @@ class Runner:
                     for k, v in settings.items():
                         setk(k, v)
                     rec = []
-                    for c in loads:
+                    if battery:     # VMODE 2 is set for the capture by bh_battery
+                        res = self.bat_measure(loads, f"thr{gi}", dwell, settle, N, 2, stable)
+                        rec = [(c.relay, c.ohms, res.get(c.label, [])) for c in loads]
+                    for c in (loads if not battery else []):
                         passes, _ = self.measure(c, f"thr{gi}", dwell, settle,
                                                  min_passes=N, stable_count=stable)
                         rec.append((c.relay, c.ohms, passes))
@@ -634,6 +699,14 @@ class Runner:
                     for k, v in rt["proposal"].items():
                         applied[k] = setk(k, v)
                     applied[thresh_key] = setk(thresh_key, rt["threshold"])
+                    if battery:
+                        # Measured with the unit awake; the sleeping probe reads a
+                        # little higher (~+0.01 V*ms on V3b), which the wake check
+                        # below confirms rather than assumes.
+                        skey = "SLEEP" + thresh_key.replace("THRESH", "THR")
+                        applied[skey] = setk(skey, rt["threshold"])
+                        report.append(f"   {skey} set to the same value -- the sleep/wake "
+                                      "check in VERIFY is what proves it wakes.")
 
             # ---- 3. verify with everything applied ----
             if p["do_verify"]:
@@ -649,7 +722,11 @@ class Runner:
                     conds += [ac_condition(vrms, f) for vrms, f in p["ac"]]
                     conds.append(Cond("gen output off", "fgen_off", "FGEN", expected="F"))
                 vs = []
-                for c in conds:
+                n0 = len(self.summaries)
+                if battery:
+                    self.bat_measure(conds, "verify", dwell, settle, N, 0, stable)
+                    vs = self.summaries[n0:]
+                for c in (conds if not battery else []):
                     try:
                         _, s = self.measure(c, "verify", dwell, settle, min_passes=N,
                                             stable_count=stable)
@@ -661,10 +738,24 @@ class Runner:
                                   f"C/F/V {s['lead_C'] * 100:5.1f}/{s['lead_F'] * 100:5.1f}/"
                                   f"{s['lead_V'] * 100:5.1f} %   {s['result']}")
                 fails = [s for s in vs if s["result"] == "FAIL"]
-                ok = not fails
-                report += ["", "VERIFY VERDICT: " + ("every condition read as expected" if ok else
-                                                     f"{len(fails)} condition(s) failed: " +
-                                                     ", ".join(s["label"] for s in fails))]
+                wake_ok = True
+                if battery and p.get("wake_check", True):
+                    stay, wake = wake_loads(loads, p["closed_max"], p["open_min"])
+                    if stay is None or wake is None:
+                        report.append("   sleep/wake check skipped: needs a load on each "
+                                      "side of the CLOSED/OPEN criteria")
+                    else:
+                        self.emit("stage", "Verify: sleep/wake")
+                        wl, wake_ok = self.bat.wake_check(stay, wake)
+                        report += [""] + wl
+                        for l in wl:
+                            self.log(l)
+                ok = not fails and wake_ok
+                report += ["", "VERIFY VERDICT: " + (
+                    "every condition read as expected" if ok else
+                    "; ".join(x for x in (
+                        f"{len(fails)} condition(s) failed: " + ", ".join(s["label"] for s in fails)
+                        if fails else "", "" if wake_ok else "sleep/wake check failed") if x))]
             report += ["", "Applied to device RAM (NOT saved): " +
                        (", ".join(f"{k}={v}" for k, v in applied.items()) or "nothing"),
                        "Press 'Save to EEPROM' to keep them, or 'Revert' to put back "
@@ -677,7 +768,12 @@ class Runner:
             raise
         finally:
             self.fgen_off()
-            self.dev.release()
+            try:
+                self.dev.release()
+            except Exception:
+                pass
+            if battery:
+                p["host"].notice(None)
             self.write_files()
             with open(os.path.join(self.dir, "tuning_report.txt"), "w", encoding="utf-8") as fh:
                 fh.write("\n".join(report) + "\n")

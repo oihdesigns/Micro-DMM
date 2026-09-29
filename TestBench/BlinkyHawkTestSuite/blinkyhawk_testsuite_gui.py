@@ -2,10 +2,11 @@
 """
 blinkyhawk_testsuite_gui.py  --  the BlinkyHawk bench GUI plus automated testing.
 
-This IS blinkyhawk_bench_gui.py (imported from ArduinoProgrammingFiles/
-BlinkyHawk_Bench and subclassed, not copied -- so its Diagnostics /
-Configuration / Bench tabs, and its per-unit CSV log, are the same ones), with
-three more tabs:
+This IS the BlinkyHawk_Unified GUI (ArduinoProgrammingFiles/BlinkyHawk_Unified/
+blinkyhawk_gui.py, imported and subclassed, not copied -- so its Diagnostics /
+Configuration / Power tabs, and its per-unit CSV log, are the same ones), with
+three more tabs.  (If that folder is missing it falls back to the older
+BlinkyHawk_Bench GUI.)
 
   Test Rig        connect and drive the relay jig (and its AS7343 LED watcher),
                   the Rigol DG852 Pro and the Siglent scope by hand.  Type SIM in any port/IP box (or press
@@ -19,10 +20,12 @@ three more tabs:
                   detection method + threshold that reads CLOSED at the chosen
                   resistance and OPEN above it -- or says it cannot, and shows
                   which loads CAN be told apart.  Applies to RAM only; Save or
-                  Revert afterwards.
+                  Revert afterwards.  By default it measures ON BATTERY with the
+                  unit floating (you unplug and replug USB when told; see
+                  bh_battery.py) -- numbers taken over USB do not hold on battery.
 
-Needs the bench firmware with !DETLOG (BlinkyHawk_Bench.ino from the same
-commit as this file).
+Needs BlinkyHawk_Unified firmware (!DETLOG, and !SLEEPLOG,2 / !SLEEPLOG,D for
+battery tuning).
 
 Dependencies:  pip install pyserial matplotlib
 Run:           py blinkyhawk_testsuite_gui.py
@@ -42,14 +45,20 @@ import serial
 import serial.tools.list_ports
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-BENCH_DIR = os.path.normpath(os.path.join(HERE, "..", "..", "ArduinoProgrammingFiles",
-                                          "BlinkyHawk_Bench"))
+FW_DIR = os.path.normpath(os.path.join(HERE, "..", "..", "ArduinoProgrammingFiles"))
+UNIFIED_DIR = os.path.join(FW_DIR, "BlinkyHawk_Unified")
+BENCH_DIR = os.path.join(FW_DIR, "BlinkyHawk_Bench")
 sys.path.insert(0, HERE)
-sys.path.insert(1, BENCH_DIR)
-try:
-    import blinkyhawk_bench_gui as bench
-except ImportError as exc:
-    raise SystemExit(f"Could not import blinkyhawk_bench_gui from\n  {BENCH_DIR}\n({exc})")
+if os.path.exists(os.path.join(UNIFIED_DIR, "blinkyhawk_gui.py")):
+    sys.path.insert(1, UNIFIED_DIR)
+    import blinkyhawk_gui as bench          # "bench" = the base GUI module
+else:
+    sys.path.insert(1, BENCH_DIR)
+    try:
+        import blinkyhawk_bench_gui as bench
+    except ImportError as exc:
+        raise SystemExit(f"Could not import a BlinkyHawk GUI from\n  {UNIFIED_DIR}\n"
+                         f"or\n  {BENCH_DIR}\n({exc})")
 
 import bh_sequencer as S
 import bh_tuner as T
@@ -143,6 +152,32 @@ def port_choices():
 
 # chart colours (validated default categorical slots 1-2, neutral for don't-care)
 C_CLOSED, C_OPEN, C_OTHER, C_INK = "#2a78d6", "#eb6834", "#8a8a86", "#0b0b0b"
+
+
+class BatteryHost:
+    """What bh_battery needs from the GUI, callable from the worker thread."""
+
+    def __init__(self, app, port):
+        self.app = app
+        self.port = port
+
+    def notice(self, text):
+        self.app.wq.put(("notice", text))
+
+    def reconnect(self):
+        """Open the port again if it is closed (never toggles an open one shut)."""
+        ev = threading.Event()
+
+        def go():
+            try:
+                a = self.app
+                if not a.serial.is_open and not a._connecting:
+                    a.port_cb.set(self.port)
+                    a._toggle_connect()
+            finally:
+                ev.set()
+        self.app.wq.put(("call", go))
+        ev.wait(5)
 
 
 class SuiteApp(bench.App):
@@ -269,8 +304,8 @@ class SuiteApp(bench.App):
         self.led_gain = ttk.Combobox(row, width=6, state="readonly", values=LED_GAINS)
         self.led_gain.set("16x")
         self.led_gain.pack(side="left", padx=2)
-        self.led_atime = tk.StringVar(value="0")
-        self.led_astep = tk.StringVar(value="999")
+        self.led_atime = tk.StringVar(value="15")
+        self.led_astep = tk.StringVar(value="256")
         self.led_thr = tk.StringVar(value="20")
         for txt, var, w in (("ATIME", self.led_atime, 4), ("ASTEP", self.led_astep, 6),
                             ("threshold (counts)", self.led_thr, 5)):
@@ -733,7 +768,7 @@ class SuiteApp(bench.App):
         ttk.Checkbutton(r, text="use the LED watcher when available",
                         variable=self.seq_use_led).pack(side="left", padx=6)
         ttk.Label(r, foreground="#555",
-                  text="(the LED needs >= ~2.5 s dwell: the float blink is ~1 per second)"
+                  text="(LED: give >= 2 s dwell -- VAC is a 3-flash cycle; FLOAT may read dark)"
                   ).pack(side="left")
 
         of = ttk.LabelFrame(t, text="Timing, scope, run", padding=6)
@@ -814,10 +849,11 @@ class SuiteApp(bench.App):
                                          "the relay jig has no AS7343 connected (or it is "
                                          "switched off here).")
             return
-        if battery and dwell < 2.5:
-            if not messagebox.askyesno("Test", f"A {dwell:g} s dwell may catch fewer than two "
-                                               "float blinks, so those conditions would come "
-                                               "out NO DATA.  Run anyway?"):
+        if battery and dwell < 2.0:
+            if not messagebox.askyesno("Test", f"A {dwell:g} s dwell may not show a whole "
+                                               "voltage pattern (VAC is three flashes, one "
+                                               "per LEDVOLTPER), so some conditions could "
+                                               "come out NO DATA or '?'.  Run anyway?"):
                 return
         if self.fgen is None and any(c.kind in ("dc", "ac") for c in conds):
             if not messagebox.askyesno(
@@ -888,6 +924,29 @@ class SuiteApp(bench.App):
         ttk.Entry(r, width=4, textvariable=self.tu_settle).pack(side="left", padx=2)
 
         r = ttk.Frame(pf)
+        r.pack(fill="x", pady=(4, 0))
+        self.tu_bat = tk.BooleanVar(value=True)
+        ttk.Checkbutton(r, text="measure ON BATTERY (floating) -- recommended",
+                        variable=self.tu_bat).pack(side="left")
+        ttk.Label(r, text="   log entries/condition:").pack(side="left")
+        self.tu_bn = tk.StringVar(value="6")
+        ttk.Entry(r, width=4, textvariable=self.tu_bn).pack(side="left", padx=2)
+        ttk.Label(r, text="dwell s:").pack(side="left")
+        self.tu_bdwell = tk.StringVar(value="2.2")
+        ttk.Entry(r, width=4, textvariable=self.tu_bdwell).pack(side="left", padx=2)
+        ttk.Label(r, text="settle s:").pack(side="left")
+        self.tu_bsettle = tk.StringVar(value="0.5")
+        ttk.Entry(r, width=4, textvariable=self.tu_bsettle).pack(side="left", padx=2)
+        self.tu_wake = tk.BooleanVar(value=True)
+        ttk.Checkbutton(r, text="sleep/wake check in verify",
+                        variable=self.tu_wake).pack(side="left", padx=10)
+        ttk.Label(pf, foreground="#a33", wraplength=1150, text=(
+            "Battery mode: take every scope probe OFF the unit (a ground clip earths it) and "
+            "leave the relay jig + generator connected.  You will be asked to unplug and "
+            "replug USB several times -- each capture then runs by itself.  The passes/"
+            "condition and dwell above are for USB mode.")).pack(fill="x", pady=(2, 0))
+
+        r = ttk.Frame(pf)
         r.pack(fill="x", pady=(6, 0))
         ttk.Button(r, text="Run auto-tune", command=self._tune_run).pack(side="left")
         ttk.Button(r, text="Stop (reverts)", command=self._stop_job).pack(side="left", padx=4)
@@ -900,9 +959,14 @@ class SuiteApp(bench.App):
         ttk.Button(r, text="Open run folder", command=self._open_run_dir).pack(side="left", padx=8)
         self.tu_status = ttk.Label(r, text="idle", font=("Consolas", 10))
         self.tu_status.pack(side="left", padx=10)
+        # Operator instruction for battery captures (unplug / replug).  Big and
+        # coloured, because the run waits on it and nothing else says so.
+        self.tu_notice = tk.Label(t, text="", font=("Segoe UI", 14, "bold"),
+                                  fg="#ffffff", bg="#c0392b", wraplength=1150, pady=6)
 
         body = ttk.Panedwindow(t, orient="horizontal")
         body.pack(fill="both", expand=True, padx=6, pady=4)
+        self.tu_body = body
         lf = ttk.Frame(body)
         self.tu_text = tk.Text(lf, wrap="none", font=("Consolas", 9))
         sb = ttk.Scrollbar(lf, command=self.tu_text.yview)
@@ -942,7 +1006,10 @@ class SuiteApp(bench.App):
                 "detbands": bands, "include_m0": self.tu_m0.get(),
                 "loads": [n for n, _ in JIG_LOADS],
                 "do_voltage": self.tu_do_v.get(), "do_threshold": self.tu_do_t.get(),
-                "do_verify": self.tu_do_x.get()}
+                "do_verify": self.tu_do_x.get(),
+                "battery": self.tu_bat.get(), "wake_check": self.tu_wake.get(),
+                "bat_samples": int(self.tu_bn.get()), "bat_dwell": float(self.tu_bdwell.get()),
+                "bat_settle": float(self.tu_bsettle.get())}
 
     def _tune_run(self):
         try:
@@ -961,6 +1028,27 @@ class SuiteApp(bench.App):
         self.tu_canvas.draw_idle()
         self.tu_save.config(state="disabled")
         self.tu_revert.config(state="disabled")
+        if p["battery"]:
+            if self.relay is None:
+                messagebox.showerror("Auto-tune", "Battery mode drives the leads by itself "
+                                                  "while USB is unplugged, so it needs the relay "
+                                                  "jig connected.")
+                return
+            port = getattr(getattr(self.serial, "ser", None), "port", None)
+            if not port:
+                messagebox.showerror("Auto-tune", "Connect the BlinkyHawk over USB first "
+                                                  "(each capture is armed over USB).")
+                return
+            if not messagebox.askokcancel(
+                    "Auto-tune on battery",
+                    "Before starting:\n\n"
+                    "  - every scope probe OFF the BlinkyHawk (a ground clip earths it)\n"
+                    "  - battery fitted and charged\n"
+                    "  - relay jig on the leads, generator connected\n\n"
+                    "You will be told when to UNPLUG and when to PLUG BACK IN the USB "
+                    "cable -- once per capture.  Everything else is automatic."):
+                return
+            p["host"] = BatteryHost(self, port)
         self._start_job(lambda r: r.run_autotune(p))
 
     def _tune_save(self):
@@ -1130,6 +1218,14 @@ class SuiteApp(bench.App):
             self._rig_say(p)
         elif kind == "call":
             p()
+        elif kind == "notice":
+            if p:
+                self.tu_notice.config(text=p)
+                self.tu_notice.pack(fill="x", padx=6, pady=4, before=self.tu_body)
+                self.bell()
+                self._log("** " + p)
+            else:
+                self.tu_notice.pack_forget()
         elif kind in ("status", "stage"):
             self.seq_status.config(text=p)
             self.tu_status.config(text=p)

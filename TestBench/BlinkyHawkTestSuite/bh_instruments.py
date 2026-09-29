@@ -234,9 +234,9 @@ class SimRelayJig:
         self.ident = "RelayJig SIM"
         self.mode = "FGEN"
         self.connected = True
-        self.led_info = {"sensor": "1", "on": "1", "gain": "5", "atime": "0",
-                         "astep": "999", "thr": "20", "hz": "240.0", "base": "12",
-                         "fullscale": "1000"}
+        self.led_info = {"sensor": "1", "on": "1", "gain": "5", "atime": "15",
+                         "astep": "256", "thr": "20", "hz": "80.0", "base": "12",
+                         "fullscale": "4112"}
         self.raw_last = None
         self._subs = []
         self._lock = threading.Lock()

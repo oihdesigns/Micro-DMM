@@ -35,7 +35,7 @@ import math
 
 INF = float("inf")
 
-# Firmware clamps (CFG_FIELDS in BlinkyHawk_Bench.ino) -- a proposal outside
+# Firmware clamps (CFG_FIELDS in BlinkyHawk_Unified.ino) -- a proposal outside
 # these would be silently clamped by !SET, so the tuner flags it instead.
 LIMITS = {"REFCENTER": (-1.0, 1.0), "REFBAND": (0.001, 1.0), "VOLTFAST": (1.0, 50.0),
           "THRESH": (0.001, 3.3), "DETBAND": (0.005, 1.0)}
@@ -491,7 +491,7 @@ def _combine(*results):
     return "FAIL" if "FAIL" in r else "PASS"
 
 
-def summarize(label, expected, passes, stable_count=2, led=None):
+def summarize(label, expected, passes, stable_count=2, led=None, skip=None):
     """One condition's verdict.
 
     expected: 'C' | 'F' | 'V' (any voltage) | 'VDC+' | 'VDC-' | 'VAC' |
@@ -503,9 +503,14 @@ def summarize(label, expected, passes, stable_count=2, led=None):
     and, for a voltage kind, the debounced kind while lead is VOLTAGE (skipped
     if the firmware predates the classifier).  The LED verdict is what the
     unit actually showed.  Both must pass when both are available.
+
+    skip: passes to drop at the start (default STABLECOUNT + 2, for the
+    debounce to catch up).  Battery captures pass 0: their entries are one per
+    log spacing (hundreds of ms), so the debounce has long settled by the first.
     """
     from bh_led import led_matches
-    skip = stable_count + 2           # let the debounce catch up with the new condition
+    if skip is None:
+        skip = stable_count + 2       # let the debounce catch up with the new condition
     use = passes[skip:] if len(passes) > skip + 3 else passes
     n = len(use)
     frac = lambda key, s: (sum(1 for p in use if p[key] == s) / n) if n else 0.0
@@ -544,7 +549,7 @@ def summarize(label, expected, passes, stable_count=2, led=None):
         out["led_state"] = led.get("state", "")
         out["led_colours"] = led.get("colours", "")
         out["led_n"] = led.get("n", 0)
-        m = led_matches(expected, out["led_state"])
+        m = led_matches(expected, out["led_state"], led.get("counts"))
         led_res = "" if m is None else ("PASS" if m else "FAIL")
     out["led_result"] = led_res
 

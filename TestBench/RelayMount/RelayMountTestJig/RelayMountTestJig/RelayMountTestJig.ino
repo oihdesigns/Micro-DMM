@@ -223,8 +223,8 @@ bool     ledSensor   = false;   // AS7343 found at boot
 bool     ledOn       = false;   // flash reporting enabled
 uint16_t ledRawMs    = 0;       // raw stream period (0 = off)
 uint8_t  ledGain     = AS7343_GAIN_16X;
-uint8_t  ledAtime    = 0;
-uint16_t ledAstep    = 999;     // (ATIME+1)(ASTEP+1) x 2.78 us = 2.78 ms
+uint8_t  ledAtime    = 15;
+uint16_t ledAstep    = 256;     // (ATIME+1)(ASTEP+1) x 2.78 us = 11.4 ms, full scale 4112
 float    ledThr      = 20.0f;   // counts above baseline that make a flash
 
 float    baseCh[3]   = {0, 0, 0};  // dark baseline per colour channel (EMA)

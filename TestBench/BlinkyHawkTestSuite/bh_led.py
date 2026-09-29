@@ -18,7 +18,8 @@ counts above the dark baseline -- roughly the sensor's blue (450 nm), green
       red + blue          VDC-        red, blue
       red + blue + green  VAC         red, blue, green
       nothing             dark        LED off / disabled / asleep between heartbeats
-      1 flash only        few         too short a window to say -- NOT judged
+      1 blue flash        FLOAT       nothing else starts blue
+      1 other flash       few         too short a window to say -- NOT judged
    A window that straddles a change shows a mix that fits none of these and
    decodes as "?" -- which is why the sequencer only looks after its settle.
    The window must hold at least two flashes of the SLOWEST alert (the float
@@ -189,8 +190,13 @@ class LedDecoder:
         if not fl:
             out["state"] = "dark"
         elif known < min_flashes:
-            # one flash (or a couple of unknown colours) is not a pattern
-            out["state"] = "few" if unknown == 0 else "?"
+            # one flash (or a couple of unknown colours) is not a pattern --
+            # except a lone BLUE one: nothing else starts blue, and the float
+            # blink is slow enough that one per window is all there may be.
+            if unknown == 0 and counts["B"] == known:
+                out["state"] = "F"
+            else:
+                out["state"] = "few" if unknown == 0 else "?"
         else:
             st = self.SET_STATE.get(frozenset(k for k in COLOURS if counts[k]), "?")
             cyc = self.KIND_CYCLE.get(st)
@@ -204,12 +210,29 @@ class LedDecoder:
         return out
 
 
-def led_matches(expected, state):
-    """Does an LED decode satisfy a sequencer expectation?  None = not judged."""
-    if not expected or state is None or state == "few":
+def led_matches(expected, state, counts=None):
+    """Does an LED decode satisfy a sequencer expectation?  None = not judged.
+
+    FLOAT accepts "dark": the float blink is dim and brief, and waiting long
+    enough to be sure of catching it would stretch every open-lead condition.
+    Dark is still not accepted where the unit must SHOW something (closed,
+    voltage), so an LED that is dead or disabled still fails the run there.
+    """
+    if not expected or state is None:
         return None
+    if state == "few":
+        # Too little to name an alert -- but a lone green or red flash where the
+        # unit should be showing FLOAT (or no voltage) is still evidence against.
+        c = counts or {}
+        if expected == "F" and (c.get("G") or c.get("R")):
+            return False
+        if expected == "!V" and c.get("R"):
+            return False
+        return None
+    if expected == "F":
+        return state in ("F", "dark")
     if expected == "!V":
-        return state in ("F", "C")
+        return state in ("F", "C", "dark")
     if expected == "V":
         return state in ("VDC+", "VDC-", "VAC")
     return state == expected

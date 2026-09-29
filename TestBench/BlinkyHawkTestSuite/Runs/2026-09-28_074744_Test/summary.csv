@@ -1,0 +1,11 @@
+phase,label,expected,result,serial_result,led_result,n,lead_C,lead_F,lead_V,raw_C,raw_F,raw_V,kind,kind_frac,vpos_max,vneg_max,led_state,led_colours,led_n,rest_mean,rest_sd,rest_min,rest_max,metric_mean,metric_sd,metric_min,metric_max,scope
+test,load SHORT,C,PASS,,PASS,0,0,0,0,0,0,0,,,,,C,G6,6,,,,,,,,,
+test,load 10K,C,PASS,,PASS,0,0,0,0,0,0,0,,,,,C,G5,5,,,,,,,,,
+test,load 150K,C,PASS,,PASS,0,0,0,0,0,0,0,,,,,C,G5,5,,,,,,,,,
+test,load 1M,F,FAIL,,FAIL,0,0,0,0,0,0,0,,,,,?, ?1,1,,,,,,,,,
+test,load 10.6M,F,PASS,,PASS,0,0,0,0,0,0,0,,,,,dark,,0,,,,,,,,,
+test,load OPEN,F,PASS,,PASS,0,0,0,0,0,0,0,,,,,dark,,0,,,,,,,,,
+test,DC +0.800V,VDC+,PASS,,PASS,0,0,0,0,0,0,0,,,,,VDC+,R5,5,,,,,,,,,
+test,DC -0.800V,VDC-,PASS,,PASS,0,0,0,0,0,0,0,,,,,VDC-,R2 B3,5,,,,,,,,,
+test,AC 5Vrms 60Hz,VAC,PASS,,PASS,0,0,0,0,0,0,0,,,,,VAC,R1 G2 B2,5,,,,,,,,,
+test,gen output off,F,PASS,,PASS,0,0,0,0,0,0,0,,,,,dark,,0,,,,,,,,,

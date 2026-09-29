@@ -10,12 +10,19 @@ settings.
 py blinkyhawk_testsuite_gui.py
 ```
 
-Needs `pip install pyserial matplotlib`, and the **bench firmware with
-`!DETLOG`** (`ArduinoProgrammingFiles/BlinkyHawk_Bench`, same commit as this).
+Needs `pip install pyserial matplotlib`, and **BlinkyHawk_Unified firmware**
+(`ArduinoProgrammingFiles/BlinkyHawk_Unified`, Sep 2026 or later). It needs
+`!DETLOG` for USB runs, and `!SLEEPLOG,2` / `!SLEEPLOG,D` for battery tuning.
+
+> **Tune on battery, not over USB.** USB earths the board, and numbers taken
+> that way do not hold once it is unplugged. See
+> [Tuning on battery](#tuning-on-battery-the-default). Auto-Tune does this by
+> default.
 
 | File | What it is |
 |---|---|
-| `blinkyhawk_testsuite_gui.py` | The GUI. It **subclasses** `blinkyhawk_bench_gui.App` (imported from `ArduinoProgrammingFiles/BlinkyHawk_Bench`) rather than copying it, so the Diagnostics / Configuration / Bench tabs are the same code, and so is the per-unit CSV (`blinkyhawk_bench_units.csv`) that **Restore this unit…** reads |
+| `blinkyhawk_testsuite_gui.py` | The GUI. It **subclasses** the unified firmware's GUI (`ArduinoProgrammingFiles/BlinkyHawk_Unified/blinkyhawk_gui.py`) rather than copying it. The Diagnostics / Configuration / Power tabs are the same code, and so is the per-unit CSV (`blinkyhawk_units.csv`) that **Restore this unit…** reads. If that folder is missing, it falls back to the old bench GUI |
+| `bh_battery.py` | Battery captures: arms the unit's RAM log over USB, runs the conditions while it is unplugged, reads the log back as passes, and runs the sleep/wake check |
 | `bh_instruments.py` | Relay jig (USB), Rigol DG800 Pro (SCPI socket), Siglent SDS800X HD (a Python port of `../Scope/ScopeLib.ps1`), and a writer for Capture-Scope's CSV layout |
 | `bh_sequencer.py` | Condition runner, the big-test job and the auto-tune job, and the run-folder writer |
 | `bh_tuner.py` | The analysis. Pure functions with no I/O |
@@ -52,7 +59,7 @@ skipped, and marked as skipped, when it isn't connected.
 
 ## Voltage kind: VDC+, VDC−, VAC
 
-The bench firmware now has the production classifier (ported from production
+The firmware has the production classifier (ported from production
 commit `4f4fecf`; bench config v5, keys `VCLASS`, `ACWINMS`, `ACBAND`,
 `VOLTLONGMS`, `VACPULSES`). The expectations follow it:
 
@@ -76,8 +83,8 @@ It has no electrical contact with the unit and takes no current from it.
 board regulates and level-shifts), GND, SDA, SCL on the header pins. On a
 Qwiic cable to a board that has the connector, change `LED_WIRE` to `Wire1` in
 `RelayMountTestJig.ino`. **Flash jig firmware 1.1.** The Test Rig tab then
-shows "sensor OK" with its sample rate (about 200 per second at the default
-2.8 ms integration).
+shows "sensor OK" with its sample rate (about 80 per second at the default
+ATIME 15 / ASTEP 256 = 11.4 ms integration, full scale 4112 counts).
 
 **Aim and shield it.** Tape or a short tube over the LED keeps room light out.
 Tick "raw counts" and check that the LED lifts the counts well clear of the
@@ -107,9 +114,13 @@ rough default colours are used.
 - **Mixed windows:** a window that is still showing the previous condition's
   tail has leading flashes dropped (up to half), and the table says so. If it
   still fits no alert, it reads `?`.
-- **Too few flashes:** fewer than two flashes is not judged (NO DATA), so give
-  the LED **≥ 2.5 s of dwell**, because the float blink is about once a
-  second.
+- **Too few flashes:** fewer than two flashes is not judged (NO DATA), except
+  that a single blue flash counts as FLOAT, since nothing else starts blue.
+- **FLOAT accepts "dark":** the float blink is dim and brief, and waiting long
+  enough to be sure of catching it would stretch every open-lead condition. So
+  an expected FLOAT (and "not voltage") passes on no flashes at all. CLOSED
+  and voltage conditions still need to see their colours, so a dead or
+  disabled LED still fails the run there.
 
 **Battery mode** (Test Sequence, "unit on battery"): the run doesn't touch the
 serial port at all. The LED is the only judge, and the pass/fail table shows
@@ -132,6 +143,112 @@ mains and bench supplies, but it isn't a fully floating system.
 | `summary.csv` | one row per condition, pass/fail, scope stats |
 | `scope.csv` + `scope.html` | **Capture-Scope.ps1's layout**, so `..\Scope\Plot-Capture.ps1` renders it. The suite runs it for you; `scope.html` is the plot |
 | `tuning_report.txt` | auto-tune only: the whole reasoning, with verdicts |
+
+## Tuning on battery (the default)
+
+**Why.** In September 2026 a V3b tuned over USB looked perfect on the bench.
+On battery, a shorted lead read OPEN on every pass: the unit went to sleep with
+its leads shorted and never woke. The measurements behind that:
+
+| | USB | Battery, floating |
+|---|---|---|
+| resting differential | 0.000 V | −0.026 V (−0.036 with a scope ground clip on) |
+| SHORT, tail area | 0.076 V·ms | 0.165 V·ms |
+| OPEN, tail area | 0.137 V·ms | 0.353 V·ms |
+| time-to-return, any load | 0.74–1.14 ms | timeout, every load |
+
+USB earths the board through the PC, and that changes both the resting level
+and the shape of the recovery tail. There is a second problem too. The Rigol's
+output ground is earth, so on an earthed board the generator is a ground loop,
+not a floating source. USB voltage sweeps came out lopsided (a +0.8 V swing
+moved the reading a third as much as −0.8 V) and noisy (40 mV pass-to-pass).
+A scope ground clip on the board earths it just as USB does.
+
+The product lives on battery, floating, and alerts are locked out on USB
+anyway (`CHGINHIBIT=1`). So that is the only condition worth tuning in.
+
+**How.** Tick **measure ON BATTERY** on the Auto-Tune tab (it is on by default).
+You need:
+
+- the relay jig on the leads and the generator connected
+- **every scope probe off the unit**
+- USB connected at the start, and the battery fitted
+
+Nothing can be printed while USB is unplugged, so the unit logs to RAM and the
+log is read back afterwards. Each **capture** goes like this:
+
+1. over USB, the suite arms the log. That sets `SLEEPSEC 0`, the log
+   `SLEEPTICKS` spacing, `CHGINHIBIT 1`, `VMODE`, and `!SLEEPLOG,2`.
+2. a red banner says **UNPLUG USB**. The suite waits for the COM port to
+   vanish.
+3. a marker, then every condition, run automatically by the jig and generator
+4. the banner says **PLUG USB BACK IN**. The GUI reconnects and reads
+   `!SLEEPLOG,D`, and the settings are put back.
+
+Each log entry is one real detection pass, with the same fields as `$DET`.
+The log has 192 entries, one every few hundred ms. **Log entries/condition**
+sets the spacing. A plan that doesn't fit one log is split into several
+captures, and the log says how many. Entries are placed on the timeline by a
+marker:
+- **Voltage captures** use a +2 V step from the generator.
+- **Open/closed captures** use a SHORT → OPEN step in the metric. Voltage
+  detection is off for these, so no voltage marker is possible.
+
+A full battery auto-tune takes about five unplug cycles:
+
+| Capture | Cycles |
+|---|---|
+| Voltage | 2 (the default DC sweep does not fit one log) |
+| Open/closed | 1 (plus 1 more if method 0 is ticked) |
+| Verify | 1 |
+| Sleep/wake check | 1 |
+
+On battery, only the **first DETBAND** candidate is used. Every extra one would
+cost another cycle, and time-to-return is the metric that fails on battery anyway.
+
+**The sleep/wake check** is new, and it tests the part that failed in the
+field. The unit really sleeps and reaches the deep stage; `DEEPSEC` is cut to
+2 s just for this, which does not change how the deep probe measures. Then:
+
+- the **OPEN-side** load nearest the boundary goes on: it must **not** wake
+  the unit
+- the **CLOSED-side** load nearest it goes on: it **must** wake it
+
+`millis()` is frozen in Standby, so the probes are counted, not timed. A wake
+on the wrong load shows up as too few probes before the wake. In battery mode
+the tuned threshold is written to `SLEEPTHRxx` as well as `THRESHxx`. The
+sleeping probe reads about 0.01 V·ms higher than the awake loop on V3b, and
+this check is what proves the margin holds.
+
+**If a capture is interrupted** (Stop, a timeout, a crash), the unit can be
+left holding the capture settings in RAM. `SLEEPSEC 0` means it never sleeps.
+Plug it in and press **Reload EEPROM → RAM**, or power-cycle it. None of it is
+ever saved to EEPROM.
+
+**Two gotchas:**
+
+- **CHGINHIBIT and a 5 V supply.** A unit powered through its 5 V input (a
+  bench supply or a boost converter) never looks unplugged, so its log never
+  starts. Battery mode needs the real battery.
+- **The LED watcher can't see dim flashes.** The AS7343 does not see the dim
+  green and blue flashes at the default brightness. The sleep/wake check
+  therefore judges by the unit's own log, not by flashes.
+
+Battery tuning of the first V3b gave:
+
+| Key | Value |
+|---|---|
+| `REFCENTER` | −0.026 |
+| `REFBAND` | 0.049 (trip at ±0.6 V) |
+| `VOLTFAST` | 1.5 |
+| `ACBAND` | 0.05 |
+| `DETMETHOD` | 2 (tail area) |
+| `THRESH11` / `SLEEPTHR11` | 0.28 |
+
+Areas: 1M 0.237, 10.6M 0.329. 10.6M must read OPEN, because the DMM's own
+10 MΩ is always across the leads. The auto-tuner reproduces `REFCENTER` /
+`REFBAND` from that run's log (−0.0256 / 0.0486). It never *lowers*
+`VOLTFAST`: 1.5 was chosen by hand to catch AC above about 1 Vrms.
 
 ## Auto-tune: what it does and how to read it
 

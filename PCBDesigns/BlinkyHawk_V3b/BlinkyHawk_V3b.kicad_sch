@@ -4958,7 +4958,7 @@
 	)
 	(rectangle
 		(start 160.02 13.97)
-		(end 279.4 64.77)
+		(end 279.4 68.58)
 		(stroke
 			(width 0)
 			(type default)
@@ -5156,7 +5156,7 @@
 	)
 	(wire
 		(pts
-			(xy 240.03 78.74) (xy 243.84 78.74)
+			(xy 213.36 60.96) (xy 217.17 60.96)
 		)
 		(stroke
 			(width 0)
@@ -6482,7 +6482,7 @@
 				(type solid)
 			)
 		)
-		(column_widths 12.7 17.78)
+		(column_widths 12.7 21.59)
 		(row_heights 2.54 2.54 2.54 2.54 2.54 2.54 2.54 2.54 2.54 2.54 2.54 2.54
 			2.54 2.54 2.54 2.54 2.54
 		)
@@ -6510,7 +6510,7 @@
 			(table_cell "Function"
 				(exclude_from_sim no)
 				(at 173.99 69.85 0)
-				(size 17.78 2.54)
+				(size 21.59 2.54)
 				(margins 0.9525 0.9525 0.9525 0.9525)
 				(span 1 1)
 				(fill
@@ -6546,7 +6546,7 @@
 			(table_cell "NC"
 				(exclude_from_sim no)
 				(at 173.99 72.39 0)
-				(size 17.78 2.54)
+				(size 21.59 2.54)
 				(margins 0.9525 0.9525 0.9525 0.9525)
 				(span 1 1)
 				(fill
@@ -6580,7 +6580,7 @@
 			(table_cell "VBus_Detect"
 				(exclude_from_sim no)
 				(at 173.99 74.93 0)
-				(size 17.78 2.54)
+				(size 21.59 2.54)
 				(margins 0.9525 0.9525 0.9525 0.9525)
 				(span 1 1)
 				(fill
@@ -6614,7 +6614,7 @@
 			(table_cell "ADC Signal"
 				(exclude_from_sim no)
 				(at 173.99 77.47 0)
-				(size 17.78 2.54)
+				(size 21.59 2.54)
 				(margins 0.9525 0.9525 0.9525 0.9525)
 				(span 1 1)
 				(fill
@@ -6645,10 +6645,10 @@
 				)
 				(uuid "2ed64276-a789-47ea-8cfb-7c1d96abde75")
 			)
-			(table_cell "Analog_Rail_Ctrl"
+			(table_cell "Analog_Rail_Enable"
 				(exclude_from_sim no)
 				(at 173.99 80.01 0)
-				(size 17.78 2.54)
+				(size 21.59 2.54)
 				(margins 0.9525 0.9525 0.9525 0.9525)
 				(span 1 1)
 				(fill
@@ -6682,7 +6682,7 @@
 			(table_cell "NC"
 				(exclude_from_sim no)
 				(at 173.99 82.55 0)
-				(size 17.78 2.54)
+				(size 21.59 2.54)
 				(margins 0.9525 0.9525 0.9525 0.9525)
 				(span 1 1)
 				(fill
@@ -6716,7 +6716,7 @@
 			(table_cell "NC"
 				(exclude_from_sim no)
 				(at 173.99 85.09 0)
-				(size 17.78 2.54)
+				(size 21.59 2.54)
 				(margins 0.9525 0.9525 0.9525 0.9525)
 				(span 1 1)
 				(fill
@@ -6750,7 +6750,7 @@
 			(table_cell "LED Ctrl"
 				(exclude_from_sim no)
 				(at 173.99 87.63 0)
-				(size 17.78 2.54)
+				(size 21.59 2.54)
 				(margins 0.9525 0.9525 0.9525 0.9525)
 				(span 1 1)
 				(fill
@@ -6784,7 +6784,7 @@
 			(table_cell "Bridge Ctrl"
 				(exclude_from_sim no)
 				(at 173.99 90.17 0)
-				(size 17.78 2.54)
+				(size 21.59 2.54)
 				(margins 0.9525 0.9525 0.9525 0.9525)
 				(span 1 1)
 				(fill
@@ -6818,7 +6818,7 @@
 			(table_cell "Buzzer Gain 1"
 				(exclude_from_sim no)
 				(at 173.99 92.71 0)
-				(size 17.78 2.54)
+				(size 21.59 2.54)
 				(margins 0.9525 0.9525 0.9525 0.9525)
 				(span 1 1)
 				(fill
@@ -6852,7 +6852,7 @@
 			(table_cell "Buzzer Gain 2"
 				(exclude_from_sim no)
 				(at 173.99 95.25 0)
-				(size 17.78 2.54)
+				(size 21.59 2.54)
 				(margins 0.9525 0.9525 0.9525 0.9525)
 				(span 1 1)
 				(fill
@@ -6883,10 +6883,10 @@
 				)
 				(uuid "7a151731-a5cf-47de-8ebe-bca286164847")
 			)
-			(table_cell "LED_Rail_Ctrl"
+			(table_cell "LED_Rail_Enable"
 				(exclude_from_sim no)
 				(at 173.99 97.79 0)
-				(size 17.78 2.54)
+				(size 21.59 2.54)
 				(margins 0.9525 0.9525 0.9525 0.9525)
 				(span 1 1)
 				(fill
@@ -6920,7 +6920,7 @@
 			(table_cell ""
 				(exclude_from_sim no)
 				(at 173.99 100.33 0)
-				(size 17.78 2.54)
+				(size 21.59 2.54)
 				(margins 0.9525 0.9525 0.9525 0.9525)
 				(span 1 1)
 				(fill
@@ -6954,7 +6954,7 @@
 			(table_cell ""
 				(exclude_from_sim no)
 				(at 173.99 102.87 0)
-				(size 17.78 2.54)
+				(size 21.59 2.54)
 				(margins 0.9525 0.9525 0.9525 0.9525)
 				(span 1 1)
 				(fill
@@ -6988,7 +6988,7 @@
 			(table_cell ""
 				(exclude_from_sim no)
 				(at 173.99 105.41 0)
-				(size 17.78 2.54)
+				(size 21.59 2.54)
 				(margins 0.9525 0.9525 0.9525 0.9525)
 				(span 1 1)
 				(fill
@@ -7022,7 +7022,7 @@
 			(table_cell ""
 				(exclude_from_sim no)
 				(at 173.99 107.95 0)
-				(size 17.78 2.54)
+				(size 21.59 2.54)
 				(margins 0.9525 0.9525 0.9525 0.9525)
 				(span 1 1)
 				(fill
@@ -7056,7 +7056,7 @@
 			(table_cell "Buzzer Signal"
 				(exclude_from_sim no)
 				(at 173.99 110.49 0)
-				(size 17.78 2.54)
+				(size 21.59 2.54)
 				(margins 0.9525 0.9525 0.9525 0.9525)
 				(span 1 1)
 				(fill
@@ -7238,7 +7238,7 @@
 	)
 	(global_label "D15"
 		(shape input)
-		(at 240.03 78.74 180)
+		(at 213.36 60.96 180)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -7248,7 +7248,7 @@
 		)
 		(uuid "086561bc-302d-4952-955f-9dc5cfab14f3")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 233.3558 78.74 0)
+			(at 206.6858 60.96 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -14208,7 +14208,7 @@
 	)
 	(symbol
 		(lib_id "Connector_Generic:Conn_01x01")
-		(at 248.92 78.74 0)
+		(at 222.25 60.96 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -14218,7 +14218,7 @@
 		(dnp yes)
 		(uuid "e6b293e9-9b96-4187-90fc-964bd351ec44")
 		(property "Reference" "J7"
-			(at 251.46 77.4699 0)
+			(at 224.79 59.6899 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -14229,7 +14229,7 @@
 			)
 		)
 		(property "Value" "Conn_01x01"
-			(at 243.078 82.042 0)
+			(at 216.408 64.262 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -14240,7 +14240,7 @@
 			)
 		)
 		(property "Footprint" "TestPoint:TestPoint_Pad_1.0x1.0mm"
-			(at 248.92 78.74 0)
+			(at 222.25 60.96 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -14251,7 +14251,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 248.92 78.74 0)
+			(at 222.25 60.96 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -14262,7 +14262,7 @@
 			)
 		)
 		(property "Description" "Generic connector, single row, 01x01, script generated (kicad-library-utils/schlib/autogen/connector/)"
-			(at 248.92 78.74 0)
+			(at 222.25 60.96 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
