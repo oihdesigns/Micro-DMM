@@ -4,8 +4,10 @@ from pathlib import Path
 import numpy as np
 import cadquery as cq
 from shapely.geometry import Polygon,box
+from shapely.affinity import translate
+from shapely.ops import unary_union
 
-DEFAULTS={'clearance':.6,'wall':2.,'floor':2.,'below':3.,'above':8.,'autoHeight':True,'topMargin':2.,'corner':3.,'lid':2.,'lip':1.5,'lipWidth':1.2,'lipClearance':.25,'shape':'rectangle'}
+DEFAULTS={'clearance':.6,'wall':2.,'floor':2.,'below':3.,'above':8.,'autoHeight':True,'topMargin':2.,'corner':3.,'lid':2.,'lip':1.5,'lipWidth':1.2,'lipClearance':.25,'shape':'rectangle','extraLeft':0.,'extraRight':0.,'extraFront':0.,'extraBack':0.}
 
 def vec(v):return np.asarray(v,dtype=float)
 def unit(v):
@@ -37,14 +39,14 @@ def validate_project(project):
     if not Polygon(b['outline']).is_valid:raise ValueError('The PCB outline is self-intersecting.')
     c=DEFAULTS|project.get('enclosure',{})
     for key in DEFAULTS:
-        if key not in ['shape','autoHeight']:numeric(c[key],key,0 if key in ['corner','lip','below','above','lipClearance'] else .05,300)
+        if key not in ['shape','autoHeight']:numeric(c[key],key,0 if key.startswith('extra') or key in ['corner','lip','below','above','lipClearance'] else .05,300)
     if c['lipClearance']>=min(c['wall'],c['lipWidth'])*2:raise ValueError('The lid lip clearance is too large for the lip width.')
     for comp in b.get('components',[]):
         numeric(comp.get('height',0),'Component height',0,300)
         for k in ['width','depth']:numeric(comp.get(k),f'Component {k}',.05,1000)
         for v in comp.get('xy',[]):numeric(v,'Component position',-10000,10000)
     if len(project.get('features',[]))>150 or len(project.get('planes',[]))>40:raise ValueError('This project exceeds the 150-feature/40-plane limit.')
-    for f in project.get('features',[])+project.get('planes',[]):
+    for f in project.get('features',[])+project.get('planes',[])+project.get('references',[]):
         for key in ['offset','rotation']:
             xyz=f.get(key,[0,0,0])
             if len(xyz)!=3:raise ValueError(f'{key} requires three numbers.')
@@ -72,7 +74,40 @@ def metrics(project):
     b=project['board'];c=project['enclosure'];bounds=Polygon(b['outline']).bounds
     tops=[b['thickness']]+[x['zMax'] if 'zMax' in x else component_shape(b,x).BoundingBox().zmax for x in b.get('components',[]) if x.get('height',0)>.01]
     top=max(b['thickness']+c['above'],max(tops)+c['topMargin']) if c['autoHeight'] else b['thickness']+c['above']
-    return {'xmin':bounds[0]-c['clearance']-c['wall'],'ymin':bounds[1]-c['clearance']-c['wall'],'xmax':bounds[2]+c['clearance']+c['wall'],'ymax':bounds[3]+c['clearance']+c['wall'],'floor':-c['below'],'bottom':-c['below']-c['floor'],'top':top,'width':bounds[2]-bounds[0]+2*(c['clearance']+c['wall']),'length':bounds[3]-bounds[1]+2*(c['clearance']+c['wall']),'height':top+c['lid']+c['below']+c['floor']}
+    xmin=bounds[0]-c['clearance']-c['wall']-c.get('extraLeft',0);xmax=bounds[2]+c['clearance']+c['wall']+c.get('extraRight',0)
+    ymin=bounds[1]-c['clearance']-c['wall']-c.get('extraFront',0);ymax=bounds[3]+c['clearance']+c['wall']+c.get('extraBack',0)
+    return {'xmin':xmin,'ymin':ymin,'xmax':xmax,'ymax':ymax,'floor':-c['below'],'bottom':-c['below']-c['floor'],'top':top,'width':xmax-xmin,'length':ymax-ymin,'height':top+c['lid']+c['below']+c['floor']}
+
+def space_outline(project):
+    """Sweep the outline along each extra-space interval without moving the PCB."""
+    c=project['enclosure'];poly=translate(Polygon(project['board']['outline']),-c.get('extraLeft',0),-c.get('extraFront',0))
+    for dx,dy in [(c.get('extraLeft',0)+c.get('extraRight',0),0),(0,c.get('extraFront',0)+c.get('extraBack',0))]:
+        if dx+dy<=0:continue
+        pieces=[poly,translate(poly,dx,dy)];points=list(poly.exterior.coords)
+        for a,b in zip(points,points[1:]):
+            q=Polygon([a,b,(b[0]+dx,b[1]+dy),(a[0]+dx,a[1]+dy)])
+            if q.area>1e-9:pieces.append(q)
+        poly=unary_union(pieces)
+    return poly
+
+def footprint(project,met,inset=0):
+    c=project['enclosure']
+    if c['shape']=='outline':return space_outline(project).buffer(c['clearance']+c['wall']-inset,quad_segs=12)
+    x0,y0,x1,y1=[met[k] for k in ['xmin','ymin','xmax','ymax']];x0+=inset;y0+=inset;x1-=inset;y1-=inset
+    radius=max(0,min(c['corner']-inset,(x1-x0)/2-.001,(y1-y0)/2-.001))
+    return box(x0+radius,y0+radius,x1-radius,y1-radius).buffer(radius,quad_segs=24) if radius else box(x0,y0,x1,y1)
+
+def reference_transform(project,ref,met,stack=()):
+    if not ref.get('mount'):return vec(ref.get('offset',[0,0,0])),euler(ref.get('rotation',[0,0,0]))
+    token='reference:'+ref['id']
+    if token in stack:raise ValueError('Hardware and construction planes have a circular attachment.')
+    p,r=attach_frame(project,ref['mount'],met,stack+(token,))
+    face=ref.get('mountFace')
+    if face:q,s=frame(face['origin'],face['normal'],face['xDir'])
+    else:
+        bounds=np.asarray(ref['bounds']);q,s=frame([(bounds[0][0]+bounds[1][0])/2,(bounds[0][1]+bounds[1][1])/2,bounds[1][2]])
+    rr=r@euler(ref.get('rotation',[0,0,0]))@s.T
+    return p+r@vec(ref.get('offset',[0,0,0]))-rr@q,rr
 
 def attach_frame(project,spec,met,stack=()):
     a=spec.get('anchor',{'kind':'origin','plane':'XY'});kind=a.get('kind','origin')
@@ -97,12 +132,22 @@ def attach_frame(project,spec,met,stack=()):
         plane=next((x for x in project.get('planes',[]) if x['id']==pid),None)
         if not plane:raise ValueError('The attached construction plane is missing.')
         p,r=attach_frame(project,plane,met,stack+(pid,))
-    elif kind=='face':
+    elif kind in ['face','reference']:
         ref=next((x for x in project.get('references',[]) if x['id']==a.get('ref')),None)
         if not ref:raise ValueError('The attached reference model is missing.')
-        if 'face' not in a:raise ValueError('Pick a planar face on a STEP reference first.')
-        f=a['face'];p,r=frame(f['origin'],f['normal'],f['xDir'])
-        rr=euler(ref.get('rotation',[0,0,0]));p=rr@p+vec(ref.get('offset',[0,0,0]));r=rr@r
+        if kind=='face':
+            if 'face' not in a:raise ValueError('Pick a planar face on a STEP reference first.')
+            f=a['face'];p,r=frame(f['origin'],f['normal'],f['xDir'])
+        else:
+            lo,hi=np.asarray(ref['bounds']);center=(lo+hi)/2;point=a.get('point','center')
+            if point=='origin':p,r=frame()
+            else:
+                axis={'left':0,'right':0,'front':1,'back':1,'bottom':2,'top':2}.get(point)
+                if axis is None:p,r=frame(center)
+                else:
+                    sign=-1 if point in ['left','front','bottom'] else 1;normal=np.zeros(3);normal[axis]=sign
+                    center[axis]=(lo if sign<0 else hi)[axis];p,r=frame(center,normal)
+        offset,rr=reference_transform(project,ref,met,stack);p=rr@p+offset;r=rr@r
     elif kind=='boardFace':
         from step_import import face_frame
         p,r=face_frame(project['board'],a)
@@ -115,6 +160,9 @@ def attach_frame(project,spec,met,stack=()):
         else:
             axis=0 if point in ['left','right'] else 1;center[axis]=met[{'left':'xmin','right':'xmax','front':'ymin','back':'ymax'}[point]]
             normal=np.zeros(3);normal[axis]=-1 if point in ['left','front'] else 1;p,r=frame(center,normal,[0,1,0] if axis==0 else [1,0,0])
+        if a.get('surface')=='inside':
+            if point in ['left','right','front','back']:p=p-r[:,2]*project['enclosure']['wall']
+            elif point=='lid':p[2]=met['top']
     else:
         if kind!='origin':raise ValueError('Unknown attachment type.')
         p,r=frame()
@@ -164,7 +212,7 @@ def make_base(project,met):
     c=project['enclosure'];b=project['board'];outer=[met[k] for k in ['xmin','ymin','xmax','ymax']]
     inner=[outer[0]+c['wall'],outer[1]+c['wall'],outer[2]-c['wall'],outer[3]-c['wall']]
     if c['shape']=='outline':
-        poly=Polygon(b['outline']);outerpoly=poly.buffer(c['clearance']+c['wall'],quad_segs=12);innerpoly=poly.buffer(c['clearance'],quad_segs=12)
+        poly=space_outline(project);outerpoly=poly.buffer(c['clearance']+c['wall'],quad_segs=12);innerpoly=poly.buffer(c['clearance'],quad_segs=12)
         prism=lambda inset,z,h:poly_prism(innerpoly.buffer(-inset,quad_segs=12),z,h)
         shell=poly_prism(outerpoly,met['bottom'],met['top']-met['bottom']).cut(poly_prism(innerpoly,met['floor'],met['top']-met['floor']+.1))
         lid=poly_prism(outerpoly,met['top'],c['lid'])
@@ -238,6 +286,11 @@ def build(project,reference_loader=None):
         if f.get('suppressed'):
             feature_results.append({'id':f['id'],'status':'suppressed'});continue
         try:
+            if f.get('type')=='lidScrews':
+                from fasteners import apply_fasteners
+                changed,centers=apply_fasteners(project,met,bodies,f)
+                delta=sum(abs(changed[k].Volume()-bodies[k].Volume()) for k in bodies);bodies.update(changed)
+                feature_results.append({'id':f['id'],'status':'ok','centers':centers,'changedVolume':delta});continue
             p,r=attach_frame(project,f,met);tool=feature_tool(f,p,r);tools[f['id']]=tool
             if not tool.isValid():raise ValueError('This feature produces an invalid solid.')
             target=f.get('target','shell');op=f.get('operation','cut')
@@ -263,7 +316,7 @@ def build(project,reference_loader=None):
     collisions=[]
     if project['board'].get('source')=='step':
         from step_import import collision_shapes
-        checks=collision_shapes(project['board'])
+        checks=list(collision_shapes(project['board']))
     else:checks=[('PCB substrate',board,False)]+[(c['ref'],component_shape(project['board'],c),True) for c in project['board'].get('components',[]) if c.get('height',0)>.1]
     for name,shape,estimated in checks:
         for key,body in bodies.items():
@@ -271,6 +324,17 @@ def build(project,reference_loader=None):
             if a.xmax<b.xmin or a.xmin>b.xmax or a.ymax<b.ymin or a.ymin>b.ymax or a.zmax<b.zmin or a.zmin>b.zmax:continue
             volume=shape.intersect(body).Volume()
             if volume>.005:collisions.append({'name':name,'part':key,'volume':round(volume,4),'estimated':estimated})
+    for ref in project.get('references',[]):
+        if not ref.get('fitCheck',False):continue
+        try:
+            from references import placed_shapes
+            shape,estimated=placed_shapes(project,ref,met)
+            for key,body in list(bodies.items())+[('PCB assembly',cq.Compound.makeCompound([s for _,s,_ in checks]))]:
+                a,b=shape.BoundingBox(),body.BoundingBox()
+                if a.xmax<b.xmin or a.xmin>b.xmax or a.ymax<b.ymin or a.ymin>b.ymax or a.zmax<b.zmin or a.zmin>b.zmax:continue
+                volume=shape.intersect(body).Volume()
+                if volume>.005:collisions.append({'name':ref['name'],'part':key,'volume':round(volume,4),'estimated':estimated or (key=='PCB assembly' and project['board'].get('source')!='step')})
+        except Exception as exc:errors.append(f"Hardware {ref['name']}: {exc}")
     overlap=bodies['shell'].intersect(bodies['lid']).Volume()
     if overlap>.001:errors.append('The shell and seated lid overlap. Reduce the lip or revise the features.')
     renders=[{'id':key,'kind':key,**mesh_data(body)} for key,body in bodies.items()]
@@ -284,7 +348,7 @@ def build(project,reference_loader=None):
     if reference_loader:
         for ref in project.get('references',[]):
             try:
-                for m in reference_loader(ref):renders.append(m)
+                for m in reference_loader(ref,reference_transform(project,ref,met)):renders.append(m)
             except Exception as exc:errors.append(f"Reference {ref['name']}: {exc}")
     report={'metrics':met,'features':feature_results,'planes':planes,'errors':errors,'warnings':warnings,'collisions':collisions,'volumes':{k:round(s.Volume(),2) for k,s in bodies.items()},'valid':not errors,'meshes':renders,'kernel':'Open CASCADE / CadQuery'}
     return report,bodies,tools

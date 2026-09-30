@@ -1,6 +1,6 @@
 # PCB Enclosure Studio
 
-A local, parametric enclosure CAD app for KiCad boards and detailed STEP PCB assemblies, with face attachments and printable solid exports. Version 0.2.
+A local, parametric enclosure CAD app for KiCad boards and detailed STEP PCB assemblies, with face attachments and printable solid exports. Version 0.3 adds space for auxiliary hardware, mounting placements, and paired lid screws with blind tapered supports.
 
 ## Open the app
 
@@ -44,25 +44,45 @@ Your `BlinkyHawkModel_v3b.step` contains 301 solids grouped into 41 components, 
 
 Select the USB component to create a projected window from its bounds, or use **Pick an exact face** / **Attach to face** to create an attachment to a specific planar surface. Directional component attachments use measured bounding faces; explicitly picked faces use the actual B-rep surface. Curved surfaces are not planar anchors. STEP component dimensions are read-only; reposition or revise components in the source CAD, then reimport. Source replacement invalidates old STEP face anchors so they can be re-picked rather than silently moving to a different surface.
 
-Detailed PCB solids participate in fit checks and enclosure height calculation. Substrate holes are retained; circular openings at least 1.8 mm across are offered as possible mounting holes. STEP lacks KiCad's pad numbers and plating metadata, so inspect these before generating posts. Imported reference files under **Add reference** remain visual aids outside fit checks.
+Detailed PCB solids participate in fit checks and enclosure height calculation. Substrate holes are retained; circular openings at least 1.8 mm across are offered as possible mounting holes. STEP lacks KiCad's pad numbers and plating metadata, so inspect these before generating posts. Separate models imported through **Add hardware** have their own fit-check toggle.
 
 ## Reference imports
 
-**STEP/STP** imports solid bodies and exposes planar face attachments. **STL/3MF** imports display meshes, positioned by translation and rotation; create a construction plane for their features. Use **Add reference** for separate auxiliary models. Use **Import PCB** to make a STEP assembly the actual PCB source, with its substrate outline and detailed components. Auxiliary references require an imported KiCad or STEP board.
+**STEP/STP** imports solid bodies and exposes planar face attachments. **STL/3MF** imports display meshes; use their model origin/bounds or a construction plane for attachments. Use **Add hardware** for separate switches, batteries, or other auxiliary models. Use **Import PCB** to make a STEP assembly the actual PCB source. Auxiliary models require an imported KiCad or STEP board.
 
 Models arrive in their original coordinates. **Center on PCB / bottom at Z = 0** supplies a starting alignment, resets rotation, and does not infer the physical component position. STL is unitless and interpreted as millimeters; 3MF declared units are converted to millimeters. STEP uses the CAD importer's unit conversion.
 
 `examples/Demo_connector_reference.step` is a simple demonstration body for testing face selection, **not an accurate model of the BlinkyHawk USB connector**. The included BlinkyHawk example generates a new general-purpose enclosure; it does not recreate the previously completed, battery-specific V3b print files.
 
+## Switch space and mounting
+
+1. Select **Enclosure → Extra room beside the PCB** and add space at left/right/front/back. The PCB stays fixed; the shell, lid, lip, and screw patterns grow together. Above/below PCB controls provide vertical room. Side expansion also works with outline-following shells by sweeping the outline in the chosen directions.
+2. **Add hardware** imports STEP/STP/STL/3MF. Position and rotate the switch in world coordinates. For automatic sizing, select **Model body to allow for** (usually the internal body, excluding an external lever) and **Grow enclosure around body**. This is a one-time expansion to a rounded rectangular enclosure; it includes the allowance and corner clearance and never shrinks existing room.
+3. Click **Pick model mounting face**, then click the flat shoulder around the shaft. Under **Position relative to**, choose a wall, lid, or construction plane. Wall placements default to the **Inside surface**; the face normal points outward. U/V slide along that plane, N offsets from it, and rotations turn around its axes. Without a picked face, the local top of the model bounds is used. Choose the inside/outside surface to suit the real flange and mounting arrangement.
+4. Choose **Opening surface**, then **Round hole** or **Window**. Set the diameter or dimensions and cutting depth. The opening attaches to the picked face or model center and follows the model. Lid openings target the lid automatically; other wall openings target the shell.
+5. **Include in fit checks** checks actual STEP hardware against the shell, lid, and PCB assembly. STL/3MF use conservative transformed bounds. Older projects retain their previous reference-only behavior until this toggle is enabled. Visibility does not disable fit checking. Hardware is embedded in saved projects and excluded from printed parts.
+
+Reserve space before mounting to a wall/plane; automatic sizing is disabled while mounted to avoid feedback between enclosure size and hardware position. Later room changes remain available in Enclosure. Changing placement mode resets translation/rotation. For curved or slanted outline walls, use a construction plane and verify the actual contact surface; wall presets follow the enclosure bounds.
+
+`examples/BlinkyHawk_hardware_demo.pcbshell` includes the actual detailed V3b PCB, an **illustrative switch**, its opening, and a four-screw closure. `examples/Illustrative_switch.step` is only a workflow example, **not a model of your actual switch**.
+
+## Lid screws with blind supports
+
+Click **Lid screws** for a four-corner pattern, a pair at any side, or custom world X/Y centers. Pattern insets are measured from the outer bounds and follow size changes. Set the boss diameter, lid clearance hole, pilot diameter and depth, and solid thickness beneath the pilot. Defaults are editable starting dimensions (6 mm boss, 2.4 mm lid hole, 1.8 mm pilot, 4 mm depth), not a universal screw fit.
+
+Each boss joins a nearby wall near the rim. A 45° underside ramp grows outward from that wall; it is not a full-height post. The pilot stops above solid material, and the taper stops above the floor. Insufficient height or a boss that cannot reach a wall produces an error instead of an unsupported part. The corresponding lip area is relieved so the lid seats on the supports without overlap. Optional counterbores or 90° countersinks leave at least 0.6 mm of lid beneath the recess.
+
+The screw set is one ordered, suppressible feature that modifies both parts together. Fit checks identify intrusion into the PCB or other modeled hardware. Add side room or adjust centers/diameters as needed. Select screw length to suit the lid and blind-hole depth; no screw model or heat-set insert geometry is generated.
+
 ## Print and fit behavior
 
 Each exported shell/lid must be a connected valid solid. STL and 3MF exports are tessellated at 0.035 mm linear tolerance and checked for watertightness. Their lowest vertex sits at Z = 0, and the lid is flipped so its outside faces down. Review orientation and supports for raised lettering, protrusions, and bridging. STEP retains the assembly coordinates and analytic solids.
 
-Fit checking intersects the shell and seated lid with the actual substrate and component solids for STEP boards, or with the substrate and editable component envelopes for KiCad boards. Imported reference models, solder, wires, cable overmolds, batteries, and external switches are **not** automatically included. Add dimensioned keepout/reference geometry for visual inspection and make a fit print. Shell/lid interference is an export-blocking error; estimated component overlaps are warnings.
+Fit checking intersects the shell and seated lid with the actual substrate and component solids for STEP boards, or with the substrate and editable component envelopes for KiCad boards. Imported hardware participates when its fit-check toggle is enabled. Unmodeled solder, wires, cable overmolds, batteries, and switches remain outside the checks. Hardware-to-hardware overlaps are not currently checked. Shell/lid interference is an export-blocking error; component and hardware overlaps are warnings. Make a physical fit print before relying on the clearances.
 
 ## Current boundaries
 
-- A focused feature modeler, not a full SolidWorks/Inventor replacement: no general sketch-constraint solver, assemblies/mate solver, face-driven fillet tool, snap latch generator, or native SLDPRT/IPT import.
+- A focused feature modeler, not a full SolidWorks/Inventor replacement: no general sketch-constraint solver, multi-mate assembly solver, face-driven fillet tool, snap latch generator, or native SLDPRT/IPT import. Hardware supports one mounting face against a wall or construction plane.
 - KiCad 6+ board outlines made from lines, arcs, circles, polygons, and rectangles. Outline curves are sampled to roughly 0.015 mm chord error. Bezier outlines, open contours, and multiple disjoint boards are rejected with a message.
 - KiCad component heights are estimates; external KiCad 3D libraries are not resolved. Import the populated STEP assembly to use its detailed geometry. STEP accuracy is limited to the supplied model; it cannot supply components absent from that file.
 - Source footprints are matched by UUID on board replacement. STEP attachments belong to the imported immutable reference; replacing it with a different file requires re-picking faces.

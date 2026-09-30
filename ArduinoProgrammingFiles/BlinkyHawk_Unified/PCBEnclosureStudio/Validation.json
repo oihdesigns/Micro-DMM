@@ -1,5 +1,5 @@
 {
-  "automated_tests": "26 passed",
+  "automated_tests": "39 passed",
   "tested_board": "BlinkyHawk_V3b.kicad_pcb, 25.4 x 53.34 mm, 40 footprints",
   "browser_checks": [
     "load example",
@@ -31,8 +31,10 @@
   ],
   "limitations": [
     "KiCad component envelopes and heights are estimates; STEP PCB imports use supplied solids.",
-    "Separate STEP/mesh references are excluded from collision checks.",
-    "Polygon sketches have no general constraint solver."
+    "Polygon sketches have no general constraint solver.",
+    "Hardware STEP fit checks use exact solids; mesh hardware uses conservative bounds.",
+    "Hardware-to-hardware overlap is not checked.",
+    "Illustrative switch is a demonstration, not the actual installed switch."
   ],
   "step_import": {
     "source": "BlinkyHawkModel_v3b.step",
@@ -62,5 +64,80 @@
       "actual solid overlap cleared",
       "substrate properties show 25.4 x 53.34 x 1.51 mm"
     ]
+  },
+  "version": "0.3.0",
+  "validated_date": "2026-09-30",
+  "hardware_and_lid_screws": {
+    "automated_checks": [
+      "asymmetric room in rectangular and outline shells with fixed PCB origin",
+      "coaxial lid/pilot centers",
+      "solid cap below blind pilots",
+      "wall-supported tapered underside stops above floor",
+      "lid lip clearance",
+      "counterbore and countersink floors",
+      "invalid and disconnected supports block export without partially changing parts",
+      "pattern follows enclosure expansion",
+      "suppression restores base geometry",
+      "model body space reservation",
+      "exact hardware collisions and removal by attached opening",
+      "mount follows wall changes and hardware translation",
+      "circular hardware/plane attachment failure",
+      "portable project embeds hardware and preserves placements",
+      "hardware import and reserve-space API"
+    ],
+    "browser_checks": [
+      "side padding edit",
+      "Lid screws creation",
+      "STEP switch upload",
+      "exact shoulder face picking",
+      "selected-body space reservation",
+      "inside-front-wall mounting",
+      "attached hole sizing",
+      "hardware slide with opening following",
+      "reload restores project",
+      "no modeled overlaps and no browser errors"
+    ],
+    "combined_actual_board_demo": {
+      "metrics": {
+        "xmin": -6.6,
+        "ymin": -16.6,
+        "xmax": 32.0,
+        "ymax": 55.940000000000005,
+        "floor": -3.0,
+        "bottom": -5.0,
+        "top": 9.51,
+        "width": 38.6,
+        "length": 72.54,
+        "height": 16.509999999999998
+      },
+      "errors": [],
+      "collisions": [],
+      "exports": [
+        {
+          "file": "V3b_hardware_and_lid_screws_DEMO_shell.stl",
+          "valid": true
+        },
+        {
+          "file": "V3b_hardware_and_lid_screws_DEMO_lid.stl",
+          "valid": true
+        },
+        {
+          "file": "V3b_hardware_and_lid_screws_DEMO_shell.3mf",
+          "valid": true
+        },
+        {
+          "file": "V3b_hardware_and_lid_screws_DEMO_lid.3mf",
+          "valid": true
+        },
+        {
+          "file": "V3b_hardware_and_lid_screws_DEMO_shell.step",
+          "valid": true
+        },
+        {
+          "file": "V3b_hardware_and_lid_screws_DEMO_lid.step",
+          "valid": true
+        }
+      ]
+    }
   }
 }

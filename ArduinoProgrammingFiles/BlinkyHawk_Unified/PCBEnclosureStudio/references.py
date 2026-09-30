@@ -5,7 +5,7 @@ from functools import lru_cache
 import cadquery as cq
 import numpy as np
 import trimesh
-from geometry import mesh_data,euler
+from geometry import mesh_data,euler,reference_transform,metrics,validate_project,numeric
 
 ROOT=Path(__file__).resolve().parent
 ASSETS=ROOT/'data'/'assets'
@@ -28,12 +28,19 @@ def asset_path(asset):
     return path
 
 @lru_cache(maxsize=12)
+def original_shapes(asset):
+    path=asset_path(asset)
+    roots=cq.importers.importStep(str(path)).vals()
+    solids=tuple(s for root in roots for s in root.Solids())
+    if not solids:raise ValueError('This STEP reference has no closed solid bodies.')
+    if len(solids)>1500:raise ValueError('This reference has more than 1,500 bodies; export a simplified mechanical model.')
+    return solids
+
+@lru_cache(maxsize=12)
 def original_meshes(asset):
     path=asset_path(asset);meshes=[]
     if path.suffix in ['.step','.stp']:
-        shape=cq.importers.importStep(str(path)).val()
-        solids=shape.Solids() or [shape]
-        if len(solids)>1500:raise ValueError('This reference has more than 1,500 bodies; export a simplified mechanical model.')
+        solids=original_shapes(asset)
         for i,s in enumerate(solids):meshes.append({'body':i,**mesh_data(s,with_faces=True,tolerance=.12)})
     else:
         scene=trimesh.load_scene(path)
@@ -48,13 +55,40 @@ def original_meshes(asset):
 def import_reference(data,name):
     asset=store_asset(data,name);meshes=original_meshes(asset)
     coords=np.vstack([m['vertices'] for m in meshes])
-    return {'id':str(uuid.uuid4()),'name':Path(name).name,'asset':asset,'format':Path(name).suffix[1:].upper(),'offset':[0,0,0],'rotation':[0,0,0],'visible':True,'bounds':[coords.min(0).tolist(),coords.max(0).tolist()],'planarFaces':sum(1 for m in meshes for f in m['faces'] if f['type']=='PLANE')}
+    return {'id':str(uuid.uuid4()),'name':Path(name).name,'asset':asset,'format':Path(name).suffix[1:].upper(),'offset':[0,0,0],'rotation':[0,0,0],'visible':True,'fitCheck':True,'spaceBody':'all','spaceMargin':1.,'bounds':[coords.min(0).tolist(),coords.max(0).tolist()],'bodies':[{'id':m['body'],'bounds':[np.min(m['vertices'],axis=0).tolist(),np.max(m['vertices'],axis=0).tolist()]} for m in meshes],'planarFaces':sum(1 for m in meshes for f in m['faces'] if f['type']=='PLANE')}
 
-def render_reference(ref):
-    result=[];r=euler(ref.get('rotation',[0,0,0]));offset=np.asarray(ref.get('offset',[0,0,0]))
+def render_reference(ref,pose=None):
+    result=[];offset,r=pose if pose else (np.asarray(ref.get('offset',[0,0,0])),euler(ref.get('rotation',[0,0,0])))
     for source in original_meshes(ref['asset']):
         m=dict(source);m['vertices']=np.round(np.asarray(source['vertices'])@r.T+offset,5).tolist()
         m.update(id=f"{ref['id']}:{source['body']}",refId=ref['id'],name=ref['name'],kind='reference',visible=ref.get('visible',True))
         # Face descriptors deliberately remain in the asset's local coordinate frame.
         result.append(m)
     return result
+
+def placed_shapes(project,ref,met):
+    from OCP.gp import gp_Trsf
+    offset,r=reference_transform(project,ref,met)
+    if asset_path(ref['asset']).suffix in ['.step','.stp']:
+        t=gp_Trsf();t.SetValues(*np.column_stack([r,offset]).ravel().tolist())
+        return cq.Compound.makeCompound([s.moved(cq.Location(t)) for s in original_shapes(ref['asset'])]),False
+    coords=np.vstack([np.asarray(m['vertices'])@r.T+offset for m in original_meshes(ref['asset'])])
+    lo=coords.min(0);hi=coords.max(0);dims=np.maximum(hi-lo,.001)
+    return cq.Workplane('XY').box(*dims).translate(tuple((lo+hi)/2)).val(),True
+
+def reserve_space(project,ref_id,body='all',margin=1):
+    """One-time sizing operation for a freely positioned hardware body."""
+    validate_project(project);margin=numeric(margin,'Hardware space allowance',0,30)
+    ref=next((r for r in project.get('references',[]) if r['id']==ref_id),None)
+    if not ref:raise ValueError('The hardware model is missing.')
+    if ref.get('mount'):raise ValueError('Reserve space in World coordinates first, then mount the model to a wall or plane.')
+    offset,r=reference_transform(project,ref,metrics(project))
+    meshes=[m for m in original_meshes(ref['asset']) if body=='all' or str(m['body'])==str(body)]
+    if not meshes:raise ValueError('The selected hardware body is missing.')
+    coords=np.vstack([np.asarray(m['vertices'])@r.T+offset for m in meshes]);lo=coords.min(0);hi=coords.max(0)
+    c=project['enclosure'];b=np.asarray(project['board']['outline']);blo=b.min(0);bhi=b.max(0)
+    pad=margin+max(0,c['corner']-c['wall'])
+    for key,amount in [('extraLeft',blo[0]-c['clearance']-lo[0]+pad),('extraRight',hi[0]+pad-bhi[0]-c['clearance']),('extraFront',blo[1]-c['clearance']-lo[1]+pad),('extraBack',hi[1]+pad-bhi[1]-c['clearance'])]:c[key]=max(c[key],round(float(amount),5))
+    c['below']=max(c['below'],float(-lo[2]+margin));c['above']=max(c['above'],float(hi[2]+margin-project['board']['thickness']))
+    c['shape']='rectangle';validate_project(project)
+    return {'enclosure':c,'bounds':[lo.tolist(),hi.tolist()]}

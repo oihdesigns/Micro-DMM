@@ -12,7 +12,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.concurrency import run_in_threadpool
 from geometry import build,new_project,validate_project
 from kicad_import import import_board
-from references import import_reference,render_reference,asset_path,store_asset
+from references import import_reference,render_reference,asset_path,store_asset,reserve_space
 from step_import import import_step_board,from_asset
 
 ROOT=Path(__file__).resolve().parent
@@ -52,7 +52,7 @@ def import_step_locked(data,name):
     with LOCK:return import_step_board(data,name)
 
 @app.get('/api/health')
-def health():return {'app':'PCB Enclosure Studio','version':'0.2.0','kernel':cq.__version__}
+def health():return {'app':'PCB Enclosure Studio','version':'0.3.0','kernel':cq.__version__}
 
 @app.get('/api/example')
 def example():
@@ -90,9 +90,15 @@ def project_assets(project):
 async def upload_reference(file:UploadFile):
     data=await read_upload(file)
     try:
-        with LOCK:return import_reference(data,file.filename or 'reference.step')
+        def load():
+            with LOCK:return import_reference(data,file.filename or 'reference.step')
+        return await run_in_threadpool(load)
     except ValueError:raise
     except Exception as exc:raise ValueError(f'The reference model could not be imported: {exc}')
+
+@app.post('/api/reference/space')
+def hardware_space(payload:dict):
+    with LOCK:return reserve_space(payload['project'],payload['refId'],payload.get('body','all'),payload.get('margin',1))
 
 @app.post('/api/build')
 def rebuild(project:dict):
