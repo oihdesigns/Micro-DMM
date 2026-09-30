@@ -1,0 +1,460 @@
+{
+  "parts": {
+    "shell": {
+      "watertight": true,
+      "positive_volume": true,
+      "connected_solids": 1,
+      "triangles": 2218,
+      "bounds_mm": [
+        [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        [
+          31.0,
+          77.39700317,
+          16.0
+        ]
+      ]
+    },
+    "lid_stl": {
+      "watertight": true,
+      "positive_volume": true,
+      "connected_solids": 1,
+      "triangles": 2222,
+      "bounds_mm": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          31.000001907348633,
+          77.39698791503906,
+          2.5
+        ]
+      ]
+    },
+    "lid_3mf": {
+      "watertight": true,
+      "positive_volume": true,
+      "connected_solids": 1,
+      "triangles": 2222,
+      "bounds_mm": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          31.00000191,
+          77.39698792,
+          2.5
+        ]
+      ]
+    },
+    "lid_multipart_3mf": {
+      "bodies": 15,
+      "all_watertight": true
+    }
+  },
+  "components": {
+    "=>[0:1:1:11]": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.940000057220459
+    },
+    "R1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.40500020980835
+    },
+    "R21": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.40500020980835
+    },
+    "R22": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.40500020980835
+    },
+    "=>[0:1:1:42]": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 9.533999919891357
+    },
+    "=>[0:1:1:39]": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 10.473999977111816
+    },
+    "USR:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 10.173999786376953
+    },
+    "LED:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 10.173999786376953
+    },
+    "CAP 3:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 10.073999881744385
+    },
+    "CAP:2": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 10.173999786376953
+    },
+    "Silkscreen:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 10.473999977111816
+    },
+    "ANT1:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 9.973999977111816
+    },
+    "CAP:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 10.173999786376953
+    },
+    "Pins:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 10.374000072479248
+    },
+    "Body:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 9.74399995803833
+    },
+    "Shield:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 8.473999977111816
+    },
+    "BOSS-EXTRUDE7_5_:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 8.49399995803833
+    },
+    "CUT-EXTRUDE5:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 7.564000129699707
+    },
+    "BOSS-EXTRUDE7_2_:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 8.49399995803833
+    },
+    "BOSS-EXTRUDE7_6_:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 8.49399995803833
+    },
+    "BOSS-EXTRUDE14_1_:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 10.174000263214111
+    },
+    "CHAMFER9:1": {
+      "shell_overlap_mm3": 0,
+      "check": "exact closed mesh",
+      "lid_clearance_mm": 7.263999938964844
+    },
+    "BOSS-EXTRUDE14_6_:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 10.174000263214111
+    },
+    "BOSS-EXTRUDE7_9_:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 8.49399995803833
+    },
+    "BOSS-EXTRUDE14_10_:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 10.174000263214111
+    },
+    "BOSS-EXTRUDE7_1_:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 8.49399995803833
+    },
+    "BOSS-EXTRUDE7_8_:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 8.49399995803833
+    },
+    "BOSS-EXTRUDE14_12_:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 10.174000263214111
+    },
+    "BOSS-EXTRUDE14_5_:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 10.174000263214111
+    },
+    "MIRROR2:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 8.519000053405762
+    },
+    "BOSS-EXTRUDE14_7_:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 10.174000263214111
+    },
+    "BOSS-EXTRUDE14_3_:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 10.174000263214111
+    },
+    "BOSS-EXTRUDE14_9_:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 10.174000263214111
+    },
+    "BOSS-EXTRUDE7_7_:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 8.49399995803833
+    },
+    "BOSS-EXTRUDE14_11_:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 10.174000263214111
+    },
+    "BOSS-EXTRUDE14_2_:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 10.174000263214111
+    },
+    "BOSS-EXTRUDE14_4_:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 10.174000263214111
+    },
+    "BOSS-EXTRUDE7_3_:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 8.49399995803833
+    },
+    "BOSS-EXTRUDE7_4_:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 8.49399995803833
+    },
+    "BOSS-EXTRUDE14_8_:1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 10.174000263214111
+    },
+    "R12": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.40500020980835
+    },
+    "D3": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 10.654999732971191
+    },
+    "C5": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.355000019073486
+    },
+    "U3": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 10.654999732971191
+    },
+    "U5": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.104000091552734
+    },
+    "R13": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.40500020980835
+    },
+    "C7": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.355000019073486
+    },
+    "R9": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.40500020980835
+    },
+    "R7": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.40500020980835
+    },
+    "R6": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.40500020980835
+    },
+    "C10": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.355000019073486
+    },
+    "LED1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 10.855000019073486
+    },
+    "C3": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.355000019073486
+    },
+    "R15": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.40500020980835
+    },
+    "BZ1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 8.835000038146973
+    },
+    "R20": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.40500020980835
+    },
+    "R10": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.40500020980835
+    },
+    "J4": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 7.854999542236328
+    },
+    "R5": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.40500020980835
+    },
+    "C1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.355000019073486
+    },
+    "C8": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.355000019073486
+    },
+    "R14": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.40500020980835
+    },
+    "C2": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.355000019073486
+    },
+    "U1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.824999809265137
+    },
+    "U4": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.824999809265137
+    },
+    "C6": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.355000019073486
+    },
+    "Q1": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 10.654999732971191
+    },
+    "R8": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.40500020980835
+    },
+    "R4": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.40500020980835
+    },
+    "C9": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.355000019073486
+    },
+    "C4": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.355000019073486
+    },
+    "R11": {
+      "shell_overlap_mm3": 0,
+      "check": "conservative bounding box",
+      "lid_clearance_mm": 11.40500020980835
+    }
+  },
+  "checks": {
+    "screw_centers_mm": [
+      [
+        2.999999423055715,
+        74.39700193701358
+      ],
+      [
+        3.000000039903967,
+        3.0000000000000004
+      ],
+      [
+        28.000000380090828,
+        74.39700193699144
+      ],
+      [
+        28.00000099694933,
+        3.0
+      ]
+    ],
+    "maximum_screw_center_error_mm": 0.00011788231742824124,
+    "shell_lid_overlap_mm3": 0,
+    "USB_min_radial_clearance_mm": 0.19595607961285333,
+    "USB_opening_bounds_xz_mm": [
+      11.18826962,
+      5.32600021,
+      20.52827072,
+      8.93599987
+    ],
+    "PCB_end_clearance_mm": 0.19999999999998863,
+    "PCB_side_clearance_each_mm": 0.5,
+    "J4_pin_tip_floor_clearance_mm": 0.645,
+    "floor_remaining_under_relief_mm": 1.2,
+    "J5_wire_route_width_mm": 2.4,
+    "J5_wire_route_vertical_gap_to_bottom_copper_mm": 1.305,
+    "unchanged_front_geometry_difference_mm3": 0
+  }
+}

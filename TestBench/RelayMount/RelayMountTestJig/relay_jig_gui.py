@@ -63,7 +63,7 @@ RELAY_ROLE = [
     "1M to return / open",
     "10k / continue",
     "10.6M / 150k",
-    "spare",
+    "BlinkyHawk USB (on = connected)",
 ]
 
 BG = "#1A1A1A"

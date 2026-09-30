@@ -132,6 +132,86 @@ network floats, but the generator's output return is earthed, so generator
 conditions are "measuring an earth-referenced source". That is realistic for
 mains and bench supplies, but it isn't a fully floating system.
 
+## Battery levels (Rigol DL3000 electronic load)
+
+The Test Sequence can run the whole plan at several battery voltages, for
+example as found (~4.1 V), then 3.9, 3.6 and 3.3 V. Between rounds, the
+electronic load drains the battery. It is wired in parallel with the
+BlinkyHawk's battery, + to + and − to −. With its input off it is high
+impedance, and the unit runs normally.
+
+**Load setup (once):**
+
+1. Utility → Interface → LAN: DHCP **off**, Auto IP **off**, static IP
+   **192.168.10.4**, mask 255.255.255.0, gateway 192.168.10.1. A plain DL3021
+   or DL3031 needs the LAN option; the A models have LAN built in.
+2. **Von Latch OFF.** The suite sends the floor voltage (default 3.0 V) as
+   Von, so the load itself stops sinking below it even if the PC or script
+   dies mid-drain. That only works with the latch off, and there is no SCPI
+   command for it.
+3. Test Rig tab → Electronic load → Connect. The port is 5555 on most Rigols.
+   The DG852 here turned out to be 5025, so try that if 5555 doesn't answer.
+
+**How a level is reached.** Loaded voltage sits below resting voltage by
+I×R, and a cell springs back up for minutes after the load comes off. So the
+drain is iterative:
+
+1. Measure R from the step when the load goes on.
+2. Drain until (loaded V + I×R) reaches the target.
+3. Rest until the voltage stops rising (under 1 mV per 10 s, or the rest
+   limit).
+4. Measure, and repeat if still above the band.
+
+The load can only take charge out, so levels must go down. The run folder
+gets `battery.csv` (V and I every 2 s, the whole run) and `levels.csv`
+(rested V before and after each round's tests, mAh drained, pass/fail
+counts). The table shows a summary row per level.
+
+**USB stays out.** With USB in, VBUS charges the battery and the drain
+fights the charger. There are two ways to judge each level:
+
+- **LED only:** fully automatic; USB is unplugged once at the start. Your
+  notes say the AS7343 misses the dim green and blue flashes on V3b, so
+  FLOAT and CLOSED are weakly judged this way.
+- **Unit's battery log:** the same unplug/replug captures as battery
+  Auto-Tune (`bh_battery.py`). At each level you plug USB in to arm the
+  capture, unplug for the run, and plug in again to read it. Replugging
+  charges the battery for a few seconds, so each level's `after tests`
+  voltage shows the effect.
+
+**Check the load's isolation first.** With the load powered, measure
+resistance from its − input terminal to the mains earth pin. It should be
+open. If it isn't, the load earths the battery exactly the way USB does,
+and battery-level results won't represent a floating unit (see the Sep 28
+USB-vs-battery findings).
+
+## USB switched by the relay jig (K8)
+
+The jig's spare relay, K8, drives four external relays, one per USB wire
+(VBUS, D+, D−, GND). K8 energised means the BlinkyHawk's USB is connected.
+With jig firmware **1.2**, every "unplug the USB / plug it back in" step
+happens automatically: the battery-log captures and wake checks in
+Auto-Tune, and battery-level runs.
+
+- **Every switch is confirmed**, not assumed. The suite waits for the COM port
+  to vanish or reappear. If the relay clicks but the port doesn't change
+  within 20 s, the run stops with a message pointing at the K8 wiring. A relay
+  that isn't actually in the cable can't pass for an unplug.
+- **Put back afterwards:** at the end of any job, including a stopped or
+  failed one, the USB goes back to how the job found it, and the serial port
+  is reopened if it came back.
+- **Test Rig → relay jig:** Connect USB / Disconnect USB buttons, the live
+  state, and "switch it automatically in battery runs" (on by default; untick
+  it to go back to being told to unplug by hand).
+- **Jig firmware:** `!USB[,0|1]` → `$USB,<0|1>`, and `$STATE` gains a trailing
+  USB field. K8 is kept out of the load selector: mode changes and `!ALL`
+  never move it, and `!K,8,x` is treated as `!USB`. It boots **connected**
+  (`USB_BOOT_CONNECTED`), so the rig behaves like an ordinary cable until a
+  job unplugs it. If your USB relays connect with K8 released instead, set
+  `RELAY_NO_SWAPPED[K8]` rather than changing the logic.
+- **A jig reset drops the USB briefly:** the pins float while the UNO R4
+  resets. Connect the relay jig before the BlinkyHawk.
+
 ## Run folders (`Runs/<date>_<kind>_<note>/`)
 
 | File | Contents |

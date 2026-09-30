@@ -1,0 +1,66 @@
+{
+  "automated_tests": "26 passed",
+  "tested_board": "BlinkyHawk_V3b.kicad_pcb, 25.4 x 53.34 mm, 40 footprints",
+  "browser_checks": [
+    "load example",
+    "component search",
+    "component-attached window",
+    "numeric edit",
+    "undo",
+    "STEP import",
+    "planar STEP face picking",
+    "project download",
+    "project reopen with embedded STEP",
+    "3MF pair download"
+  ],
+  "browser_export_checks": [
+    {
+      "part": "BlinkyHawk_V3b_enclosure_shell.3mf",
+      "watertight": true,
+      "volume_mm3": 7628.85,
+      "lowest_z_mm": 0.0,
+      "triangles": 816
+    },
+    {
+      "part": "BlinkyHawk_V3b_enclosure_lid.3mf",
+      "watertight": true,
+      "volume_mm3": 3846.24,
+      "lowest_z_mm": 0.0,
+      "triangles": 556
+    }
+  ],
+  "limitations": [
+    "KiCad component envelopes and heights are estimates; STEP PCB imports use supplied solids.",
+    "Separate STEP/mesh references are excluded from collision checks.",
+    "Polygon sketches have no general constraint solver."
+  ],
+  "step_import": {
+    "source": "BlinkyHawkModel_v3b.step",
+    "bodies": 301,
+    "component_groups": 41,
+    "usb_solid_bodies": 24,
+    "pcb_mm": [
+      25.4,
+      53.34,
+      1.51
+    ],
+    "tests": [
+      "standalone populated STEP",
+      "single-solid STEP",
+      "vertical PCB normalization",
+      "exact planar face cut",
+      "face follows substrate frame",
+      "changed source invalidates face attachment",
+      "portable archive embeds source STEP",
+      "actual USB-shell intersection and removal by projected window"
+    ],
+    "browser_checks": [
+      "loaded supplied STEP assembly through prepared project",
+      "rendered detailed USB connector",
+      "picked planar USB solid face",
+      "created connector-projected window",
+      "actual solid overlap cleared",
+      "substrate properties show 25.4 x 53.34 x 1.51 mm"
+    ]
+  }
+}

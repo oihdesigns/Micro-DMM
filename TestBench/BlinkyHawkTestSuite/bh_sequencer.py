@@ -26,6 +26,9 @@ Everything lands in a run folder under Runs/:
     config_before.csv  the BlinkyHawk's full !CFG at the start
     passes.csv         every $DET pass, tagged with its condition
     flashes.csv        every LED flash the sensor saw, with its decoded colour
+    battery.csv        (battery-level runs) the electronic load's V / I every 2 s
+    levels.csv         (battery-level runs) one row per level: resting V before
+                       and after the tests, charge drained, pass/fail counts
     summary.csv        one row per condition (bh_tuner.summarize)
     scope.csv          Capture-Scope.ps1 layout -> ..\\Scope\\Plot-Capture.ps1 renders it
     tuning_report.txt  (auto-tune only) the full reasoning, verdicts, proposal
@@ -327,6 +330,13 @@ class Runner:
         self.scope_conds = []
         self.scope_note = ""
         self.started = None
+        self.load = None             # RigolDL3000 / SimLoad (battery-level runs)
+        self.usb_auto = False        # switch the DUT's USB with the jig's K8 relay
+        self._usb_orig = None        # USB state before this job first moved it
+        self.prompt = None           # callable(text) -> bool, set by the GUI
+        self.batt_rows = []          # [t_s, phase, V, A, load state]
+        self.level_rows = []
+        self._batt_phase = ""
 
     # ---------- plumbing ----------
     def log(self, text):
@@ -462,6 +472,16 @@ class Runner:
             w = csv.writer(fh)
             w.writerow(["phase", "condition", "i"] + T.DET_FIELDS)
             w.writerows(self.pass_rows)
+        if self.batt_rows:
+            with open(os.path.join(self.dir, "battery.csv"), "w", newline="") as fh:
+                w = csv.writer(fh)
+                w.writerow(["t_s", "level", "volts", "amps", "load"])
+                w.writerows(list(self.batt_rows))
+        if self.level_rows:
+            with open(os.path.join(self.dir, "levels.csv"), "w", newline="") as fh:
+                w = csv.DictWriter(fh, fieldnames=list(self.level_rows[0]))
+                w.writeheader()
+                w.writerows(self.level_rows)
         if self.flash_rows:
             with open(os.path.join(self.dir, "flashes.csv"), "w", newline="") as fh:
                 w = csv.writer(fh)
@@ -505,7 +525,8 @@ class Runner:
     def instrument_lines(self):
         return [f"relay:  {getattr(self.relay, 'ident', getattr(self.relay, 'name', '-'))}",
                 f"fgen:   {getattr(self.fgen, 'ident', 'not connected')}",
-                f"scope:  {getattr(self.scope, 'ident', 'not connected')}"]
+                f"scope:  {getattr(self.scope, 'ident', 'not connected')}",
+                f"load:   {getattr(self.load, 'ident', 'not connected')}"]
 
     # ---------- job 1: the big test ----------
     def run_plan(self, conds, dwell_s, settle_s, scope_mode, scope_timeout, note):
@@ -546,6 +567,238 @@ class Runner:
         self.log(f"== done: {len(self.summaries)} condition(s), "
                  f"{len(fails)} fail{'' if len(fails) == 1 else 's'}"
                  + (f": {', '.join(fails)}" if fails else ""))
+        return self.dir
+
+    # ---------- the BlinkyHawk's USB (relay jig K8) ----------
+    def usb_auto_ok(self):
+        return self.usb_auto and getattr(self.relay, "has_usb", False)
+
+    def usb_set(self, on):
+        if self._usb_orig is None:
+            self._usb_orig = getattr(self.relay, "usb_state", True)
+        self.relay.usb(on)
+        self.log(f"   USB relay: BlinkyHawk USB {'connected' if on else 'DISCONNECTED'}")
+
+    def usb_restore(self):
+        """Put the USB back the way the job found it.  Returns True if it was
+        reconnected (the GUI then reconnects the serial port)."""
+        if self._usb_orig is None or not getattr(self.relay, "has_usb", False):
+            return False
+        try:
+            if self.relay.usb_state != self._usb_orig:
+                self.relay.usb(self._usb_orig)
+                self.log(f"   USB relay: restored to "
+                         f"{'connected' if self._usb_orig else 'disconnected'}")
+                return bool(self._usb_orig)
+        except Exception as exc:
+            self.log(f"!! could not restore the USB relay: {exc}")
+        return False
+
+    # ---------- battery drain (electronic load) ----------
+    def _batt_sampler(self, stop_ev):
+        """Log the load's V / I every 2 s for the whole run (battery.csv), and
+        integrate the charge the load has taken."""
+        t0 = time.time()
+        while not stop_ev.wait(2.0):
+            try:
+                v, a = self.load.volts(), self.load.amps()
+            except Exception:
+                continue
+            self.batt_rows.append([round(time.time() - t0, 1), self._batt_phase,
+                                   round(v, 4), round(a, 4), self.load.state])
+            self.emit("battery", (v, a, self.load.state))
+
+    def _drained_mah(self, phase):
+        rows = [r for r in self.batt_rows if r[1] == phase]
+        return sum(r[3] for r in rows) * 2.0 / 3.6      # A x 2 s -> mAh
+
+    def rest_ocv(self, rest_s, min_s=5.0):
+        """Load off, then wait for the cell to stop recovering: less than 1 mV
+        change over 10 s, or rest_s, whichever first.  Li-ion keeps creeping up
+        for minutes after a load comes off, so a reading taken the moment the
+        load stops is several tens of mV low."""
+        self.load.input(False)
+        hist = []
+        t0 = time.time()
+        while True:
+            self.check_stop()
+            v = self.load.volts()
+            hist.append((time.time(), v))
+            el = time.time() - t0
+            old = [x for t, x in hist if t <= hist[-1][0] - 10.0]
+            if el >= rest_s or (el >= min_s and old and abs(v - old[-1]) < 0.001):
+                return v
+            self.sleep(1.0)
+
+    def drain_to(self, target, amps, tol, rest_s, floor, max_s):
+        """Drain until the RESTED voltage is within `tol` of `target`.
+
+        Loaded voltage sits below the resting voltage by I x R, and the cell
+        recovers when the load comes off, so the loop is: estimate R from the
+        step when the load goes on, drain until (loaded V + I x R) reaches the
+        target, rest, measure, and repeat.  Each round removes less; it stops
+        at the first rest inside the band.  Returns the rested voltage.
+        """
+        L = self.load
+        if target - tol <= floor:
+            raise InstrumentError(f"target {target:g} V is too close to the {floor:g} V floor")
+        v = self.rest_ocv(min(rest_s, 10.0))
+        if v <= target + tol:
+            self.log(f"   battery rests at {v:.3f} V -- already at or below {target:g} V, "
+                     "no drain")
+            return v
+        L.set_cc(amps, floor)
+        t_start = time.time()
+        try:
+            for rnd in range(1, 13):
+                L.input(True)
+                self.sleep(1.5)
+                v_on, i = L.volts(), L.amps()
+                if i < 0.5 * amps:
+                    raise InstrumentError(
+                        f"the load is not sinking ({i * 1000:.0f} mA at {v_on:.3f} V).  Check "
+                        "the wiring, that Von Latch is OFF, and that the battery is above "
+                        f"the {floor:g} V floor")
+                r = max(0.0, (v - v_on) / i)
+                self.log(f"   drain round {rnd}: rested {v:.3f} V -> {v_on:.3f} V at "
+                         f"{i * 1000:.0f} mA (~{r * 1000:.0f} mohm); draining to an "
+                         f"estimated rest of {target:g} V")
+                while True:
+                    vl, il = L.volts(), L.amps()
+                    self.emit("status", f"{self._batt_phase}: draining, {vl:.3f} V at "
+                                        f"{il * 1000:.0f} mA")
+                    if vl <= floor + 0.02:
+                        self.log(f"   !! reached the {floor:g} V floor under load -- stopping")
+                        break
+                    if time.time() - t_start > max_s:
+                        raise InstrumentError(f"drain took longer than {max_s:g} s")
+                    if vl + il * r <= target:
+                        break
+                    self.sleep(1.0)
+                L.input(False)
+                self.emit("status", f"{self._batt_phase}: resting")
+                v = self.rest_ocv(rest_s)
+                self.log(f"   rested at {v:.3f} V")
+                if v <= target + tol:
+                    return v
+            raise InstrumentError("drain did not settle inside the band in 12 rounds")
+        finally:
+            L.input(False)
+
+    # ---------- job 4: the whole plan at each battery level ----------
+    def run_battery_levels(self, p):
+        """p: levels [float|None] (None = as found), conds, dwell, settle, amps,
+        tol, rest_s, floor, max_drain_s, judge 'led'|'log', samples, host, note.
+
+        USB must be unplugged the whole time the battery is being measured or
+        drained -- with it in, VBUS charges the battery and the drain fights the
+        charger.  In 'log' mode it has to go back in to arm each capture and read
+        it back (a few seconds of charging per level, which is why the resting
+        voltage is measured again right before the conditions run)."""
+        if self.load is None:
+            raise InstrumentError("battery levels need the electronic load")
+        judge = p["judge"]
+        host = p.get("host")
+        self.open_run("BattLevels", p.get("note", ""))
+        self.log(f"== battery-level run -> {self.dir}")
+        stable = 2
+        if judge == "log":
+            if self.dev is None:
+                raise InstrumentError("the battery-log mode arms each capture over USB -- "
+                                      "connect the BlinkyHawk first")
+            from bh_battery import BatteryBench
+            self.bat = BatteryBench(self, host)
+            cfg = self.dev.get_cfg()
+            self.write_cfg(cfg, "config_before.csv")
+            stable = int(float(cfg.get("STABLECOUNT", 2)))
+        levels = p["levels"]
+        self.write_info([f"BlinkyHawk test suite -- battery-level run {self.started}",
+                         f"note: {p.get('note', '')}", *self.instrument_lines(),
+                         "levels: " + ", ".join("as found" if l is None else f"{l:g} V"
+                                                for l in levels),
+                         f"drain {p['amps'] * 1000:.0f} mA, band +/-{p['tol'] * 1000:.0f} mV, "
+                         f"rest up to {p['rest_s']:g} s, floor {p['floor']:g} V (also set as "
+                         "the load's Von)",
+                         "judged by: " + ("the unit's own battery log (USB replugged to read "
+                                          "it at each level)" if judge == "log" else
+                                          "the LED watcher only (USB out the whole run)"),
+                         f"dwell {p['dwell']} s, settle {p['settle']} s",
+                         "conditions:", *[f"  {c.label}: {c.describe()}, expect "
+                                          f"{c.expected or '-'}" for c in p["conds"]]])
+
+        def unplug(why):
+            if host is not None and host.port:
+                if self.bat is None:
+                    from bh_battery import BatteryBench
+                    self.bat = BatteryBench(self, host)
+                self.bat.unplugged(why)
+            elif self.usb_auto_ok():
+                self.usb_set(False)          # no COM port known to confirm it by
+                self.sleep(2.0)
+            elif self.prompt and not self.prompt(why + "\n\nPress OK once it is unplugged."):
+                raise Aborted()
+
+        stop_ev = threading.Event()
+        sampler = threading.Thread(target=self._batt_sampler, args=(stop_ev,), daemon=True)
+        self.bat = getattr(self, "bat", None)
+        try:
+            self.load.input(False)
+            sampler.start()
+            unplug("UNPLUG the BlinkyHawk's USB now -- it must run on its battery for the "
+                   "whole level run (USB would charge it).")
+            for li, target in enumerate(levels, 1):
+                tag = "as found" if target is None else f"{target:g}V"
+                self._batt_phase = f"L{li} {tag}"
+                self.emit("stage", f"level {li}/{len(levels)}: {tag}")
+                self.log(f"-- level {li}/{len(levels)}: {tag}")
+                if target is None:
+                    v0 = self.rest_ocv(min(p["rest_s"], 10.0))
+                else:
+                    v0 = self.drain_to(target, p["amps"], p["tol"], p["rest_s"],
+                                       p["floor"], p["max_drain_s"])
+                drained = self._drained_mah(self._batt_phase)
+                n_before = len(self.summaries)
+                phase = f"{self._batt_phase} ({v0:.2f}V)"
+                if judge == "log":
+                    self.bat.plugged("Plug the BlinkyHawk's USB back in to arm this level's "
+                                     "capture.")
+                    self.bat_measure(p["conds"], phase, p["dwell"], p["settle"],
+                                     p["samples"], 0, stable)
+                    # the capture ends with USB plugged in: out again before draining
+                    if li < len(levels):
+                        unplug("UNPLUG the BlinkyHawk's USB again for the next drain.")
+                else:
+                    for i, c in enumerate(p["conds"], 1):
+                        self.emit("progress", (i, len(p["conds"])))
+                        try:
+                            self.measure(c, phase, p["dwell"], p["settle"], stable_count=stable)
+                        except InstrumentError as exc:
+                            self.log(f"   {c.label}: SKIPPED -- {exc}")
+                self.fgen_off()
+                v1 = self.load.volts()
+                res = [s["result"] for s in self.summaries[n_before:]]
+                row = {"level": tag, "rest_before_V": round(v0, 4),
+                       "after_tests_V": round(v1, 4), "drained_mAh": round(drained, 1),
+                       "pass": res.count("PASS"), "fail": res.count("FAIL"),
+                       "no_data": sum(1 for r in res if r not in ("PASS", "FAIL"))}
+                self.level_rows.append(row)
+                self.emit("level", row)
+                self.log(f"   level {tag}: rested {v0:.3f} V before, {v1:.3f} V after; "
+                         f"{row['pass']} pass, {row['fail']} fail, {row['no_data']} no data")
+                self.write_files()
+        finally:
+            try:
+                self.load.input(False)
+            except Exception as exc:
+                self.log(f"!! could not turn the load input off: {exc} -- TURN IT OFF BY HAND")
+            stop_ev.set()
+            sampler.join(timeout=3)
+            self.fgen_off()
+            self.write_files()
+        self.log("== battery levels done:")
+        for r in self.level_rows:
+            self.log(f"   {r['level']:>9}: {r['rest_before_V']:.3f} V  "
+                     f"{r['pass']} pass / {r['fail']} fail / {r['no_data']} no data")
         return self.dir
 
     # ---------- battery captures (see bh_battery.py) ----------

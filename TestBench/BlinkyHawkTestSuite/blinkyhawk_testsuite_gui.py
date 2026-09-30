@@ -63,6 +63,7 @@ else:
 import bh_sequencer as S
 import bh_tuner as T
 from bh_instruments import (JIG_LOADS, InstrumentError, RelayJig, RigolDG800, SiglentSDS,
+                            RigolDL3000, SimLoad,
                             SimFGen, SimRelayJig, SimScope, fmt_ohms)
 from bh_led import COLOURS, STATE_NAMES, LedDecoder
 from bh_sim import SimBench, SimBlinkyHawk
@@ -75,6 +76,7 @@ INF = float("inf")
 SIM = "SIM"
 DEFAULT_FGEN_IP = "192.168.10.3"      # static IP set on the DG852 Pro (Utility > LAN)
 DEFAULT_SCOPE_IP = "192.168.10.2"
+DEFAULT_LOAD_IP = "192.168.10.4"      # static IP to set on the DL3000 (Utility > Interface > LAN)
 
 CLOSED_CHOICES = [("SHORT", 0.0), ("10K", 10e3), ("150K", 150e3)]
 OPEN_CHOICES = [("1M", 1e6), ("10.6M", 10.6e6), ("OPEN", INF)]
@@ -189,6 +191,7 @@ class SuiteApp(bench.App):
         self.serial = SafeSerialManager(self.line_queue)
         self._connecting = False
         self._status_seen_t = 0.0
+        self._last_port = None
         # Keep both port lists current: refresh when a dropdown is opened.
         self.port_cb.configure(postcommand=self._refresh_ports)
         self.title("Blinky Hawk TEST SUITE -- bench GUI + relay jig / generator / scope")
@@ -205,6 +208,7 @@ class SuiteApp(bench.App):
         self.relay = None
         self.fgen = None
         self.scope = None
+        self.load = None
         self.worker = None
         self.stop_event = threading.Event()
         self.wq = queue.Queue()
@@ -288,6 +292,18 @@ class SuiteApp(bench.App):
                        command=lambda n=name: self._bg(lambda: self.relay.set_mode(n),
                                                        f"relay -> {n}", need="relay")
                        ).pack(side="left", padx=2)
+        row3 = ttk.Frame(rf)
+        row3.pack(fill="x", pady=(6, 0))
+        ttk.Label(row3, text="BlinkyHawk USB (K8):").pack(side="left")
+        ttk.Button(row3, text="Connect USB", command=lambda: self._usb_manual(True)
+                   ).pack(side="left", padx=4)
+        ttk.Button(row3, text="Disconnect USB", command=lambda: self._usb_manual(False)
+                   ).pack(side="left")
+        self.usb_auto = tk.BooleanVar(value=True)
+        ttk.Checkbutton(row3, text="switch it automatically in battery runs (no unplugging "
+                                   "by hand)", variable=self.usb_auto).pack(side="left", padx=12)
+        self.usb_lbl = ttk.Label(row3, text="", font=("Consolas", 10, "bold"))
+        self.usb_lbl.pack(side="left", padx=8)
 
         # --- LED watcher (AS7343 on the relay jig) ---
         lf = ttk.LabelFrame(t, text="LED watcher (AS7343 over the BlinkyHawk's LED, on the "
@@ -406,6 +422,47 @@ class SuiteApp(bench.App):
         self.sc_lbl = ttk.Label(row, text="not connected", foreground="#a60")
         self.sc_lbl.pack(side="left", padx=10)
 
+        # --- electronic load ---
+        ef = ttk.LabelFrame(t, text="Electronic load (Rigol DL3000, LAN SCPI) -- in parallel "
+                                    "with the BlinkyHawk battery, for draining between levels",
+                            padding=6)
+        ef.pack(fill="x", padx=6, pady=4)
+        row = ttk.Frame(ef)
+        row.pack(fill="x")
+        ttk.Label(row, text="IP:").pack(side="left")
+        self.ld_ip = tk.StringVar(value=DEFAULT_LOAD_IP)
+        ttk.Entry(row, width=16, textvariable=self.ld_ip).pack(side="left", padx=2)
+        ttk.Label(row, text="port:").pack(side="left")
+        self.ld_port = ttk.Combobox(row, width=6, values=["5555", "5025"])
+        self.ld_port.set("5555")
+        self.ld_port.pack(side="left", padx=2)
+        ttk.Label(row, text="current cap (A):").pack(side="left", padx=(10, 0))
+        self.ld_cap = tk.StringVar(value="1.0")
+        ttk.Entry(row, width=5, textvariable=self.ld_cap).pack(side="left", padx=2)
+        ttk.Button(row, text="Connect", command=self._ld_connect).pack(side="left", padx=6)
+        ttk.Button(row, text="Disconnect", command=self._ld_disconnect).pack(side="left")
+        self.ld_lbl = ttk.Label(row, text="not connected", foreground="#a60")
+        self.ld_lbl.pack(side="left", padx=10)
+        row = ttk.Frame(ef)
+        row.pack(fill="x", pady=(6, 0))
+        ttk.Label(row, text="CC (mA):").pack(side="left")
+        self.ld_ma = tk.StringVar(value="250")
+        ttk.Entry(row, width=6, textvariable=self.ld_ma).pack(side="left", padx=2)
+        ttk.Label(row, text="Von floor (V):").pack(side="left", padx=(8, 0))
+        self.ld_floor = tk.StringVar(value="3.0")
+        ttk.Entry(row, width=5, textvariable=self.ld_floor).pack(side="left", padx=2)
+        ttk.Button(row, text="Input ON", command=self._ld_on).pack(side="left", padx=(10, 2))
+        ttk.Button(row, text="Input OFF", command=lambda: self._bg(
+            lambda: self.load.input(False), "load input off", need="load")).pack(side="left")
+        ttk.Button(row, text="Read V / I", command=self._ld_read).pack(side="left", padx=8)
+        self.ld_meas = ttk.Label(row, text="", font=("Consolas", 11, "bold"))
+        self.ld_meas.pack(side="left", padx=8)
+        ttk.Label(ef, foreground="#555", wraplength=1180,
+                  text="Set 'Von Latch' to OFF on the load's front panel once: the floor is sent "
+                       "as Von, so the load itself stops sinking below it even if this PC or "
+                       "script dies mid-drain -- but only with the latch off, and SCPI cannot "
+                       "set the latch.").pack(anchor="w", pady=(6, 0))
+
         self.rig_log = tk.Text(t, height=10, wrap="none", font=("Consolas", 9))
         self.rig_log.pack(fill="both", expand=True, padx=6, pady=6)
 
@@ -440,6 +497,14 @@ class SuiteApp(bench.App):
         else:
             self.jig_lbl.config(text="not connected -- runs will ask you to move the "
                                      "leads by hand", foreground="#a60")
+        if self.relay is None or not getattr(self.relay, "has_usb", False):
+            self.usb_lbl.config(text="no USB switch (jig firmware 1.2 + K8 relays)",
+                                foreground="#888")
+        else:
+            on = self.relay.usb_state
+            self.usb_lbl.config(text={True: "USB CONNECTED", False: "USB DISCONNECTED",
+                                      None: "USB ?"}[on],
+                                foreground={True: "#0a0", False: "#c00", None: "#888"}[on])
         if self.fgen is not None:
             self.fg_lbl.config(text=f"{self.fgen.ident}   output: {self.fgen.state}",
                                foreground="#0a0")
@@ -447,6 +512,9 @@ class SuiteApp(bench.App):
             self.fg_lbl.config(text="not connected", foreground="#a60")
         self.sc_lbl.config(text=self.scope.ident if self.scope else "not connected",
                            foreground="#0a0" if self.scope else "#a60")
+        self.ld_lbl.config(text=(f"{self.load.ident}   input: {self.load.state}"
+                                 if self.load else "not connected"),
+                           foreground="#0a0" if self.load else "#a60")
         info = getattr(self.relay, "led_info", {}) if self.relay is not None else {}
         if self.relay is None:
             self.led_lbl.config(text="relay jig not connected", foreground="#555")
@@ -608,6 +676,83 @@ class SuiteApp(bench.App):
             self.scope = s
         self._bg(lambda: s.connect(ip), f"scope at {ip}", done=done)
 
+    def _usb_usable(self):
+        return self.relay is not None and getattr(self.relay, "has_usb", False)
+
+    def _usb_auto_on(self):
+        return self.usb_auto.get() and self._usb_usable()
+
+    def _usb_manual(self, on):
+        if not self._usb_usable():
+            self._rig_say("** the relay jig cannot switch USB (needs jig firmware 1.2 and the "
+                          "K8 USB relays)")
+            return
+        if not on and self.serial.is_open:
+            # Let go of the port first, rather than have it vanish under the reader.
+            self._toggle_connect()
+        port = self._last_port
+
+        def done(_):
+            if on and port and not self.serial.is_open:
+                # Windows needs a moment to enumerate the BlinkyHawk again.
+                self.after(2500, lambda: self._reconnect_to(port))
+        self._bg(lambda: self.relay.usb(on), f"USB {'connect' if on else 'disconnect'}",
+                 need="relay", done=done)
+
+    def _reconnect_to(self, port):
+        if self.serial.is_open or self._connecting:
+            return
+        if port not in [p.device for p in serial.tools.list_ports.comports()]:
+            self._log(f"** {port} is not back yet -- press Connect when it is")
+            return
+        self.port_cb.set(port)
+        self._toggle_connect()
+
+    def _ld_connect(self):
+        ip = self.ld_ip.get().strip()
+        self._ld_disconnect()
+        try:
+            cap = float(self.ld_cap.get())
+        except ValueError:
+            self._rig_say("** load current cap must be a number")
+            return
+        if ip.upper() == SIM:
+            self.load = SimLoad(self.sim_bench, cap)
+            self._refresh_rig_labels()
+            return
+        ld = RigolDL3000(cap)
+
+        def done(_):
+            self.load = ld
+        self._bg(lambda: ld.connect(ip, int(self.ld_port.get())), f"load at {ip}", done=done)
+
+    def _ld_disconnect(self):
+        if self.load is not None:
+            self.load.safe_off()
+            self.load.close()
+        self.load = None
+        self._refresh_rig_labels()
+
+    def _ld_on(self):
+        try:
+            amps = float(self.ld_ma.get()) / 1000.0
+            floor = float(self.ld_floor.get())
+        except ValueError:
+            self._rig_say("** load: mA and floor must be numbers")
+            return
+
+        def go():
+            self.load.set_cc(amps, floor)
+            self.load.input(True)
+        self._bg(go, f"load CC {amps * 1000:.0f} mA ON (Von {floor:g} V)", need="load")
+
+    def _ld_read(self):
+        def rd():
+            v, a = self.load.volts(), self.load.amps()
+            self.wq.put(("battery", (v, a, self.load.state)))
+            return f"{v:.4f} V  {a * 1000:.1f} mA"
+        self._bg(rd, "load reading", need="load")
+
     def _sc_disconnect(self):
         if self.scope is not None:
             self.scope.restore()
@@ -634,6 +779,8 @@ class SuiteApp(bench.App):
         self._fg_connect()
         self.sc_ip.set(SIM)
         self._sc_connect()
+        self.ld_ip.set(SIM)
+        self._ld_connect()
         self._rig_say("everything simulated -- numbers from the simulator mean nothing about "
                       "hardware; this is for checking the flow")
 
@@ -685,6 +832,7 @@ class SuiteApp(bench.App):
                     "re-enumerated on a new COM number after the upload."))
             return
         self.serial.preopened = ser
+        self._last_port = port
         t0 = time.time()
         super()._toggle_connect()            # base: attach, reset state, send the queries
         self.after(int(REPLY_TIMEOUT_S * 1000), lambda: self._check_reply(port, t0))
@@ -771,6 +919,39 @@ class SuiteApp(bench.App):
                   text="(LED: give >= 2 s dwell -- VAC is a 3-flash cycle; FLOAT may read dark)"
                   ).pack(side="left")
 
+        bf = ttk.LabelFrame(t, text="Battery levels (electronic load drains the battery "
+                                    "between rounds; USB stays out)", padding=6)
+        bf.pack(fill="x", padx=6, pady=4)
+        r = ttk.Frame(bf)
+        r.pack(fill="x")
+        self.bl_on = tk.BooleanVar(value=False)
+        ttk.Checkbutton(r, text="run the plan at each level:", variable=self.bl_on
+                        ).pack(side="left")
+        self.bl_levels = tk.StringVar(value="as found, 3.9, 3.6, 3.3")
+        ttk.Entry(r, width=24, textvariable=self.bl_levels).pack(side="left", padx=4)
+        ttk.Label(r, text="V   judge by:").pack(side="left")
+        self.bl_judge = tk.StringVar(value="led")
+        ttk.Radiobutton(r, text="LED only (automatic)", value="led",
+                        variable=self.bl_judge).pack(side="left", padx=2)
+        ttk.Radiobutton(r, text="unit's battery log (replug USB each level)", value="log",
+                        variable=self.bl_judge).pack(side="left", padx=2)
+        r = ttk.Frame(bf)
+        r.pack(fill="x", pady=(4, 0))
+        self.bl_ma = tk.StringVar(value="250")
+        self.bl_tol = tk.StringVar(value="20")
+        self.bl_rest = tk.StringVar(value="60")
+        self.bl_floor = tk.StringVar(value="3.0")
+        self.bl_max = tk.StringVar(value="60")
+        self.bl_samples = tk.StringVar(value="8")
+        for txt, var, w in (("drain mA", self.bl_ma, 5), ("band +/- mV", self.bl_tol, 4),
+                            ("rest up to s", self.bl_rest, 4), ("floor V", self.bl_floor, 4),
+                            ("max drain min", self.bl_max, 4),
+                            ("log samples/condition", self.bl_samples, 3)):
+            ttk.Label(r, text=txt).pack(side="left", padx=(8, 2))
+            ttk.Entry(r, width=w, textvariable=var).pack(side="left")
+        self.bl_batt = ttk.Label(r, text="", font=("Consolas", 10, "bold"), foreground="#06a")
+        self.bl_batt.pack(side="left", padx=12)
+
         of = ttk.LabelFrame(t, text="Timing, scope, run", padding=6)
         of.pack(fill="x", padx=6, pady=4)
         r = ttk.Frame(of)
@@ -808,14 +989,19 @@ class SuiteApp(bench.App):
         heads = ("condition", "expect", "result", "passes", "CLOSED %", "OPEN %", "VOLT %",
                  "kind", "LED says", "LED flashes", "rest diff V", "metric", "scope")
         widths = (170, 55, 60, 50, 65, 60, 60, 55, 70, 120, 85, 70, 300)
+        # operator instruction (unplug / replug USB) for battery-level runs
+        self.seq_notice = tk.Label(t, text="", font=("Segoe UI", 14, "bold"),
+                                   fg="#ffffff", bg="#c0392b", wraplength=1150, pady=6)
         tf = ttk.Frame(t)
         tf.pack(fill="both", expand=True, padx=6, pady=4)
+        self.seq_tf = tf
         self.seq_tree = ttk.Treeview(tf, columns=cols, show="headings", height=12)
         for c, h, w in zip(cols, heads, widths):
             self.seq_tree.heading(c, text=h)
             self.seq_tree.column(c, width=w, anchor="w", stretch=(c == "scope"))
         self.seq_tree.tag_configure("FAIL", foreground="#c00")
         self.seq_tree.tag_configure("PASS", foreground="#070")
+        self.seq_tree.tag_configure("LEVEL", background="#e8eef7")
         sb = ttk.Scrollbar(tf, command=self.seq_tree.yview)
         self.seq_tree.configure(yscrollcommand=sb.set)
         sb.pack(side="right", fill="y")
@@ -860,6 +1046,9 @@ class SuiteApp(bench.App):
                     "Test", "The function generator is not connected, so the DC/AC "
                             "conditions will be skipped.  Run the rest?"):
                 return
+        if self.bl_on.get():
+            self._levels_run(conds, dwell, settle)
+            return
         self.seq_tree.delete(*self.seq_tree.get_children())
         self.seq_prog.config(maximum=len(conds), value=0)
         scope_mode = self.seq_scope.get() or None
@@ -867,6 +1056,74 @@ class SuiteApp(bench.App):
         self._start_job(lambda r: r.run_plan(conds, dwell, settle, scope_mode, sto, note),
                         need_serial=not battery, use_led=use_led,
                         serial_if_open=not battery)
+
+    def _levels_run(self, conds, dwell, settle):
+        """The whole plan at each battery level (bh_sequencer.run_battery_levels)."""
+        try:
+            levels = []
+            for tok in self.bl_levels.get().replace(";", ",").split(","):
+                tok = tok.strip().lower()
+                if not tok:
+                    continue
+                levels.append(None if tok in ("as found", "asfound", "start", "full", "now")
+                              else float(tok))
+            p = {"levels": levels, "conds": conds, "dwell": dwell, "settle": settle,
+                 "amps": float(self.bl_ma.get()) / 1000.0, "tol": float(self.bl_tol.get()) / 1000.0,
+                 "rest_s": float(self.bl_rest.get()), "floor": float(self.bl_floor.get()),
+                 "max_drain_s": float(self.bl_max.get()) * 60.0,
+                 "samples": int(self.bl_samples.get()), "judge": self.bl_judge.get(),
+                 "note": self.seq_note.get()}
+        except ValueError as exc:
+            messagebox.showerror("Battery levels", f"Check the settings: {exc}")
+            return
+        nums = [l for l in levels if l is not None]
+        if not levels:
+            return
+        if nums != sorted(nums, reverse=True) or (None in levels and levels[0] is not None):
+            messagebox.showerror("Battery levels", "Levels must go DOWN (the load can only "
+                                                   "drain), with 'as found' first if used.")
+            return
+        if nums and min(nums) - p["tol"] <= p["floor"]:
+            messagebox.showerror("Battery levels", f"{min(nums):g} V is too close to the "
+                                                   f"{p['floor']:g} V floor.")
+            return
+        if self.load is None:
+            messagebox.showerror("Battery levels", "Connect the electronic load first "
+                                                   "(Test Rig tab).")
+            return
+        log_mode = p["judge"] == "log"
+        port = getattr(getattr(self.serial, "ser", None), "port", None)
+        if log_mode and not port:
+            messagebox.showerror("Battery levels", "The battery-log mode arms each capture "
+                                                   "over USB: connect the BlinkyHawk first.")
+            return
+        if not log_mode and not (self.seq_use_led.get() and self.relay is not None
+                                 and getattr(self.relay, "has_led", False)):
+            messagebox.showerror("Battery levels", "LED-only judging needs the relay jig's "
+                                                   "LED watcher.")
+            return
+        if not messagebox.askokcancel(
+                "Battery levels",
+                "Before starting:\n\n"
+                "  - the load is wired ACROSS THE BATTERY (+ to +, - to -)\n"
+                "  - 'Von Latch' is OFF on the load's front panel\n"
+                "  - every scope probe is OFF the BlinkyHawk\n"
+                + ("  - the relay jig will DISCONNECT the USB"
+                   + (" and reconnect it at each level to read the unit's log"
+                      if log_mode else " for the whole run")
+                   + ", and put it back at the end"
+                   if self._usb_auto_on() else
+                   "  - you will be told to UNPLUG the USB"
+                   + (" and, at each level, to plug it back in to read the unit's log"
+                      if log_mode else " -- it stays out for the whole run")) + "\n\n"
+                f"Drain {p['amps'] * 1000:.0f} mA to within +/-{p['tol'] * 1000:.0f} mV of each "
+                f"level (rested), never below {p['floor']:g} V."):
+            return
+        p["host"] = BatteryHost(self, port) if port else None
+        self.seq_tree.delete(*self.seq_tree.get_children())
+        self.seq_prog.config(maximum=len(conds), value=0)
+        self._start_job(lambda r: r.run_battery_levels(p), need_serial=log_mode,
+                        use_led=self.seq_use_led.get(), serial_if_open=log_mode)
 
     # ----------------------------------------------------------- tune tab
     def _build_tune_tab(self):
@@ -1045,8 +1302,11 @@ class SuiteApp(bench.App):
                     "  - every scope probe OFF the BlinkyHawk (a ground clip earths it)\n"
                     "  - battery fitted and charged\n"
                     "  - relay jig on the leads, generator connected\n\n"
-                    "You will be told when to UNPLUG and when to PLUG BACK IN the USB "
-                    "cable -- once per capture.  Everything else is automatic."):
+                    + ("The relay jig switches the USB for each capture and puts it "
+                       "back at the end -- fully automatic."
+                       if self._usb_auto_on() else
+                       "You will be told when to UNPLUG and when to PLUG BACK IN the USB "
+                       "cable -- once per capture.  Everything else is automatic.")):
                 return
             p["host"] = BatteryHost(self, port)
         self._start_job(lambda r: r.run_autotune(p))
@@ -1146,6 +1406,10 @@ class SuiteApp(bench.App):
         runner = S.Runner(dev, relay, self.fgen, self.scope,
                           lambda k, p: self.wq.put((k, p)), self.stop_event,
                           use_led=use_led, decoder=self.decoder)
+        runner.load = self.load
+        runner.prompt = self._worker_prompt
+        runner.usb_auto = self._usb_auto_on()
+        port = self._last_port
 
         def run():
             try:
@@ -1156,6 +1420,14 @@ class SuiteApp(bench.App):
             except Exception as exc:
                 self.wq.put(("log", f"!! run failed: {exc}"))
                 self.wq.put(("finished", f"failed: {exc}"))
+            finally:
+                # Whatever happened, put the USB back how the job found it --
+                # a stopped or failed battery run must not leave the unit
+                # disconnected -- and reopen the serial port if it came back.
+                if runner.usb_restore() and port:
+                    self.wq.put(("call", lambda: self.after(2500,
+                                                            lambda: self._reconnect_to(port))))
+                self.wq.put(("call", self._refresh_rig_labels))
             if runner.dir:
                 self.wq.put(("rundir", runner.dir))
         self.worker = threading.Thread(target=run, daemon=True)
@@ -1222,10 +1494,23 @@ class SuiteApp(bench.App):
             if p:
                 self.tu_notice.config(text=p)
                 self.tu_notice.pack(fill="x", padx=6, pady=4, before=self.tu_body)
+                self.seq_notice.config(text=p)
+                self.seq_notice.pack(fill="x", padx=6, pady=4, before=self.seq_tf)
                 self.bell()
                 self._log("** " + p)
             else:
                 self.tu_notice.pack_forget()
+                self.seq_notice.pack_forget()
+        elif kind == "battery":
+            v, a, st = p
+            txt = f"battery {v:.3f} V  {a * 1000:.0f} mA  (load {st})"
+            self.bl_batt.config(text=txt)
+            self.ld_meas.config(text=txt)
+        elif kind == "level":
+            self.seq_tree.insert("", "end", tags=("LEVEL",), values=(
+                f"== level {p['level']}", "", f"{p['pass']}P {p['fail']}F", "",
+                "", "", "", "", "", f"rest {p['rest_before_V']:.3f} V",
+                f"{p['drained_mAh']:.1f} mAh", "", f"after tests {p['after_tests_V']:.3f} V"))
         elif kind in ("status", "stage"):
             self.seq_status.config(text=p)
             self.tu_status.config(text=p)
@@ -1304,7 +1589,8 @@ class SuiteApp(bench.App):
 
     def _on_close(self):
         self.stop_event.set()
-        for fn in (self._fg_disconnect, self._sc_disconnect, self._jig_disconnect):
+        for fn in (self._ld_disconnect, self._fg_disconnect, self._sc_disconnect,
+                   self._jig_disconnect):
             try:
                 fn()
             except Exception:

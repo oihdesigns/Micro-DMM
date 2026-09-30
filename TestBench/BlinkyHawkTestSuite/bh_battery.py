@@ -98,15 +98,34 @@ class BatteryBench:
                                   "between captures (to arm the log and read it back)")
         return self.r.dev
 
+    def _present(self):
+        f = getattr(self.host, "present", None)      # a test host can stand in
+        return f() if f else port_present(self.host.port)
+
     def _wait(self, want_present, what):
-        self.host.notice(what)
-        end = time.time() + LINK_TIMEOUT_S
-        while port_present(self.host.port) != want_present:
+        """Get the BlinkyHawk's USB to `want_present`.  With the relay jig's USB
+        switch (K8) and auto-USB on, the relay does it; otherwise the operator
+        is told to.  Either way it is CONFIRMED by the COM port vanishing /
+        reappearing -- a relay that clicks but is not wired to the cable must
+        not pass for an unplug."""
+        auto = self.r.usb_auto_ok()
+        if auto:
+            self.r.usb_set(want_present)
+        else:
+            self.host.notice(what)
+        end = time.time() + (20 if auto else LINK_TIMEOUT_S)
+        while self._present() != want_present:
             self.r.check_stop()
             if time.time() > end:
+                if auto:
+                    raise InstrumentError(
+                        f"the USB relay switched {'ON' if want_present else 'OFF'} but "
+                        f"{self.host.port} did not {'appear' if want_present else 'go away'} "
+                        "within 20 s -- check the K8 relay wiring to the cable")
                 raise InstrumentError(f"timed out waiting for: {what}")
             time.sleep(0.1)
-        self.host.notice(None)
+        if not auto:
+            self.host.notice(None)
 
     def _relink(self):
         """USB is back: have the GUI reconnect, then wait for a $STATUS."""
@@ -172,6 +191,16 @@ class BatteryBench:
                 dev.set(k, v)
         dev.send("!VMODE,0")
         dev.request("!SLEEPLOG,0", lambda l: l.startswith("$OK,sleeplog"))
+
+    # ---------- for other jobs (the battery-level run) ----------
+    def unplugged(self, what):
+        """Block until the BlinkyHawk's COM port is gone (USB unplugged)."""
+        self._wait(False, what)
+
+    def plugged(self, what):
+        """Block until the port is back, then reconnect and wait for $STATUS."""
+        self._wait(True, what)
+        self._relink()
 
     # ---------- sizing ----------
     @staticmethod

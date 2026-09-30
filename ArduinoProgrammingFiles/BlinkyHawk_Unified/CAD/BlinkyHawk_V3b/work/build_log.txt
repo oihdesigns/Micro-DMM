@@ -1,0 +1,47 @@
+{
+  "source_sha256": {
+    "C:\\Users\\Nick\\Dropbox (Personal)\\Solidworks\\STL Outputs\\BlinkyHawk_V3_Shell.3MF": "cff0ad160e0c4de23f90c2dc469939eae6e6a630fbc2eae8bc32234ebd0219a0",
+    "C:\\Users\\Nick\\Dropbox (Personal)\\Solidworks\\STL Outputs\\BlinkyHawkV3_Lid.3MF": "d41ca8053bf3074606b86cc73f6e9f84ad3dc3e2801e97bbe2c9e597c14441a2"
+  },
+  "changes_mm": {
+    "length_increase": 1.397,
+    "USB_dx": 0.2386,
+    "USB_dz": 0.186,
+    "minimum_floor_under_relief": 1.2
+  },
+  "shell": {
+    "bounds": [
+      [
+        -1.2576750283029535e-14,
+        -8.239937357922781e-15,
+        0.0
+      ],
+      [
+        31.0,
+        77.39700317382812,
+        16.0
+      ]
+    ],
+    "volume_mm3": 11505.709639423018,
+    "watertight": true,
+    "connected_solids": 1
+  },
+  "lid": {
+    "bounds": [
+      [
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        31.000001907348633,
+        77.39698791503906,
+        2.5
+      ]
+    ],
+    "volume_mm3": 5933.632562330298,
+    "watertight": true,
+    "connected_solids_stl": 1,
+    "bodies_3mf": 15
+  }
+}

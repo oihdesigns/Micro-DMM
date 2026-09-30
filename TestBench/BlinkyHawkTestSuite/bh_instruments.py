@@ -4,6 +4,8 @@ bh_instruments.py  --  bench instrument drivers for the BlinkyHawk test suite.
   RelayJig      the RelayMount UNO R4 load selector (USB serial, !MODE / $STATE),
                 plus its AS7343 LED watcher ($FLASH, see bh_led.py)
   RigolDG800    Rigol DG852 Pro function generator (SCPI over a raw LAN socket)
+  RigolDL3000   Rigol DL3021/DL3031 electronic load (SCPI over a raw LAN socket),
+                used to drain the unit's battery between test levels
   SiglentSDS    Siglent SDS800X HD scope (SCPI over a raw LAN socket) -- a
                 Python port of TestBench/Scope/ScopeLib.ps1, and
   write_scope_csv()  which writes the SAME CSV layout as Capture-Scope.ps1, so
@@ -79,6 +81,8 @@ class RelayJig:
         self.mode = None
         self.led_info = {}          # last $LEDSTATE, as key -> str
         self.raw_last = None        # last $LEDRAW fields
+        self.has_usb = False        # jig firmware 1.2+: K8 switches the DUT's USB
+        self.usb_state = None       # True = BlinkyHawk USB connected
         self._wlock = threading.Lock()
         self._waiters = []          # [(prefix, queue)]
         self._flash_subs = []
@@ -111,7 +115,13 @@ class RelayJig:
         if st:
             self.mode = st.split(",")[1]
         self.request("!LEDSTAT", "$LEDSTATE", 1.5, quiet=True)   # absent on fw 1.0
-        return self.ident + ("   LED sensor OK" if self.has_led else "   (no LED sensor)")
+        # fw 1.2+: K8 is the BlinkyHawk's USB.  Older firmware answers $ERR.
+        try:
+            self.has_usb = self.request("!USB", "$USB", 1.5, quiet=True) is not None
+        except InstrumentError:
+            self.has_usb = False
+        return (self.ident + ("   LED sensor OK" if self.has_led else "   (no LED sensor)")
+                + ("   USB switch OK" if self.has_usb else "   (no USB switch)"))
 
     def close(self):
         self._stop.set()
@@ -155,6 +165,12 @@ class RelayJig:
             self._boot.set()
         elif line.startswith("$LEDSTATE,"):
             self.led_info = dict(t.split("=", 1) for t in line.split(",")[1:] if "=" in t)
+        elif line.startswith("$USB,"):
+            self.usb_state = line.split(",")[1].strip() == "1"
+        elif line.startswith("$STATE,"):
+            f = line.split(",")
+            if len(f) >= 6:                # fw 1.2 appends the USB state
+                self.usb_state = f[5].strip() == "1"
         elif line.startswith("$LEDRAW,"):
             self.raw_last = line.split(",")[1:]
         with self._slock:
@@ -207,6 +223,17 @@ class RelayJig:
             if q in self._flash_subs:
                 self._flash_subs.remove(q)
 
+    def usb(self, on):
+        """Connect (True) / disconnect (False) the BlinkyHawk's USB via K8."""
+        if not self.has_usb:
+            raise InstrumentError("this relay jig cannot switch USB (needs jig firmware 1.2 "
+                                  "and the K8 USB relays)")
+        line = self.request(f"!USB,{1 if on else 0}", "$USB", 3.0)
+        self.usb_state = line.split(",")[1].strip() == "1"
+        if self.usb_state != bool(on):
+            raise InstrumentError(f"USB relay did not switch: {line}")
+        return line
+
     def led_enable(self, on):
         return self.request(f"!LED,{1 if on else 0}", "$LEDSTATE", 2.0)
 
@@ -241,6 +268,8 @@ class SimRelayJig:
         self._subs = []
         self._lock = threading.Lock()
         bench.flash_sink = self._on_sim_flash
+        self.has_usb = True
+        self.usb_state = True
 
     @property
     def has_led(self):
@@ -258,6 +287,11 @@ class SimRelayJig:
         self.mode = mode
         self.bench.relay = mode
         return f"$STATE,{mode},sim,{mode},25"
+
+    def usb(self, on):
+        self.usb_state = bool(on)
+        self.bench.usb = bool(on)
+        return f"$USB,{int(bool(on))}"
 
     def _on_sim_flash(self, colour, t_start, dur_ms, brightness):
         import random
@@ -526,6 +560,131 @@ class SimFGen:
 
     def safe_off(self):
         self.output(False)
+
+
+# ---------------------------------------------------------------------------
+# Rigol DL3000 electronic load (battery drain)
+# ---------------------------------------------------------------------------
+class RigolDL3000(ScpiSocket):
+    """Rigol DL3021/DL3031(A) over a raw LAN socket, used ONLY to drain the
+    BlinkyHawk's battery between test levels.  It sits in parallel with the
+    battery; with its input OFF it is high impedance and the unit runs normally.
+
+    Syntax from the DL3000 Programming Guide:
+      :SOUR:FUNC:MODE FIX / :SOUR:FUNC CURR      static constant-current mode
+      :SOUR:CURR:RANG <A> / :SOUR:CURR <A>       range + level (A)
+      :SOUR:CURR:VON <V>                         only sink while input > Von
+      :SOUR:INP:STAT ON|OFF
+      :MEAS:VOLT? / :MEAS:CURR?
+    Port: not given in the guide; Rigol's raw socket is 5555 on most models and
+    the DG852 here turned out to be 5025, so the GUI offers both.
+
+    SAFETY.  Von is set to the drain floor on every drain, so the LOAD ITSELF
+    stops sinking below it -- that holds even if this PC or script dies with the
+    input on.  It only works with "Von Latch" OFF on the front panel (with latch
+    ON the load keeps sinking once started), and there is no SCPI command for
+    the latch, so it has to be set by hand once.
+    """
+    name = "Electronic load"
+
+    def __init__(self, max_amps=1.0):
+        super().__init__()
+        self.max_amps = max_amps     # user safety cap on the drain current
+        self.ident = ""
+        self.state = "off"
+
+    def connect(self, host, port=5555):
+        self.open(host, port)
+        self.ident = self.identify("electronic load")
+        self.setup()
+        return self.ident
+
+    def setup(self):
+        self.write(":SOUR:INP:STAT OFF")
+        self.write(":SOUR:FUNC:MODE FIX")
+        self.write(":SOUR:FUNC CURR")
+        self.check_error("setup")
+        self.state = "off"
+
+    def check_error(self, what):
+        err = self.query(":SYST:ERR?")
+        code = err.split(",", 1)[0].strip().lstrip("+")
+        if code not in ("0", ""):
+            raise InstrumentError(f"load error after {what}: {err}")
+
+    def set_cc(self, amps, von):
+        """Constant current `amps`, sinking only while the input is above `von`."""
+        if not 0 < amps <= self.max_amps + 1e-9:
+            raise InstrumentError(f"{amps:g} A is outside 0..{self.max_amps:g} A "
+                                  "(the drain-current cap on the Test Rig tab)")
+        self.write(":SOUR:FUNC CURR")
+        # Low range: the drain currents here are a small fraction of an amp, and
+        # the low range regulates and reads them more finely.  The guide:
+        # MINimum = the low range.
+        self.write(":SOUR:CURR:RANG MIN")
+        self.write(f":SOUR:CURR {amps:.4f}")
+        self.write(f":SOUR:CURR:VON {von:.3f}")
+        self.check_error("CC setup")
+
+    def input(self, on):
+        self.write(f":SOUR:INP:STAT {'ON' if on else 'OFF'}")
+        self.state = "SINKING" if on else "off"
+
+    def volts(self):
+        return float(self.query(":MEAS:VOLT?"))
+
+    def amps(self):
+        return float(self.query(":MEAS:CURR?"))
+
+    def safe_off(self):
+        try:
+            if self.connected:
+                self.input(False)
+        except Exception:
+            pass
+
+
+class SimLoad:
+    """Load + a made-up Li-ion cell (bh_sim.SimBattery lives on the bench)."""
+    name = "Electronic load (sim)"
+
+    def __init__(self, bench, max_amps=1.0):
+        self.bench = bench
+        self.max_amps = max_amps
+        self.ident = "RIGOL TECHNOLOGIES,DL3021A,SIM"
+        self.state = "off"
+        self.connected = True
+        self._amps = 0.0
+        self._von = 0.0
+
+    def connect(self, host=None, port=None):
+        return self.ident
+
+    def close(self):
+        self.input(False)
+
+    def setup(self):
+        self.input(False)
+
+    def set_cc(self, amps, von):
+        if not 0 < amps <= self.max_amps + 1e-9:
+            raise InstrumentError("drain current outside the cap")
+        self._amps, self._von = amps, von
+
+    def input(self, on):
+        b = self.bench.battery
+        b.load_amps = self._amps if on else 0.0
+        b.von = self._von
+        self.state = "SINKING" if on else "off"
+
+    def volts(self):
+        return self.bench.battery.terminal()
+
+    def amps(self):
+        return self.bench.battery.drawn()
+
+    def safe_off(self):
+        self.input(False)
 
 
 # ---------------------------------------------------------------------------

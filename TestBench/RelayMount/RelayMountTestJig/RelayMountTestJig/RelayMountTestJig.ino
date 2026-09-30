@@ -3,7 +3,9 @@
  *
  * Hardware: Arduino UNO R4 WiFi (Freenove V5) + two 4-channel relay boards
  *           on the RelayMount plate.  Relay channel n is driven by pin
- *           RELAY_PIN[n-1]; channel 8 is a spare.
+ *           RELAY_PIN[n-1].  Channel 8 (K8) switches the BlinkyHawk's USB
+ *           cable: it drives the coils of four external relays, one per USB
+ *           wire (VBUS, D+, D-, GND).  K8 energised = USB connected.
  *
  * What the jig does (hand schematic 2026-09-26):
  *
@@ -38,8 +40,10 @@
  *
  * Serial protocol (115200, '\n' terminated):
  *   !MODE,<FGEN|SHORT|OPEN|1M|10K|10.6M|150K>   select a load
- *   !K,<1-8>,<0|1>      drive one relay directly (mode becomes RAW)
- *   !ALL                release every relay (= FGEN, no sequencing)
+ *   !K,<1-7>,<0|1>      drive one relay directly (mode becomes RAW)
+ *   !ALL                release K1-K7 (= FGEN, no sequencing).  USB untouched.
+ *   !USB[,0|1]          connect (1) / disconnect (0) the BlinkyHawk's USB via
+ *                       K8; bare = report.  (v1.2)
  *   !SETTLE,<ms>        relay settle time between steps (default 25)
  *   !STATE              report state
  *   !ID                 identify
@@ -59,7 +63,8 @@
  * Replies:
  *   $BOOT,RelayJig,<ver>
  *   $ID,RelayJig,<ver>
- *   $STATE,<mode>,<K1..K8 bits>,<what the DUT sees>,<settle ms>
+ *   $STATE,<mode>,<K1..K8 bits>,<what the DUT sees>,<settle ms>,<usb 0|1>
+ *   $USB,<0|1>          reply to !USB
  *   $FLASH,<startMs>,<durMs>,<n>,<fz>,<fy>,<fxl>,<vis>,<peak>,<sat>
  *        one per LED flash, sent when it ENDS.  fz/fy/fxl/vis are the mean of
  *        the samples in the flash with the dark baseline subtracted (FZ 450 nm
@@ -71,7 +76,16 @@
  *   anything not starting with '$' is human-readable debug.
  */
 
-#define FW_VERSION "1.1"
+#define FW_VERSION "1.2"
+
+// K8 = the BlinkyHawk's USB.  It is NOT part of the load selector: mode
+// changes and !ALL never move it, only !USB does.  Boot state is CONNECTED, so
+// the rig behaves like an ordinary cable until the test suite deliberately
+// unplugs it.  (While this board is resetting its pins float and the relay
+// drops out, so a jig reset still blips the USB -- connect the jig before the
+// BlinkyHawk.)  If your USB relays connect with K8 RELEASED instead, set
+// RELAY_NO_SWAPPED[K8] below rather than changing this.
+#define USB_BOOT_CONNECTED 1
 
 #include <Wire.h>
 #include <Adafruit_AS7343.h>
@@ -102,6 +116,7 @@ const uint8_t NUM_NAMED_MODES = 7;
 enum { K1, K2, K3, K4, K5, K6, K7, K8 };
 
 bool relayOn[NUM_RELAYS];          // logical state: true = moved to the NO contact
+bool usbOn = USB_BOOT_CONNECTED;   // K8: the BlinkyHawk's USB is connected
 Mode currentMode = M_FGEN;
 uint16_t settleMs = 25;
 
@@ -191,8 +206,14 @@ void setMode(Mode m) {
 }
 
 void releaseAll() {
-  for (uint8_t k = 0; k < NUM_RELAYS; k++) driveRelay(k, false);
+  for (uint8_t k = K1; k <= K7; k++) driveRelay(k, false);
+  driveRelay(K8, usbOn);             // the USB is not a load: leave it as it was
   currentMode = M_FGEN;
+}
+
+void setUsb(bool on) {
+  usbOn = on;
+  driveRelay(K8, on);
 }
 
 // ---------------------------------------------------------------------------
@@ -380,14 +401,17 @@ void reportState() {
   Serial.print(',');
   Serial.print(resolveLoad());
   Serial.print(',');
-  Serial.println(settleMs);
+  Serial.print(settleMs);
+  Serial.print(',');
+  Serial.println(usbOn ? 1 : 0);     // appended: older hosts stop at settle
 }
 
 void printHelp() {
   Serial.println(F("RelayJig commands:"));
   Serial.println(F("  !MODE,<FGEN|SHORT|OPEN|1M|10K|10.6M|150K>"));
   Serial.println(F("  !K,<1-8>,<0|1>   raw relay drive"));
-  Serial.println(F("  !ALL             release all relays (FGEN)"));
+  Serial.println(F("  !ALL             release K1-K7 (FGEN); USB untouched"));
+  Serial.println(F("  !USB[,0|1]       BlinkyHawk USB via K8: 1 connect, 0 disconnect"));
   Serial.println(F("  !SETTLE,<ms>     settle time per relay step"));
   Serial.println(F("  !STATE  !ID  !HELP"));
   Serial.println(F("  !LED[,0|1]  !LEDRAW[,ms]  !LEDCFG[,gain,atime,astep,thr]  !LEDSTAT"));
@@ -426,9 +450,23 @@ void handleCommand(char *cmd) {
       Serial.println(F("$ERR,usage !K,<1-8>,<0|1>"));
       return;
     }
+    if (n - 1 == K8) {
+      // K8 is the USB, not part of the load network: keep it out of RAW mode
+      // and keep usbOn honest.
+      setUsb(*val == '1');
+      Serial.print(F("$USB,")); Serial.println(usbOn ? 1 : 0);
+      reportState();
+      return;
+    }
     driveRelay(n - 1, *val == '1');
     currentMode = M_RAW;
     reportState();
+  } else if (!strcmp(cmd, "!USB")) {
+    if (arg) {
+      if (*arg != '0' && *arg != '1') { Serial.println(F("$ERR,usage !USB[,0|1]")); return; }
+      setUsb(*arg == '1');
+    }
+    Serial.print(F("$USB,")); Serial.println(usbOn ? 1 : 0);
   } else if (!strcmp(cmd, "!ALL")) {
     releaseAll();
     reportState();
@@ -502,9 +540,10 @@ void setup() {
   // pinMode(OUTPUT) can briefly drive LOW, which would click an active-low
   // board.  A few microseconds is far too short to pull a relay in.
   for (uint8_t k = 0; k < NUM_RELAYS; k++) {
-    driveRelay(k, false);
+    bool on = (k == K8) ? usbOn : false;   // K8 comes up as USB_BOOT_CONNECTED
+    driveRelay(k, on);
     pinMode(RELAY_PIN[k], OUTPUT);
-    driveRelay(k, false);
+    driveRelay(k, on);
   }
 
   Serial.begin(115200);

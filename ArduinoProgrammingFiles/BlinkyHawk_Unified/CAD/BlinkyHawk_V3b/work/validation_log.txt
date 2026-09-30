@@ -1,0 +1,100 @@
+screw centers shell [(2.999999423055715, 74.39700193701358), (3.000000039903967, 3.0000000000000004), (28.000000380090828, 74.39700193699144), (28.00000099694933, 3.0)] lid [(3.0001171153125257, 74.39699524571706), (3.0001174978564897, 2.9999962293077407), (28.00011782248127, 74.39699524571738), (28.0001182050263, 2.999996229303086)] error [np.float64(0.00011788231742824124), np.float64(0.0001175184612348134), np.float64(0.00011763285349314885), np.float64(0.0001172687147652551)]
+{
+  "parts": {
+    "shell": {
+      "watertight": true,
+      "positive_volume": true,
+      "connected_solids": 1,
+      "triangles": 2218,
+      "bounds_mm": [
+        [
+          -0.0,
+          0.0,
+          0.0
+        ],
+        [
+          31.0,
+          77.39700317,
+          16.0
+        ]
+      ]
+    },
+    "lid_stl": {
+      "watertight": true,
+      "positive_volume": true,
+      "connected_solids": 1,
+      "triangles": 2222,
+      "bounds_mm": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          31.000001907348633,
+          77.39698791503906,
+          2.5
+        ]
+      ]
+    },
+    "lid_3mf": {
+      "watertight": true,
+      "positive_volume": true,
+      "connected_solids": 1,
+      "triangles": 2222,
+      "bounds_mm": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          31.00000191,
+          77.39698792,
+          2.5
+        ]
+      ]
+    },
+    "lid_multipart_3mf": {
+      "bodies": 15,
+      "all_watertight": true
+    }
+  },
+  "checks": {
+    "screw_centers_mm": [
+      [
+        2.999999423055715,
+        74.39700193701358
+      ],
+      [
+        3.000000039903967,
+        3.0000000000000004
+      ],
+      [
+        28.000000380090828,
+        74.39700193699144
+      ],
+      [
+        28.00000099694933,
+        3.0
+      ]
+    ],
+    "maximum_screw_center_error_mm": 0.00011788231742824124,
+    "shell_lid_overlap_mm3": 0,
+    "USB_min_radial_clearance_mm": 0.19595607961285333,
+    "USB_opening_bounds_xz_mm": [
+      11.18826962,
+      5.32600021,
+      20.52827072,
+      8.93599987
+    ],
+    "PCB_end_clearance_mm": 0.19999999999998863,
+    "PCB_side_clearance_each_mm": 0.5,
+    "J4_pin_tip_floor_clearance_mm": 0.645,
+    "floor_remaining_under_relief_mm": 1.2,
+    "J5_wire_route_width_mm": 2.4,
+    "J5_wire_route_vertical_gap_to_bottom_copper_mm": 1.305,
+    "unchanged_front_geometry_difference_mm3": 0
+  },
+  "component_groups_clear": 72
+}

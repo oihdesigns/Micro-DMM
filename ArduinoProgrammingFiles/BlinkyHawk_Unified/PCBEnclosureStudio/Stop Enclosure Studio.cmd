@@ -1,0 +1,3 @@
+@echo off
+set "STUDIO_DIR=%~dp0"
+powershell -NoProfile -Command "$studioRoot=[IO.Path]::GetFullPath($env:STUDIO_DIR); $studioState=Join-Path $studioRoot '.server.json'; if(Test-Path -LiteralPath $studioState){$studioInfo=Get-Content -LiteralPath $studioState -Raw | ConvertFrom-Json; $studioProcess=Get-CimInstance Win32_Process -Filter ('ProcessId='+[int]$studioInfo.pid); $studioScript=Join-Path $studioRoot 'server.py'; if($studioProcess -and $studioProcess.CommandLine.Contains($studioScript)){[System.Diagnostics.Process]::GetProcessById([int]$studioProcess.ProcessId).Kill(); Write-Host 'Enclosure Studio stopped.'}else{Write-Host 'No matching Enclosure Studio process is running.'}}"

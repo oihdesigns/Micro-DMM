@@ -22,6 +22,49 @@ import time
 from bh_instruments import JIG_LOAD_OHMS
 
 
+class SimBattery:
+    """A made-up Li-ion cell for the electronic-load dry run: linear OCV from
+    3.0 V (empty) to 4.2 V (full), 0.12 ohm series resistance, and a
+    polarisation voltage that builds up under load and relaxes over ~8 s after
+    it -- so the drain loop sees the real behaviour it has to handle (the
+    voltage springs back UP when the load comes off).  Capacity is tiny so a
+    whole 4.1 -> 3.3 V drain takes a few minutes at 250 mA."""
+
+    CAP_AH = 0.02
+    R0, R1, TAU = 0.12, 0.10, 8.0
+    UNIT_A = 0.003                 # the BlinkyHawk's own draw
+
+    def __init__(self, ocv=4.10):
+        self.soc = (ocv - 3.0) / 1.2
+        self.vp = 0.0
+        self.load_amps = 0.0
+        self.von = 0.0
+        self._t = time.time()
+
+    def _sinking(self):
+        return self.load_amps > 0 and self._raw(self.load_amps) > self.von
+
+    def _raw(self, i):
+        return 3.0 + 1.2 * max(0.0, self.soc) - i * self.R0 - self.vp
+
+    def _step(self):
+        now = time.time()
+        dt, self._t = now - self._t, now
+        i = self.UNIT_A + (self.load_amps if self._sinking() else 0.0)
+        self.soc -= i * dt / 3600.0 / self.CAP_AH
+        target = i * self.R1
+        self.vp += (target - self.vp) * (1 - math.exp(-dt / self.TAU))
+
+    def drawn(self):
+        self._step()
+        return self.load_amps if self._sinking() else 0.0
+
+    def terminal(self):
+        self._step()
+        i = self.UNIT_A + (self.load_amps if self._sinking() else 0.0)
+        return self._raw(i) + random.gauss(0, 0.0005)
+
+
 class SimBench:
     def __init__(self):
         self.relay = "FGEN"
@@ -29,6 +72,8 @@ class SimBench:
         # SimRelayJig registers here to "see" the simulated LED:
         # flash_sink(colour 'R'|'G'|'B', t_start, dur_ms, brightness)
         self.flash_sink = None
+        self.battery = SimBattery()
+        self.usb = True           # SimRelayJig.usb() flips it; a test host reads it
 
 
 SIM_DEFAULTS = {
