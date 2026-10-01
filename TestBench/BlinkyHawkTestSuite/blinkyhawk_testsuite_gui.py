@@ -912,6 +912,9 @@ class SuiteApp(bench.App):
         self.seq_battery = tk.BooleanVar(value=False)
         ttk.Checkbutton(r, text="unit on battery -- NO serial link, LED watcher only",
                         variable=self.seq_battery).pack(side="left", padx=6)
+        self.quiet_var = tk.BooleanVar(value=True)     # shared with the Auto-Tune tab
+        ttk.Checkbutton(r, text="silence beeps during the run", variable=self.quiet_var
+                        ).pack(side="left", padx=6)
         self.seq_use_led = tk.BooleanVar(value=True)
         ttk.Checkbutton(r, text="use the LED watcher when available",
                         variable=self.seq_use_led).pack(side="left", padx=6)
@@ -1142,6 +1145,8 @@ class SuiteApp(bench.App):
         ttk.Checkbutton(r, text="2. open/closed (method + threshold)",
                         variable=self.tu_do_t).pack(side="left", padx=10)
         ttk.Checkbutton(r, text="3. verify", variable=self.tu_do_x).pack(side="left")
+        ttk.Checkbutton(r, text="silence beeps during the run (restored after)",
+                        variable=self.quiet_var).pack(side="left", padx=16)
 
         r = ttk.Frame(pf)
         r.pack(fill="x", pady=4)
@@ -1409,6 +1414,7 @@ class SuiteApp(bench.App):
         runner.load = self.load
         runner.prompt = self._worker_prompt
         runner.usb_auto = self._usb_auto_on()
+        runner.quiet_beeps = self.quiet_var.get()
         port = self._last_port
 
         def run():

@@ -332,6 +332,8 @@ class Runner:
         self.started = None
         self.load = None             # RigolDL3000 / SimLoad (battery-level runs)
         self.usb_auto = False        # switch the DUT's USB with the jig's K8 relay
+        self.quiet_beeps = True      # BEEP=0 (RAM) for the length of a job
+        self._beep_orig = None       # BEEP as the job found it, while silenced
         self._usb_orig = None        # USB state before this job first moved it
         self.prompt = None           # callable(text) -> bool, set by the GUI
         self.batt_rows = []          # [t_s, phase, V, A, load state]
@@ -550,6 +552,7 @@ class Runner:
         if self.dev is not None:
             self.dev.prepare()
         try:
+            self.quiet_begin()
             for i, c in enumerate(conds, 1):
                 self.emit("progress", (i, len(conds)))
                 try:
@@ -559,6 +562,7 @@ class Runner:
                     self.log(f"   {c.label}: SKIPPED -- {exc}")
         finally:
             self.fgen_off()
+            self.quiet_end()
             if self.dev is not None:
                 self.dev.release()
             self.write_files()
@@ -568,6 +572,42 @@ class Runner:
                  f"{len(fails)} fail{'' if len(fails) == 1 else 's'}"
                  + (f": {', '.join(fails)}" if fails else ""))
         return self.dir
+
+    # ---------- silence the buzzer for the run ----------
+    def quiet_begin(self):
+        """BEEP=0 in RAM for the whole job -- a test run otherwise chirps on every
+        condition change.  Called AFTER the job has snapshotted the config, so
+        config_before.csv (and anything reverted from it) keeps the unit's real
+        BEEP.  RAM only: a reset of the board brings the beeps back by itself."""
+        if not self.quiet_beeps or self.dev is None or self._beep_orig is not None:
+            return
+        try:
+            v = self.dev.get_cfg().get("BEEP")
+            if v is None:
+                self.log("   (this firmware has no BEEP key -- beeps not silenced)")
+                return
+            self._beep_orig = v
+            if v.strip() not in ("0", "0.0"):
+                self.dev.set("BEEP", 0)
+                self.log("   beeps silenced for the run (BEEP=0, RAM only)")
+        except Exception as exc:
+            self._beep_orig = None
+            self.log(f"   !! could not silence the beeps: {exc}")
+
+    def quiet_end(self):
+        """Put BEEP back.  Runs from each job's cleanup, so a stopped or failed
+        run restores it too -- as long as the board is still reachable."""
+        if self._beep_orig is None:
+            return
+        orig, self._beep_orig = self._beep_orig, None
+        if orig.strip() in ("0", "0.0"):
+            return                            # it was already off: nothing to undo
+        try:
+            self.dev.set("BEEP", orig)
+            self.log("   beeps re-enabled (BEEP restored)")
+        except Exception as exc:
+            self.log(f"   !! could not re-enable the beeps ({exc}) -- BEEP is still 0 in "
+                     "RAM: !SET,BEEP,1, '!LOAD', or a power cycle brings them back")
 
     # ---------- the BlinkyHawk's USB (relay jig K8) ----------
     def usb_auto_ok(self):
@@ -711,6 +751,9 @@ class Runner:
             cfg = self.dev.get_cfg()
             self.write_cfg(cfg, "config_before.csv")
             stable = int(float(cfg.get("STABLECOUNT", 2)))
+            self.quiet_begin()
+        elif self.quiet_beeps:
+            self.log("   (no serial link in LED-only mode, so the beeps cannot be silenced)")
         levels = p["levels"]
         self.write_info([f"BlinkyHawk test suite -- battery-level run {self.started}",
                          f"note: {p.get('note', '')}", *self.instrument_lines(),
@@ -794,6 +837,7 @@ class Runner:
             stop_ev.set()
             sampler.join(timeout=3)
             self.fgen_off()
+            self.quiet_end()
             self.write_files()
         self.log("== battery levels done:")
         for r in self.level_rows:
@@ -860,6 +904,7 @@ class Runner:
             self.dev.prepare()
         loads = load_conditions(p["loads"], p["closed_max"], p["open_min"])
         try:
+            self.quiet_begin()                # after `original` was snapshotted
             # ---- 1. voltage ----
             if p["do_voltage"]:
                 if self.fgen is None:
@@ -1021,6 +1066,7 @@ class Runner:
             raise
         finally:
             self.fgen_off()
+            self.quiet_end()
             try:
                 self.dev.release()
             except Exception:
@@ -1055,6 +1101,7 @@ class Runner:
         try:
             if self.dev is not None:
                 self.dev.prepare()
+            self.quiet_begin()
             for colour, c in plan:
                 self.emit("status", f"LED calibration: {c.label}")
                 self.apply(c, settle_s)
@@ -1071,6 +1118,7 @@ class Runner:
                 lines.append(msg)
         finally:
             self.fgen_off()
+            self.quiet_end()
             if self.dev is not None:
                 self.dev.release()
         self.decoder.save()
