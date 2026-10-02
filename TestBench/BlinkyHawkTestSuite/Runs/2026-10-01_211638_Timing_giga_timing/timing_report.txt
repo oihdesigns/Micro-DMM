@@ -1,0 +1,11 @@
+TIMING CHECK (on battery, USB off; meter A2-A3 x7.005)
+   config: awake every LOOPMS 50 ms + the pass; sleeps after 1 s open; stage 1 every 62.5 ms; deep after a further 15 s at 1000 ms
+      awake: pass interval                  n/a  -- LOOPMS 50 + the pass itself
+       deep: entry after leads opened       6329.1 ms  (-60.4 % vs 16000 ms)  -- stream, +-50 ms; DEEPSEC is counted in RTC ticks
+    stage 1: probe interval                 n/a  -- meter capture
+   scope: no period found
+       deep: probe interval                 n/a  -- meter capture
+   wake 1: first pass 7.6 ms after the leads closed
+   wake 2: first pass 481.0 ms after the leads closed
+   wake 3: first pass 382.5 ms after the leads closed
+       wake: to first pass (median of 3)    382.5 ms  -- range 8..481 ms; worst case = one deep interval (1000 ms); the alert follows ~100 ms later (STABLECOUNT 2 awake passes)

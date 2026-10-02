@@ -1,0 +1,5 @@
+step,quantity,measured_ms,expected_ms,note
+awake,pass interval,,,LOOPMS 50 + the pass itself
+deep,entry after leads opened,,16000,"stream, +-50 ms; DEEPSEC is counted in RTC ticks"
+stage 1,probe interval,,62.5,meter capture
+deep,probe interval,,1000,meter capture

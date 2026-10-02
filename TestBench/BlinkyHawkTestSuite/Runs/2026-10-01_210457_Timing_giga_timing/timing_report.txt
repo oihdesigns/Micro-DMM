@@ -1,0 +1,13 @@
+TIMING CHECK (on battery, USB off; meter A2-A3 x7.005)
+   expected: awake ~50 ms + pass; stage 1 every 62.5 ms after 1 s; deep every 1000 ms after a further 15 s
+      awake: pass interval              n/a  -- LOOPMS 50 + the pass itself
+    stage 1: probe interval (meter)     n/a
+   scope: no period found
+   deep entry not seen inside the 5 s window (host timing off, or DEEPSEC not reached)
+       deep: probe interval             403.1 ms  (-59.7 % vs 1000 ms)
+   wake: capture failed: int() argument must be a string, a bytes-like object or a real number, not 'dict'
+   wake 1: first pass n/a after the leads closed
+   wake: capture failed: int() argument must be a string, a bytes-like object or a real number, not 'dict'
+   wake 2: first pass n/a after the leads closed
+   wake: capture failed: int() argument must be a string, a bytes-like object or a real number, not 'dict'
+   wake 3: first pass n/a after the leads closed

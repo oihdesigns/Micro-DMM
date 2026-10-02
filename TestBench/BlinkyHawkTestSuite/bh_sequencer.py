@@ -168,11 +168,14 @@ class DeviceClient:
         self.request("!DETLOG,1", lambda l: l.startswith("$OK,detlog"))
 
     def release(self):
-        try:
-            self.send("!DETLOG,0")
-            self.send("!VMODE,0")
-        except Exception:
-            pass
+        """Stop $DET and put voltage mode back.  WAITS for both replies: the
+        caller may be about to cut USB, and a reply still being written when
+        the port goes away stalls the board (see BatteryBench._wait)."""
+        for cmd, head in (("!DETLOG,0", "$OK,detlog"), ("!VMODE,0", "$STATUS")):
+            try:
+                self.request(cmd, lambda l, h=head: l.startswith(h), timeout=2.0)
+            except Exception:
+                pass
 
     def collect(self, seconds, min_passes=0):
         """Record $DET passes for `seconds` (extended until min_passes arrive)."""
@@ -331,6 +334,7 @@ class Runner:
         self.scope_note = ""
         self.started = None
         self.load = None             # RigolDL3000 / SimLoad (battery-level runs)
+        self._load_warned = False    # "no load relay" said once per Runner
         self.usb_auto = False        # switch the DUT's USB with the jig's K8 relay
         self.quiet_beeps = True      # BEEP=0 (RAM) for the length of a job
         self._beep_orig = None       # BEEP as the job found it, while silenced
@@ -634,12 +638,51 @@ class Runner:
             self.log(f"!! could not restore the USB relay: {exc}")
         return False
 
+    # ---------- the electronic load's battery relay (jig D10, fw 1.3) ----------
+    def has_load_relay(self):
+        return getattr(self.relay, "has_load", False)
+
+    def load_linked(self):
+        """True when the load can see the battery: relay closed, or no relay
+        (load hard-wired, as before jig fw 1.3)."""
+        return not self.has_load_relay() or bool(getattr(self.relay, "load_state", False))
+
+    def load_link(self, on):
+        """Put the electronic load across the BlinkyHawk's battery (True) or
+        take it off (False).
+
+        The load's input is earthed, so while it is across the battery it
+        earths the board and shifts every reading (seen 2026-09-30).  It goes
+        on only to drain or to read the battery voltage -- which it can only do
+        through the relay -- and comes off before the unit is tested.  The
+        input is switched OFF before the relay opens, so the contacts never
+        break the drain current; the callers turn it on only after this has
+        closed the relay."""
+        if not self.has_load_relay():
+            if not on and not self._load_warned and self.load is not None:
+                self._load_warned = True
+                self.log("   (no load relay on the jig: the load stays across the battery "
+                         "and earths the BlinkyHawk during the tests -- jig fw 1.3 + the D10 "
+                         "relay take it off)")
+            return
+        if bool(self.relay.load_state) == bool(on):
+            return
+        if not on and self.load is not None:
+            self.load.input(False)
+            self.sleep(0.2)                   # let the load actually stop sinking
+        self.relay.load_relay(on)
+        self.log(f"   load relay: electronic load {'ON the battery' if on else 'disconnected'}")
+        if on:
+            self.sleep(0.5)                   # contacts settled, load's voltmeter caught up
+
     # ---------- battery drain (electronic load) ----------
     def _batt_sampler(self, stop_ev):
         """Log the load's V / I every 2 s for the whole run (battery.csv), and
         integrate the charge the load has taken."""
         t0 = time.time()
         while not stop_ev.wait(2.0):
+            if not self.load_linked():
+                continue                      # relay open: the load sees no battery
             try:
                 v, a = self.load.volts(), self.load.amps()
             except Exception:
@@ -657,6 +700,7 @@ class Runner:
         change over 10 s, or rest_s, whichever first.  Li-ion keeps creeping up
         for minutes after a load comes off, so a reading taken the moment the
         load stops is several tens of mV low."""
+        self.load_link(True)                  # the load reads the battery through the relay
         self.load.input(False)
         hist = []
         t0 = time.time()
@@ -688,6 +732,7 @@ class Runner:
                      "no drain")
             return v
         L.set_cc(amps, floor)
+        self.load_link(True)                  # rest_ocv did this; be explicit before input ON
         t_start = time.time()
         try:
             for rnd in range(1, 13):
@@ -800,6 +845,7 @@ class Runner:
                     v0 = self.drain_to(target, p["amps"], p["tol"], p["rest_s"],
                                        p["floor"], p["max_drain_s"])
                 drained = self._drained_mah(self._batt_phase)
+                self.load_link(False)         # off the battery before the unit is tested
                 n_before = len(self.summaries)
                 phase = f"{self._batt_phase} ({v0:.2f}V)"
                 if judge == "log":
@@ -818,6 +864,7 @@ class Runner:
                         except InstrumentError as exc:
                             self.log(f"   {c.label}: SKIPPED -- {exc}")
                 self.fgen_off()
+                self.load_link(True)          # back on to read the battery
                 v1 = self.load.volts()
                 res = [s["result"] for s in self.summaries[n_before:]]
                 row = {"level": tag, "rest_before_V": round(v0, 4),
@@ -834,6 +881,10 @@ class Runner:
                 self.load.input(False)
             except Exception as exc:
                 self.log(f"!! could not turn the load input off: {exc} -- TURN IT OFF BY HAND")
+            try:
+                self.load_link(False)         # leave the battery floating
+            except Exception as exc:
+                self.log(f"!! could not open the load relay: {exc}")
             stop_ev.set()
             sampler.join(timeout=3)
             self.fgen_off()
@@ -843,6 +894,57 @@ class Runner:
         for r in self.level_rows:
             self.log(f"   {r['level']:>9}: {r['rest_before_V']:.3f} V  "
                      f"{r['pass']} pass / {r['fail']} fail / {r['no_data']} no data")
+        return self.dir
+
+    # ---------- job 5: sleep / wake timing with the Giga meter ----------
+    def run_timing(self, p):
+        """p: meter (bh_giga.GigaMeter), host (BatteryHost), repeats, use_scope, note.
+        See bh_timing.py.  Needs USB at the start (the config sets what to
+        expect) and the jig's USB switch (the board only sleeps on battery)."""
+        from bh_battery import BatteryBench
+        from bh_timing import TimingCheck
+        if self.dev is None:
+            raise InstrumentError("connect the BlinkyHawk over USB first -- its config sets "
+                                  "what the timing should be")
+        if not self.usb_auto_ok():
+            raise InstrumentError("the timing check needs the relay jig's USB switch (K8): "
+                                  "on USB the board never sleeps")
+        self.open_run("Timing", p.get("note", ""))
+        self.log(f"== timing check -> {self.dir}")
+        cfg = self.dev.get_cfg()
+        self.write_cfg(cfg, "config_before.csv")
+        self.bat = BatteryBench(self, p["host"])
+        tc = TimingCheck(self, p["meter"])
+        scope = self.scope if p.get("use_scope") else None
+        if scope is not None:
+            self.log("   note: the scope's ground clip earths the board -- fine for timing, "
+                     "not a run to tune thresholds from")
+        try:
+            self.quiet_begin()
+            self.dev.release()
+            self.fgen_off()
+            self.bat.unplugged("timing check: USB off")
+            tc.run(cfg, p.get("repeats", 3), scope)
+        finally:
+            self.fgen_off()
+            try:
+                self.relay.set_mode("OPEN")
+            except Exception:
+                pass
+            try:
+                self.bat.plugged("timing check done: USB back on")
+            except Exception as exc:
+                self.log(f"!! USB did not come back: {exc}")
+            self.quiet_end()
+            with open(os.path.join(self.dir, "timing_report.txt"), "w", encoding="utf-8") as fh:
+                fh.write("\n".join(tc.lines) + "\n")
+            with open(os.path.join(self.dir, "timing.csv"), "w", newline="") as fh:
+                w = csv.writer(fh)
+                w.writerow(["step", "quantity", "measured_ms", "expected_ms", "note"])
+                for step, what, got, want, note in tc.rows:
+                    w.writerow([step, what, "" if got is None else f"{got:.2f}",
+                                "" if not want else f"{want:g}", note])
+            self.emit("report", "\n".join(tc.lines))
         return self.dir
 
     # ---------- battery captures (see bh_battery.py) ----------

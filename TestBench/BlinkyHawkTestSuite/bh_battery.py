@@ -109,6 +109,26 @@ class BatteryBench:
         reappearing -- a relay that clicks but is not wired to the cable must
         not pass for an unplug."""
         auto = self.r.usb_auto_ok()
+        if not want_present:
+            # LET GO OF THE PORT FIRST.  Found on hardware (Oct 2026, Unified fw
+            # on V3b): if USB is cut while a host still holds the BlinkyHawk's COM
+            # port open, the board keeps treating the port as connected, its
+            # periodic debug write blocks, and the main loop stops -- no
+            # detection, no alerts -- until some host opens the port again and
+            # drains it.  Closing the port first drops DTR, so the board knows
+            # nobody is listening.  Applies to a by-hand unplug just as much.
+            #
+            # AND let the board finish writing first.  The core's SerialUSB::
+            # write() checks "connected" once, then spins until there is buffer
+            # space -- so a reply (or the periodic debug line) that is mid-write
+            # when the port closes never finishes.  Closing straight after a
+            # command reply, as the timing job first did, reproduced the stall
+            # every time.  The reader keeps draining during this pause.
+            rel = getattr(self.host, "release_port", None)
+            if rel:
+                time.sleep(0.6)
+                rel()
+                time.sleep(0.3)
         if auto:
             self.r.usb_set(want_present)
         else:

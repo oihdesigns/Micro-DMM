@@ -1,0 +1,6 @@
+step,quantity,measured_ms,expected_ms,note
+awake,pass interval,56.01,,LOOPMS 50 + the pass itself
+deep,entry after leads opened,15617.29,16000,"stream, +-50 ms; DEEPSEC is counted in RTC ticks"
+stage 1,probe interval,60.93,62.5,meter capture
+deep,probe interval,976.65,1000,meter capture
+wake,to first pass (median of 3),529.66,,range 105..610 ms; worst case = one deep interval (977 ms); the alert follows ~112 ms later (STABLECOUNT 2 awake passes)

@@ -166,6 +166,21 @@ class BatteryHost:
     def notice(self, text):
         self.app.wq.put(("notice", text))
 
+    def release_port(self):
+        """Close the BlinkyHawk's serial port before USB is cut (see the note in
+        bh_battery.BatteryBench._wait: a pull with the port open stalls the
+        board).  reconnect() reopens it afterwards."""
+        ev = threading.Event()
+
+        def go():
+            try:
+                if self.app.serial.is_open:
+                    self.app._toggle_connect()          # the disconnect path
+            finally:
+                ev.set()
+        self.app.wq.put(("call", go))
+        ev.wait(5)
+
     def reconnect(self):
         """Open the port again if it is closed (never toggles an open one shut)."""
         ev = threading.Event()
@@ -457,6 +472,18 @@ class SuiteApp(bench.App):
         ttk.Button(row, text="Read V / I", command=self._ld_read).pack(side="left", padx=8)
         self.ld_meas = ttk.Label(row, text="", font=("Consolas", 11, "bold"))
         self.ld_meas.pack(side="left", padx=8)
+        row = ttk.Frame(ef)
+        row.pack(fill="x", pady=(6, 0))
+        ttk.Label(row, text="Battery relay (jig D10):").pack(side="left")
+        ttk.Button(row, text="Connect load", command=lambda: self._ld_link(True)
+                   ).pack(side="left", padx=4)
+        ttk.Button(row, text="Disconnect load", command=lambda: self._ld_link(False)
+                   ).pack(side="left")
+        self.ld_link_lbl = ttk.Label(row, text="", font=("Consolas", 10, "bold"))
+        self.ld_link_lbl.pack(side="left", padx=8)
+        ttk.Label(row, foreground="#555",
+                  text="battery runs switch it themselves: on to drain / read V, off while "
+                       "the unit is tested").pack(side="left", padx=8)
         ttk.Label(ef, foreground="#555", wraplength=1180,
                   text="Set 'Von Latch' to OFF on the load's front panel once: the floor is sent "
                        "as Von, so the load itself stops sinking below it even if this PC or "
@@ -515,6 +542,14 @@ class SuiteApp(bench.App):
         self.ld_lbl.config(text=(f"{self.load.ident}   input: {self.load.state}"
                                  if self.load else "not connected"),
                            foreground="#0a0" if self.load else "#a60")
+        if self.relay is None or not getattr(self.relay, "has_load", False):
+            self.ld_link_lbl.config(text="no load relay (jig firmware 1.3 + relay on D10) "
+                                         "-- load hard-wired", foreground="#888")
+        else:
+            on = self.relay.load_state
+            self.ld_link_lbl.config(text={True: "LOAD ON BATTERY", False: "LOAD DISCONNECTED",
+                                          None: "load ?"}[on],
+                                    foreground={True: "#c60", False: "#0a0", None: "#888"}[on])
         info = getattr(self.relay, "led_info", {}) if self.relay is not None else {}
         if self.relay is None:
             self.led_lbl.config(text="relay jig not connected", foreground="#555")
@@ -741,10 +776,31 @@ class SuiteApp(bench.App):
             self._rig_say("** load: mA and floor must be numbers")
             return
 
+        if (self.relay is not None and getattr(self.relay, "has_load", False)
+                and not self.relay.load_state):
+            self._rig_say("** the load is disconnected from the battery -- press Connect "
+                          "load first")
+            return
+
         def go():
             self.load.set_cc(amps, floor)
             self.load.input(True)
         self._bg(go, f"load CC {amps * 1000:.0f} mA ON (Von {floor:g} V)", need="load")
+
+    def _ld_link(self, on):
+        """Manual battery-relay switch.  Same ordering as Runner.load_link: the
+        load's input goes off before the relay opens."""
+        if self.relay is None or not getattr(self.relay, "has_load", False):
+            self._rig_say("** the relay jig has no load relay (needs jig firmware 1.3 and the "
+                          "relay on D10)")
+            return
+
+        def go():
+            if not on and self.load is not None:
+                self.load.input(False)
+                time.sleep(0.2)
+            return self.relay.load_relay(on)
+        self._bg(go, f"load {'connect' if on else 'disconnect'}", need="relay")
 
     def _ld_read(self):
         def rd():

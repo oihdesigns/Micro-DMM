@@ -1,0 +1,4 @@
+step,quantity,measured_ms,expected_ms,note
+awake,pass interval,,,LOOPMS 50 + the pass itself
+stage 1,probe interval (meter),,62.5,
+deep,probe interval,403.07,1000,

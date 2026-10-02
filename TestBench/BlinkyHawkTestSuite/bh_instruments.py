@@ -83,6 +83,8 @@ class RelayJig:
         self.raw_last = None        # last $LEDRAW fields
         self.has_usb = False        # jig firmware 1.2+: K8 switches the DUT's USB
         self.usb_state = None       # True = BlinkyHawk USB connected
+        self.has_load = False       # jig firmware 1.3+: D10 relay puts the e-load on the battery
+        self.load_state = None      # True = electronic load across the battery
         self._wlock = threading.Lock()
         self._waiters = []          # [(prefix, queue)]
         self._flash_subs = []
@@ -120,8 +122,14 @@ class RelayJig:
             self.has_usb = self.request("!USB", "$USB", 1.5, quiet=True) is not None
         except InstrumentError:
             self.has_usb = False
+        # fw 1.3+: the D10 relay connects the electronic load to the battery.
+        try:
+            self.has_load = self.request("!LOAD", "$LOAD", 1.5, quiet=True) is not None
+        except InstrumentError:
+            self.has_load = False
         return (self.ident + ("   LED sensor OK" if self.has_led else "   (no LED sensor)")
-                + ("   USB switch OK" if self.has_usb else "   (no USB switch)"))
+                + ("   USB switch OK" if self.has_usb else "   (no USB switch)")
+                + ("   load relay OK" if self.has_load else "   (no load relay)"))
 
     def close(self):
         self._stop.set()
@@ -167,10 +175,14 @@ class RelayJig:
             self.led_info = dict(t.split("=", 1) for t in line.split(",")[1:] if "=" in t)
         elif line.startswith("$USB,"):
             self.usb_state = line.split(",")[1].strip() == "1"
+        elif line.startswith("$LOAD,"):
+            self.load_state = line.split(",")[1].strip() == "1"
         elif line.startswith("$STATE,"):
             f = line.split(",")
             if len(f) >= 6:                # fw 1.2 appends the USB state
                 self.usb_state = f[5].strip() == "1"
+            if len(f) >= 7:                # fw 1.3 then the load relay
+                self.load_state = f[6].strip() == "1"
         elif line.startswith("$LEDRAW,"):
             self.raw_last = line.split(",")[1:]
         with self._slock:
@@ -234,6 +246,19 @@ class RelayJig:
             raise InstrumentError(f"USB relay did not switch: {line}")
         return line
 
+    def load_relay(self, on):
+        """Connect (True) / disconnect (False) the electronic load from the
+        BlinkyHawk's battery (jig fw 1.3, relay on D10).  Turn the load's INPUT
+        off before opening it -- Runner.load_link does that ordering."""
+        if not self.has_load:
+            raise InstrumentError("this relay jig has no load relay (needs jig firmware 1.3 "
+                                  "and the relay on D10)")
+        line = self.request(f"!LOAD,{1 if on else 0}", "$LOAD", 3.0)
+        self.load_state = line.split(",")[1].strip() == "1"
+        if self.load_state != bool(on):
+            raise InstrumentError(f"load relay did not switch: {line}")
+        return line
+
     def led_enable(self, on):
         return self.request(f"!LED,{1 if on else 0}", "$LEDSTATE", 2.0)
 
@@ -270,6 +295,8 @@ class SimRelayJig:
         bench.flash_sink = self._on_sim_flash
         self.has_usb = True
         self.usb_state = True
+        self.has_load = True
+        self.load_state = False
 
     @property
     def has_led(self):
@@ -292,6 +319,11 @@ class SimRelayJig:
         self.usb_state = bool(on)
         self.bench.usb = bool(on)
         return f"$USB,{int(bool(on))}"
+
+    def load_relay(self, on):
+        self.load_state = bool(on)
+        self.bench.load_linked = bool(on)
+        return f"$LOAD,{int(bool(on))}"
 
     def _on_sim_flash(self, colour, t_start, dur_ms, brightness):
         import random
@@ -671,17 +703,21 @@ class SimLoad:
             raise InstrumentError("drain current outside the cap")
         self._amps, self._von = amps, von
 
+    def _linked(self):
+        # the sim jig's load relay; benches without one are hard-wired
+        return getattr(self.bench, "load_linked", True)
+
     def input(self, on):
         b = self.bench.battery
-        b.load_amps = self._amps if on else 0.0
+        b.load_amps = self._amps if on and self._linked() else 0.0
         b.von = self._von
         self.state = "SINKING" if on else "off"
 
     def volts(self):
-        return self.bench.battery.terminal()
+        return self.bench.battery.terminal() if self._linked() else 0.0
 
     def amps(self):
-        return self.bench.battery.drawn()
+        return self.bench.battery.drawn() if self._linked() else 0.0
 
     def safe_off(self):
         self.input(False)

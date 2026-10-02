@@ -179,11 +179,31 @@ fights the charger. There are two ways to judge each level:
   charges the battery for a few seconds, so each level's `after tests`
   voltage shows the effect.
 
-**Check the load's isolation first.** With the load powered, measure
-resistance from its − input terminal to the mains earth pin. It should be
-open. If it isn't, the load earths the battery exactly the way USB does,
-and battery-level results won't represent a floating unit (see the Sep 28
-USB-vs-battery findings).
+**The load earths the battery** (confirmed 2026-09-30: with it connected,
+the generator sweep came out inverted and shifted). So it goes through a
+relay.
+
+### Load relay (relay jig D10, jig firmware 1.3)
+
+The load's inputs connect to the battery through a relay on the jig's
+**D10** (`!LOAD[,0|1]` → `$LOAD`; also the 7th field of `$STATE`). It boots
+**disconnected**, and resetting the jig drops it out as well. Battery-level
+runs switch it themselves:
+
+| Phase | Load relay |
+|---|---|
+| Resting voltage, drain rounds | connected (the load reads the cell through it) |
+| The unit's test conditions | **disconnected**: the board floats |
+| Reading `after tests` V | connected |
+| End of run, stop or error | disconnected |
+
+The load's input is always switched **off** before the relay opens, and
+only turned on after it closes, so the contacts never break current. The
+2 s V/I log skips while the relay is open, because the load sees no
+battery then. On the Test-rig tab, **Connect load / Disconnect load**
+drive it by hand, and **Input ON** refuses while it is disconnected.
+Without jig firmware 1.3 the suite assumes the load is hard-wired and
+says so once in the log.
 
 ## USB switched by the relay jig (K8)
 

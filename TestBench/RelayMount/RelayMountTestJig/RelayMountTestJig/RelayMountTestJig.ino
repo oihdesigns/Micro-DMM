@@ -6,6 +6,8 @@
  *           RELAY_PIN[n-1].  Channel 8 (K8) switches the BlinkyHawk's USB
  *           cable: it drives the coils of four external relays, one per USB
  *           wire (VBUS, D+, D-, GND).  K8 energised = USB connected.
+ *           A separate relay on D10 (v1.3) puts the electronic load across
+ *           the BlinkyHawk's battery; energised = load connected.
  *
  * What the jig does (hand schematic 2026-09-26):
  *
@@ -44,6 +46,9 @@
  *   !ALL                release K1-K7 (= FGEN, no sequencing).  USB untouched.
  *   !USB[,0|1]          connect (1) / disconnect (0) the BlinkyHawk's USB via
  *                       K8; bare = report.  (v1.2)
+ *   !LOAD[,0|1]         connect (1) / disconnect (0) the electronic load from
+ *                       the BlinkyHawk's battery (relay on D10); bare = report.
+ *                       Boots DISCONNECTED.  (v1.3)
  *   !SETTLE,<ms>        relay settle time between steps (default 25)
  *   !STATE              report state
  *   !ID                 identify
@@ -63,8 +68,9 @@
  * Replies:
  *   $BOOT,RelayJig,<ver>
  *   $ID,RelayJig,<ver>
- *   $STATE,<mode>,<K1..K8 bits>,<what the DUT sees>,<settle ms>,<usb 0|1>
+ *   $STATE,<mode>,<K1..K8 bits>,<what the DUT sees>,<settle ms>,<usb 0|1>,<load 0|1>
  *   $USB,<0|1>          reply to !USB
+ *   $LOAD,<0|1>         reply to !LOAD
  *   $FLASH,<startMs>,<durMs>,<n>,<fz>,<fy>,<fxl>,<vis>,<peak>,<sat>
  *        one per LED flash, sent when it ENDS.  fz/fy/fxl/vis are the mean of
  *        the samples in the flash with the dark baseline subtracted (FZ 450 nm
@@ -76,7 +82,7 @@
  *   anything not starting with '$' is human-readable debug.
  */
 
-#define FW_VERSION "1.2"
+#define FW_VERSION "1.3"
 
 // K8 = the BlinkyHawk's USB.  It is NOT part of the load selector: mode
 // changes and !ALL never move it, only !USB does.  Boot state is CONNECTED, so
@@ -86,6 +92,18 @@
 // BlinkyHawk.)  If your USB relays connect with K8 RELEASED instead, set
 // RELAY_NO_SWAPPED[K8] below rather than changing this.
 #define USB_BOOT_CONNECTED 1
+
+// The electronic load's battery relay, on its own pin (not one of the K1-K8
+// boards).  The load's input is not isolated from earth, so while it is across
+// the battery it earths the BlinkyHawk and shifts every reading: the test suite
+// connects it only to drain or to read the battery voltage, and keeps it off
+// while the unit is under test.  Boots (and, with an active-low module, resets)
+// DISCONNECTED -- the safe state.  Like the other relays the drive goes through
+// LOAD_ACTIVE_LOW / LOAD_NO_SWAPPED, so a different module or wiring is one
+// edit here.
+const uint8_t LOAD_PIN = 10;
+#define LOAD_ACTIVE_LOW RELAY_ACTIVE_LOW
+#define LOAD_NO_SWAPPED false
 
 #include <Wire.h>
 #include <Adafruit_AS7343.h>
@@ -117,6 +135,7 @@ enum { K1, K2, K3, K4, K5, K6, K7, K8 };
 
 bool relayOn[NUM_RELAYS];          // logical state: true = moved to the NO contact
 bool usbOn = USB_BOOT_CONNECTED;   // K8: the BlinkyHawk's USB is connected
+bool loadOn = false;               // D10: the electronic load is across the battery
 Mode currentMode = M_FGEN;
 uint16_t settleMs = 25;
 
@@ -214,6 +233,13 @@ void releaseAll() {
 void setUsb(bool on) {
   usbOn = on;
   driveRelay(K8, on);
+}
+
+void setLoad(bool on) {
+  bool coil = on ^ LOAD_NO_SWAPPED;
+  bool level = LOAD_ACTIVE_LOW ? !coil : coil;
+  digitalWrite(LOAD_PIN, level ? HIGH : LOW);
+  loadOn = on;
 }
 
 // ---------------------------------------------------------------------------
@@ -403,7 +429,9 @@ void reportState() {
   Serial.print(',');
   Serial.print(settleMs);
   Serial.print(',');
-  Serial.println(usbOn ? 1 : 0);     // appended: older hosts stop at settle
+  Serial.print(usbOn ? 1 : 0);       // appended: older hosts stop at settle
+  Serial.print(',');
+  Serial.println(loadOn ? 1 : 0);    // v1.3
 }
 
 void printHelp() {
@@ -412,6 +440,7 @@ void printHelp() {
   Serial.println(F("  !K,<1-8>,<0|1>   raw relay drive"));
   Serial.println(F("  !ALL             release K1-K7 (FGEN); USB untouched"));
   Serial.println(F("  !USB[,0|1]       BlinkyHawk USB via K8: 1 connect, 0 disconnect"));
+  Serial.println(F("  !LOAD[,0|1]      electronic load across the battery (D10): 1 connect, 0 disconnect"));
   Serial.println(F("  !SETTLE,<ms>     settle time per relay step"));
   Serial.println(F("  !STATE  !ID  !HELP"));
   Serial.println(F("  !LED[,0|1]  !LEDRAW[,ms]  !LEDCFG[,gain,atime,astep,thr]  !LEDSTAT"));
@@ -467,6 +496,12 @@ void handleCommand(char *cmd) {
       setUsb(*arg == '1');
     }
     Serial.print(F("$USB,")); Serial.println(usbOn ? 1 : 0);
+  } else if (!strcmp(cmd, "!LOAD")) {
+    if (arg) {
+      if (*arg != '0' && *arg != '1') { Serial.println(F("$ERR,usage !LOAD[,0|1]")); return; }
+      setLoad(*arg == '1');
+    }
+    Serial.print(F("$LOAD,")); Serial.println(loadOn ? 1 : 0);
   } else if (!strcmp(cmd, "!ALL")) {
     releaseAll();
     reportState();
@@ -545,6 +580,9 @@ void setup() {
     pinMode(RELAY_PIN[k], OUTPUT);
     driveRelay(k, on);
   }
+  setLoad(false);                          // same released-level trick as above
+  pinMode(LOAD_PIN, OUTPUT);
+  setLoad(false);
 
   Serial.begin(115200);
   delay(200);

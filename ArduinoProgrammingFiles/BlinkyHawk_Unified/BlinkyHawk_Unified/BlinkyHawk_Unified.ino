@@ -227,6 +227,64 @@
 #endif
 
 // ══════════════════════════════════════════════════════════════════
+//  USB SERIAL THAT CANNOT HANG THE LOOP
+// ══════════════════════════════════════════════════════════════════
+// The core's SerialUSB::write() checks "host connected" once, then spins until
+// the CDC FIFO has room -- forever, if nobody is draining it.  Found on the
+// test rig (Oct 2026): pull the cable (or cut USB on battery) while a host
+// still has the port open, and the next print -- the 4 Hz debug line, or a
+// reply still going out -- never returns.  Detection, alerts and sleep all
+// stop until a host reopens the port and reads the backlog.
+//
+// Every Serial use in this sketch goes through GuardedSerial instead (the
+// #define below): a write only ever hands the core as much as the FIFO has
+// room for, so the core's spin is never reached.  If the FIFO stays full for
+// SERIAL_TX_WAIT_MS nobody is reading -- the output is dropped and the port
+// counts as STALLED, so later writes drop at once with no wait.  The first
+// write that finds room again clears it.
+//
+// STALLED also makes `if (Serial)` false: a port that is open but not being
+// drained is no host.  Without that, a cable pulled while the GUI was
+// connected left DTR latched and lowPowerAllowed() held the board awake on
+// battery indefinitely.
+const uint32_t SERIAL_TX_WAIT_MS = 20;   // a live host drains in well under 1 ms
+
+class GuardedSerial : public Stream {
+public:
+  void   begin(unsigned long baud)    { SerialUSB.begin(baud); }
+  int    available() override         { return SerialUSB.available(); }
+  int    read() override              { return SerialUSB.read(); }
+  int    peek() override              { return SerialUSB.peek(); }
+  void   flush() override             { SerialUSB.flush(); }   // non-blocking in this core
+  int    availableForWrite() override { return SerialUSB.availableForWrite(); }
+  size_t write(uint8_t c) override    { return write(&c, 1); }
+  size_t write(const uint8_t *p, size_t n) override {
+    size_t done = 0;
+    while (done < n) {
+      int room = SerialUSB.availableForWrite();
+      if (room <= 0 && !stalled) {
+        uint32_t t0 = millis();
+        while ((room = SerialUSB.availableForWrite()) <= 0 &&
+               millis() - t0 < SERIAL_TX_WAIT_MS) { }
+      }
+      if (room <= 0) { stalled = true; return n; }   // drop the rest, quietly
+      stalled = false;
+      size_t chunk = min((size_t)room, n - done);
+      SerialUSB.write(p + done, chunk);              // fits: the core never spins
+      done += chunk;
+    }
+    return n;
+  }
+  using Print::write;
+  // Port open (DTR) AND being drained.
+  operator bool() { return !stalled && (bool)SerialUSB; }
+  bool stalled = false;
+};
+GuardedSerial bhSerial;
+#undef  Serial
+#define Serial bhSerial
+
+// ══════════════════════════════════════════════════════════════════
 //  PIN MAP / HARDWARE CONSTANTS
 // ══════════════════════════════════════════════════════════════════
 // These are VARIABLES because they depend on the board revision.
@@ -2649,6 +2707,8 @@ static void sleepHeartbeat() {
 // USB", and Standby stops the USB peripheral -- so without this the board slept
 // SLEEPSEC after the !SET and the COM port vanished, which looks like a crash.
 // Arm with !SLEEP as before; it now fires when the host closes the port.
+// "Open" means open AND reading (GuardedSerial): a pulled cable leaves DTR
+// latched, but the stalled FIFO releases the hold within a second.
 static bool lowPowerAllowed() {
   if (millis() < SLEEP_BOOT_GRACE_MS) return false;
   if (Serial) return false;
