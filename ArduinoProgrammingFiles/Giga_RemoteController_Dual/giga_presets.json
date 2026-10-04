@@ -988,7 +988,7 @@
     "bits": "16",
     "time": "500",
     "smooth": "7",
-    "log": "500",
+    "log": "1000",
     "diff_enable": true,
     "diff_pos": "A2",
     "diff_neg": "A3",

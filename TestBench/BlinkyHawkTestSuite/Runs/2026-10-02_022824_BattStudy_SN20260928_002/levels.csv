@@ -1,0 +1,6 @@
+level,after_V,applied,error,open_floor_V,open_passes,open_peak_V,rest_V,short_floor_V,short_passes,short_peak_V,tune_dir,tune_ok,unit_battv
+asfound,2.9187,"{""REFCENTER"": ""-0.0344"", ""REFBAND"": ""0.0457"", ""DETMETHOD"": ""2"", ""THRESH11"": ""0.2304"", ""SLEEPTHR11"": ""0.2304""}",,0.7386,7,2.3418,3.4916,0.7404,7,2.3799,2026-10-02_022915_AutoTune_study_asfound,False,3.591
+3.45V,3.548,"{""REFCENTER"": ""-0.0303"", ""REFBAND"": ""0.0461"", ""DETMETHOD"": ""2"", ""THRESH11"": ""0.2260"", ""SLEEPTHR11"": ""0.2260""}",,0.7407,7,2.3517,3.4645,0.7411,7,2.3605,2026-10-02_024016_AutoTune_study_3.45V,False,3.573
+3.40V,2.2607,"{""REFCENTER"": ""-0.0303"", ""REFBAND"": ""0.0468"", ""DETMETHOD"": ""2"", ""THRESH11"": ""0.2266"", ""SLEEPTHR11"": ""0.2266""}",,0.74,7,2.2621,3.4132,0.7407,8,2.3644,2026-10-02_025937_AutoTune_study_3.40V,False,3.535
+3.35V,2.5331,"{""REFCENTER"": ""-0.0245"", ""REFBAND"": ""0.0486"", ""DETMETHOD"": ""2"", ""THRESH11"": ""0.2240"", ""SLEEPTHR11"": ""0.2240""}",,0.7386,7,2.3556,3.3626,0.739,7,2.3277,2026-10-02_032518_AutoTune_study_3.35V,False,3.499
+3.30V,3.4394,,drain did not settle inside the band in 12 rounds,,,,,,,,,,

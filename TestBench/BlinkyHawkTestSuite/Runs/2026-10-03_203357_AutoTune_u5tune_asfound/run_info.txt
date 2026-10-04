@@ -1,0 +1,10 @@
+BlinkyHawk auto-tune  2026-10-03 20:33:57
+MODE: ON BATTERY, floating -- passes read back from the unit's RAM log after each unplug cycle
+relay:  $ID,RelayJig,1.3
+fgen:   RIGOL TECHNOLOGIES,DG852 Pro,DG8R273M00069,00.01.00.00.22
+scope:  not connected
+load:   RIGOL TECHNOLOGIES,DL3021A,DL3B26BM00237,00.01.05.00.01
+target trip +/-0.6 V; CLOSED <= 150k, OPEN >= 1M
+active threshold slot: THRESH11 (dip=3); STABLECOUNT 2
+6 passes minimum per condition, 2.2 s dwell, 0.5 s settle
+

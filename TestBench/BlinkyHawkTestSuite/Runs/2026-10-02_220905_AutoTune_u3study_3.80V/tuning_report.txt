@@ -1,0 +1,139 @@
+BlinkyHawk auto-tune  2026-10-02 22:09:05
+MODE: ON BATTERY, floating -- passes read back from the unit's RAM log after each unplug cycle
+relay:  $ID,RelayJig,1.3
+fgen:   RIGOL TECHNOLOGIES,DG852 Pro,DG8R273M00069,00.01.00.00.22
+scope:  not connected
+load:   RIGOL TECHNOLOGIES,DL3021A,DL3B26BM00237,00.01.05.00.01
+target trip +/-0.6 V; CLOSED <= 150k, OPEN >= 1M
+active threshold slot: THRESH11 (dip=3); STABLECOUNT 2
+6 passes minimum per condition, 2.2 s dwell, 0.5 s settle
+
+VOLTAGE -- front-end transfer (input V -> resting differential, median of passes)
+    -1.200 V  ->   -0.0864 V   (sd   1.50 mV, n=6)
+    -1.100 V  ->   -0.0791 V   (sd   2.95 mV, n=6)
+    -1.000 V  ->   -0.0698 V   (sd   3.56 mV, n=6)
+    -0.900 V  ->   -0.0608 V   (sd   3.28 mV, n=6)
+    -0.800 V  ->   -0.0563 V   (sd   2.95 mV, n=6)
+    -0.700 V  ->   -0.0482 V   (sd   1.04 mV, n=6)
+    -0.600 V  ->   -0.0371 V   (sd   2.07 mV, n=5)
+    -0.500 V  ->   -0.0324 V   (sd   2.13 mV, n=6)
+    -0.400 V  ->   -0.0242 V   (sd  17.19 mV, n=6)
+    -0.300 V  ->   -0.0139 V   (sd   2.92 mV, n=6)
+    -0.200 V  ->   -0.0042 V   (sd   2.93 mV, n=5)
+    -0.100 V  ->   +0.0050 V   (sd   1.61 mV, n=6)
+    +0.000 V  ->   +0.0126 V   (sd   2.88 mV, n=6)
+    +0.100 V  ->   +0.0195 V   (sd   1.01 mV, n=6)
+    +0.200 V  ->   +0.0273 V   (sd   2.67 mV, n=5)
+    +0.300 V  ->   +0.0359 V   (sd   2.75 mV, n=5)
+    +0.400 V  ->   +0.0437 V   (sd   2.27 mV, n=5)
+    +0.500 V  ->   +0.0501 V   (sd   0.84 mV, n=5)
+    +0.600 V  ->   +0.0622 V   (sd   3.40 mV, n=5)
+    +0.700 V  ->   +0.0686 V   (sd   1.83 mV, n=5)
+    +0.800 V  ->   +0.0761 V   (sd   2.93 mV, n=5)
+    +0.900 V  ->   +0.0834 V   (sd   0.94 mV, n=5)
+    +1.000 V  ->   +0.0933 V   (sd   3.22 mV, n=5)
+    +1.100 V  ->   +0.1004 V   (sd   2.22 mV, n=5)
+    +1.200 V  ->   +0.1112 V   (sd   2.05 mV, n=5)
+   gain: +side 82.6 mV/V, -side 83.0 mV/V   (asymmetry -0.4 %)
+
+For a trip at +/-0.6 V:  REFCENTER = +0.0125   REFBAND = 0.0497
+
+No-voltage conditions re-decided with those values (VOLTFAST 1.5):
+        SHORT: rest +0.0117 V (sd 3.45 mV), at   1.7 % of band, false-voltage rate   0.0 %
+          10K: rest +0.0117 V (sd 2.47 mV), at   1.8 % of band, false-voltage rate   0.0 %
+         150K: rest +0.0106 V (sd 2.17 mV), at   3.8 % of band, false-voltage rate   0.0 %
+           1M: rest +0.0130 V (sd 1.59 mV), at   0.9 % of band, false-voltage rate   0.0 %
+        10.6M: rest +0.0126 V (sd 3.03 mV), at   0.1 % of band, false-voltage rate   0.0 %
+         OPEN: rest +0.0123 V (sd 2.59 mV), at   0.4 % of band, false-voltage rate   0.0 %
+   worst averaged deviation 9.6 % of the band (want <= 80 %), worst single read 0.47 x band (VOLTFAST is 1.5)
+   Smallest trip voltage that stays clean with a 1.25x guard: +/-0.082 V
+
+Detection rate per swept DC level (per pass, re-decided):
+    -1.200 V :  100.0 %
+    -1.100 V :  100.0 %
+    -1.000 V :  100.0 %
+    -0.900 V :  100.0 %
+    -0.800 V :  100.0 %
+    -0.700 V :  100.0 %
+    -0.600 V :   40.0 %
+    -0.500 V :    0.0 %
+    -0.400 V :    0.0 %
+    -0.300 V :    0.0 %
+    -0.200 V :    0.0 %
+    -0.100 V :    0.0 %
+    +0.000 V :    0.0 %
+    +0.100 V :    0.0 %
+    +0.200 V :    0.0 %
+    +0.300 V :    0.0 %
+    +0.400 V :    0.0 %
+    +0.500 V :    0.0 %
+    +0.600 V :   40.0 %
+    +0.700 V :  100.0 %
+    +0.800 V :  100.0 %
+    +0.900 V :  100.0 %
+    +1.000 V :  100.0 %
+    +1.100 V :  100.0 %
+    +1.200 V :  100.0 %
+   Always detected from 0.7 V (+) and -0.7 V (-); never detected up to 0.5 V (+) / 0.5 V (-)
+
+AC conditions (per pass, then through STABLECOUNT debounce):
+   AC 5Vrms 60Hz: 100.0 % of passes see voltage, lead state VOLTAGE 100.0 % of the time
+
+VOLTAGE VERDICT: clean -- trips at +/-0.6 V with no false positives
+
+   battery mode: DETBAND 0.03 only (each extra candidate would cost another unplug cycle)
+OPEN/CLOSED -- must read CLOSED at <= 150k and OPEN at >= 1M
+
+[time-to-return, DETBAND 0.03]  (DETMETHOD 1, units ms)
+     SHORT ( short): mean    0.8843  sd   0.0238  range    0.8690 ..    0.9150  n=6
+       10K (   10k): mean    0.8847  sd   0.0243  range    0.8690 ..    0.9170  n=6
+      150K (  150k): mean    0.9303  sd   0.0238  range    0.9150 ..    0.9610  n=6
+        1M (    1M): mean    1.0443  sd   0.0188  range    1.0060 ..    1.0520  n=6
+     10.6M ( 10.6M): mean    1.2120  sd   0.0252  range    1.1890 ..    1.2350  n=6
+      OPEN (  open): mean    1.2350  sd   0.0291  range    1.1890 ..    1.2810  n=6
+   clean cut points between adjacent loads: 150K|1M, 1M|10.6M
+   CLEAN: threshold 0.9940 ms, 2.7 sigma / 0.0120 ms from the nearest recorded pass (150K vs 1M)
+
+[tail area (method 2)]  (DETMETHOD 2, units V*ms)
+     SHORT ( short): mean    0.0819  sd   0.0010  range    0.0810 ..    0.0835  n=6
+       10K (   10k): mean    0.0828  sd   0.0009  range    0.0813 ..    0.0838  n=6
+      150K (  150k): mean    0.0891  sd   0.0013  range    0.0880 ..    0.0913  n=6
+        1M (    1M): mean    0.1114  sd   0.0012  range    0.1099 ..    0.1125  n=6
+     10.6M ( 10.6M): mean    0.1564  sd   0.0012  range    0.1550 ..    0.1584  n=6
+      OPEN (  open): mean    0.1703  sd   0.0018  range    0.1671 ..    0.1721  n=6
+   clean cut points between adjacent loads: 10K|150K, 150K|1M, 1M|10.6M, 10.6M|OPEN
+   CLEAN: threshold 0.1005 V*ms, 9.0 sigma / 0.0093 V*ms from the nearest recorded pass (150K vs 1M)
+
+[single |diff| (method 0)]  (DETMETHOD 0, units V)
+     SHORT ( short): mean    0.4714  sd   0.0074  range    0.4572 ..    0.4770  n=6
+       10K (   10k): mean    0.4785  sd   0.0014  range    0.4766 ..    0.4804  n=6
+      150K (  150k): mean    0.4991  sd   0.0016  range    0.4971 ..    0.5010  n=6
+        1M (    1M): mean    0.5652  sd   0.0100  range    0.5539 ..    0.5781  n=6
+     10.6M ( 10.6M): mean    0.6620  sd   0.0046  range    0.6571 ..    0.6683  n=6
+      OPEN (  open): mean    0.6829  sd   0.0035  range    0.6794 ..    0.6893  n=6
+   clean cut points between adjacent loads: 10K|150K, 150K|1M, 1M|10.6M, 10.6M|OPEN
+   CLEAN: threshold 0.5142 V, 5.1 sigma / 0.0132 V from the nearest recorded pass (150K vs 1M)
+
+OPEN/CLOSED VERDICT: clean with [tail area (method 2)], threshold 0.1005 V*ms
+
+   SLEEPTHR11 set to the same value -- the sleep/wake check in VERIFY is what proves it wakes.
+VERIFY -- the tuned settings, run for real (lead state after STABLECOUNT debounce):
+               load SHORT: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                 load 10K: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                load 150K: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                  load 1M: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+               load 10.6M: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+                load OPEN: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+               DC -0.800V: expect VDC-  C/F/V   0.0/  0.0/100.0 %   PASS
+               DC -0.690V: expect VDC-  C/F/V   0.0/  0.0/100.0 %   PASS
+               DC -0.510V: expect !V  C/F/V   0.0/100.0/  0.0 %   PASS
+               DC +0.510V: expect !V  C/F/V   0.0/100.0/  0.0 %   PASS
+               DC +0.690V: expect VDC+  C/F/V   0.0/  0.0/100.0 %   PASS
+               DC +0.800V: expect VDC+  C/F/V   0.0/  0.0/100.0 %   PASS
+            AC 5Vrms 60Hz: expect VAC  C/F/V   0.0/  0.0/100.0 %   PASS
+           gen output off: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+
+VERIFY VERDICT: every condition read as expected
+
+Applied to device RAM (NOT saved): REFCENTER=0.0125, REFBAND=0.0497, DETMETHOD=2, THRESH11=0.1005, SLEEPTHR11=0.1005
+Press 'Save to EEPROM' to keep them, or 'Revert' to put back config_before.csv.

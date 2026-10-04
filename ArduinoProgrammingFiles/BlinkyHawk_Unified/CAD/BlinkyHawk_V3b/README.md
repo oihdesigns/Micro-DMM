@@ -4,6 +4,32 @@ Use **BlinkyHawk_V3b_Shell.3mf** and **BlinkyHawk_V3b_Lid.3mf** for the first fi
 
 **BlinkyHawk_V3b_Lid_Multipart.3mf** retains the original 15 bodies for separate lettering/panel colors. Import its bodies together as parts of one object, preserving their relative positions. It has no assigned filament colors or printer profile. Use the ordinary lid 3MF for a single-material print.
 
+## Slide-switch variant — 2 October 2026
+
+Use **BlinkyHawk_V3b_Shell_SlideSwitch.3mf** (or the equivalent STL) with the existing V3b lid. The original shell files remain available.
+
+- Centered on the long wall opposite the LED (X=0 wall; Y=38.6985 mm).
+- Opening: 10.66 mm along the wall × 5.8 mm vertically, with its top edge flush with the Z=16 mm enclosure lip. This forms an open-top notch; the existing lid closes its top.
+- Two through-holes: 1.8 mm diameter, 15.0 mm center spacing along the horizontal opening axis, at Z=13.1 mm.
+- Exact nominal dimensions, with no added print-fit allowance. Switch depth, flange thickness, terminals, and screw-head clearance were not supplied and have not been checked.
+- STL and 3MF verified as one watertight positive-volume solid, with matching volume. Changes are confined to the intended side-wall cuts. Other enclosure features and the lid are preserved.
+
+See `SlideSwitch_Preview.png` and `SlideSwitch_Validation.json`. Reproduce with `work/add_slide_switch.py`. These are revised printable meshes; native SolidWorks feature files are not present in this folder and were not edited.
+
+## Switch above XIAO variant — 3 October 2026
+
+Use **BlinkyHawk_V3b_Shell_SlideSwitch_AboveXIAO.3mf** (or its equivalent STL) with the existing V3b lid. This variant starts from the uncut V3b shell, so it has only the new switch opening. The earlier centered switch version remains available.
+
+The switch stays on the long wall opposite the LED, with its top edge at the enclosure lip. Its center is now Y=64.7552 mm, aligned with the longitudinal center of the imported XIAO board (Y=54.2777–75.2327 mm). This moves the switch 26.0567 mm toward the USB end. The opening remains 10.66 × 5.8 mm; the two mounting holes remain Ø1.8 mm, 15 mm apart, at Z=13.1 mm.
+
+The new shell and 3MF round-trip are one watertight solid. Dimensional section checks confirm both holes, and boolean checks confirm that only the intended cuts changed the shell. Switch depth and actual hardware clearance remain unverified. See `SlideSwitch_AboveXIAO_Preview.png` and `SlideSwitch_AboveXIAO_Validation.json`. Reproduce with `work/add_slide_switch.py --above-xiao`.
+
+## Switch above XIAO, moved inward 5 mm — 3 October 2026
+
+Use **BlinkyHawk_V3b_Shell_SlideSwitch_AboveXIAO_Inward5mm.3mf** (or its equivalent STL) with the existing lid. The switch center is Y=59.7552 mm: 5 mm toward the enclosure middle from the previous above-XIAO position, away from the USB-end lid screw mount. Opening dimensions, top-lip alignment, and mounting holes are unchanged. Earlier versions remain available; this shell has only the relocated opening and holes.
+
+Both exports pass watertight single-solid and dimensional checks. The shift increases longitudinal separation from the end screw mount by 5 mm; actual switch flange, screw-head, and body clearance still require a fit check. See `SlideSwitch_AboveXIAO_Inward5mm_Preview.png` and `SlideSwitch_AboveXIAO_Inward5mm_Validation.json`. Reproduce with `work/add_slide_switch.py --above-xiao --shift-inward-5mm`.
+
 ## Configuration
 
 - PCB: `PCBDesigns/BlinkyHawk_V3b/BlinkyHawk_V3b.kicad_pcb`, as supplied.

@@ -1,0 +1,8 @@
+level,after_V,applied,error,open_floor_V,open_passes,open_peak_V,rest_V,short_floor_V,short_passes,short_peak_V,tune_dir,tune_ok,unit_battv
+3.90V,3.7632,"{""REFCENTER"": ""-0.0292"", ""REFBAND"": ""0.0490"", ""DETMETHOD"": ""2"", ""THRESH11"": ""0.2267"", ""SLEEPTHR11"": ""0.2267""}",,0.7482,8,2.4057,3.9113,0.7485,8,2.3926,2026-10-03_130310_AutoTune_u4study_3.90V,True,4.050
+3.80V,3.8953,"{""REFCENTER"": ""-0.0266"", ""REFBAND"": ""0.0493"", ""DETMETHOD"": ""2"", ""THRESH11"": ""0.2344"", ""SLEEPTHR11"": ""0.2344""}",,0.746,8,2.4046,3.8132,0.7506,7,2.3249,2026-10-03_132252_AutoTune_u4study_3.80V,True,3.949
+3.75V,3.6573,"{""REFCENTER"": ""-0.0296"", ""REFBAND"": ""0.0486"", ""DETMETHOD"": ""2"", ""THRESH11"": ""0.2192"", ""SLEEPTHR11"": ""0.2192""}",,0.7457,7,2.3637,3.7649,0.7496,7,2.3746,2026-10-03_133653_AutoTune_u4study_3.75V,True,3.869
+3.70V,2.8484,"{""REFCENTER"": ""-0.0293"", ""REFBAND"": ""0.0486"", ""DETMETHOD"": ""2"", ""THRESH11"": ""0.2339"", ""SLEEPTHR11"": ""0.2339""}",,0.7478,8,2.4356,3.7123,0.7474,8,2.3693,2026-10-03_135142_AutoTune_u4study_3.70V,True,3.840
+3.65V,3.7415,"{""REFCENTER"": ""-0.0283"", ""REFBAND"": ""0.0486"", ""DETMETHOD"": ""2"", ""THRESH11"": ""0.2180"", ""SLEEPTHR11"": ""0.2180""}",,0.7506,8,2.4268,3.6629,0.7489,7,2.3538,2026-10-03_140822_AutoTune_u4study_3.65V,True,3.776
+3.60V,,,"relay jig: no reply to !MODE,10K",0.7432,8,2.4131,3.6135,0.7446,8,2.2303,,,3.749
+3.55V,,,"relay jig: no reply to !USB,0",,,,,,,,,,

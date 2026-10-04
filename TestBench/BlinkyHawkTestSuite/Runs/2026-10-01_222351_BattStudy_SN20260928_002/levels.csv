@@ -1,0 +1,12 @@
+level,after_V,applied,error,open_floor_V,open_passes,open_peak_V,rest_V,short_floor_V,short_passes,short_peak_V,tune_dir,tune_ok,unit_battv
+asfound,3.4319,"{""REFCENTER"": ""-0.0247"", ""REFBAND"": ""0.0480"", ""DETMETHOD"": ""2"", ""THRESH11"": ""0.2122"", ""SLEEPTHR11"": ""0.2122""}",,0.7397,8,2.4903,4.1971,0.7418,7,2.4575,2026-10-01_222426_AutoTune_study_asfound,True,4.205
+4.00V,2.7235,"{""REFCENTER"": ""-0.0229"", ""REFBAND"": ""0.0488"", ""DETMETHOD"": ""2"", ""THRESH11"": ""0.2171"", ""SLEEPTHR11"": ""0.2171""}",,0.7464,7,2.4328,4.0149,0.7482,7,2.4388,2026-10-01_224658_AutoTune_study_4.00V,False,4.120
+3.90V,3.6715,"{""REFCENTER"": ""-0.0244"", ""REFBAND"": ""0.0490"", ""DETMETHOD"": ""2"", ""THRESH11"": ""0.2140"", ""SLEEPTHR11"": ""0.2140""}",,0.7439,7,2.4907,3.9141,0.7482,7,2.3965,2026-10-01_231121_AutoTune_study_3.90V,False,3.973
+3.80V,3.8816,"{""REFCENTER"": ""-0.0207"", ""REFBAND"": ""0.0485"", ""DETMETHOD"": ""2"", ""THRESH11"": ""0.2126"", ""SLEEPTHR11"": ""0.2126""}",,0.745,7,2.4769,3.8145,0.7464,7,2.4522,2026-10-01_233706_AutoTune_study_3.80V,True,3.906
+3.75V,3.0835,"{""REFCENTER"": ""-0.0238"", ""REFBAND"": ""0.0494"", ""DETMETHOD"": ""0"", ""THRESH11"": ""0.5750"", ""SLEEPTHR11"": ""0.5750""}",,0.745,8,2.4942,3.7645,0.746,7,2.4332,2026-10-01_235507_AutoTune_study_3.75V,True,3.867
+3.70V,3.0957,"{""REFCENTER"": ""-0.0227"", ""REFBAND"": ""0.0497"", ""DETMETHOD"": ""2"", ""THRESH11"": ""0.2177"", ""SLEEPTHR11"": ""0.2177""}",,0.7446,7,2.4413,3.7148,0.7471,8,2.3944,2026-10-02_001222_AutoTune_study_3.70V,True,3.780
+3.65V,3.4842,"{""REFCENTER"": ""-0.0237"", ""REFBAND"": ""0.0493"", ""DETMETHOD"": ""2"", ""THRESH11"": ""0.2384"", ""SLEEPTHR11"": ""0.2384""}",,0.7425,7,2.4325,3.6643,0.7446,7,2.412,2026-10-02_003249_AutoTune_study_3.65V,True,3.741
+3.60V,3.4943,"{""REFCENTER"": ""-0.0243"", ""REFBAND"": ""0.0489"", ""DETMETHOD"": ""2"", ""THRESH11"": ""0.2320"", ""SLEEPTHR11"": ""0.2320""}",,0.7411,7,2.43,3.6143,0.7446,7,2.3542,2026-10-02_010450_AutoTune_study_3.60V,True,3.716
+3.55V,3.2252,"{""REFCENTER"": ""-0.0253"", ""REFBAND"": ""0.0474"", ""DETMETHOD"": ""2"", ""THRESH11"": ""0.2223"", ""SLEEPTHR11"": ""0.2223""}",,0.7422,7,2.4674,3.5644,0.7422,7,2.4501,2026-10-02_013946_AutoTune_study_3.55V,False,3.673
+3.50V,3.5776,,drain did not settle inside the band in 12 rounds,,,,,,,,,,
+3.45V,3.5429,,drain did not settle inside the band in 12 rounds,,,,,,,,,,

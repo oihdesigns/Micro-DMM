@@ -1,0 +1,4 @@
+level,after_V,applied,error,open_floor_V,open_passes,open_peak_V,rest_V,short_floor_V,short_passes,short_peak_V,tune_dir,tune_ok,unit_battv
+3.60V,2.9612,"{""REFCENTER"": ""-0.0298"", ""REFBAND"": ""0.0496"", ""DETMETHOD"": ""2"", ""THRESH11"": ""0.2389"", ""SLEEPTHR11"": ""0.2389""}",,0.7436,7,2.4265,3.6086,0.7439,7,2.3439,2026-10-03_174944_AutoTune_u4study_3.60V,False,3.820
+3.55V,,,"relay jig: no reply to !MODE,OPEN",0.7563,5,1.2868,3.5286,0.7556,5,1.2896,,,3.742
+3.50V,,,"relay jig: no reply to !USB,0",,,,,,,,,,

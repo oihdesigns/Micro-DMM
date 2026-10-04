@@ -1,0 +1,30 @@
+{
+  "source": "BlinkyHawk_V3b_Shell.stl",
+  "source_sha256": "d829db84b77b7f7bdefa9990b9f28dccb65dc8ab1aba0b222eb31554ede1d9a3",
+  "opening_mm": [
+    10.66,
+    5.8
+  ],
+  "top_mm": 16.0,
+  "center_y_mm": 38.698501586914055,
+  "center_z_mm": 13.1,
+  "mounting_hole_diameter_mm": 1.8,
+  "mounting_hole_pitch_mm": 15.0,
+  "hole_centers_yz_mm": [
+    [
+      31.198501586914055,
+      13.1
+    ],
+    [
+      46.198501586914055,
+      13.1
+    ]
+  ],
+  "watertight": true,
+  "connected_solids": 1,
+  "stl_3mf_volume_match": true,
+  "removed_material_mm3": 153.90532571910526,
+  "modification_confined_to_opposite_side_wall": true,
+  "tolerance_allowance_mm": 0,
+  "switch_body_depth_not_supplied": true
+}

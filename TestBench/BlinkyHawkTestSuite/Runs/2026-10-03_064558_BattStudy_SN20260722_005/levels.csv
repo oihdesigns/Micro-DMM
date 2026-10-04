@@ -1,0 +1,3 @@
+level,after_V,applied,open_floor_V,open_passes,open_peak_V,rest_V,short_floor_V,short_passes,short_peak_V,tune_dir,tune_ok,unit_battv
+asfound,3.2267,"{""REFCENTER"": ""0.0022"", ""REFBAND"": ""0.0125"", ""VOLTFAST"": ""3.5000"", ""DETMETHOD"": ""0"", ""THRESH11"": ""0.4999"", ""SLEEPTHR11"": ""0.4999""}",0.7443,7,2.2473,3.3865,0.7404,7,2.2614,2026-10-03_064655_AutoTune_u3study_asfound,False,3.442
+3.35V,2.2356,"{""DETBAND"": ""0.0300"", ""DETMETHOD"": ""1"", ""THRESH11"": ""0.7640"", ""SLEEPTHR11"": ""0.7640""}",0.7411,7,2.1009,3.2621,0.7414,7,1.8896,2026-10-03_065135_AutoTune_u3study_3.35V,True,3.308

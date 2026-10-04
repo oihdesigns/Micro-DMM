@@ -1,0 +1,23 @@
+[15:59:21] $ID,RelayJig,1.3   LED sensor OK   USB switch OK   load relay OK
+[15:59:21] LED sensor polling off: $LEDSTATE,sensor=1,on=0,gain=5,atime=15,astep=256,thr=20.0,hz=84.3,base=9.0,fullscale=4112
+[15:59:21] RIGOL TECHNOLOGIES,DG852 Pro,DG8R273M00069,00.01.00.00.22
+[15:59:21] RIGOL TECHNOLOGIES,DL3021A,DL3B26BM00237,00.01.05.00.01
+[15:59:21] Giga meter 192.168.40.152:8080   preset BlinkyHawkObservation: A2-A3 x7.005
+[15:59:22] saved config: THRESH11=0.5350 SLEEPTHR11=0.5350 REFCENTER=0.0125 REFBAND=0.0490 BEEP=1
+[15:59:22] ======== level 1/7: 3.60V ========
+[15:59:23] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[15:59:23] log:    load relay: electronic load ON the battery
+[15:59:35] log:    drain round 1: rested 4.129 V -> 3.968 V at 156 mA (~1036 mohm); expecting I x R + 0 mV of recovery
+[16:39:34] !! level 3.60V failed: drain took longer than 2400 s
+[16:39:34] log:    USB relay: BlinkyHawk USB connected
+[16:39:37] ======== level 2/7: 3.55V ========
+[16:39:38] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[16:39:49] log:    drain round 1: rested 3.731 V -> 3.563 V at 156 mA (~1078 mohm); expecting I x R + 0 mV of recovery
+[17:19:48] !! level 3.55V failed: drain took longer than 2400 s
+[17:19:48] log:    USB relay: BlinkyHawk USB connected
+[17:19:51] !! two levels in a row failed -- stopping the study
+[17:19:51] cleanup
+[17:19:51] log:    load relay: electronic load disconnected
+[17:19:52] BEEP restored to 1
+[17:19:52] STUDY DIR C:\Users\Nick\Documents\GitHub\Micro-DMM\TestBench\BlinkyHawkTestSuite\Runs\2026-10-03_155917_BattStudy_SN20260722_005_rev2
+[17:19:52] END

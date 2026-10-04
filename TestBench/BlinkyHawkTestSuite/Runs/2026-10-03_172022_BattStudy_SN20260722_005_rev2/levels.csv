@@ -1,0 +1,3 @@
+level,error,open_floor_V,open_passes,open_peak_V,rest_V,short_floor_V,short_passes,short_peak_V,unit_battv
+3.60V,"relay jig: no reply to !MODE,OPEN",0.7404,9,2.4208,3.5942,0.7439,7,2.3467,3.810
+3.55V,"WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))",,,,,,,,

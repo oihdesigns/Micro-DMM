@@ -595,10 +595,13 @@ void configDefaults() {
   cfg.ledVoltPerMs    = 500;
 
   cfg.chargeThreshV  = 2.0f;
-  // 3.70, not the cell's electrical floor: below ~3.6 V moving the leads trips
-  // the voltage detector (measured Aug 2026), so "empty" means "stop believing
-  // it" rather than "the cell is flat".
-  cfg.battEmptyV     = 3.70f;
+  // Not the cell's electrical floor: "empty" means "stop believing it" rather
+  // than "the cell is flat".  Aug 2026 saw the voltage detector trip on moving
+  // leads below ~3.6 V; the Oct 2026 battery-range study (test suite, V3b, one
+  // recalibration per 50 mV step) was clean down to 3.56 V rested and first
+  // showed false VDC trips at 3.49 V -- so 3.55.  3.70 had the gauge at 0 %
+  // with over half the usable charge still in the cell.
+  cfg.battEmptyV     = 3.55f;
   cfg.battFullV      = 4.20f;
   cfg.battFullPct    = 90;
 

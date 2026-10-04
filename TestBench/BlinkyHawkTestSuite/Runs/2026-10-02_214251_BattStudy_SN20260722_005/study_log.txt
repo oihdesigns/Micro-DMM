@@ -1,0 +1,40 @@
+[21:42:54] $ID,RelayJig,1.3   LED sensor OK   USB switch OK   load relay OK
+[21:42:54] RIGOL TECHNOLOGIES,DG852 Pro,DG8R273M00069,00.01.00.00.22
+[21:42:54] RIGOL TECHNOLOGIES,DL3021A,DL3B26BM00237,00.01.05.00.01
+[21:42:54] Giga meter 192.168.40.152:8080   preset BlinkyHawkObservation: A2-A3 x7.005
+[21:42:55] saved config: THRESH11=0.1000 SLEEPTHR11=0.2800 REFCENTER=-0.0260 REFBAND=0.0490 BEEP=1
+[21:42:55] ======== level 1/11: asfound ========
+[21:42:56] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[21:42:56] log:    load relay: electronic load ON the battery
+[21:43:27] log:    load relay: electronic load disconnected
+[21:44:04]    meter L01_asfound_SHORT: 7 passes, cadence 55.99114331723028, node peak 2.080 V, floor 0.739 V
+[21:44:32]    meter L01_asfound_OPEN: 7 passes, cadence 56.03626107977438, node peak 1.808 V, floor 0.739 V
+[21:44:32] log:    USB relay: BlinkyHawk USB connected
+[21:44:34]    unit says battv=3.973 (54 %), cell rested 3.906 V
+[21:44:34] log: == auto-tune -> C:\Users\Nick\Documents\GitHub\Micro-DMM\TestBench\BlinkyHawkTestSuite\Runs\2026-10-02_214434_AutoTune_u3study_asfound
+[21:44:35] stage: Voltage: characterising
+[21:44:35] log:    battery capture: 32 condition(s) in 2 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[21:44:36] stage: volt 1/2: UNPLUG USB
+[21:44:37] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[21:45:07] log: !! capture interrupted: the unit may still hold the capture settings in RAM (SLEEPSEC 0 = never sleeps, SLEEPTICKS, CHGINHIBIT 1, VMODE, log armed). Plug it in and press 'Reload EEPROM -> RAM' on the Configuration tab, or power-cycle it.  Nothing was saved to EEPROM.
+BlinkyHawk auto-tune  2026-10-02 21:44:34
+MODE: ON BATTERY, floating -- passes read back from the unit's RAM log after each unplug cycle
+relay:  $ID,RelayJig,1.3
+fgen:   RIGOL TECHNOLOGIES,DG852 Pro,DG8R273M00069,00.01.00.00.22
+scope:  not connected
+load:   RIGOL TECHNOLOGIES,DL3021A,DL3B26BM00237,00.01.05.00.01
+target trip +/-0.6 V; CLOSED <= 150k, OPEN >= 1M
+active threshold slot: THRESH11 (dip=3); STABLECOUNT 2
+6 passes minimum per condition, 2.2 s dwell, 0.5 s settle
+
+[21:45:07] !! level asfound failed: relay jig: no reply to !MODE,FGEN
+[21:45:10] !! USB did not come back: relay jig: no reply to !USB,1
+[21:45:13] ======== level 2/11: 3.80V ========
+[21:45:16] !! level 3.80V failed: relay jig: no reply to !USB,0
+[21:45:19] !! USB did not come back: relay jig: no reply to !USB,1
+[21:45:22] !! two levels in a row failed -- stopping the study
+[21:45:22] cleanup
+[21:45:30] !! cleanup: relay jig: no reply to !USB,1
+[21:45:33] log: !! could not restore the USB relay: relay jig: no reply to !USB,1
+[21:45:33] STUDY DIR C:\Users\Nick\Documents\GitHub\Micro-DMM\TestBench\BlinkyHawkTestSuite\Runs\2026-10-02_214251_BattStudy_SN20260722_005
+[21:45:33] END

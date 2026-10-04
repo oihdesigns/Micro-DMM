@@ -1,0 +1,6 @@
+level,after_V,applied,error,open_floor_V,open_passes,open_peak_V,rest_V,short_floor_V,short_passes,short_peak_V,tune_dir,tune_ok,unit_battv
+asfound,4.1948,"{""REFCENTER"": ""-0.0276"", ""REFBAND"": ""0.0486"", ""DETMETHOD"": ""2"", ""THRESH11"": ""0.2037"", ""SLEEPTHR11"": ""0.2037""}",,0.7411,7,2.4663,4.1863,0.7422,7,2.424,2026-10-02_085119_AutoTune_u1study_asfound,True,4.187
+4.00V,3.8772,"{""REFCENTER"": ""-0.0251"", ""REFBAND"": ""0.0485"", ""DETMETHOD"": ""2"", ""THRESH11"": ""0.2132"", ""SLEEPTHR11"": ""0.2132""}",,0.7436,7,2.4106,4.0119,0.7453,7,2.4363,2026-10-02_091153_AutoTune_u1study_4.00V,False,4.089
+3.90V,3.6374,"{""REFCENTER"": ""-0.0249"", ""REFBAND"": ""0.0493"", ""DETMETHOD"": ""2"", ""THRESH11"": ""0.2213"", ""SLEEPTHR11"": ""0.2213""}",,0.7422,8,2.4603,3.9147,0.7432,7,2.3704,2026-10-02_093032_AutoTune_u1study_3.90V,True,3.994
+3.80V,3.4314,,the USB relay switched ON but COM14 did not appear within 20 s -- check the K8 relay wiring to the cable,0.7443,7,2.4512,3.8143,0.7425,7,2.4699,,,3.871
+3.75V,2.7703,,COM14 did not come back (board browned out or hung?),0.4614,0,0.5224,3.7606,0.4617,0,0.5224,,,

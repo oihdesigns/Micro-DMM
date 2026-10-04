@@ -1,0 +1,8 @@
+level,after_V,applied,error,open_floor_V,open_passes,open_peak_V,rest_V,short_floor_V,short_passes,short_peak_V,tune_dir,tune_ok,unit_battv
+asfound,2.7826,"{""REFCENTER"": ""0.0121"", ""REFBAND"": ""0.0486"", ""DETMETHOD"": ""2"", ""THRESH11"": ""0.1016"", ""SLEEPTHR11"": ""0.1016""}",,0.7379,7,1.8691,3.9504,0.7393,7,2.0021,2026-10-02_215639_AutoTune_u3study_asfound,False,4.017
+3.80V,3.8403,"{""REFCENTER"": ""0.0125"", ""REFBAND"": ""0.0497"", ""DETMETHOD"": ""2"", ""THRESH11"": ""0.1005"", ""SLEEPTHR11"": ""0.1005""}",,0.74,7,2.1164,3.806,0.7376,7,2.1573,2026-10-02_220905_AutoTune_u3study_3.80V,True,3.925
+3.75V,3.044,"{""REFCENTER"": ""0.0107"", ""REFBAND"": ""0.0493"", ""DETMETHOD"": ""0"", ""THRESH11"": ""0.5192"", ""SLEEPTHR11"": ""0.5192""}",,0.7379,7,2.0811,3.7558,0.7386,7,2.145,2026-10-02_221654_AutoTune_u3study_3.75V,True,3.873
+3.70V,2.1531,"{""REFCENTER"": ""0.0098"", ""REFBAND"": ""0.0488"", ""DETMETHOD"": ""0"", ""THRESH11"": ""0.5174"", ""SLEEPTHR11"": ""0.5174""}",,0.7376,7,1.8487,3.706,0.7358,7,1.9609,2026-10-02_222531_AutoTune_u3study_3.70V,True,3.818
+3.65V,3.7076,"{""REFCENTER"": ""0.0127"", ""REFBAND"": ""0.0477"", ""DETMETHOD"": ""2"", ""THRESH11"": ""0.1016"", ""SLEEPTHR11"": ""0.1016""}",,0.7379,7,2.1418,3.657,0.7383,7,1.934,2026-10-02_223434_AutoTune_u3study_3.65V,True,3.746
+3.60V,2.5738,,"Cannot configure port, something went wrong. Original message: PermissionError(13, 'A device attached to the system is not functioning.', None, 31)",0.7355,7,2.1351,3.609,0.7372,7,2.2684,,,
+3.55V,,,Write timeout,0.7365,7,2.1848,3.5607,0.7376,7,2.2476,,,3.645

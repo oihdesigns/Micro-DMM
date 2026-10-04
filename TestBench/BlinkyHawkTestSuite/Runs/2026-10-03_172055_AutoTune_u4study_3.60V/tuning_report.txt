@@ -1,0 +1,85 @@
+BlinkyHawk auto-tune  2026-10-03 17:20:55
+MODE: ON BATTERY, floating -- passes read back from the unit's RAM log after each unplug cycle
+relay:  $ID,RelayJig,1.3
+fgen:   RIGOL TECHNOLOGIES,DG852 Pro,DG8R273M00069,00.01.00.00.22
+scope:  not connected
+load:   RIGOL TECHNOLOGIES,DL3021A,DL3B26BM00237,00.01.05.00.01
+target trip +/-0.6 V; CLOSED <= 150k, OPEN >= 1M
+active threshold slot: THRESH11 (dip=3); STABLECOUNT 2
+6 passes minimum per condition, 2.2 s dwell, 0.5 s settle
+
+VOLTAGE -- front-end transfer (input V -> resting differential, median of passes)
+    -1.200 V  ->   -0.1413 V   (sd  16.73 mV, n=5)
+    -1.100 V  ->   -0.1268 V   (sd  12.96 mV, n=6)
+    -1.000 V  ->   -0.1122 V   (sd   7.55 mV, n=6)
+    -0.900 V  ->   -0.1086 V   (sd  17.29 mV, n=5)
+    -0.800 V  ->   -0.0937 V   (sd   5.34 mV, n=6)
+    -0.700 V  ->   -0.0938 V   (sd   9.03 mV, n=5)
+    -0.600 V  ->   -0.0816 V   (sd  10.50 mV, n=5)
+    -0.500 V  ->   -0.0855 V   (sd  13.47 mV, n=5)
+    -0.400 V  ->   -0.0665 V   (sd  13.28 mV, n=5)
+    -0.300 V  ->   -0.0552 V   (sd  18.06 mV, n=5)
+    -0.200 V  ->   -0.0528 V   (sd  15.90 mV, n=5)
+    -0.100 V  ->   -0.0467 V   (sd   7.50 mV, n=5)
+    +0.000 V  ->   -0.0334 V   (sd  13.77 mV, n=6)
+    +0.100 V  ->   -0.0244 V   (sd   9.16 mV, n=5)
+    +0.200 V  ->   -0.0107 V   (sd   7.40 mV, n=6)
+    +0.300 V  ->   -0.0066 V   (sd   5.69 mV, n=6)
+    +0.400 V  ->   +0.0031 V   (sd   3.33 mV, n=6)
+    +0.500 V  ->   +0.0108 V   (sd   6.18 mV, n=6)
+    +0.600 V  ->   +0.0175 V   (sd  12.59 mV, n=6)
+    +0.700 V  ->   +0.0199 V   (sd  25.36 mV, n=6)
+    +0.800 V  ->   +0.0306 V   (sd   5.06 mV, n=6)
+    +0.900 V  ->   +0.0397 V   (sd   9.44 mV, n=6)
+    +1.000 V  ->   +0.0455 V   (sd   9.95 mV, n=5)
+    +1.100 V  ->   +0.0515 V   (sd  10.07 mV, n=6)
+    +1.200 V  ->   +0.0621 V   (sd  15.06 mV, n=5)
+   gain: +side 84.9 mV/V, -side 80.3 mV/V   (asymmetry +5.4 %)
+
+For a trip at +/-0.6 V:  REFCENTER = -0.0320   REFBAND = 0.0496
+
+No-voltage conditions re-decided with those values (VOLTFAST 2.4):
+        SHORT: rest -0.0345 V (sd 10.21 mV), at   4.9 % of band, false-voltage rate   0.0 %
+          10K: rest -0.0396 V (sd 15.99 mV), at  15.3 % of band, false-voltage rate   0.0 %
+         150K: rest -0.0444 V (sd 8.12 mV), at  25.0 % of band, false-voltage rate   0.0 %
+           1M: rest -0.0337 V (sd 11.42 mV), at   3.4 % of band, false-voltage rate   0.0 %
+        10.6M: rest -0.0329 V (sd 6.28 mV), at   1.8 % of band, false-voltage rate   0.0 %
+         OPEN: rest -0.0317 V (sd 1.41 mV), at   0.7 % of band, false-voltage rate   0.0 %
+   worst averaged deviation 66.3 % of the band (want <= 80 %), worst single read 1.88 x band (VOLTFAST is 1.5)
+   -> VOLTFAST 1.5 lets single noisy reads trip; propose VOLTFAST = 2.4
+   Smallest trip voltage that stays clean with a 1.25x guard: +/-0.437 V
+
+Detection rate per swept DC level (per pass, re-decided):
+    -1.200 V :  100.0 %
+    -1.100 V :  100.0 %
+    -1.000 V :  100.0 %
+    -0.900 V :  100.0 %
+    -0.800 V :  100.0 %
+    -0.700 V :  100.0 %
+    -0.600 V :   40.0 %
+    -0.500 V :   60.0 %
+    -0.400 V :   20.0 %
+    -0.300 V :   40.0 %
+    -0.200 V :    0.0 %
+    -0.100 V :    0.0 %
+    +0.000 V :    0.0 %
+    +0.100 V :    0.0 %
+    +0.200 V :    0.0 %
+    +0.300 V :    0.0 %
+    +0.400 V :    0.0 %
+    +0.500 V :   50.0 %
+    +0.600 V :   50.0 %
+    +0.700 V :   66.7 %
+    +0.800 V :  100.0 %
+    +0.900 V :  100.0 %
+    +1.000 V :  100.0 %
+    +1.100 V :  100.0 %
+    +1.200 V :  100.0 %
+   Always detected from 0.8 V (+) and -0.7 V (-); never detected up to 0.4 V (+) / 0.2 V (-)
+
+AC conditions (per pass, then through STABLECOUNT debounce):
+   AC 5Vrms 60Hz: 100.0 % of passes see voltage, lead state VOLTAGE 100.0 % of the time
+
+VOLTAGE VERDICT: clean -- trips at +/-0.6 V with no false positives
+
+   battery mode: DETBAND 0.03 only (each extra candidate would cost another unplug cycle)

@@ -1,0 +1,2449 @@
+[22:23:54] $ID,RelayJig,1.3   (no LED sensor)   USB switch OK   load relay OK
+[22:23:54] RIGOL TECHNOLOGIES,DG852 Pro,DG8R273M00069,00.01.00.00.22
+[22:23:54] RIGOL TECHNOLOGIES,DL3021A,DL3B26BM00237,00.01.05.00.01
+[22:23:55] Giga meter 192.168.40.152:8080   preset BlinkyHawkObservation: A2-A3 x7.005
+[22:23:56] saved config: THRESH11=0.2081 SLEEPTHR11=0.2081 REFCENTER=-0.0227 REFBAND=0.0495 BEEP=1
+[22:23:56] ======== level 1/14: asfound ========
+[22:23:56] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[22:23:57] log:    load relay: electronic load ON the battery
+[22:24:08] log:    load relay: electronic load disconnected
+[22:24:16]    meter L01_asfound_SHORT: 7 passes, cadence 55.946098149637976, node peak 2.458 V, floor 0.742 V
+[22:24:24]    meter L01_asfound_OPEN: 8 passes, cadence 55.946098149637976, node peak 2.490 V, floor 0.740 V
+[22:24:24] log:    USB relay: BlinkyHawk USB connected
+[22:24:26]    unit says battv=4.205 (100 %), cell rested 4.197 V
+[22:24:26] log: == auto-tune -> C:\Users\Nick\Documents\GitHub\Micro-DMM\TestBench\BlinkyHawkTestSuite\Runs\2026-10-01_222426_AutoTune_study_asfound
+[22:24:27] stage: Voltage: characterising
+[22:24:27] log:    battery capture: 32 condition(s) in 2 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[22:24:28] stage: volt 1/2: UNPLUG USB
+[22:24:29] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[22:25:15] stage: volt 1/2: PLUG USB BACK IN
+[22:25:15] log:    USB relay: BlinkyHawk USB connected
+[22:25:20] stage: volt 2/2: UNPLUG USB
+[22:25:21] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[22:25:58] stage: volt 2/2: PLUG USB BACK IN
+[22:25:58] log:    USB relay: BlinkyHawk USB connected
+[22:26:02] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[22:26:02] log:                load 10K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[22:26:02] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[22:26:02] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:26:02] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:26:02] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:26:02] log:              DC -1.200V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[22:26:02] log:              DC -1.100V:  n=  6  lead C/F/V   0/  0/100 % VDC-  
+[22:26:02] log:              DC -1.000V:  n=  6  lead C/F/V   0/  0/100 % VDC-  
+[22:26:02] log:              DC -0.900V:  n=  6  lead C/F/V   0/  0/100 % VDC-  
+[22:26:02] log:              DC -0.800V:  n=  6  lead C/F/V   0/  0/100 % VDC-  
+[22:26:02] log:              DC -0.700V:  n=  6  lead C/F/V   0/  0/100 % VDC-  
+[22:26:02] log:              DC -0.600V:  n=  6  lead C/F/V   0/  0/100 % VDC-  
+[22:26:02] log:              DC -0.500V:  n=  6  lead C/F/V   0/100/  0 %  
+[22:26:02] log:              DC -0.400V:  n=  6  lead C/F/V   0/100/  0 %  
+[22:26:02] log:              DC -0.300V:  n=  6  lead C/F/V   0/100/  0 %  
+[22:26:02] log:              DC -0.200V:  n=  6  lead C/F/V   0/100/  0 %  
+[22:26:02] log:              DC -0.100V:  n=  6  lead C/F/V   0/100/  0 %  
+[22:26:02] log:              DC +0.000V:  n=  6  lead C/F/V 100/  0/  0 %  
+[22:26:02] log:              DC +0.100V:  n=  5  lead C/F/V 100/  0/  0 %  
+[22:26:02] log:              DC +0.200V:  n=  6  lead C/F/V 100/  0/  0 %  
+[22:26:02] log:              DC +0.300V:  n=  6  lead C/F/V 100/  0/  0 %  
+[22:26:02] log:              DC +0.400V:  n=  6  lead C/F/V 100/  0/  0 %  
+[22:26:02] log:              DC +0.500V:  n=  6  lead C/F/V 100/  0/  0 %  
+[22:26:02] log:              DC +0.600V:  n=  6  lead C/F/V 100/  0/  0 %  
+[22:26:02] log:              DC +0.700V:  n=  5  lead C/F/V   0/  0/100 % VDC+  
+[22:26:02] log:              DC +0.800V:  n=  5  lead C/F/V   0/  0/100 % VDC+  
+[22:26:02] log:              DC +0.900V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[22:26:02] log:              DC +1.000V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[22:26:02] log:              DC +1.100V:  n=  5  lead C/F/V   0/  0/100 % VDC+  
+[22:26:02] log:              DC +1.200V:  n=  5  lead C/F/V   0/  0/100 % VDC+  
+[22:26:02] log:           AC 5Vrms 60Hz:  n=  6  lead C/F/V   0/  0/100 % VAC  PASS
+[22:26:02] log:    applied (RAM): REFCENTER=-0.0247, REFBAND=0.048
+[22:26:02] stage: Open/closed: characterising
+[22:26:02] log:    battery capture: 6 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[22:26:03] stage: thr0 1/1: UNPLUG USB
+[22:26:04] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[22:26:22] stage: thr0 1/1: PLUG USB BACK IN
+[22:26:22] log:    USB relay: BlinkyHawk USB connected
+[22:26:25] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[22:26:25] log:                load 10K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[22:26:25] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[22:26:25] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:26:25] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:26:25] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:26:25] log:    battery capture: 6 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[22:26:26] stage: thr1 1/1: UNPLUG USB
+[22:26:27] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[22:26:45] stage: thr1 1/1: PLUG USB BACK IN
+[22:26:45] log:    USB relay: BlinkyHawk USB connected
+[22:26:48] log:              load SHORT:  n=  6  lead C/F/V   0/100/  0 %  FAIL
+[22:26:48] log:                load 10K:  n=  6  lead C/F/V   0/100/  0 %  FAIL
+[22:26:48] log:               load 150K:  n=  6  lead C/F/V   0/100/  0 %  FAIL
+[22:26:48] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:26:48] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:26:48] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:26:48] stage: Verify
+[22:26:48] log:    battery capture: 14 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[22:26:49] stage: verify 1/1: UNPLUG USB
+[22:26:50] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[22:27:27] stage: verify 1/1: PLUG USB BACK IN
+[22:27:27] log:    USB relay: BlinkyHawk USB connected
+[22:27:31] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[22:27:31] log:                load 10K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[22:27:31] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[22:27:31] log:                 load 1M:  n=  5  lead C/F/V   0/100/  0 %  PASS
+[22:27:31] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:27:31] log:               load OPEN:  n=  5  lead C/F/V   0/100/  0 %  PASS
+[22:27:31] log:              DC -0.800V:  n=  5  lead C/F/V   0/  0/100 % VDC-  PASS
+[22:27:31] log:              DC -0.690V:  n=  5  lead C/F/V   0/  0/100 % VDC-  PASS
+[22:27:31] log:              DC -0.510V:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:27:31] log:              DC +0.510V:  n=  5  lead C/F/V 100/  0/  0 %  PASS
+[22:27:31] log:              DC +0.690V:  n=  5  lead C/F/V   0/  0/100 % VDC+  PASS
+[22:27:31] log:              DC +0.800V:  n=  5  lead C/F/V   0/  0/100 % VDC+  PASS
+[22:27:31] log:           AC 5Vrms 60Hz:  n=  5  lead C/F/V   0/  0/100 % VAC  PASS
+[22:27:31] log:          gen output off:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:27:31] stage: Verify: sleep/wake
+[22:27:32] stage: wake check: UNPLUG USB
+[22:27:33] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[22:27:51] stage: wake check: PLUG USB BACK IN
+[22:27:51] log:    USB relay: BlinkyHawk USB connected
+[22:27:54] log: SLEEP/WAKE CHECK (on battery; SLEEPTHR in force: 0.2122)
+[22:27:54] log:    woke from the deep stage on a probe reading C (metric 0.19346, threshold 0.2122)
+[22:27:54] log:    the last 4 deep stage probe(s) before it -- load 1M on the leads -- all FLOAT, metric 0.2517..0.2527 (margin +0.0395 over the threshold)
+[22:27:54] log:    10 deep stage probe(s) before the wake, ~10 expected
+[22:27:54] log:    verdict: PASS
+BlinkyHawk auto-tune  2026-10-01 22:24:26
+MODE: ON BATTERY, floating -- passes read back from the unit's RAM log after each unplug cycle
+relay:  $ID,RelayJig,1.3
+fgen:   RIGOL TECHNOLOGIES,DG852 Pro,DG8R273M00069,00.01.00.00.22
+scope:  not connected
+load:   RIGOL TECHNOLOGIES,DL3021A,DL3B26BM00237,00.01.05.00.01
+target trip +/-0.6 V; CLOSED <= 150k, OPEN >= 1M
+active threshold slot: THRESH11 (dip=3); STABLECOUNT 2
+6 passes minimum per condition, 2.2 s dwell, 0.5 s settle
+
+VOLTAGE -- front-end transfer (input V -> resting differential, median of passes)
+    -1.200 V  ->   -0.1225 V   (sd   0.62 mV, n=5)
+    -1.100 V  ->   -0.1155 V   (sd   1.66 mV, n=6)
+    -1.000 V  ->   -0.1063 V   (sd  32.53 mV, n=6)
+    -0.900 V  ->   -0.0984 V   (sd  29.32 mV, n=6)
+    -0.800 V  ->   -0.0900 V   (sd  26.13 mV, n=6)
+    -0.700 V  ->   -0.0806 V   (sd  23.33 mV, n=6)
+    -0.600 V  ->   -0.0726 V   (sd  19.62 mV, n=6)
+    -0.500 V  ->   -0.0658 V   (sd   1.77 mV, n=6)
+    -0.400 V  ->   -0.0583 V   (sd  14.53 mV, n=6)
+    -0.300 V  ->   -0.0504 V   (sd   1.54 mV, n=6)
+    -0.200 V  ->   -0.0429 V   (sd   1.36 mV, n=6)
+    -0.100 V  ->   -0.0342 V   (sd   0.81 mV, n=6)
+    +0.000 V  ->   -0.0253 V   (sd   1.26 mV, n=6)
+    +0.100 V  ->   -0.0189 V   (sd   1.61 mV, n=5)
+    +0.200 V  ->   -0.0095 V   (sd   1.87 mV, n=6)
+    +0.300 V  ->   -0.0017 V   (sd   0.86 mV, n=6)
+    +0.400 V  ->   +0.0072 V   (sd   1.31 mV, n=6)
+    +0.500 V  ->   +0.0158 V   (sd   1.66 mV, n=6)
+    +0.600 V  ->   +0.0233 V   (sd   0.79 mV, n=6)
+    +0.700 V  ->   +0.0324 V   (sd   1.56 mV, n=5)
+    +0.800 V  ->   +0.0400 V   (sd   1.97 mV, n=5)
+    +0.900 V  ->   +0.0486 V   (sd   0.95 mV, n=6)
+    +1.000 V  ->   +0.0572 V   (sd   1.44 mV, n=6)
+    +1.100 V  ->   +0.0642 V   (sd   2.93 mV, n=5)
+    +1.200 V  ->   +0.0727 V   (sd   0.85 mV, n=5)
+   gain: +side 81.0 mV/V, -side 78.9 mV/V   (asymmetry +2.6 %)
+
+For a trip at +/-0.6 V:  REFCENTER = -0.0247   REFBAND = 0.0480
+
+No-voltage conditions re-decided with those values (VOLTFAST 1.5):
+        SHORT: rest -0.0256 V (sd 0.61 mV), at   1.9 % of band, false-voltage rate   0.0 %
+          10K: rest -0.0258 V (sd 2.02 mV), at   2.3 % of band, false-voltage rate   0.0 %
+         150K: rest -0.0257 V (sd 1.69 mV), at   2.2 % of band, false-voltage rate   0.0 %
+           1M: rest -0.0256 V (sd 1.16 mV), at   1.9 % of band, false-voltage rate   0.0 %
+        10.6M: rest -0.0267 V (sd 1.80 mV), at   4.3 % of band, false-voltage rate   0.0 %
+         OPEN: rest -0.0254 V (sd 1.38 mV), at   1.6 % of band, false-voltage rate   0.0 %
+   worst averaged deviation 9.3 % of the band (want <= 80 %), worst single read 0.36 x band (VOLTFAST is 1.5)
+   Smallest trip voltage that stays clean with a 1.25x guard: +/-0.067 V
+
+Detection rate per swept DC level (per pass, re-decided):
+    -1.200 V :  100.0 %
+    -1.100 V :  100.0 %
+    -1.000 V :   83.3 %
+    -0.900 V :   83.3 %
+    -0.800 V :   83.3 %
+    -0.700 V :   83.3 %
+    -0.600 V :   50.0 %
+    -0.500 V :    0.0 %
+    -0.400 V :    0.0 %
+    -0.300 V :    0.0 %
+    -0.200 V :    0.0 %
+    -0.100 V :    0.0 %
+    +0.000 V :    0.0 %
+    +0.100 V :    0.0 %
+    +0.200 V :    0.0 %
+    +0.300 V :    0.0 %
+    +0.400 V :    0.0 %
+    +0.500 V :    0.0 %
+    +0.600 V :   50.0 %
+    +0.700 V :  100.0 %
+    +0.800 V :  100.0 %
+    +0.900 V :  100.0 %
+    +1.000 V :  100.0 %
+    +1.100 V :  100.0 %
+    +1.200 V :  100.0 %
+   Always detected from 0.7 V (+) and -1.1 V (-); never detected up to 0.5 V (+) / 0.5 V (-)
+
+AC conditions (per pass, then through STABLECOUNT debounce):
+   AC 5Vrms 60Hz: 100.0 % of passes see voltage, lead state VOLTAGE 100.0 % of the time
+
+VOLTAGE VERDICT: clean -- trips at +/-0.6 V with no false positives
+
+   battery mode: DETBAND 0.03 only (each extra candidate would cost another unplug cycle)
+OPEN/CLOSED -- must read CLOSED at <= 150k and OPEN at >= 1M
+
+[time-to-return, DETBAND 0.03]  (DETMETHOD 1, units ms)
+     SHORT ( short): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+       10K (   10k): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+      150K (  150k): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+        1M (    1M): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+     10.6M ( 10.6M): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+      OPEN (  open): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+   clean cut points between adjacent loads: none
+   OVERLAP: SHORT and 1M distributions overlap by -0.0000 ms; best threshold 1.5000 still misreads 50.00 % of passes
+
+[tail area (method 2)]  (DETMETHOD 2, units V*ms)
+     SHORT ( short): mean    0.1725  sd   0.0006  range    0.1718 ..    0.1734  n=6
+       10K (   10k): mean    0.1736  sd   0.0008  range    0.1722 ..    0.1744  n=6
+      150K (  150k): mean    0.1891  sd   0.0009  range    0.1882 ..    0.1908  n=6
+        1M (    1M): mean    0.2463  sd   0.0014  range    0.2443 ..    0.2478  n=6
+     10.6M ( 10.6M): mean    0.3409  sd   0.0013  range    0.3388 ..    0.3426  n=6
+      OPEN (  open): mean    0.3643  sd   0.0010  range    0.3630 ..    0.3654  n=6
+   clean cut points between adjacent loads: 10K|150K, 150K|1M, 1M|10.6M, 10.6M|OPEN
+   CLEAN: threshold 0.2122 V*ms, 24.8 sigma / 0.0215 V*ms from the nearest recorded pass (150K vs 1M)
+
+[single |diff| (method 0)]  (DETMETHOD 0, units V)
+     SHORT ( short): mean    0.5106  sd   0.0040  range    0.5050 ..    0.5167  n=6
+       10K (   10k): mean    0.5117  sd   0.0026  range    0.5084 ..    0.5152  n=6
+      150K (  150k): mean    0.5328  sd   0.0022  range    0.5298 ..    0.5346  n=6
+        1M (    1M): mean    0.6076  sd   0.0053  range    0.5992 ..    0.6152  n=6
+     10.6M ( 10.6M): mean    0.6988  sd   0.0020  range    0.6959 ..    0.7014  n=6
+      OPEN (  open): mean    0.7212  sd   0.0016  range    0.7191 ..    0.7231  n=6
+   clean cut points between adjacent loads: 10K|150K, 150K|1M, 1M|10.6M, 10.6M|OPEN
+   CLEAN: threshold 0.5546 V, 10.0 sigma / 0.0200 V from the nearest recorded pass (150K vs 1M)
+
+OPEN/CLOSED VERDICT: clean with [tail area (method 2)], threshold 0.2122 V*ms
+
+   SLEEPTHR11 set to the same value -- the sleep/wake check in VERIFY is what proves it wakes.
+VERIFY -- the tuned settings, run for real (lead state after STABLECOUNT debounce):
+               load SHORT: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                 load 10K: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                load 150K: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                  load 1M: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+               load 10.6M: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+                load OPEN: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+               DC -0.800V: expect VDC-  C/F/V   0.0/  0.0/100.0 %   PASS
+               DC -0.690V: expect VDC-  C/F/V   0.0/  0.0/100.0 %   PASS
+               DC -0.510V: expect !V  C/F/V   0.0/100.0/  0.0 %   PASS
+               DC +0.510V: expect !V  C/F/V 100.0/  0.0/  0.0 %   PASS
+               DC +0.690V: expect VDC+  C/F/V   0.0/  0.0/100.0 %   PASS
+               DC +0.800V: expect VDC+  C/F/V   0.0/  0.0/100.0 %   PASS
+            AC 5Vrms 60Hz: expect VAC  C/F/V   0.0/  0.0/100.0 %   PASS
+           gen output off: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+
+SLEEP/WAKE CHECK (on battery; SLEEPTHR in force: 0.2122)
+   woke from the deep stage on a probe reading C (metric 0.19346, threshold 0.2122)
+   the last 4 deep stage probe(s) before it -- load 1M on the leads -- all FLOAT, metric 0.2517..0.2527 (margin +0.0395 over the threshold)
+   10 deep stage probe(s) before the wake, ~10 expected
+   verdict: PASS
+
+VERIFY VERDICT: every condition read as expected
+
+Applied to device RAM (NOT saved): REFCENTER=-0.0247, REFBAND=0.0480, DETMETHOD=2, THRESH11=0.2122, SLEEPTHR11=0.2122
+Press 'Save to EEPROM' to keep them, or 'Revert' to put back config_before.csv.
+[22:27:54] TUNE_DONE {"applied": {"REFCENTER": "-0.0247", "REFBAND": "0.0480", "DETMETHOD": "2", "THRESH11": "0.2122", "SLEEPTHR11": "0.2122"}, "ok": true, "dir": "C:\\Users\\Nick\\Documents\\GitHub\\Micro-DMM\\TestBench\\BlinkyHawkTestSuite\\Runs\\2026-10-01_222426_AutoTune_study_asfound"}
+[22:27:55] log:    load relay: electronic load ON the battery
+[22:27:55] ======== level 2/14: 4.00V ========
+[22:27:56] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[22:28:08] log:    drain round 1: rested 4.193 V -> 4.117 V at 156 mA (~488 mohm); draining to an estimated rest of 4 V
+[22:42:30] log:    rested at 4.025 V
+[22:42:31] log:    drain round 2: rested 4.025 V -> 3.951 V at 156 mA (~480 mohm); draining to an estimated rest of 4 V
+[22:44:12] log:    rested at 4.021 V
+[22:44:14] log:    drain round 3: rested 4.021 V -> 3.946 V at 156 mA (~479 mohm); draining to an estimated rest of 4 V
+[22:45:33] log:    rested at 4.017 V
+[22:45:34] log:    drain round 4: rested 4.017 V -> 3.943 V at 156 mA (~478 mohm); draining to an estimated rest of 4 V
+[22:46:40] log:    rested at 4.015 V
+[22:46:41] log:    load relay: electronic load disconnected
+[22:46:49]    meter L02_4.00V_SHORT: 7 passes, cadence 55.946098149637976, node peak 2.439 V, floor 0.748 V
+[22:46:56]    meter L02_4.00V_OPEN: 7 passes, cadence 55.94609814963795, node peak 2.433 V, floor 0.746 V
+[22:46:56] log:    USB relay: BlinkyHawk USB connected
+[22:46:58]    unit says battv=4.120 (84 %), cell rested 4.015 V
+[22:46:58] log: == auto-tune -> C:\Users\Nick\Documents\GitHub\Micro-DMM\TestBench\BlinkyHawkTestSuite\Runs\2026-10-01_224658_AutoTune_study_4.00V
+[22:46:59] stage: Voltage: characterising
+[22:46:59] log:    battery capture: 32 condition(s) in 2 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[22:47:00] stage: volt 1/2: UNPLUG USB
+[22:47:01] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[22:47:47] stage: volt 1/2: PLUG USB BACK IN
+[22:47:48] log:    USB relay: BlinkyHawk USB connected
+[22:47:52] stage: volt 2/2: UNPLUG USB
+[22:47:53] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[22:48:30] stage: volt 2/2: PLUG USB BACK IN
+[22:48:30] log:    USB relay: BlinkyHawk USB connected
+[22:48:33] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[22:48:33] log:                load 10K:  n=  6  lead C/F/V  83/ 17/  0 %  FAIL
+[22:48:33] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[22:48:33] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:48:33] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:48:33] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:48:33] log:              DC -1.200V:  n=  6  lead C/F/V   0/ 17/ 83 % VDC-  
+[22:48:33] log:              DC -1.100V:  n=  6  lead C/F/V   0/  0/100 % VDC-  
+[22:48:33] log:              DC -1.000V:  n=  6  lead C/F/V   0/  0/100 % VDC-  
+[22:48:33] log:              DC -0.900V:  n=  6  lead C/F/V   0/ 17/ 83 % VDC-  
+[22:48:33] log:              DC -0.800V:  n=  6  lead C/F/V   0/  0/100 % VDC-  
+[22:48:33] log:              DC -0.700V:  n=  6  lead C/F/V   0/ 17/ 83 % VDC-  
+[22:48:33] log:              DC -0.600V:  n=  6  lead C/F/V   0/ 83/ 17 % VDC-  
+[22:48:33] log:              DC -0.500V:  n=  5  lead C/F/V   0/100/  0 %  
+[22:48:33] log:              DC -0.400V:  n=  6  lead C/F/V   0/100/  0 %  
+[22:48:33] log:              DC -0.300V:  n=  6  lead C/F/V   0/100/  0 %  
+[22:48:33] log:              DC -0.200V:  n=  6  lead C/F/V   0/100/  0 %  
+[22:48:33] log:              DC -0.100V:  n=  5  lead C/F/V   0/100/  0 %  
+[22:48:33] log:              DC +0.000V:  n=  6  lead C/F/V 100/  0/  0 %  
+[22:48:33] log:              DC +0.100V:  n=  6  lead C/F/V 100/  0/  0 %  
+[22:48:33] log:              DC +0.200V:  n=  6  lead C/F/V 100/  0/  0 %  
+[22:48:33] log:              DC +0.300V:  n=  6  lead C/F/V  83/ 17/  0 %  
+[22:48:33] log:              DC +0.400V:  n=  6  lead C/F/V 100/  0/  0 %  
+[22:48:33] log:              DC +0.500V:  n=  6  lead C/F/V  83/ 17/  0 %  
+[22:48:33] log:              DC +0.600V:  n=  6  lead C/F/V  83/  0/ 17 % VDC+  
+[22:48:33] log:              DC +0.700V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[22:48:33] log:              DC +0.800V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[22:48:33] log:              DC +0.900V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[22:48:33] log:              DC +1.000V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[22:48:33] log:              DC +1.100V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[22:48:33] log:              DC +1.200V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[22:48:33] log:           AC 5Vrms 60Hz:  n=  6  lead C/F/V   0/  0/100 % VAC  PASS
+[22:48:34] log:    applied (RAM): REFCENTER=-0.0229, REFBAND=0.0488
+[22:48:34] stage: Open/closed: characterising
+[22:48:34] log:    battery capture: 6 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[22:48:35] stage: thr0 1/1: UNPLUG USB
+[22:48:36] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[22:48:54] stage: thr0 1/1: PLUG USB BACK IN
+[22:48:54] log:    USB relay: BlinkyHawk USB connected
+[22:48:56] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[22:48:56] log:                load 10K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[22:48:56] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[22:48:56] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:48:56] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:48:56] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:48:57] log:    battery capture: 6 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[22:48:58] stage: thr1 1/1: UNPLUG USB
+[22:48:59] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[22:49:17] stage: thr1 1/1: PLUG USB BACK IN
+[22:49:17] log:    USB relay: BlinkyHawk USB connected
+[22:49:19] log:              load SHORT:  n=  6  lead C/F/V   0/100/  0 %  FAIL
+[22:49:19] log:                load 10K:  n=  7  lead C/F/V   0/100/  0 %  FAIL
+[22:49:19] log:               load 150K:  n=  6  lead C/F/V   0/100/  0 %  FAIL
+[22:49:19] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:49:19] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:49:19] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:49:20] stage: Verify
+[22:49:20] log:    battery capture: 14 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[22:49:21] stage: verify 1/1: UNPLUG USB
+[22:49:22] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[22:49:59] stage: verify 1/1: PLUG USB BACK IN
+[22:49:59] log:    USB relay: BlinkyHawk USB connected
+[22:50:02] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[22:50:02] log:                load 10K:  n=  6  lead C/F/V  83/ 17/  0 %  FAIL
+[22:50:02] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[22:50:02] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:50:02] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:50:02] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:50:02] log:              DC -0.800V:  n=  6  lead C/F/V   0/ 17/ 83 % VDC-  FAIL
+[22:50:02] log:              DC -0.690V:  n=  6  lead C/F/V   0/ 17/ 83 % VDC-  FAIL
+[22:50:02] log:              DC -0.510V:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:50:02] log:              DC +0.510V:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[22:50:02] log:              DC +0.690V:  n=  6  lead C/F/V   0/  0/100 % VDC+  PASS
+[22:50:02] log:              DC +0.800V:  n=  6  lead C/F/V   0/  0/100 % VDC+  PASS
+[22:50:02] log:           AC 5Vrms 60Hz:  n=  6  lead C/F/V   0/  0/100 % VAC  PASS
+[22:50:02] log:          gen output off:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[22:50:02] stage: Verify: sleep/wake
+[22:50:03] stage: wake check: UNPLUG USB
+[22:50:05] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[22:50:22] stage: wake check: PLUG USB BACK IN
+[22:50:23] log:    USB relay: BlinkyHawk USB connected
+[22:50:26] log: SLEEP/WAKE CHECK (on battery; SLEEPTHR in force: 0.2171)
+[22:50:26] log:    woke from the deep stage on a probe reading C (metric 0.19716, threshold 0.2171)
+[22:50:26] log:    the last 4 deep stage probe(s) before it -- load 1M on the leads -- all FLOAT, metric 0.2557..0.2578 (margin +0.0386 over the threshold)
+[22:50:26] log:    10 deep stage probe(s) before the wake, ~10 expected
+[22:50:26] log:    verdict: PASS
+BlinkyHawk auto-tune  2026-10-01 22:46:58
+MODE: ON BATTERY, floating -- passes read back from the unit's RAM log after each unplug cycle
+relay:  $ID,RelayJig,1.3
+fgen:   RIGOL TECHNOLOGIES,DG852 Pro,DG8R273M00069,00.01.00.00.22
+scope:  not connected
+load:   RIGOL TECHNOLOGIES,DL3021A,DL3B26BM00237,00.01.05.00.01
+target trip +/-0.6 V; CLOSED <= 150k, OPEN >= 1M
+active threshold slot: THRESH11 (dip=3); STABLECOUNT 2
+6 passes minimum per condition, 2.2 s dwell, 0.5 s settle
+
+VOLTAGE -- front-end transfer (input V -> resting differential, median of passes)
+    -1.200 V  ->   -0.1205 V   (sd  40.71 mV, n=6)
+    -1.100 V  ->   -0.1112 V   (sd  36.37 mV, n=6)
+    -1.000 V  ->   -0.1039 V   (sd  33.11 mV, n=6)
+    -0.900 V  ->   -0.0965 V   (sd  30.34 mV, n=6)
+    -0.800 V  ->   -0.0891 V   (sd  27.00 mV, n=6)
+    -0.700 V  ->   -0.0801 V   (sd  23.71 mV, n=6)
+    -0.600 V  ->   -0.0717 V   (sd   1.04 mV, n=6)
+    -0.500 V  ->   -0.0638 V   (sd   1.96 mV, n=5)
+    -0.400 V  ->   -0.0561 V   (sd   1.65 mV, n=6)
+    -0.300 V  ->   -0.0464 V   (sd   9.37 mV, n=6)
+    -0.200 V  ->   -0.0394 V   (sd   1.15 mV, n=6)
+    -0.100 V  ->   -0.0306 V   (sd   1.44 mV, n=5)
+    +0.000 V  ->   -0.0218 V   (sd   1.27 mV, n=6)
+    +0.100 V  ->   -0.0162 V   (sd   3.05 mV, n=6)
+    +0.200 V  ->   -0.0069 V   (sd   0.99 mV, n=6)
+    +0.300 V  ->   +0.0018 V   (sd  10.45 mV, n=6)
+    +0.400 V  ->   +0.0100 V   (sd   0.83 mV, n=6)
+    +0.500 V  ->   +0.0177 V   (sd  17.09 mV, n=6)
+    +0.600 V  ->   +0.0260 V   (sd   0.92 mV, n=6)
+    +0.700 V  ->   +0.0341 V   (sd   1.14 mV, n=6)
+    +0.800 V  ->   +0.0420 V   (sd   1.17 mV, n=6)
+    +0.900 V  ->   +0.0500 V   (sd  30.28 mV, n=6)
+    +1.000 V  ->   +0.0589 V   (sd  33.55 mV, n=6)
+    +1.100 V  ->   +0.0656 V   (sd  37.01 mV, n=6)
+    +1.200 V  ->   +0.0749 V   (sd  39.36 mV, n=6)
+   gain: +side 79.6 mV/V, -side 83.2 mV/V   (asymmetry -4.5 %)
+
+For a trip at +/-0.6 V:  REFCENTER = -0.0229   REFBAND = 0.0488
+
+No-voltage conditions re-decided with those values (VOLTFAST 1.5):
+        SHORT: rest -0.0226 V (sd 0.56 mV), at   0.5 % of band, false-voltage rate   0.0 %
+          10K: rest -0.0230 V (sd 1.52 mV), at   0.3 % of band, false-voltage rate   0.0 %
+         150K: rest -0.0232 V (sd 0.94 mV), at   0.7 % of band, false-voltage rate   0.0 %
+           1M: rest -0.0229 V (sd 1.32 mV), at   0.0 % of band, false-voltage rate   0.0 %
+        10.6M: rest -0.0237 V (sd 1.84 mV), at   1.7 % of band, false-voltage rate   0.0 %
+         OPEN: rest -0.0231 V (sd 1.55 mV), at   0.5 % of band, false-voltage rate   0.0 %
+   worst averaged deviation 7.5 % of the band (want <= 80 %), worst single read 0.36 x band (VOLTFAST is 1.5)
+   Smallest trip voltage that stays clean with a 1.25x guard: +/-0.067 V
+
+Detection rate per swept DC level (per pass, re-decided):
+    -1.200 V :   83.3 %
+    -1.100 V :   83.3 %
+    -1.000 V :   83.3 %
+    -0.900 V :   83.3 %
+    -0.800 V :   83.3 %
+    -0.700 V :   83.3 %
+    -0.600 V :   50.0 %
+    -0.500 V :    0.0 %
+    -0.400 V :    0.0 %
+    -0.300 V :    0.0 %
+    -0.200 V :    0.0 %
+    -0.100 V :    0.0 %
+    +0.000 V :    0.0 %
+    +0.100 V :    0.0 %
+    +0.200 V :    0.0 %
+    +0.300 V :    0.0 %
+    +0.400 V :    0.0 %
+    +0.500 V :    0.0 %
+    +0.600 V :   50.0 %
+    +0.700 V :  100.0 %
+    +0.800 V :  100.0 %
+    +0.900 V :   83.3 %
+    +1.000 V :   83.3 %
+    +1.100 V :   83.3 %
+    +1.200 V :   83.3 %
+   Always detected from 0.7 V (+) and None V (-); never detected up to 0.5 V (+) / 0.5 V (-)
+
+AC conditions (per pass, then through STABLECOUNT debounce):
+   AC 5Vrms 60Hz:  83.3 % of passes see voltage, lead state VOLTAGE 100.0 % of the time
+              (the misses are passes whose ten reads landed near a zero crossing -- raise VOLTAVG or lower the trip voltage)
+
+VOLTAGE VERDICT: clean -- trips at +/-0.6 V with no false positives
+
+   battery mode: DETBAND 0.03 only (each extra candidate would cost another unplug cycle)
+OPEN/CLOSED -- must read CLOSED at <= 150k and OPEN at >= 1M
+
+[time-to-return, DETBAND 0.03]  (DETMETHOD 1, units ms)
+     SHORT ( short): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+       10K (   10k): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+      150K (  150k): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+        1M (    1M): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+     10.6M ( 10.6M): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+      OPEN (  open): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+   clean cut points between adjacent loads: none
+   OVERLAP: SHORT and 1M distributions overlap by -0.0000 ms; best threshold 1.5000 still misreads 50.00 % of passes
+
+[tail area (method 2)]  (DETMETHOD 2, units V*ms)
+     SHORT ( short): mean    0.1762  sd   0.0010  range    0.1755 ..    0.1776  n=6
+       10K (   10k): mean    0.1767  sd   0.0010  range    0.1749 ..    0.1777  n=6
+      150K (  150k): mean    0.1922  sd   0.0006  range    0.1916 ..    0.1929  n=6
+        1M (    1M): mean    0.2492  sd   0.0007  range    0.2484 ..    0.2504  n=6
+     10.6M ( 10.6M): mean    0.3444  sd   0.0007  range    0.3431 ..    0.3452  n=6
+      OPEN (  open): mean    0.3679  sd   0.0007  range    0.3669 ..    0.3685  n=6
+   clean cut points between adjacent loads: 10K|150K, 150K|1M, 1M|10.6M, 10.6M|OPEN
+   CLEAN: threshold 0.2171 V*ms, 43.1 sigma / 0.0242 V*ms from the nearest recorded pass (150K vs 1M)
+
+[single |diff| (method 0)]  (DETMETHOD 0, units V)
+     SHORT ( short): mean    0.5111  sd   0.0039  range    0.5040 ..    0.5152  n=6
+       10K (   10k): mean    0.5121  sd   0.0032  range    0.5090 ..    0.5169  n=7
+      150K (  150k): mean    0.5343  sd   0.0049  range    0.5283 ..    0.5394  n=6
+        1M (    1M): mean    0.6084  sd   0.0022  range    0.6057 ..    0.6115  n=6
+     10.6M ( 10.6M): mean    0.7016  sd   0.0023  range    0.6984 ..    0.7044  n=6
+      OPEN (  open): mean    0.7217  sd   0.0035  range    0.7153 ..    0.7247  n=6
+   !! medians are not in resistance order -- this metric does not track resistance monotonically here
+   clean cut points between adjacent loads: 10K|150K, 150K|1M, 1M|10.6M, 10.6M|OPEN
+   CLEAN: threshold 0.5856 V, 10.6 sigma / 0.0201 V from the nearest recorded pass (150K vs 1M)
+
+OPEN/CLOSED VERDICT: clean with [tail area (method 2)], threshold 0.2171 V*ms
+
+   SLEEPTHR11 set to the same value -- the sleep/wake check in VERIFY is what proves it wakes.
+VERIFY -- the tuned settings, run for real (lead state after STABLECOUNT debounce):
+               load SHORT: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                 load 10K: expect  C  C/F/V  83.3/ 16.7/  0.0 %   FAIL
+                load 150K: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                  load 1M: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+               load 10.6M: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+                load OPEN: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+               DC -0.800V: expect VDC-  C/F/V   0.0/ 16.7/ 83.3 %   FAIL
+               DC -0.690V: expect VDC-  C/F/V   0.0/ 16.7/ 83.3 %   FAIL
+               DC -0.510V: expect !V  C/F/V   0.0/100.0/  0.0 %   PASS
+               DC +0.510V: expect !V  C/F/V 100.0/  0.0/  0.0 %   PASS
+               DC +0.690V: expect VDC+  C/F/V   0.0/  0.0/100.0 %   PASS
+               DC +0.800V: expect VDC+  C/F/V   0.0/  0.0/100.0 %   PASS
+            AC 5Vrms 60Hz: expect VAC  C/F/V   0.0/  0.0/100.0 %   PASS
+           gen output off: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+
+SLEEP/WAKE CHECK (on battery; SLEEPTHR in force: 0.2171)
+   woke from the deep stage on a probe reading C (metric 0.19716, threshold 0.2171)
+   the last 4 deep stage probe(s) before it -- load 1M on the leads -- all FLOAT, metric 0.2557..0.2578 (margin +0.0386 over the threshold)
+   10 deep stage probe(s) before the wake, ~10 expected
+   verdict: PASS
+
+VERIFY VERDICT: 3 condition(s) failed: load 10K, DC -0.800V, DC -0.690V
+
+Applied to device RAM (NOT saved): REFCENTER=-0.0229, REFBAND=0.0488, DETMETHOD=2, THRESH11=0.2171, SLEEPTHR11=0.2171
+Press 'Save to EEPROM' to keep them, or 'Revert' to put back config_before.csv.
+[22:50:26] TUNE_DONE {"applied": {"REFCENTER": "-0.0229", "REFBAND": "0.0488", "DETMETHOD": "2", "THRESH11": "0.2171", "SLEEPTHR11": "0.2171"}, "ok": false, "dir": "C:\\Users\\Nick\\Documents\\GitHub\\Micro-DMM\\TestBench\\BlinkyHawkTestSuite\\Runs\\2026-10-01_224658_AutoTune_study_4.00V"}
+[22:50:26] log:    load relay: electronic load ON the battery
+[22:50:27] ======== level 3/14: 3.90V ========
+[22:50:28] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[22:50:40] log:    drain round 1: rested 4.027 V -> 3.952 V at 156 mA (~484 mohm); draining to an estimated rest of 3.9 V
+[23:02:08] log:    rested at 3.931 V
+[23:02:10] log:    drain round 2: rested 3.931 V -> 3.856 V at 156 mA (~480 mohm); draining to an estimated rest of 3.9 V
+[23:04:16] log:    rested at 3.926 V
+[23:04:18] log:    drain round 3: rested 3.926 V -> 3.851 V at 155 mA (~482 mohm); draining to an estimated rest of 3.9 V
+[23:05:58] log:    rested at 3.922 V
+[23:05:59] log:    drain round 4: rested 3.922 V -> 3.847 V at 155 mA (~479 mohm); draining to an estimated rest of 3.9 V
+[23:07:29] log:    rested at 3.920 V
+[23:07:30] log:    drain round 5: rested 3.920 V -> 3.845 V at 156 mA (~482 mohm); draining to an estimated rest of 3.9 V
+[23:08:49] log:    rested at 3.917 V
+[23:08:50] log:    drain round 6: rested 3.917 V -> 3.842 V at 156 mA (~483 mohm); draining to an estimated rest of 3.9 V
+[23:10:01] log:    rested at 3.916 V
+[23:10:03] log:    drain round 7: rested 3.916 V -> 3.841 V at 156 mA (~479 mohm); draining to an estimated rest of 3.9 V
+[23:11:05] log:    rested at 3.914 V
+[23:11:05] log:    load relay: electronic load disconnected
+[23:11:12]    meter L03_3.90V_SHORT: 7 passes, cadence 55.94609814963795, node peak 2.396 V, floor 0.748 V
+[23:11:18]    meter L03_3.90V_OPEN: 7 passes, cadence 55.946098149637976, node peak 2.491 V, floor 0.744 V
+[23:11:18] log:    USB relay: BlinkyHawk USB connected
+[23:11:21]    unit says battv=3.973 (54 %), cell rested 3.914 V
+[23:11:21] log: == auto-tune -> C:\Users\Nick\Documents\GitHub\Micro-DMM\TestBench\BlinkyHawkTestSuite\Runs\2026-10-01_231121_AutoTune_study_3.90V
+[23:11:21] stage: Voltage: characterising
+[23:11:21] log:    battery capture: 32 condition(s) in 2 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[23:11:22] stage: volt 1/2: UNPLUG USB
+[23:11:23] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[23:12:10] stage: volt 1/2: PLUG USB BACK IN
+[23:12:10] log:    USB relay: BlinkyHawk USB connected
+[23:12:14] stage: volt 2/2: UNPLUG USB
+[23:12:15] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[23:12:52] stage: volt 2/2: PLUG USB BACK IN
+[23:12:52] log:    USB relay: BlinkyHawk USB connected
+[23:12:56] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:12:56] log:                load 10K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:12:56] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:12:56] log:                 load 1M:  n=  5  lead C/F/V   0/100/  0 %  PASS
+[23:12:56] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:12:56] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:12:56] log:              DC -1.200V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[23:12:56] log:              DC -1.100V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[23:12:56] log:              DC -1.000V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[23:12:56] log:              DC -0.900V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[23:12:56] log:              DC -0.800V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[23:12:56] log:              DC -0.700V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[23:12:56] log:              DC -0.600V:  n=  6  lead C/F/V   0/  0/100 % VDC-  
+[23:12:56] log:              DC -0.500V:  n=  6  lead C/F/V   0/100/  0 %  
+[23:12:56] log:              DC -0.400V:  n=  6  lead C/F/V   0/100/  0 %  
+[23:12:56] log:              DC -0.300V:  n=  6  lead C/F/V   0/100/  0 %  
+[23:12:56] log:              DC -0.200V:  n=  6  lead C/F/V   0/100/  0 %  
+[23:12:56] log:              DC -0.100V:  n=  6  lead C/F/V   0/100/  0 %  
+[23:12:56] log:              DC +0.000V:  n=  6  lead C/F/V 100/  0/  0 %  
+[23:12:56] log:              DC +0.100V:  n=  6  lead C/F/V 100/  0/  0 %  
+[23:12:56] log:              DC +0.200V:  n=  6  lead C/F/V 100/  0/  0 %  
+[23:12:56] log:              DC +0.300V:  n=  6  lead C/F/V 100/  0/  0 %  
+[23:12:56] log:              DC +0.400V:  n=  6  lead C/F/V 100/  0/  0 %  
+[23:12:56] log:              DC +0.500V:  n=  6  lead C/F/V 100/  0/  0 %  
+[23:12:56] log:              DC +0.600V:  n=  6  lead C/F/V 100/  0/  0 %  
+[23:12:56] log:              DC +0.700V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[23:12:56] log:              DC +0.800V:  n=  5  lead C/F/V   0/  0/100 % VDC+  
+[23:12:56] log:              DC +0.900V:  n=  5  lead C/F/V   0/  0/100 % VDC+  
+[23:12:56] log:              DC +1.000V:  n=  5  lead C/F/V   0/  0/100 % VDC+  
+[23:12:56] log:              DC +1.100V:  n=  5  lead C/F/V   0/  0/100 % VDC+  
+[23:12:56] log:              DC +1.200V:  n=  5  lead C/F/V   0/  0/100 % VDC+  
+[23:12:56] log:           AC 5Vrms 60Hz:  n=  5  lead C/F/V   0/  0/100 % VAC  PASS
+[23:12:56] log:    applied (RAM): REFCENTER=-0.0244, REFBAND=0.049
+[23:12:56] stage: Open/closed: characterising
+[23:12:56] log:    battery capture: 6 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[23:12:57] stage: thr0 1/1: UNPLUG USB
+[23:12:58] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[23:13:16] stage: thr0 1/1: PLUG USB BACK IN
+[23:13:16] log:    USB relay: BlinkyHawk USB connected
+[23:13:19] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:13:19] log:                load 10K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:13:19] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:13:19] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:13:19] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:13:19] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:13:19] log:    battery capture: 6 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[23:13:20] stage: thr1 1/1: UNPLUG USB
+[23:13:21] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[23:13:39] stage: thr1 1/1: PLUG USB BACK IN
+[23:13:39] log:    USB relay: BlinkyHawk USB connected
+[23:13:42] log:              load SHORT:  n=  6  lead C/F/V   0/100/  0 %  FAIL
+[23:13:42] log:                load 10K:  n=  7  lead C/F/V   0/100/  0 %  FAIL
+[23:13:42] log:               load 150K:  n=  6  lead C/F/V   0/100/  0 %  FAIL
+[23:13:42] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:13:42] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:13:42] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:13:42] stage: Verify
+[23:13:43] log:    battery capture: 14 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[23:13:44] stage: verify 1/1: UNPLUG USB
+[23:13:44] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[23:14:22] stage: verify 1/1: PLUG USB BACK IN
+[23:14:22] log:    USB relay: BlinkyHawk USB connected
+[23:14:25] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:14:25] log:                load 10K:  n=  6  lead C/F/V  83/ 17/  0 %  FAIL
+[23:14:25] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:14:25] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:14:25] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:14:25] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:14:25] log:              DC -0.800V:  n=  6  lead C/F/V   0/  0/100 % VDC-  PASS
+[23:14:25] log:              DC -0.690V:  n=  6  lead C/F/V   0/ 17/ 83 % VDC-  FAIL
+[23:14:25] log:              DC -0.510V:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:14:25] log:              DC +0.510V:  n=  6  lead C/F/V  83/ 17/  0 %  PASS
+[23:14:25] log:              DC +0.690V:  n=  6  lead C/F/V   0/ 17/ 83 % VDC+  FAIL
+[23:14:25] log:              DC +0.800V:  n=  6  lead C/F/V   0/  0/100 % VDC+  PASS
+[23:14:25] log:           AC 5Vrms 60Hz:  n=  6  lead C/F/V   0/ 17/ 83 % VAC  FAIL
+[23:14:25] log:          gen output off:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:14:25] stage: Verify: sleep/wake
+[23:14:26] stage: wake check: UNPLUG USB
+[23:14:27] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[23:14:45] stage: wake check: PLUG USB BACK IN
+[23:14:46] log:    USB relay: BlinkyHawk USB connected
+[23:14:49] log: SLEEP/WAKE CHECK (on battery; SLEEPTHR in force: 0.2140)
+[23:14:49] log:    woke from the deep stage on a probe reading C (metric 0.19698, threshold 0.214)
+[23:14:49] log:    the last 4 deep stage probe(s) before it -- load 1M on the leads -- all FLOAT, metric 0.2550..0.2582 (margin +0.0410 over the threshold)
+[23:14:49] log:    10 deep stage probe(s) before the wake, ~10 expected
+[23:14:49] log:    verdict: PASS
+BlinkyHawk auto-tune  2026-10-01 23:11:21
+MODE: ON BATTERY, floating -- passes read back from the unit's RAM log after each unplug cycle
+relay:  $ID,RelayJig,1.3
+fgen:   RIGOL TECHNOLOGIES,DG852 Pro,DG8R273M00069,00.01.00.00.22
+scope:  not connected
+load:   RIGOL TECHNOLOGIES,DL3021A,DL3B26BM00237,00.01.05.00.01
+target trip +/-0.6 V; CLOSED <= 150k, OPEN >= 1M
+active threshold slot: THRESH11 (dip=3); STABLECOUNT 2
+6 passes minimum per condition, 2.2 s dwell, 0.5 s settle
+
+VOLTAGE -- front-end transfer (input V -> resting differential, median of passes)
+    -1.200 V  ->   -0.1217 V   (sd   2.76 mV, n=5)
+    -1.100 V  ->   -0.1142 V   (sd   1.08 mV, n=5)
+    -1.000 V  ->   -0.1067 V   (sd   0.62 mV, n=5)
+    -0.900 V  ->   -0.0962 V   (sd   0.79 mV, n=5)
+    -0.800 V  ->   -0.0899 V   (sd   2.15 mV, n=5)
+    -0.700 V  ->   -0.0830 V   (sd   2.26 mV, n=5)
+    -0.600 V  ->   -0.0733 V   (sd   0.89 mV, n=6)
+    -0.500 V  ->   -0.0652 V   (sd   1.18 mV, n=6)
+    -0.400 V  ->   -0.0565 V   (sd   0.89 mV, n=6)
+    -0.300 V  ->   -0.0488 V   (sd   2.02 mV, n=6)
+    -0.200 V  ->   -0.0399 V   (sd   2.21 mV, n=6)
+    -0.100 V  ->   -0.0315 V   (sd   1.59 mV, n=6)
+    +0.000 V  ->   -0.0251 V   (sd   1.10 mV, n=6)
+    +0.100 V  ->   -0.0158 V   (sd   1.46 mV, n=6)
+    +0.200 V  ->   -0.0076 V   (sd   1.43 mV, n=6)
+    +0.300 V  ->   -0.0001 V   (sd   0.79 mV, n=6)
+    +0.400 V  ->   +0.0083 V   (sd   0.74 mV, n=6)
+    +0.500 V  ->   +0.0172 V   (sd   1.40 mV, n=6)
+    +0.600 V  ->   +0.0246 V   (sd   1.17 mV, n=6)
+    +0.700 V  ->   +0.0332 V   (sd   1.80 mV, n=6)
+    +0.800 V  ->   +0.0425 V   (sd   1.59 mV, n=5)
+    +0.900 V  ->   +0.0496 V   (sd   1.38 mV, n=5)
+    +1.000 V  ->   +0.0576 V   (sd   1.97 mV, n=5)
+    +1.100 V  ->   +0.0654 V   (sd   1.28 mV, n=5)
+    +1.200 V  ->   +0.0736 V   (sd   2.10 mV, n=5)
+   gain: +side 82.8 mV/V, -side 80.4 mV/V   (asymmetry +2.8 %)
+
+For a trip at +/-0.6 V:  REFCENTER = -0.0244   REFBAND = 0.0490
+
+No-voltage conditions re-decided with those values (VOLTFAST 1.5):
+        SHORT: rest -0.0244 V (sd 1.98 mV), at   0.1 % of band, false-voltage rate   0.0 %
+          10K: rest -0.0244 V (sd 1.98 mV), at   0.1 % of band, false-voltage rate   0.0 %
+         150K: rest -0.0247 V (sd 1.50 mV), at   0.6 % of band, false-voltage rate   0.0 %
+           1M: rest -0.0236 V (sd 0.98 mV), at   1.6 % of band, false-voltage rate   0.0 %
+        10.6M: rest -0.0244 V (sd 1.73 mV), at   0.1 % of band, false-voltage rate   0.0 %
+         OPEN: rest -0.0251 V (sd 0.31 mV), at   1.5 % of band, false-voltage rate   0.0 %
+   worst averaged deviation 7.6 % of the band (want <= 80 %), worst single read 0.32 x band (VOLTFAST is 1.5)
+   Smallest trip voltage that stays clean with a 1.25x guard: +/-0.057 V
+
+Detection rate per swept DC level (per pass, re-decided):
+    -1.200 V :  100.0 %
+    -1.100 V :  100.0 %
+    -1.000 V :  100.0 %
+    -0.900 V :  100.0 %
+    -0.800 V :  100.0 %
+    -0.700 V :  100.0 %
+    -0.600 V :   50.0 %
+    -0.500 V :    0.0 %
+    -0.400 V :    0.0 %
+    -0.300 V :    0.0 %
+    -0.200 V :    0.0 %
+    -0.100 V :    0.0 %
+    +0.000 V :    0.0 %
+    +0.100 V :    0.0 %
+    +0.200 V :    0.0 %
+    +0.300 V :    0.0 %
+    +0.400 V :    0.0 %
+    +0.500 V :    0.0 %
+    +0.600 V :   50.0 %
+    +0.700 V :  100.0 %
+    +0.800 V :  100.0 %
+    +0.900 V :  100.0 %
+    +1.000 V :  100.0 %
+    +1.100 V :  100.0 %
+    +1.200 V :  100.0 %
+   Always detected from 0.7 V (+) and -0.7 V (-); never detected up to 0.5 V (+) / 0.5 V (-)
+
+AC conditions (per pass, then through STABLECOUNT debounce):
+   AC 5Vrms 60Hz:  80.0 % of passes see voltage, lead state VOLTAGE 100.0 % of the time
+              (the misses are passes whose ten reads landed near a zero crossing -- raise VOLTAVG or lower the trip voltage)
+
+VOLTAGE VERDICT: clean -- trips at +/-0.6 V with no false positives
+
+   battery mode: DETBAND 0.03 only (each extra candidate would cost another unplug cycle)
+OPEN/CLOSED -- must read CLOSED at <= 150k and OPEN at >= 1M
+
+[time-to-return, DETBAND 0.03]  (DETMETHOD 1, units ms)
+     SHORT ( short): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+       10K (   10k): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+      150K (  150k): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+        1M (    1M): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+     10.6M ( 10.6M): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+      OPEN (  open): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+   clean cut points between adjacent loads: none
+   OVERLAP: SHORT and 1M distributions overlap by -0.0000 ms; best threshold 1.5000 still misreads 50.00 % of passes
+
+[tail area (method 2)]  (DETMETHOD 2, units V*ms)
+     SHORT ( short): mean    0.1725  sd   0.0009  range    0.1712 ..    0.1735  n=6
+       10K (   10k): mean    0.1739  sd   0.0011  range    0.1723 ..    0.1750  n=6
+      150K (  150k): mean    0.1896  sd   0.0006  range    0.1887 ..    0.1904  n=6
+        1M (    1M): mean    0.2477  sd   0.0008  range    0.2468 ..    0.2489  n=6
+     10.6M ( 10.6M): mean    0.3427  sd   0.0007  range    0.3419 ..    0.3435  n=6
+      OPEN (  open): mean    0.3656  sd   0.0005  range    0.3649 ..    0.3661  n=6
+   clean cut points between adjacent loads: 10K|150K, 150K|1M, 1M|10.6M, 10.6M|OPEN
+   CLEAN: threshold 0.2140 V*ms, 40.8 sigma / 0.0236 V*ms from the nearest recorded pass (150K vs 1M)
+
+[single |diff| (method 0)]  (DETMETHOD 0, units V)
+     SHORT ( short): mean    0.5080  sd   0.0024  range    0.5050 ..    0.5108  n=6
+       10K (   10k): mean    0.5096  sd   0.0032  range    0.5034 ..    0.5120  n=7
+      150K (  150k): mean    0.5301  sd   0.0044  range    0.5215 ..    0.5330  n=6
+        1M (    1M): mean    0.6071  sd   0.0028  range    0.6025 ..    0.6103  n=6
+     10.6M ( 10.6M): mean    0.6992  sd   0.0006  range    0.6986 ..    0.7000  n=6
+      OPEN (  open): mean    0.7212  sd   0.0029  range    0.7167 ..    0.7247  n=6
+   clean cut points between adjacent loads: 10K|150K, 150K|1M, 1M|10.6M, 10.6M|OPEN
+   CLEAN: threshold 0.5777 V, 10.7 sigma / 0.0248 V from the nearest recorded pass (150K vs 1M)
+
+OPEN/CLOSED VERDICT: clean with [tail area (method 2)], threshold 0.214 V*ms
+
+   SLEEPTHR11 set to the same value -- the sleep/wake check in VERIFY is what proves it wakes.
+VERIFY -- the tuned settings, run for real (lead state after STABLECOUNT debounce):
+               load SHORT: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                 load 10K: expect  C  C/F/V  83.3/ 16.7/  0.0 %   FAIL
+                load 150K: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                  load 1M: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+               load 10.6M: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+                load OPEN: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+               DC -0.800V: expect VDC-  C/F/V   0.0/  0.0/100.0 %   PASS
+               DC -0.690V: expect VDC-  C/F/V   0.0/ 16.7/ 83.3 %   FAIL
+               DC -0.510V: expect !V  C/F/V   0.0/100.0/  0.0 %   PASS
+               DC +0.510V: expect !V  C/F/V  83.3/ 16.7/  0.0 %   PASS
+               DC +0.690V: expect VDC+  C/F/V   0.0/ 16.7/ 83.3 %   FAIL
+               DC +0.800V: expect VDC+  C/F/V   0.0/  0.0/100.0 %   PASS
+            AC 5Vrms 60Hz: expect VAC  C/F/V   0.0/ 16.7/ 83.3 %   FAIL
+           gen output off: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+
+SLEEP/WAKE CHECK (on battery; SLEEPTHR in force: 0.2140)
+   woke from the deep stage on a probe reading C (metric 0.19698, threshold 0.214)
+   the last 4 deep stage probe(s) before it -- load 1M on the leads -- all FLOAT, metric 0.2550..0.2582 (margin +0.0410 over the threshold)
+   10 deep stage probe(s) before the wake, ~10 expected
+   verdict: PASS
+
+VERIFY VERDICT: 4 condition(s) failed: load 10K, DC -0.690V, DC +0.690V, AC 5Vrms 60Hz
+
+Applied to device RAM (NOT saved): REFCENTER=-0.0244, REFBAND=0.0490, DETMETHOD=2, THRESH11=0.2140, SLEEPTHR11=0.2140
+Press 'Save to EEPROM' to keep them, or 'Revert' to put back config_before.csv.
+[23:14:49] TUNE_DONE {"applied": {"REFCENTER": "-0.0244", "REFBAND": "0.0490", "DETMETHOD": "2", "THRESH11": "0.2140", "SLEEPTHR11": "0.2140"}, "ok": false, "dir": "C:\\Users\\Nick\\Documents\\GitHub\\Micro-DMM\\TestBench\\BlinkyHawkTestSuite\\Runs\\2026-10-01_231121_AutoTune_study_3.90V"}
+[23:14:49] log:    load relay: electronic load ON the battery
+[23:14:50] ======== level 4/14: 3.80V ========
+[23:14:51] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[23:15:03] log:    drain round 1: rested 3.928 V -> 3.856 V at 149 mA (~485 mohm); draining to an estimated rest of 3.8 V
+[23:26:09] log:    rested at 3.829 V
+[23:26:10] log:    drain round 2: rested 3.829 V -> 3.755 V at 155 mA (~474 mohm); draining to an estimated rest of 3.8 V
+[23:28:14] log:    rested at 3.825 V
+[23:28:15] log:    drain round 3: rested 3.825 V -> 3.751 V at 155 mA (~477 mohm); draining to an estimated rest of 3.8 V
+[23:30:07] log:    rested at 3.823 V
+[23:30:08] log:    drain round 4: rested 3.823 V -> 3.749 V at 156 mA (~476 mohm); draining to an estimated rest of 3.8 V
+[23:31:44] log:    rested at 3.821 V
+[23:31:46] log:    drain round 5: rested 3.821 V -> 3.746 V at 156 mA (~479 mohm); draining to an estimated rest of 3.8 V
+[23:33:09] log:    rested at 3.818 V
+[23:33:10] log:    drain round 6: rested 3.818 V -> 3.744 V at 155 mA (~479 mohm); draining to an estimated rest of 3.8 V
+[23:34:22] log:    rested at 3.816 V
+[23:34:24] log:    drain round 7: rested 3.816 V -> 3.742 V at 156 mA (~478 mohm); draining to an estimated rest of 3.8 V
+[23:35:38] log:    rested at 3.816 V
+[23:35:40] log:    drain round 8: rested 3.816 V -> 3.741 V at 156 mA (~479 mohm); draining to an estimated rest of 3.8 V
+[23:36:50] log:    rested at 3.814 V
+[23:36:50] log:    load relay: electronic load disconnected
+[23:36:58]    meter L04_3.80V_SHORT: 7 passes, cadence 55.946098149637976, node peak 2.452 V, floor 0.746 V
+[23:37:03]    meter L04_3.80V_OPEN: 7 passes, cadence 55.94609814963795, node peak 2.477 V, floor 0.745 V
+[23:37:04] log:    USB relay: BlinkyHawk USB connected
+[23:37:06]    unit says battv=3.906 (41 %), cell rested 3.814 V
+[23:37:06] log: == auto-tune -> C:\Users\Nick\Documents\GitHub\Micro-DMM\TestBench\BlinkyHawkTestSuite\Runs\2026-10-01_233706_AutoTune_study_3.80V
+[23:37:06] stage: Voltage: characterising
+[23:37:07] log:    battery capture: 32 condition(s) in 2 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[23:37:07] stage: volt 1/2: UNPLUG USB
+[23:37:08] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[23:37:55] stage: volt 1/2: PLUG USB BACK IN
+[23:37:55] log:    USB relay: BlinkyHawk USB connected
+[23:38:00] stage: volt 2/2: UNPLUG USB
+[23:38:01] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[23:38:38] stage: volt 2/2: PLUG USB BACK IN
+[23:38:38] log:    USB relay: BlinkyHawk USB connected
+[23:38:41] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:38:41] log:                load 10K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:38:41] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:38:41] log:                 load 1M:  n=  5  lead C/F/V   0/100/  0 %  PASS
+[23:38:41] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:38:41] log:               load OPEN:  n=  5  lead C/F/V   0/100/  0 %  PASS
+[23:38:41] log:              DC -1.200V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[23:38:41] log:              DC -1.100V:  n=  6  lead C/F/V   0/  0/100 % VDC-  
+[23:38:41] log:              DC -1.000V:  n=  6  lead C/F/V   0/  0/100 % VDC-  
+[23:38:41] log:              DC -0.900V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[23:38:41] log:              DC -0.800V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[23:38:41] log:              DC -0.700V:  n=  6  lead C/F/V   0/  0/100 % VDC-  
+[23:38:41] log:              DC -0.600V:  n=  6  lead C/F/V   0/100/  0 %  
+[23:38:41] log:              DC -0.500V:  n=  6  lead C/F/V   0/100/  0 %  
+[23:38:41] log:              DC -0.400V:  n=  6  lead C/F/V   0/100/  0 %  
+[23:38:41] log:              DC -0.300V:  n=  5  lead C/F/V   0/100/  0 %  
+[23:38:41] log:              DC -0.200V:  n=  6  lead C/F/V   0/100/  0 %  
+[23:38:41] log:              DC -0.100V:  n=  5  lead C/F/V   0/100/  0 %  
+[23:38:41] log:              DC +0.000V:  n=  6  lead C/F/V 100/  0/  0 %  
+[23:38:41] log:              DC +0.100V:  n=  6  lead C/F/V 100/  0/  0 %  
+[23:38:41] log:              DC +0.200V:  n=  6  lead C/F/V 100/  0/  0 %  
+[23:38:41] log:              DC +0.300V:  n=  6  lead C/F/V 100/  0/  0 %  
+[23:38:41] log:              DC +0.400V:  n=  6  lead C/F/V 100/  0/  0 %  
+[23:38:41] log:              DC +0.500V:  n=  5  lead C/F/V 100/  0/  0 %  
+[23:38:41] log:              DC +0.600V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[23:38:41] log:              DC +0.700V:  n=  5  lead C/F/V   0/  0/100 % VDC+  
+[23:38:41] log:              DC +0.800V:  n=  5  lead C/F/V   0/  0/100 % VDC+  
+[23:38:41] log:              DC +0.900V:  n=  5  lead C/F/V   0/  0/100 % VDC+  
+[23:38:41] log:              DC +1.000V:  n=  5  lead C/F/V   0/  0/100 % VDC+  
+[23:38:41] log:              DC +1.100V:  n=  5  lead C/F/V   0/  0/100 % VDC+  
+[23:38:41] log:              DC +1.200V:  n=  5  lead C/F/V   0/  0/100 % VDC+  
+[23:38:41] log:           AC 5Vrms 60Hz:  n=  6  lead C/F/V   0/  0/100 % VAC  PASS
+[23:38:41] log:    applied (RAM): REFCENTER=-0.0207, REFBAND=0.0485
+[23:38:41] stage: Open/closed: characterising
+[23:38:42] log:    battery capture: 6 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[23:38:42] stage: thr0 1/1: UNPLUG USB
+[23:38:43] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[23:39:01] stage: thr0 1/1: PLUG USB BACK IN
+[23:39:01] log:    USB relay: BlinkyHawk USB connected
+[23:39:04] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:39:04] log:                load 10K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:39:04] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:39:04] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:39:04] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:39:04] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:39:05] log:    battery capture: 6 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[23:39:05] stage: thr1 1/1: UNPLUG USB
+[23:39:06] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[23:39:24] stage: thr1 1/1: PLUG USB BACK IN
+[23:39:25] log:    USB relay: BlinkyHawk USB connected
+[23:39:27] log:              load SHORT:  n=  6  lead C/F/V   0/100/  0 %  FAIL
+[23:39:27] log:                load 10K:  n=  7  lead C/F/V   0/100/  0 %  FAIL
+[23:39:27] log:               load 150K:  n=  6  lead C/F/V   0/100/  0 %  FAIL
+[23:39:27] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:39:27] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:39:27] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:39:28] stage: Verify
+[23:39:28] log:    battery capture: 14 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[23:39:29] stage: verify 1/1: UNPLUG USB
+[23:39:30] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[23:40:07] stage: verify 1/1: PLUG USB BACK IN
+[23:40:07] log:    USB relay: BlinkyHawk USB connected
+[23:40:11] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:40:11] log:                load 10K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:40:11] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:40:11] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:40:11] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:40:11] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:40:11] log:              DC -0.800V:  n=  6  lead C/F/V   0/  0/100 % VDC-  PASS
+[23:40:11] log:              DC -0.690V:  n=  6  lead C/F/V   0/  0/100 % VDC-  PASS
+[23:40:11] log:              DC -0.510V:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:40:11] log:              DC +0.510V:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:40:11] log:              DC +0.690V:  n=  6  lead C/F/V   0/  0/100 % VDC+  PASS
+[23:40:11] log:              DC +0.800V:  n=  6  lead C/F/V   0/  0/100 % VDC+  PASS
+[23:40:11] log:           AC 5Vrms 60Hz:  n=  6  lead C/F/V   0/  0/100 % VAC  PASS
+[23:40:11] log:          gen output off:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:40:11] stage: Verify: sleep/wake
+[23:40:12] stage: wake check: UNPLUG USB
+[23:40:13] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[23:40:31] stage: wake check: PLUG USB BACK IN
+[23:40:31] log:    USB relay: BlinkyHawk USB connected
+[23:40:34] log: SLEEP/WAKE CHECK (on battery; SLEEPTHR in force: 0.2126)
+[23:40:34] log:    woke from the deep stage on a probe reading C (metric 0.20491, threshold 0.2126)
+[23:40:34] log:    the last 4 deep stage probe(s) before it -- load 1M on the leads -- all FLOAT, metric 0.2624..0.2638 (margin +0.0498 over the threshold)
+[23:40:34] log:    10 deep stage probe(s) before the wake, ~10 expected
+[23:40:34] log:    verdict: PASS
+BlinkyHawk auto-tune  2026-10-01 23:37:06
+MODE: ON BATTERY, floating -- passes read back from the unit's RAM log after each unplug cycle
+relay:  $ID,RelayJig,1.3
+fgen:   RIGOL TECHNOLOGIES,DG852 Pro,DG8R273M00069,00.01.00.00.22
+scope:  not connected
+load:   RIGOL TECHNOLOGIES,DL3021A,DL3B26BM00237,00.01.05.00.01
+target trip +/-0.6 V; CLOSED <= 150k, OPEN >= 1M
+active threshold slot: THRESH11 (dip=3); STABLECOUNT 2
+6 passes minimum per condition, 2.2 s dwell, 0.5 s settle
+
+VOLTAGE -- front-end transfer (input V -> resting differential, median of passes)
+    -1.200 V  ->   -0.1215 V   (sd   2.28 mV, n=5)
+    -1.100 V  ->   -0.1063 V   (sd  35.88 mV, n=6)
+    -1.000 V  ->   -0.1007 V   (sd  33.76 mV, n=6)
+    -0.900 V  ->   -0.0952 V   (sd   2.97 mV, n=5)
+    -0.800 V  ->   -0.0866 V   (sd   4.00 mV, n=5)
+    -0.700 V  ->   -0.0776 V   (sd  25.05 mV, n=6)
+    -0.600 V  ->   -0.0691 V   (sd   1.97 mV, n=6)
+    -0.500 V  ->   -0.0598 V   (sd  17.20 mV, n=6)
+    -0.400 V  ->   -0.0537 V   (sd   1.36 mV, n=6)
+    -0.300 V  ->   -0.0455 V   (sd   1.65 mV, n=5)
+    -0.200 V  ->   -0.0363 V   (sd   1.47 mV, n=6)
+    -0.100 V  ->   -0.0270 V   (sd   0.55 mV, n=5)
+    +0.000 V  ->   -0.0217 V   (sd   1.42 mV, n=6)
+    +0.100 V  ->   -0.0142 V   (sd   3.42 mV, n=6)
+    +0.200 V  ->   -0.0056 V   (sd   3.58 mV, n=6)
+    +0.300 V  ->   +0.0044 V   (sd  12.72 mV, n=6)
+    +0.400 V  ->   +0.0124 V   (sd   1.26 mV, n=6)
+    +0.500 V  ->   +0.0205 V   (sd   1.51 mV, n=5)
+    +0.600 V  ->   +0.0278 V   (sd   3.01 mV, n=6)
+    +0.700 V  ->   +0.0372 V   (sd   3.15 mV, n=5)
+    +0.800 V  ->   +0.0437 V   (sd   3.48 mV, n=5)
+    +0.900 V  ->   +0.0522 V   (sd   3.64 mV, n=5)
+    +1.000 V  ->   +0.0582 V   (sd   3.94 mV, n=5)
+    +1.100 V  ->   +0.0663 V   (sd   5.87 mV, n=5)
+    +1.200 V  ->   +0.0749 V   (sd   6.19 mV, n=5)
+   gain: +side 82.5 mV/V, -side 79.0 mV/V   (asymmetry +4.3 %)
+
+For a trip at +/-0.6 V:  REFCENTER = -0.0207   REFBAND = 0.0485
+
+No-voltage conditions re-decided with those values (VOLTFAST 1.5):
+        SHORT: rest -0.0236 V (sd 2.88 mV), at   6.0 % of band, false-voltage rate   0.0 %
+          10K: rest -0.0227 V (sd 2.11 mV), at   4.2 % of band, false-voltage rate   0.0 %
+         150K: rest -0.0235 V (sd 3.08 mV), at   5.7 % of band, false-voltage rate   0.0 %
+           1M: rest -0.0211 V (sd 1.59 mV), at   0.9 % of band, false-voltage rate   0.0 %
+        10.6M: rest -0.0211 V (sd 1.37 mV), at   0.9 % of band, false-voltage rate   0.0 %
+         OPEN: rest -0.0210 V (sd 1.72 mV), at   0.6 % of band, false-voltage rate   0.0 %
+   worst averaged deviation 12.9 % of the band (want <= 80 %), worst single read 0.36 x band (VOLTFAST is 1.5)
+   Smallest trip voltage that stays clean with a 1.25x guard: +/-0.117 V
+
+Detection rate per swept DC level (per pass, re-decided):
+    -1.200 V :  100.0 %
+    -1.100 V :   83.3 %
+    -1.000 V :   83.3 %
+    -0.900 V :  100.0 %
+    -0.800 V :  100.0 %
+    -0.700 V :   83.3 %
+    -0.600 V :   50.0 %
+    -0.500 V :    0.0 %
+    -0.400 V :    0.0 %
+    -0.300 V :    0.0 %
+    -0.200 V :    0.0 %
+    -0.100 V :    0.0 %
+    +0.000 V :    0.0 %
+    +0.100 V :    0.0 %
+    +0.200 V :    0.0 %
+    +0.300 V :    0.0 %
+    +0.400 V :    0.0 %
+    +0.500 V :    0.0 %
+    +0.600 V :   50.0 %
+    +0.700 V :  100.0 %
+    +0.800 V :  100.0 %
+    +0.900 V :  100.0 %
+    +1.000 V :  100.0 %
+    +1.100 V :  100.0 %
+    +1.200 V :  100.0 %
+   Always detected from 0.7 V (+) and -0.8 V (-); never detected up to 0.5 V (+) / 0.5 V (-)
+
+AC conditions (per pass, then through STABLECOUNT debounce):
+   AC 5Vrms 60Hz:  66.7 % of passes see voltage, lead state VOLTAGE 100.0 % of the time
+              (the misses are passes whose ten reads landed near a zero crossing -- raise VOLTAVG or lower the trip voltage)
+
+VOLTAGE VERDICT: clean -- trips at +/-0.6 V with no false positives
+
+   battery mode: DETBAND 0.03 only (each extra candidate would cost another unplug cycle)
+OPEN/CLOSED -- must read CLOSED at <= 150k and OPEN at >= 1M
+
+[time-to-return, DETBAND 0.03]  (DETMETHOD 1, units ms)
+     SHORT ( short): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+       10K (   10k): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+      150K (  150k): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+        1M (    1M): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+     10.6M ( 10.6M): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+      OPEN (  open): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+   clean cut points between adjacent loads: none
+   OVERLAP: SHORT and 1M distributions overlap by -0.0000 ms; best threshold 1.5000 still misreads 50.00 % of passes
+
+[tail area (method 2)]  (DETMETHOD 2, units V*ms)
+     SHORT ( short): mean    0.1803  sd   0.0012  range    0.1788 ..    0.1817  n=6
+       10K (   10k): mean    0.1811  sd   0.0009  range    0.1800 ..    0.1822  n=6
+      150K (  150k): mean    0.1963  sd   0.0005  range    0.1959 ..    0.1970  n=6
+        1M (    1M): mean    0.2543  sd   0.0012  range    0.2534 ..    0.2564  n=6
+     10.6M ( 10.6M): mean    0.3494  sd   0.0009  range    0.3482 ..    0.3506  n=6
+      OPEN (  open): mean    0.3737  sd   0.0017  range    0.3711 ..    0.3755  n=6
+   clean cut points between adjacent loads: 10K|150K, 150K|1M, 1M|10.6M, 10.6M|OPEN
+   CLEAN: threshold 0.2126 V*ms, 34.8 sigma / 0.0155 V*ms from the nearest recorded pass (150K vs 1M)
+
+[single |diff| (method 0)]  (DETMETHOD 0, units V)
+     SHORT ( short): mean    0.5101  sd   0.0034  range    0.5056 ..    0.5152  n=6
+       10K (   10k): mean    0.5113  sd   0.0044  range    0.5048 ..    0.5165  n=7
+      150K (  150k): mean    0.5342  sd   0.0035  range    0.5282 ..    0.5386  n=6
+        1M (    1M): mean    0.6058  sd   0.0049  range    0.5997 ..    0.6109  n=6
+     10.6M ( 10.6M): mean    0.7006  sd   0.0057  range    0.6895 ..    0.7052  n=6
+      OPEN (  open): mean    0.7241  sd   0.0016  range    0.7215 ..    0.7259  n=6
+   clean cut points between adjacent loads: 10K|150K, 150K|1M, 1M|10.6M, 10.6M|OPEN
+   CLEAN: threshold 0.5644 V, 8.5 sigma / 0.0258 V from the nearest recorded pass (150K vs 1M)
+
+OPEN/CLOSED VERDICT: clean with [tail area (method 2)], threshold 0.2126 V*ms
+
+   SLEEPTHR11 set to the same value -- the sleep/wake check in VERIFY is what proves it wakes.
+VERIFY -- the tuned settings, run for real (lead state after STABLECOUNT debounce):
+               load SHORT: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                 load 10K: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                load 150K: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                  load 1M: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+               load 10.6M: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+                load OPEN: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+               DC -0.800V: expect VDC-  C/F/V   0.0/  0.0/100.0 %   PASS
+               DC -0.690V: expect VDC-  C/F/V   0.0/  0.0/100.0 %   PASS
+               DC -0.510V: expect !V  C/F/V   0.0/100.0/  0.0 %   PASS
+               DC +0.510V: expect !V  C/F/V 100.0/  0.0/  0.0 %   PASS
+               DC +0.690V: expect VDC+  C/F/V   0.0/  0.0/100.0 %   PASS
+               DC +0.800V: expect VDC+  C/F/V   0.0/  0.0/100.0 %   PASS
+            AC 5Vrms 60Hz: expect VAC  C/F/V   0.0/  0.0/100.0 %   PASS
+           gen output off: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+
+SLEEP/WAKE CHECK (on battery; SLEEPTHR in force: 0.2126)
+   woke from the deep stage on a probe reading C (metric 0.20491, threshold 0.2126)
+   the last 4 deep stage probe(s) before it -- load 1M on the leads -- all FLOAT, metric 0.2624..0.2638 (margin +0.0498 over the threshold)
+   10 deep stage probe(s) before the wake, ~10 expected
+   verdict: PASS
+
+VERIFY VERDICT: every condition read as expected
+
+Applied to device RAM (NOT saved): REFCENTER=-0.0207, REFBAND=0.0485, DETMETHOD=2, THRESH11=0.2126, SLEEPTHR11=0.2126
+Press 'Save to EEPROM' to keep them, or 'Revert' to put back config_before.csv.
+[23:40:34] TUNE_DONE {"applied": {"REFCENTER": "-0.0207", "REFBAND": "0.0485", "DETMETHOD": "2", "THRESH11": "0.2126", "SLEEPTHR11": "0.2126"}, "ok": true, "dir": "C:\\Users\\Nick\\Documents\\GitHub\\Micro-DMM\\TestBench\\BlinkyHawkTestSuite\\Runs\\2026-10-01_233706_AutoTune_study_3.80V"}
+[23:40:35] log:    load relay: electronic load ON the battery
+[23:40:35] ======== level 5/14: 3.75V ========
+[23:40:36] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[23:40:48] log:    drain round 1: rested 3.830 V -> 3.755 V at 156 mA (~485 mohm); draining to an estimated rest of 3.75 V
+[23:46:34] log:    rested at 3.777 V
+[23:46:36] log:    drain round 2: rested 3.777 V -> 3.703 V at 156 mA (~478 mohm); draining to an estimated rest of 3.75 V
+[23:48:41] log:    rested at 3.774 V
+[23:48:43] log:    drain round 3: rested 3.774 V -> 3.699 V at 156 mA (~477 mohm); draining to an estimated rest of 3.75 V
+[23:50:26] log:    rested at 3.771 V
+[23:50:28] log:    drain round 4: rested 3.771 V -> 3.696 V at 155 mA (~479 mohm); draining to an estimated rest of 3.75 V
+[23:52:01] log:    rested at 3.769 V
+[23:52:02] log:    drain round 5: rested 3.769 V -> 3.698 V at 149 mA (~480 mohm); draining to an estimated rest of 3.75 V
+[23:53:22] log:    rested at 3.766 V
+[23:53:24] log:    drain round 6: rested 3.766 V -> 3.692 V at 149 mA (~500 mohm); draining to an estimated rest of 3.75 V
+[23:54:52] log:    rested at 3.765 V
+[23:54:52] log:    load relay: electronic load disconnected
+[23:54:59]    meter L05_3.75V_SHORT: 7 passes, cadence 55.946098149637976, node peak 2.433 V, floor 0.746 V
+[23:55:05]    meter L05_3.75V_OPEN: 8 passes, cadence 55.787610619469035, node peak 2.494 V, floor 0.745 V
+[23:55:05] log:    USB relay: BlinkyHawk USB connected
+[23:55:07]    unit says battv=3.867 (33 %), cell rested 3.765 V
+[23:55:07] log: == auto-tune -> C:\Users\Nick\Documents\GitHub\Micro-DMM\TestBench\BlinkyHawkTestSuite\Runs\2026-10-01_235507_AutoTune_study_3.75V
+[23:55:08] stage: Voltage: characterising
+[23:55:08] log:    battery capture: 32 condition(s) in 2 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[23:55:09] stage: volt 1/2: UNPLUG USB
+[23:55:10] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[23:55:57] stage: volt 1/2: PLUG USB BACK IN
+[23:55:57] log:    USB relay: BlinkyHawk USB connected
+[23:56:01] stage: volt 2/2: UNPLUG USB
+[23:56:02] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[23:56:39] stage: volt 2/2: PLUG USB BACK IN
+[23:56:39] log:    USB relay: BlinkyHawk USB connected
+[23:56:42] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:56:42] log:                load 10K:  n=  6  lead C/F/V  83/ 17/  0 %  FAIL
+[23:56:42] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:56:42] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:56:42] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:56:42] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:56:42] log:              DC -1.200V:  n=  6  lead C/F/V   0/  0/100 % VDC-  
+[23:56:42] log:              DC -1.100V:  n=  6  lead C/F/V   0/  0/100 % VDC-  
+[23:56:42] log:              DC -1.000V:  n=  6  lead C/F/V   0/ 17/ 83 % VDC-  
+[23:56:42] log:              DC -0.900V:  n=  6  lead C/F/V   0/ 17/ 83 % VDC-  
+[23:56:42] log:              DC -0.800V:  n=  6  lead C/F/V   0/ 17/ 83 % VDC-  
+[23:56:42] log:              DC -0.700V:  n=  6  lead C/F/V   0/ 17/ 83 % VDC-  
+[23:56:42] log:              DC -0.600V:  n=  6  lead C/F/V   0/ 17/ 83 % VDC-  
+[23:56:42] log:              DC -0.500V:  n=  5  lead C/F/V   0/100/  0 %  
+[23:56:42] log:              DC -0.400V:  n=  6  lead C/F/V   0/100/  0 %  
+[23:56:42] log:              DC -0.300V:  n=  5  lead C/F/V   0/100/  0 %  
+[23:56:42] log:              DC -0.200V:  n=  6  lead C/F/V   0/100/  0 %  
+[23:56:42] log:              DC -0.100V:  n=  6  lead C/F/V   0/100/  0 %  
+[23:56:42] log:              DC +0.000V:  n=  6  lead C/F/V 100/  0/  0 %  
+[23:56:42] log:              DC +0.100V:  n=  6  lead C/F/V 100/  0/  0 %  
+[23:56:42] log:              DC +0.200V:  n=  6  lead C/F/V 100/  0/  0 %  
+[23:56:42] log:              DC +0.300V:  n=  6  lead C/F/V 100/  0/  0 %  
+[23:56:42] log:              DC +0.400V:  n=  6  lead C/F/V 100/  0/  0 %  
+[23:56:42] log:              DC +0.500V:  n=  6  lead C/F/V 100/  0/  0 %  
+[23:56:42] log:              DC +0.600V:  n=  6  lead C/F/V 100/  0/  0 %  
+[23:56:42] log:              DC +0.700V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[23:56:42] log:              DC +0.800V:  n=  5  lead C/F/V   0/  0/100 % VDC+  
+[23:56:42] log:              DC +0.900V:  n=  5  lead C/F/V   0/  0/100 % VDC+  
+[23:56:42] log:              DC +1.000V:  n=  5  lead C/F/V   0/  0/100 % VDC+  
+[23:56:42] log:              DC +1.100V:  n=  5  lead C/F/V   0/  0/100 % VDC+  
+[23:56:42] log:              DC +1.200V:  n=  5  lead C/F/V   0/  0/100 % VDC+  
+[23:56:42] log:           AC 5Vrms 60Hz:  n=  5  lead C/F/V   0/  0/100 % VAC  PASS
+[23:56:43] log:    applied (RAM): REFCENTER=-0.0238, REFBAND=0.0494
+[23:56:43] stage: Open/closed: characterising
+[23:56:43] log:    battery capture: 6 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[23:56:44] stage: thr0 1/1: UNPLUG USB
+[23:56:45] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[23:57:03] stage: thr0 1/1: PLUG USB BACK IN
+[23:57:03] log:    USB relay: BlinkyHawk USB connected
+[23:57:06] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:57:06] log:                load 10K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:57:06] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:57:06] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:57:06] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:57:06] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:57:06] log:    battery capture: 6 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[23:57:07] stage: thr1 1/1: UNPLUG USB
+[23:57:08] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[23:57:26] stage: thr1 1/1: PLUG USB BACK IN
+[23:57:26] log:    USB relay: BlinkyHawk USB connected
+[23:57:29] log:              load SHORT:  n=  6  lead C/F/V   0/100/  0 %  FAIL
+[23:57:29] log:                load 10K:  n=  7  lead C/F/V   0/100/  0 %  FAIL
+[23:57:29] log:               load 150K:  n=  6  lead C/F/V   0/100/  0 %  FAIL
+[23:57:29] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:57:29] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:57:29] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:57:29] stage: Verify
+[23:57:29] log:    battery capture: 14 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[23:57:30] stage: verify 1/1: UNPLUG USB
+[23:57:31] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[23:58:08] stage: verify 1/1: PLUG USB BACK IN
+[23:58:09] log:    USB relay: BlinkyHawk USB connected
+[23:58:12] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:58:12] log:                load 10K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:58:12] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:58:12] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:58:12] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:58:12] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:58:12] log:              DC -0.800V:  n=  5  lead C/F/V   0/  0/100 % VDC-  PASS
+[23:58:12] log:              DC -0.690V:  n=  5  lead C/F/V   0/  0/100 % VDC-  PASS
+[23:58:12] log:              DC -0.510V:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:58:12] log:              DC +0.510V:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[23:58:12] log:              DC +0.690V:  n=  6  lead C/F/V   0/  0/100 % VDC+  PASS
+[23:58:12] log:              DC +0.800V:  n=  5  lead C/F/V   0/  0/100 % VDC+  PASS
+[23:58:12] log:           AC 5Vrms 60Hz:  n=  6  lead C/F/V   0/  0/100 % VAC  PASS
+[23:58:12] log:          gen output off:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[23:58:12] stage: Verify: sleep/wake
+[23:58:13] stage: wake check: UNPLUG USB
+[23:58:14] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[23:58:32] stage: wake check: PLUG USB BACK IN
+[23:58:32] log:    USB relay: BlinkyHawk USB connected
+[23:58:35] log: SLEEP/WAKE CHECK (on battery; SLEEPTHR in force: 0.5750)
+[23:58:35] log:    woke from the deep stage on a probe reading C (metric 0.5362, threshold 0.575)
+[23:58:35] log:    the last 4 deep stage probe(s) before it -- load 1M on the leads -- all FLOAT, metric 0.6057..0.6131 (margin +0.0307 over the threshold)
+[23:58:35] log:    10 deep stage probe(s) before the wake, ~10 expected
+[23:58:35] log:    verdict: PASS
+BlinkyHawk auto-tune  2026-10-01 23:55:07
+MODE: ON BATTERY, floating -- passes read back from the unit's RAM log after each unplug cycle
+relay:  $ID,RelayJig,1.3
+fgen:   RIGOL TECHNOLOGIES,DG852 Pro,DG8R273M00069,00.01.00.00.22
+scope:  not connected
+load:   RIGOL TECHNOLOGIES,DL3021A,DL3B26BM00237,00.01.05.00.01
+target trip +/-0.6 V; CLOSED <= 150k, OPEN >= 1M
+active threshold slot: THRESH11 (dip=3); STABLECOUNT 2
+6 passes minimum per condition, 2.2 s dwell, 0.5 s settle
+
+VOLTAGE -- front-end transfer (input V -> resting differential, median of passes)
+    -1.200 V  ->   -0.1212 V   (sd  38.85 mV, n=6)
+    -1.100 V  ->   -0.1117 V   (sd  36.57 mV, n=6)
+    -1.000 V  ->   -0.1048 V   (sd  32.59 mV, n=6)
+    -0.900 V  ->   -0.0966 V   (sd  30.36 mV, n=6)
+    -0.800 V  ->   -0.0885 V   (sd  26.99 mV, n=6)
+    -0.700 V  ->   -0.0797 V   (sd  22.75 mV, n=6)
+    -0.600 V  ->   -0.0732 V   (sd   1.66 mV, n=6)
+    -0.500 V  ->   -0.0640 V   (sd   1.11 mV, n=5)
+    -0.400 V  ->   -0.0556 V   (sd   0.76 mV, n=6)
+    -0.300 V  ->   -0.0479 V   (sd   0.78 mV, n=5)
+    -0.200 V  ->   -0.0398 V   (sd   7.03 mV, n=6)
+    -0.100 V  ->   -0.0312 V   (sd   1.15 mV, n=6)
+    +0.000 V  ->   -0.0240 V   (sd   0.38 mV, n=6)
+    +0.100 V  ->   -0.0153 V   (sd   1.81 mV, n=6)
+    +0.200 V  ->   -0.0073 V   (sd   0.99 mV, n=6)
+    +0.300 V  ->   +0.0015 V   (sd   1.08 mV, n=6)
+    +0.400 V  ->   +0.0085 V   (sd   0.60 mV, n=6)
+    +0.500 V  ->   +0.0178 V   (sd   0.83 mV, n=6)
+    +0.600 V  ->   +0.0256 V   (sd   0.78 mV, n=6)
+    +0.700 V  ->   +0.0333 V   (sd   0.71 mV, n=6)
+    +0.800 V  ->   +0.0406 V   (sd   0.92 mV, n=5)
+    +0.900 V  ->   +0.0499 V   (sd   1.11 mV, n=5)
+    +1.000 V  ->   +0.0578 V   (sd   1.74 mV, n=5)
+    +1.100 V  ->   +0.0663 V   (sd   1.11 mV, n=5)
+    +1.200 V  ->   +0.0745 V   (sd   0.79 mV, n=5)
+   gain: +side 82.6 mV/V, -side 82.0 mV/V   (asymmetry +0.7 %)
+
+For a trip at +/-0.6 V:  REFCENTER = -0.0238   REFBAND = 0.0494
+
+No-voltage conditions re-decided with those values (VOLTFAST 1.5):
+        SHORT: rest -0.0238 V (sd 1.48 mV), at   0.1 % of band, false-voltage rate   0.0 %
+          10K: rest -0.0239 V (sd 0.95 mV), at   0.3 % of band, false-voltage rate   0.0 %
+         150K: rest -0.0234 V (sd 0.76 mV), at   0.7 % of band, false-voltage rate   0.0 %
+           1M: rest -0.0240 V (sd 1.08 mV), at   0.5 % of band, false-voltage rate   0.0 %
+        10.6M: rest -0.0244 V (sd 0.90 mV), at   1.2 % of band, false-voltage rate   0.0 %
+         OPEN: rest -0.0243 V (sd 0.59 mV), at   1.1 % of band, false-voltage rate   0.0 %
+   worst averaged deviation 5.4 % of the band (want <= 80 %), worst single read 0.42 x band (VOLTFAST is 1.5)
+   Smallest trip voltage that stays clean with a 1.25x guard: +/-0.042 V
+
+Detection rate per swept DC level (per pass, re-decided):
+    -1.200 V :   83.3 %
+    -1.100 V :   83.3 %
+    -1.000 V :   83.3 %
+    -0.900 V :   83.3 %
+    -0.800 V :   83.3 %
+    -0.700 V :   83.3 %
+    -0.600 V :   50.0 %
+    -0.500 V :    0.0 %
+    -0.400 V :    0.0 %
+    -0.300 V :    0.0 %
+    -0.200 V :    0.0 %
+    -0.100 V :    0.0 %
+    +0.000 V :    0.0 %
+    +0.100 V :    0.0 %
+    +0.200 V :    0.0 %
+    +0.300 V :    0.0 %
+    +0.400 V :    0.0 %
+    +0.500 V :    0.0 %
+    +0.600 V :   50.0 %
+    +0.700 V :  100.0 %
+    +0.800 V :  100.0 %
+    +0.900 V :  100.0 %
+    +1.000 V :  100.0 %
+    +1.100 V :  100.0 %
+    +1.200 V :  100.0 %
+   Always detected from 0.7 V (+) and None V (-); never detected up to 0.5 V (+) / 0.5 V (-)
+
+AC conditions (per pass, then through STABLECOUNT debounce):
+   AC 5Vrms 60Hz: 100.0 % of passes see voltage, lead state VOLTAGE 100.0 % of the time
+
+VOLTAGE VERDICT: clean -- trips at +/-0.6 V with no false positives
+
+   battery mode: DETBAND 0.03 only (each extra candidate would cost another unplug cycle)
+OPEN/CLOSED -- must read CLOSED at <= 150k and OPEN at >= 1M
+
+[time-to-return, DETBAND 0.03]  (DETMETHOD 1, units ms)
+     SHORT ( short): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+       10K (   10k): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+      150K (  150k): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+        1M (    1M): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+     10.6M ( 10.6M): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+      OPEN (  open): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+   clean cut points between adjacent loads: none
+   OVERLAP: SHORT and 1M distributions overlap by -0.0000 ms; best threshold 1.5000 still misreads 50.00 % of passes
+
+[tail area (method 2)]  (DETMETHOD 2, units V*ms)
+     SHORT ( short): mean    0.1786  sd   0.0019  range    0.1762 ..    0.1812  n=6
+       10K (   10k): mean    0.1798  sd   0.0022  range    0.1777 ..    0.1835  n=6
+      150K (  150k): mean    0.1959  sd   0.0028  range    0.1912 ..    0.1983  n=6
+        1M (    1M): mean    0.2543  sd   0.0030  range    0.2500 ..    0.2583  n=6
+     10.6M ( 10.6M): mean    0.3496  sd   0.0017  range    0.3472 ..    0.3524  n=6
+      OPEN (  open): mean    0.3738  sd   0.0014  range    0.3715 ..    0.3754  n=6
+   clean cut points between adjacent loads: 10K|150K, 150K|1M, 1M|10.6M, 10.6M|OPEN
+   CLEAN: threshold 0.2243 V*ms, 10.1 sigma / 0.0257 V*ms from the nearest recorded pass (150K vs 1M)
+
+[single |diff| (method 0)]  (DETMETHOD 0, units V)
+     SHORT ( short): mean    0.5107  sd   0.0026  range    0.5064 ..    0.5136  n=6
+       10K (   10k): mean    0.5129  sd   0.0030  range    0.5090 ..    0.5169  n=7
+      150K (  150k): mean    0.5365  sd   0.0029  range    0.5316 ..    0.5402  n=6
+        1M (    1M): mean    0.6106  sd   0.0027  range    0.6057 ..    0.6136  n=6
+     10.6M ( 10.6M): mean    0.7020  sd   0.0022  range    0.6990 ..    0.7050  n=6
+      OPEN (  open): mean    0.7239  sd   0.0015  range    0.7223 ..    0.7264  n=6
+   clean cut points between adjacent loads: 10K|150K, 150K|1M, 1M|10.6M, 10.6M|OPEN
+   CLEAN: threshold 0.5750 V, 13.1 sigma / 0.0307 V from the nearest recorded pass (150K vs 1M)
+
+OPEN/CLOSED VERDICT: clean with [single |diff| (method 0)], threshold 0.575 V
+
+   SLEEPTHR11 set to the same value -- the sleep/wake check in VERIFY is what proves it wakes.
+VERIFY -- the tuned settings, run for real (lead state after STABLECOUNT debounce):
+               load SHORT: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                 load 10K: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                load 150K: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                  load 1M: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+               load 10.6M: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+                load OPEN: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+               DC -0.800V: expect VDC-  C/F/V   0.0/  0.0/100.0 %   PASS
+               DC -0.690V: expect VDC-  C/F/V   0.0/  0.0/100.0 %   PASS
+               DC -0.510V: expect !V  C/F/V   0.0/100.0/  0.0 %   PASS
+               DC +0.510V: expect !V  C/F/V 100.0/  0.0/  0.0 %   PASS
+               DC +0.690V: expect VDC+  C/F/V   0.0/  0.0/100.0 %   PASS
+               DC +0.800V: expect VDC+  C/F/V   0.0/  0.0/100.0 %   PASS
+            AC 5Vrms 60Hz: expect VAC  C/F/V   0.0/  0.0/100.0 %   PASS
+           gen output off: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+
+SLEEP/WAKE CHECK (on battery; SLEEPTHR in force: 0.5750)
+   woke from the deep stage on a probe reading C (metric 0.5362, threshold 0.575)
+   the last 4 deep stage probe(s) before it -- load 1M on the leads -- all FLOAT, metric 0.6057..0.6131 (margin +0.0307 over the threshold)
+   10 deep stage probe(s) before the wake, ~10 expected
+   verdict: PASS
+
+VERIFY VERDICT: every condition read as expected
+
+Applied to device RAM (NOT saved): REFCENTER=-0.0238, REFBAND=0.0494, DETMETHOD=0, THRESH11=0.5750, SLEEPTHR11=0.5750
+Press 'Save to EEPROM' to keep them, or 'Revert' to put back config_before.csv.
+[23:58:35] TUNE_DONE {"applied": {"REFCENTER": "-0.0238", "REFBAND": "0.0494", "DETMETHOD": "0", "THRESH11": "0.5750", "SLEEPTHR11": "0.5750"}, "ok": true, "dir": "C:\\Users\\Nick\\Documents\\GitHub\\Micro-DMM\\TestBench\\BlinkyHawkTestSuite\\Runs\\2026-10-01_235507_AutoTune_study_3.75V"}
+[23:58:36] log:    load relay: electronic load ON the battery
+[23:58:36] ======== level 6/14: 3.70V ========
+[23:58:37] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[23:58:49] log:    drain round 1: rested 3.782 V -> 3.710 V at 149 mA (~482 mohm); draining to an estimated rest of 3.7 V
+[00:05:43] log:    rested at 3.724 V
+[00:05:44] log:    drain round 2: rested 3.724 V -> 3.650 V at 156 mA (~474 mohm); draining to an estimated rest of 3.7 V
+[00:07:42] log:    rested at 3.721 V
+[00:07:43] log:    drain round 3: rested 3.721 V -> 3.647 V at 156 mA (~475 mohm); draining to an estimated rest of 3.7 V
+[00:09:20] log:    rested at 3.718 V
+[00:09:21] log:    drain round 4: rested 3.718 V -> 3.647 V at 149 mA (~475 mohm); draining to an estimated rest of 3.7 V
+[00:10:47] log:    rested at 3.716 V
+[00:10:49] log:    drain round 5: rested 3.716 V -> 3.642 V at 156 mA (~476 mohm); draining to an estimated rest of 3.7 V
+[00:12:07] log:    rested at 3.715 V
+[00:12:07] log:    load relay: electronic load disconnected
+[00:12:14]    meter L06_3.70V_SHORT: 8 passes, cadence 55.787610619469035, node peak 2.394 V, floor 0.747 V
+[00:12:19]    meter L06_3.70V_OPEN: 7 passes, cadence 55.946098149637976, node peak 2.441 V, floor 0.745 V
+[00:12:19] log:    USB relay: BlinkyHawk USB connected
+[00:12:22]    unit says battv=3.780 (15 %), cell rested 3.715 V
+[00:12:22] log: == auto-tune -> C:\Users\Nick\Documents\GitHub\Micro-DMM\TestBench\BlinkyHawkTestSuite\Runs\2026-10-02_001222_AutoTune_study_3.70V
+[00:12:22] stage: Voltage: characterising
+[00:12:23] log:    battery capture: 32 condition(s) in 2 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[00:12:24] stage: volt 1/2: UNPLUG USB
+[00:12:25] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[00:13:11] stage: volt 1/2: PLUG USB BACK IN
+[00:13:11] log:    USB relay: BlinkyHawk USB connected
+[00:13:16] stage: volt 2/2: UNPLUG USB
+[00:13:16] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[00:13:54] stage: volt 2/2: PLUG USB BACK IN
+[00:13:54] log:    USB relay: BlinkyHawk USB connected
+[00:13:57] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[00:13:57] log:                load 10K:  n=  6  lead C/F/V  83/ 17/  0 %  FAIL
+[00:13:57] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[00:13:57] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[00:13:57] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[00:13:57] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[00:13:57] log:              DC -1.200V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[00:13:57] log:              DC -1.100V:  n=  6  lead C/F/V   0/ 17/ 83 % VDC-  
+[00:13:57] log:              DC -1.000V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[00:13:57] log:              DC -0.900V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[00:13:57] log:              DC -0.800V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[00:13:57] log:              DC -0.700V:  n=  6  lead C/F/V   0/  0/100 % VDC-  
+[00:13:57] log:              DC -0.600V:  n=  6  lead C/F/V   0/ 33/ 67 % VDC-  
+[00:13:57] log:              DC -0.500V:  n=  6  lead C/F/V   0/100/  0 %  
+[00:13:57] log:              DC -0.400V:  n=  6  lead C/F/V   0/100/  0 %  
+[00:13:57] log:              DC -0.300V:  n=  6  lead C/F/V   0/100/  0 %  
+[00:13:57] log:              DC -0.200V:  n=  6  lead C/F/V   0/100/  0 %  
+[00:13:57] log:              DC -0.100V:  n=  6  lead C/F/V   0/100/  0 %  
+[00:13:57] log:              DC +0.000V:  n=  6  lead C/F/V 100/  0/  0 %  
+[00:13:57] log:              DC +0.100V:  n=  6  lead C/F/V 100/  0/  0 %  
+[00:13:57] log:              DC +0.200V:  n=  5  lead C/F/V 100/  0/  0 %  
+[00:13:57] log:              DC +0.300V:  n=  6  lead C/F/V 100/  0/  0 %  
+[00:13:57] log:              DC +0.400V:  n=  5  lead C/F/V 100/  0/  0 %  
+[00:13:57] log:              DC +0.500V:  n=  6  lead C/F/V 100/  0/  0 %  
+[00:13:57] log:              DC +0.600V:  n=  6  lead C/F/V  50/  0/ 50 % VDC+  
+[00:13:57] log:              DC +0.700V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[00:13:57] log:              DC +0.800V:  n=  5  lead C/F/V   0/  0/100 % VDC+  
+[00:13:57] log:              DC +0.900V:  n=  5  lead C/F/V   0/  0/100 % VDC+  
+[00:13:57] log:              DC +1.000V:  n=  5  lead C/F/V   0/  0/100 % VDC+  
+[00:13:57] log:              DC +1.100V:  n=  5  lead C/F/V   0/  0/100 % VDC+  
+[00:13:57] log:              DC +1.200V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[00:13:57] log:           AC 5Vrms 60Hz:  n=  6  lead C/F/V   0/  0/100 % VAC  PASS
+[00:13:57] log:    applied (RAM): REFCENTER=-0.0227, REFBAND=0.0497
+[00:13:57] stage: Open/closed: characterising
+[00:13:58] log:    battery capture: 6 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[00:13:59] stage: thr0 1/1: UNPLUG USB
+[00:14:00] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[00:14:18] stage: thr0 1/1: PLUG USB BACK IN
+[00:14:18] log:    USB relay: BlinkyHawk USB connected
+[00:14:21] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[00:14:21] log:                load 10K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[00:14:21] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[00:14:21] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[00:14:21] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[00:14:21] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[00:14:21] log:    battery capture: 6 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[00:14:22] stage: thr1 1/1: UNPLUG USB
+[00:14:23] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[00:14:41] stage: thr1 1/1: PLUG USB BACK IN
+[00:14:41] log:    USB relay: BlinkyHawk USB connected
+[00:14:43] log:              load SHORT:  n=  6  lead C/F/V   0/100/  0 %  FAIL
+[00:14:43] log:                load 10K:  n=  6  lead C/F/V   0/100/  0 %  FAIL
+[00:14:43] log:               load 150K:  n=  6  lead C/F/V   0/100/  0 %  FAIL
+[00:14:43] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[00:14:43] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[00:14:43] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[00:14:44] stage: Verify
+[00:14:44] log:    battery capture: 14 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[00:14:45] stage: verify 1/1: UNPLUG USB
+[00:14:46] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[00:15:23] stage: verify 1/1: PLUG USB BACK IN
+[00:15:23] log:    USB relay: BlinkyHawk USB connected
+[00:15:27] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[00:15:27] log:                load 10K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[00:15:27] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[00:15:27] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[00:15:27] log:              load 10.6M:  n=  5  lead C/F/V   0/100/  0 %  PASS
+[00:15:27] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[00:15:27] log:              DC -0.800V:  n=  6  lead C/F/V   0/  0/100 % VDC-  PASS
+[00:15:27] log:              DC -0.690V:  n=  6  lead C/F/V   0/  0/100 % VDC-  PASS
+[00:15:27] log:              DC -0.510V:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[00:15:27] log:              DC +0.510V:  n=  6  lead C/F/V  83/ 17/  0 %  PASS
+[00:15:27] log:              DC +0.690V:  n=  6  lead C/F/V   0/  0/100 % VDC+  PASS
+[00:15:27] log:              DC +0.800V:  n=  5  lead C/F/V   0/  0/100 % VDC+  PASS
+[00:15:27] log:           AC 5Vrms 60Hz:  n=  6  lead C/F/V   0/  0/100 % VAC  PASS
+[00:15:27] log:          gen output off:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[00:15:27] stage: Verify: sleep/wake
+[00:15:28] stage: wake check: UNPLUG USB
+[00:15:29] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[00:15:47] stage: wake check: PLUG USB BACK IN
+[00:15:47] log:    USB relay: BlinkyHawk USB connected
+[00:15:50] log: SLEEP/WAKE CHECK (on battery; SLEEPTHR in force: 0.2177)
+[00:15:50] log:    woke from the deep stage on a probe reading C (metric 0.205, threshold 0.2177)
+[00:15:50] log:    the last 4 deep stage probe(s) before it -- load 1M on the leads -- all FLOAT, metric 0.2625..0.2629 (margin +0.0448 over the threshold)
+[00:15:50] log:    10 deep stage probe(s) before the wake, ~10 expected
+[00:15:50] log:    verdict: PASS
+BlinkyHawk auto-tune  2026-10-02 00:12:22
+MODE: ON BATTERY, floating -- passes read back from the unit's RAM log after each unplug cycle
+relay:  $ID,RelayJig,1.3
+fgen:   RIGOL TECHNOLOGIES,DG852 Pro,DG8R273M00069,00.01.00.00.22
+scope:  not connected
+load:   RIGOL TECHNOLOGIES,DL3021A,DL3B26BM00237,00.01.05.00.01
+target trip +/-0.6 V; CLOSED <= 150k, OPEN >= 1M
+active threshold slot: THRESH11 (dip=3); STABLECOUNT 2
+6 passes minimum per condition, 2.2 s dwell, 0.5 s settle
+
+VOLTAGE -- front-end transfer (input V -> resting differential, median of passes)
+    -1.200 V  ->   -0.1219 V   (sd   1.72 mV, n=5)
+    -1.100 V  ->   -0.1137 V   (sd  35.76 mV, n=6)
+    -1.000 V  ->   -0.1061 V   (sd   1.51 mV, n=5)
+    -0.900 V  ->   -0.0966 V   (sd   1.42 mV, n=5)
+    -0.800 V  ->   -0.0874 V   (sd   2.10 mV, n=5)
+    -0.700 V  ->   -0.0821 V   (sd  23.17 mV, n=6)
+    -0.600 V  ->   -0.0724 V   (sd   1.61 mV, n=6)
+    -0.500 V  ->   -0.0629 V   (sd  17.01 mV, n=6)
+    -0.400 V  ->   -0.0549 V   (sd   1.45 mV, n=6)
+    -0.300 V  ->   -0.0477 V   (sd  10.29 mV, n=6)
+    -0.200 V  ->   -0.0402 V   (sd   2.97 mV, n=6)
+    -0.100 V  ->   -0.0319 V   (sd   4.25 mV, n=6)
+    +0.000 V  ->   -0.0234 V   (sd   1.08 mV, n=6)
+    +0.100 V  ->   -0.0153 V   (sd   2.24 mV, n=6)
+    +0.200 V  ->   -0.0053 V   (sd   1.55 mV, n=5)
+    +0.300 V  ->   +0.0027 V   (sd   1.79 mV, n=6)
+    +0.400 V  ->   +0.0087 V   (sd   1.56 mV, n=5)
+    +0.500 V  ->   +0.0197 V   (sd   2.26 mV, n=6)
+    +0.600 V  ->   +0.0270 V   (sd   0.80 mV, n=6)
+    +0.700 V  ->   +0.0344 V   (sd   2.30 mV, n=6)
+    +0.800 V  ->   +0.0430 V   (sd   2.17 mV, n=5)
+    +0.900 V  ->   +0.0501 V   (sd   0.85 mV, n=5)
+    +1.000 V  ->   +0.0576 V   (sd   1.60 mV, n=5)
+    +1.100 V  ->   +0.0663 V   (sd   1.67 mV, n=5)
+    +1.200 V  ->   +0.0744 V   (sd   1.66 mV, n=6)
+   gain: +side 84.0 mV/V, -side 81.5 mV/V   (asymmetry +2.9 %)
+
+For a trip at +/-0.6 V:  REFCENTER = -0.0227   REFBAND = 0.0497
+
+No-voltage conditions re-decided with those values (VOLTFAST 1.5):
+        SHORT: rest -0.0217 V (sd 1.75 mV), at   2.1 % of band, false-voltage rate   0.0 %
+          10K: rest -0.0238 V (sd 0.99 mV), at   2.2 % of band, false-voltage rate   0.0 %
+         150K: rest -0.0230 V (sd 2.34 mV), at   0.6 % of band, false-voltage rate   0.0 %
+           1M: rest -0.0226 V (sd 0.72 mV), at   0.2 % of band, false-voltage rate   0.0 %
+        10.6M: rest -0.0233 V (sd 2.92 mV), at   1.1 % of band, false-voltage rate   0.0 %
+         OPEN: rest -0.0215 V (sd 1.99 mV), at   2.4 % of band, false-voltage rate   0.0 %
+   worst averaged deviation 7.9 % of the band (want <= 80 %), worst single read 0.45 x band (VOLTFAST is 1.5)
+   Smallest trip voltage that stays clean with a 1.25x guard: +/-0.062 V
+
+Detection rate per swept DC level (per pass, re-decided):
+    -1.200 V :  100.0 %
+    -1.100 V :   83.3 %
+    -1.000 V :  100.0 %
+    -0.900 V :  100.0 %
+    -0.800 V :  100.0 %
+    -0.700 V :   83.3 %
+    -0.600 V :   50.0 %
+    -0.500 V :    0.0 %
+    -0.400 V :    0.0 %
+    -0.300 V :    0.0 %
+    -0.200 V :    0.0 %
+    -0.100 V :    0.0 %
+    +0.000 V :    0.0 %
+    +0.100 V :    0.0 %
+    +0.200 V :    0.0 %
+    +0.300 V :    0.0 %
+    +0.400 V :    0.0 %
+    +0.500 V :    0.0 %
+    +0.600 V :   50.0 %
+    +0.700 V :  100.0 %
+    +0.800 V :  100.0 %
+    +0.900 V :  100.0 %
+    +1.000 V :  100.0 %
+    +1.100 V :  100.0 %
+    +1.200 V :  100.0 %
+   Always detected from 0.7 V (+) and -0.8 V (-); never detected up to 0.5 V (+) / 0.5 V (-)
+
+AC conditions (per pass, then through STABLECOUNT debounce):
+   AC 5Vrms 60Hz: 100.0 % of passes see voltage, lead state VOLTAGE 100.0 % of the time
+
+VOLTAGE VERDICT: clean -- trips at +/-0.6 V with no false positives
+
+   battery mode: DETBAND 0.03 only (each extra candidate would cost another unplug cycle)
+OPEN/CLOSED -- must read CLOSED at <= 150k and OPEN at >= 1M
+
+[time-to-return, DETBAND 0.03]  (DETMETHOD 1, units ms)
+     SHORT ( short): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+       10K (   10k): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+      150K (  150k): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+        1M (    1M): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+     10.6M ( 10.6M): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+      OPEN (  open): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+   clean cut points between adjacent loads: none
+   OVERLAP: SHORT and 1M distributions overlap by -0.0000 ms; best threshold 1.5000 still misreads 50.00 % of passes
+
+[tail area (method 2)]  (DETMETHOD 2, units V*ms)
+     SHORT ( short): mean    0.1800  sd   0.0011  range    0.1786 ..    0.1817  n=6
+       10K (   10k): mean    0.1815  sd   0.0004  range    0.1809 ..    0.1819  n=6
+      150K (  150k): mean    0.1964  sd   0.0007  range    0.1955 ..    0.1972  n=6
+        1M (    1M): mean    0.2552  sd   0.0012  range    0.2535 ..    0.2569  n=6
+     10.6M ( 10.6M): mean    0.3507  sd   0.0006  range    0.3501 ..    0.3515  n=6
+      OPEN (  open): mean    0.3745  sd   0.0011  range    0.3726 ..    0.3760  n=6
+   clean cut points between adjacent loads: 10K|150K, 150K|1M, 1M|10.6M, 10.6M|OPEN
+   CLEAN: threshold 0.2177 V*ms, 32.6 sigma / 0.0205 V*ms from the nearest recorded pass (150K vs 1M)
+
+[single |diff| (method 0)]  (DETMETHOD 0, units V)
+     SHORT ( short): mean    0.5117  sd   0.0034  range    0.5072 ..    0.5161  n=6
+       10K (   10k): mean    0.5151  sd   0.0028  range    0.5100 ..    0.5181  n=6
+      150K (  150k): mean    0.5386  sd   0.0019  range    0.5358 ..    0.5410  n=6
+        1M (    1M): mean    0.6131  sd   0.0023  range    0.6095 ..    0.6160  n=6
+     10.6M ( 10.6M): mean    0.7014  sd   0.0042  range    0.6941 ..    0.7064  n=6
+      OPEN (  open): mean    0.7257  sd   0.0022  range    0.7223 ..    0.7288  n=6
+   clean cut points between adjacent loads: 10K|150K, 150K|1M, 1M|10.6M, 10.6M|OPEN
+   CLEAN: threshold 0.5728 V, 17.8 sigma / 0.0318 V from the nearest recorded pass (150K vs 1M)
+
+OPEN/CLOSED VERDICT: clean with [tail area (method 2)], threshold 0.2177 V*ms
+
+   SLEEPTHR11 set to the same value -- the sleep/wake check in VERIFY is what proves it wakes.
+VERIFY -- the tuned settings, run for real (lead state after STABLECOUNT debounce):
+               load SHORT: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                 load 10K: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                load 150K: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                  load 1M: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+               load 10.6M: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+                load OPEN: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+               DC -0.800V: expect VDC-  C/F/V   0.0/  0.0/100.0 %   PASS
+               DC -0.690V: expect VDC-  C/F/V   0.0/  0.0/100.0 %   PASS
+               DC -0.510V: expect !V  C/F/V   0.0/100.0/  0.0 %   PASS
+               DC +0.510V: expect !V  C/F/V  83.3/ 16.7/  0.0 %   PASS
+               DC +0.690V: expect VDC+  C/F/V   0.0/  0.0/100.0 %   PASS
+               DC +0.800V: expect VDC+  C/F/V   0.0/  0.0/100.0 %   PASS
+            AC 5Vrms 60Hz: expect VAC  C/F/V   0.0/  0.0/100.0 %   PASS
+           gen output off: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+
+SLEEP/WAKE CHECK (on battery; SLEEPTHR in force: 0.2177)
+   woke from the deep stage on a probe reading C (metric 0.205, threshold 0.2177)
+   the last 4 deep stage probe(s) before it -- load 1M on the leads -- all FLOAT, metric 0.2625..0.2629 (margin +0.0448 over the threshold)
+   10 deep stage probe(s) before the wake, ~10 expected
+   verdict: PASS
+
+VERIFY VERDICT: every condition read as expected
+
+Applied to device RAM (NOT saved): REFCENTER=-0.0227, REFBAND=0.0497, DETMETHOD=2, THRESH11=0.2177, SLEEPTHR11=0.2177
+Press 'Save to EEPROM' to keep them, or 'Revert' to put back config_before.csv.
+[00:15:50] TUNE_DONE {"applied": {"REFCENTER": "-0.0227", "REFBAND": "0.0497", "DETMETHOD": "2", "THRESH11": "0.2177", "SLEEPTHR11": "0.2177"}, "ok": true, "dir": "C:\\Users\\Nick\\Documents\\GitHub\\Micro-DMM\\TestBench\\BlinkyHawkTestSuite\\Runs\\2026-10-02_001222_AutoTune_study_3.70V"}
+[00:15:51] log:    load relay: electronic load ON the battery
+[00:15:51] ======== level 7/14: 3.65V ========
+[00:15:52] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[00:16:04] log:    drain round 1: rested 3.728 V -> 3.653 V at 156 mA (~482 mohm); draining to an estimated rest of 3.65 V
+[00:25:35] log:    rested at 3.673 V
+[00:25:36] log:    drain round 2: rested 3.673 V -> 3.599 V at 155 mA (~476 mohm); draining to an estimated rest of 3.65 V
+[00:27:36] log:    rested at 3.670 V
+[00:27:37] log:    drain round 3: rested 3.670 V -> 3.596 V at 155 mA (~476 mohm); draining to an estimated rest of 3.65 V
+[00:29:20] log:    rested at 3.668 V
+[00:29:21] log:    drain round 4: rested 3.668 V -> 3.594 V at 156 mA (~474 mohm); draining to an estimated rest of 3.65 V
+[00:30:52] log:    rested at 3.667 V
+[00:30:54] log:    drain round 5: rested 3.667 V -> 3.593 V at 149 mA (~496 mohm); draining to an estimated rest of 3.65 V
+[00:32:33] log:    rested at 3.664 V
+[00:32:33] log:    load relay: electronic load disconnected
+[00:32:40]    meter L07_3.65V_SHORT: 7 passes, cadence 55.946098149637976, node peak 2.412 V, floor 0.745 V
+[00:32:46]    meter L07_3.65V_OPEN: 7 passes, cadence 55.94609814963792, node peak 2.432 V, floor 0.743 V
+[00:32:46] log:    USB relay: BlinkyHawk USB connected
+[00:32:49]    unit says battv=3.741 (8 %), cell rested 3.664 V
+[00:32:49] log: == auto-tune -> C:\Users\Nick\Documents\GitHub\Micro-DMM\TestBench\BlinkyHawkTestSuite\Runs\2026-10-02_003249_AutoTune_study_3.65V
+[00:32:49] stage: Voltage: characterising
+[00:32:49] log:    battery capture: 32 condition(s) in 2 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[00:32:50] stage: volt 1/2: UNPLUG USB
+[00:32:51] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[00:33:38] stage: volt 1/2: PLUG USB BACK IN
+[00:33:38] log:    USB relay: BlinkyHawk USB connected
+[00:33:42] stage: volt 2/2: UNPLUG USB
+[00:33:43] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[00:34:21] stage: volt 2/2: PLUG USB BACK IN
+[00:34:21] log:    USB relay: BlinkyHawk USB connected
+[00:34:24] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[00:34:24] log:                load 10K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[00:34:24] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[00:34:24] log:                 load 1M:  n=  5  lead C/F/V   0/100/  0 %  PASS
+[00:34:24] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[00:34:24] log:               load OPEN:  n=  5  lead C/F/V   0/100/  0 %  PASS
+[00:34:24] log:              DC -1.200V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[00:34:24] log:              DC -1.100V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[00:34:24] log:              DC -1.000V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[00:34:24] log:              DC -0.900V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[00:34:24] log:              DC -0.800V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[00:34:24] log:              DC -0.700V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[00:34:24] log:              DC -0.600V:  n=  6  lead C/F/V   0/ 50/ 50 % VDC-  
+[00:34:24] log:              DC -0.500V:  n=  6  lead C/F/V   0/100/  0 %  
+[00:34:24] log:              DC -0.400V:  n=  6  lead C/F/V   0/100/  0 %  
+[00:34:24] log:              DC -0.300V:  n=  6  lead C/F/V   0/100/  0 %  
+[00:34:24] log:              DC -0.200V:  n=  6  lead C/F/V   0/100/  0 %  
+[00:34:24] log:              DC -0.100V:  n=  6  lead C/F/V   0/100/  0 %  
+[00:34:24] log:              DC +0.000V:  n=  6  lead C/F/V 100/  0/  0 %  
+[00:34:24] log:              DC +0.100V:  n=  6  lead C/F/V 100/  0/  0 %  
+[00:34:24] log:              DC +0.200V:  n=  6  lead C/F/V 100/  0/  0 %  
+[00:34:24] log:              DC +0.300V:  n=  6  lead C/F/V 100/  0/  0 %  
+[00:34:24] log:              DC +0.400V:  n=  6  lead C/F/V 100/  0/  0 %  
+[00:34:24] log:              DC +0.500V:  n=  6  lead C/F/V 100/  0/  0 %  
+[00:34:24] log:              DC +0.600V:  n=  6  lead C/F/V  83/  0/ 17 % VDC+  
+[00:34:24] log:              DC +0.700V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[00:34:24] log:              DC +0.800V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[00:34:24] log:              DC +0.900V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[00:34:24] log:              DC +1.000V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[00:34:24] log:              DC +1.100V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[00:34:24] log:              DC +1.200V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[00:34:24] log:           AC 5Vrms 60Hz:  n=  5  lead C/F/V   0/  0/100 % VAC  PASS
+[00:34:24] log:    applied (RAM): REFCENTER=-0.0237, REFBAND=0.0493
+[00:34:24] stage: Open/closed: characterising
+[00:34:24] log:    battery capture: 6 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[00:34:25] stage: thr0 1/1: UNPLUG USB
+[00:34:26] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[00:34:44] stage: thr0 1/1: PLUG USB BACK IN
+[00:34:44] log:    USB relay: BlinkyHawk USB connected
+[00:34:47] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[00:34:47] log:                load 10K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[00:34:47] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[00:34:47] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[00:34:47] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[00:34:47] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[00:34:47] log:    battery capture: 6 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[00:34:48] stage: thr1 1/1: UNPLUG USB
+[00:34:49] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[00:35:07] stage: thr1 1/1: PLUG USB BACK IN
+[00:35:07] log:    USB relay: BlinkyHawk USB connected
+[00:35:10] log:              load SHORT:  n=  6  lead C/F/V   0/100/  0 %  FAIL
+[00:35:10] log:                load 10K:  n=  6  lead C/F/V   0/100/  0 %  FAIL
+[00:35:10] log:               load 150K:  n=  6  lead C/F/V   0/100/  0 %  FAIL
+[00:35:10] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[00:35:10] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[00:35:10] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[00:35:11] stage: Verify
+[00:35:11] log:    battery capture: 14 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[00:35:12] stage: verify 1/1: UNPLUG USB
+[00:35:13] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[00:35:50] stage: verify 1/1: PLUG USB BACK IN
+[00:35:50] log:    USB relay: BlinkyHawk USB connected
+[00:35:53] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[00:35:53] log:                load 10K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[00:35:53] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[00:35:53] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[00:35:53] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[00:35:53] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[00:35:53] log:              DC -0.800V:  n=  5  lead C/F/V   0/  0/100 % VDC-  PASS
+[00:35:53] log:              DC -0.690V:  n=  5  lead C/F/V   0/  0/100 % VDC-  PASS
+[00:35:53] log:              DC -0.510V:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[00:35:53] log:              DC +0.510V:  n=  5  lead C/F/V 100/  0/  0 %  PASS
+[00:35:53] log:              DC +0.690V:  n=  6  lead C/F/V   0/  0/100 % VDC+  PASS
+[00:35:53] log:              DC +0.800V:  n=  5  lead C/F/V   0/  0/100 % VDC+  PASS
+[00:35:53] log:           AC 5Vrms 60Hz:  n=  5  lead C/F/V   0/  0/100 % VAC  PASS
+[00:35:53] log:          gen output off:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[00:35:53] stage: Verify: sleep/wake
+[00:35:55] stage: wake check: UNPLUG USB
+[00:35:56] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[00:36:14] stage: wake check: PLUG USB BACK IN
+[00:36:14] log:    USB relay: BlinkyHawk USB connected
+[00:36:17] log: SLEEP/WAKE CHECK (on battery; SLEEPTHR in force: 0.2384)
+[00:36:17] log:    woke from the deep stage on a probe reading C (metric 0.20348, threshold 0.2384)
+[00:36:17] log:    the last 4 deep stage probe(s) before it -- load 1M on the leads -- all FLOAT, metric 0.2613..0.2629 (margin +0.0229 over the threshold)
+[00:36:17] log:    10 deep stage probe(s) before the wake, ~10 expected
+[00:36:17] log:    verdict: PASS
+BlinkyHawk auto-tune  2026-10-02 00:32:49
+MODE: ON BATTERY, floating -- passes read back from the unit's RAM log after each unplug cycle
+relay:  $ID,RelayJig,1.3
+fgen:   RIGOL TECHNOLOGIES,DG852 Pro,DG8R273M00069,00.01.00.00.22
+scope:  not connected
+load:   RIGOL TECHNOLOGIES,DL3021A,DL3B26BM00237,00.01.05.00.01
+target trip +/-0.6 V; CLOSED <= 150k, OPEN >= 1M
+active threshold slot: THRESH11 (dip=3); STABLECOUNT 2
+6 passes minimum per condition, 2.2 s dwell, 0.5 s settle
+
+VOLTAGE -- front-end transfer (input V -> resting differential, median of passes)
+    -1.200 V  ->   -0.1221 V   (sd   1.54 mV, n=5)
+    -1.100 V  ->   -0.1125 V   (sd   2.20 mV, n=5)
+    -1.000 V  ->   -0.1058 V   (sd   1.81 mV, n=5)
+    -0.900 V  ->   -0.0980 V   (sd   2.03 mV, n=5)
+    -0.800 V  ->   -0.0892 V   (sd   0.95 mV, n=5)
+    -0.700 V  ->   -0.0815 V   (sd   0.84 mV, n=5)
+    -0.600 V  ->   -0.0730 V   (sd   2.35 mV, n=6)
+    -0.500 V  ->   -0.0644 V   (sd   0.98 mV, n=6)
+    -0.400 V  ->   -0.0556 V   (sd  13.29 mV, n=6)
+    -0.300 V  ->   -0.0475 V   (sd   1.07 mV, n=6)
+    -0.200 V  ->   -0.0397 V   (sd   6.24 mV, n=6)
+    -0.100 V  ->   -0.0314 V   (sd   1.02 mV, n=6)
+    +0.000 V  ->   -0.0223 V   (sd   2.87 mV, n=6)
+    +0.100 V  ->   -0.0147 V   (sd   3.18 mV, n=6)
+    +0.200 V  ->   -0.0078 V   (sd   2.31 mV, n=6)
+    +0.300 V  ->   -0.0006 V   (sd   9.86 mV, n=6)
+    +0.400 V  ->   +0.0088 V   (sd   1.88 mV, n=6)
+    +0.500 V  ->   +0.0169 V   (sd  16.78 mV, n=6)
+    +0.600 V  ->   +0.0256 V   (sd   1.22 mV, n=6)
+    +0.700 V  ->   +0.0326 V   (sd  23.45 mV, n=6)
+    +0.800 V  ->   +0.0419 V   (sd  28.55 mV, n=6)
+    +0.900 V  ->   +0.0483 V   (sd  29.18 mV, n=6)
+    +1.000 V  ->   +0.0566 V   (sd  33.33 mV, n=6)
+    +1.100 V  ->   +0.0643 V   (sd  35.34 mV, n=6)
+    +1.200 V  ->   +0.0741 V   (sd  40.97 mV, n=6)
+   gain: +side 79.9 mV/V, -side 84.4 mV/V   (asymmetry -5.6 %)
+
+For a trip at +/-0.6 V:  REFCENTER = -0.0237   REFBAND = 0.0493
+
+No-voltage conditions re-decided with those values (VOLTFAST 1.5):
+        SHORT: rest -0.0228 V (sd 2.85 mV), at   1.9 % of band, false-voltage rate   0.0 %
+          10K: rest -0.0229 V (sd 1.71 mV), at   1.6 % of band, false-voltage rate   0.0 %
+         150K: rest -0.0227 V (sd 1.23 mV), at   1.9 % of band, false-voltage rate   0.0 %
+           1M: rest -0.0237 V (sd 1.58 mV), at   0.1 % of band, false-voltage rate   0.0 %
+        10.6M: rest -0.0254 V (sd 2.58 mV), at   3.5 % of band, false-voltage rate   0.0 %
+         OPEN: rest -0.0228 V (sd 2.71 mV), at   1.9 % of band, false-voltage rate   0.0 %
+   worst averaged deviation 14.0 % of the band (want <= 80 %), worst single read 0.40 x band (VOLTFAST is 1.5)
+   Smallest trip voltage that stays clean with a 1.25x guard: +/-0.117 V
+
+Detection rate per swept DC level (per pass, re-decided):
+    -1.200 V :  100.0 %
+    -1.100 V :  100.0 %
+    -1.000 V :  100.0 %
+    -0.900 V :  100.0 %
+    -0.800 V :  100.0 %
+    -0.700 V :  100.0 %
+    -0.600 V :   50.0 %
+    -0.500 V :    0.0 %
+    -0.400 V :    0.0 %
+    -0.300 V :    0.0 %
+    -0.200 V :    0.0 %
+    -0.100 V :    0.0 %
+    +0.000 V :    0.0 %
+    +0.100 V :    0.0 %
+    +0.200 V :    0.0 %
+    +0.300 V :    0.0 %
+    +0.400 V :    0.0 %
+    +0.500 V :    0.0 %
+    +0.600 V :   50.0 %
+    +0.700 V :   83.3 %
+    +0.800 V :   83.3 %
+    +0.900 V :   83.3 %
+    +1.000 V :   83.3 %
+    +1.100 V :   83.3 %
+    +1.200 V :   83.3 %
+   Always detected from None V (+) and -0.7 V (-); never detected up to 0.5 V (+) / 0.5 V (-)
+
+AC conditions (per pass, then through STABLECOUNT debounce):
+   AC 5Vrms 60Hz: 100.0 % of passes see voltage, lead state VOLTAGE 100.0 % of the time
+
+VOLTAGE VERDICT: clean -- trips at +/-0.6 V with no false positives
+
+   battery mode: DETBAND 0.03 only (each extra candidate would cost another unplug cycle)
+OPEN/CLOSED -- must read CLOSED at <= 150k and OPEN at >= 1M
+
+[time-to-return, DETBAND 0.03]  (DETMETHOD 1, units ms)
+     SHORT ( short): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+       10K (   10k): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+      150K (  150k): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+        1M (    1M): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+     10.6M ( 10.6M): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+      OPEN (  open): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+   clean cut points between adjacent loads: none
+   OVERLAP: SHORT and 1M distributions overlap by -0.0000 ms; best threshold 1.5000 still misreads 50.00 % of passes
+
+[tail area (method 2)]  (DETMETHOD 2, units V*ms)
+     SHORT ( short): mean    0.1796  sd   0.0008  range    0.1784 ..    0.1809  n=6
+       10K (   10k): mean    0.1807  sd   0.0005  range    0.1801 ..    0.1813  n=6
+      150K (  150k): mean    0.1961  sd   0.0009  range    0.1949 ..    0.1977  n=6
+        1M (    1M): mean    0.2551  sd   0.0004  range    0.2546 ..    0.2556  n=6
+     10.6M ( 10.6M): mean    0.3501  sd   0.0002  range    0.3498 ..    0.3503  n=6
+      OPEN (  open): mean    0.3738  sd   0.0005  range    0.3732 ..    0.3746  n=6
+   clean cut points between adjacent loads: 10K|150K, 150K|1M, 1M|10.6M, 10.6M|OPEN
+   CLEAN: threshold 0.2384 V*ms, 44.6 sigma / 0.0163 V*ms from the nearest recorded pass (150K vs 1M)
+
+[single |diff| (method 0)]  (DETMETHOD 0, units V)
+     SHORT ( short): mean    0.5084  sd   0.0043  range    0.5026 ..    0.5142  n=6
+       10K (   10k): mean    0.5092  sd   0.0049  range    0.5026 ..    0.5152  n=6
+      150K (  150k): mean    0.5330  sd   0.0027  range    0.5282 ..    0.5362  n=6
+        1M (    1M): mean    0.6046  sd   0.0044  range    0.5960 ..    0.6083  n=6
+     10.6M ( 10.6M): mean    0.6969  sd   0.0041  range    0.6895 ..    0.7018  n=6
+      OPEN (  open): mean    0.7175  sd   0.0035  range    0.7120 ..    0.7223  n=6
+   clean cut points between adjacent loads: 10K|150K, 150K|1M, 1M|10.6M, 10.6M|OPEN
+   CLEAN: threshold 0.5605 V, 10.1 sigma / 0.0243 V from the nearest recorded pass (150K vs 1M)
+
+OPEN/CLOSED VERDICT: clean with [tail area (method 2)], threshold 0.2384 V*ms
+
+   SLEEPTHR11 set to the same value -- the sleep/wake check in VERIFY is what proves it wakes.
+VERIFY -- the tuned settings, run for real (lead state after STABLECOUNT debounce):
+               load SHORT: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                 load 10K: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                load 150K: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                  load 1M: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+               load 10.6M: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+                load OPEN: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+               DC -0.800V: expect VDC-  C/F/V   0.0/  0.0/100.0 %   PASS
+               DC -0.690V: expect VDC-  C/F/V   0.0/  0.0/100.0 %   PASS
+               DC -0.510V: expect !V  C/F/V   0.0/100.0/  0.0 %   PASS
+               DC +0.510V: expect !V  C/F/V 100.0/  0.0/  0.0 %   PASS
+               DC +0.690V: expect VDC+  C/F/V   0.0/  0.0/100.0 %   PASS
+               DC +0.800V: expect VDC+  C/F/V   0.0/  0.0/100.0 %   PASS
+            AC 5Vrms 60Hz: expect VAC  C/F/V   0.0/  0.0/100.0 %   PASS
+           gen output off: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+
+SLEEP/WAKE CHECK (on battery; SLEEPTHR in force: 0.2384)
+   woke from the deep stage on a probe reading C (metric 0.20348, threshold 0.2384)
+   the last 4 deep stage probe(s) before it -- load 1M on the leads -- all FLOAT, metric 0.2613..0.2629 (margin +0.0229 over the threshold)
+   10 deep stage probe(s) before the wake, ~10 expected
+   verdict: PASS
+
+VERIFY VERDICT: every condition read as expected
+
+Applied to device RAM (NOT saved): REFCENTER=-0.0237, REFBAND=0.0493, DETMETHOD=2, THRESH11=0.2384, SLEEPTHR11=0.2384
+Press 'Save to EEPROM' to keep them, or 'Revert' to put back config_before.csv.
+[00:36:17] TUNE_DONE {"applied": {"REFCENTER": "-0.0237", "REFBAND": "0.0493", "DETMETHOD": "2", "THRESH11": "0.2384", "SLEEPTHR11": "0.2384"}, "ok": true, "dir": "C:\\Users\\Nick\\Documents\\GitHub\\Micro-DMM\\TestBench\\BlinkyHawkTestSuite\\Runs\\2026-10-02_003249_AutoTune_study_3.65V"}
+[00:36:18] log:    load relay: electronic load ON the battery
+[00:36:18] ======== level 8/14: 3.60V ========
+[00:36:19] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[00:36:31] log:    drain round 1: rested 3.676 V -> 3.601 V at 156 mA (~479 mohm); draining to an estimated rest of 3.6 V
+[00:48:35] log:    rested at 3.628 V
+[00:48:36] log:    drain round 2: rested 3.628 V -> 3.553 V at 155 mA (~480 mohm); draining to an estimated rest of 3.6 V
+[00:51:26] log:    rested at 3.625 V
+[00:51:28] log:    drain round 3: rested 3.625 V -> 3.550 V at 156 mA (~482 mohm); draining to an estimated rest of 3.6 V
+[00:53:38] log:    rested at 3.622 V
+[00:53:39] log:    drain round 4: rested 3.622 V -> 3.547 V at 156 mA (~479 mohm); draining to an estimated rest of 3.6 V
+[00:55:35] log:    rested at 3.621 V
+[00:55:37] log:    drain round 5: rested 3.621 V -> 3.546 V at 156 mA (~482 mohm); draining to an estimated rest of 3.6 V
+[00:57:20] log:    rested at 3.619 V
+[00:57:22] log:    drain round 6: rested 3.619 V -> 3.547 V at 149 mA (~482 mohm); draining to an estimated rest of 3.6 V
+[00:58:56] log:    rested at 3.618 V
+[00:58:57] log:    drain round 7: rested 3.618 V -> 3.543 V at 156 mA (~482 mohm); draining to an estimated rest of 3.6 V
+[01:00:27] log:    rested at 3.617 V
+[01:00:29] log:    drain round 8: rested 3.617 V -> 3.542 V at 156 mA (~485 mohm); draining to an estimated rest of 3.6 V
+[01:02:00] log:    rested at 3.617 V
+[01:02:02] log:    drain round 9: rested 3.617 V -> 3.541 V at 156 mA (~483 mohm); draining to an estimated rest of 3.6 V
+[01:03:20] log:    rested at 3.615 V
+[01:03:21] log:    drain round 10: rested 3.615 V -> 3.540 V at 156 mA (~484 mohm); draining to an estimated rest of 3.6 V
+[01:04:34] log:    rested at 3.614 V
+[01:04:34] log:    load relay: electronic load disconnected
+[01:04:42]    meter L08_3.60V_SHORT: 7 passes, cadence 55.94609814963797, node peak 2.354 V, floor 0.745 V
+[01:04:47]    meter L08_3.60V_OPEN: 7 passes, cadence 55.94609814963795, node peak 2.430 V, floor 0.741 V
+[01:04:47] log:    USB relay: BlinkyHawk USB connected
+[01:04:50]    unit says battv=3.716 (3 %), cell rested 3.614 V
+[01:04:50] log: == auto-tune -> C:\Users\Nick\Documents\GitHub\Micro-DMM\TestBench\BlinkyHawkTestSuite\Runs\2026-10-02_010450_AutoTune_study_3.60V
+[01:04:50] stage: Voltage: characterising
+[01:04:50] log:    battery capture: 32 condition(s) in 2 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[01:04:51] stage: volt 1/2: UNPLUG USB
+[01:04:52] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[01:05:39] stage: volt 1/2: PLUG USB BACK IN
+[01:05:39] log:    USB relay: BlinkyHawk USB connected
+[01:05:43] stage: volt 2/2: UNPLUG USB
+[01:05:44] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[01:06:22] stage: volt 2/2: PLUG USB BACK IN
+[01:06:22] log:    USB relay: BlinkyHawk USB connected
+[01:06:25] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[01:06:25] log:                load 10K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[01:06:25] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[01:06:25] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:06:25] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:06:25] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:06:25] log:              DC -1.200V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[01:06:25] log:              DC -1.100V:  n=  6  lead C/F/V   0/  0/100 % VDC-  
+[01:06:25] log:              DC -1.000V:  n=  6  lead C/F/V   0/  0/100 % VDC-  
+[01:06:25] log:              DC -0.900V:  n=  6  lead C/F/V   0/  0/100 % VDC-  
+[01:06:25] log:              DC -0.800V:  n=  6  lead C/F/V   0/  0/100 % VDC-  
+[01:06:25] log:              DC -0.700V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[01:06:25] log:              DC -0.600V:  n=  6  lead C/F/V   0/  0/100 % VDC-  
+[01:06:25] log:              DC -0.500V:  n=  6  lead C/F/V   0/100/  0 %  
+[01:06:25] log:              DC -0.400V:  n=  6  lead C/F/V   0/100/  0 %  
+[01:06:25] log:              DC -0.300V:  n=  6  lead C/F/V   0/100/  0 %  
+[01:06:25] log:              DC -0.200V:  n=  6  lead C/F/V   0/100/  0 %  
+[01:06:25] log:              DC -0.100V:  n=  6  lead C/F/V   0/100/  0 %  
+[01:06:25] log:              DC +0.000V:  n=  6  lead C/F/V 100/  0/  0 %  
+[01:06:25] log:              DC +0.100V:  n=  6  lead C/F/V 100/  0/  0 %  
+[01:06:25] log:              DC +0.200V:  n=  6  lead C/F/V 100/  0/  0 %  
+[01:06:25] log:              DC +0.300V:  n=  6  lead C/F/V 100/  0/  0 %  
+[01:06:25] log:              DC +0.400V:  n=  6  lead C/F/V 100/  0/  0 %  
+[01:06:25] log:              DC +0.500V:  n=  6  lead C/F/V 100/  0/  0 %  
+[01:06:25] log:              DC +0.600V:  n=  6  lead C/F/V 100/  0/  0 %  
+[01:06:25] log:              DC +0.700V:  n=  5  lead C/F/V   0/  0/100 % VDC+  
+[01:06:25] log:              DC +0.800V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[01:06:25] log:              DC +0.900V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[01:06:25] log:              DC +1.000V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[01:06:25] log:              DC +1.100V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[01:06:25] log:              DC +1.200V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[01:06:25] log:           AC 5Vrms 60Hz:  n=  5  lead C/F/V   0/  0/100 % VAC  PASS
+[01:06:25] log:    applied (RAM): REFCENTER=-0.0243, REFBAND=0.0489
+[01:06:25] stage: Open/closed: characterising
+[01:06:26] log:    battery capture: 6 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[01:06:26] stage: thr0 1/1: UNPLUG USB
+[01:06:27] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[01:06:45] stage: thr0 1/1: PLUG USB BACK IN
+[01:06:46] log:    USB relay: BlinkyHawk USB connected
+[01:06:48] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[01:06:48] log:                load 10K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[01:06:48] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[01:06:48] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:06:48] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:06:48] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:06:49] log:    battery capture: 6 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[01:06:49] stage: thr1 1/1: UNPLUG USB
+[01:06:50] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[01:07:08] stage: thr1 1/1: PLUG USB BACK IN
+[01:07:09] log:    USB relay: BlinkyHawk USB connected
+[01:07:11] log:              load SHORT:  n=  6  lead C/F/V   0/100/  0 %  FAIL
+[01:07:11] log:                load 10K:  n=  6  lead C/F/V   0/100/  0 %  FAIL
+[01:07:11] log:               load 150K:  n=  6  lead C/F/V   0/100/  0 %  FAIL
+[01:07:11] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:07:11] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:07:11] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:07:12] stage: Verify
+[01:07:12] log:    battery capture: 14 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[01:07:13] stage: verify 1/1: UNPLUG USB
+[01:07:14] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[01:07:51] stage: verify 1/1: PLUG USB BACK IN
+[01:07:51] log:    USB relay: BlinkyHawk USB connected
+[01:07:54] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[01:07:54] log:                load 10K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[01:07:54] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[01:07:54] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:07:54] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:07:54] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:07:54] log:              DC -0.800V:  n=  5  lead C/F/V   0/  0/100 % VDC-  PASS
+[01:07:54] log:              DC -0.690V:  n=  6  lead C/F/V   0/  0/100 % VDC-  PASS
+[01:07:54] log:              DC -0.510V:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:07:54] log:              DC +0.510V:  n=  5  lead C/F/V 100/  0/  0 %  PASS
+[01:07:54] log:              DC +0.690V:  n=  5  lead C/F/V   0/  0/100 % VDC+  PASS
+[01:07:54] log:              DC +0.800V:  n=  5  lead C/F/V   0/  0/100 % VDC+  PASS
+[01:07:54] log:           AC 5Vrms 60Hz:  n=  5  lead C/F/V   0/  0/100 % VAC  PASS
+[01:07:54] log:          gen output off:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:07:54] stage: Verify: sleep/wake
+[01:07:55] stage: wake check: UNPLUG USB
+[01:07:56] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[01:08:14] stage: wake check: PLUG USB BACK IN
+[01:08:15] log:    USB relay: BlinkyHawk USB connected
+[01:08:18] log: SLEEP/WAKE CHECK (on battery; SLEEPTHR in force: 0.2320)
+[01:08:18] log:    woke from the deep stage on a probe reading C (metric 0.20081, threshold 0.232)
+[01:08:18] log:    the last 4 deep stage probe(s) before it -- load 1M on the leads -- all FLOAT, metric 0.2602..0.2618 (margin +0.0282 over the threshold)
+[01:08:18] log:    10 deep stage probe(s) before the wake, ~10 expected
+[01:08:18] log:    verdict: PASS
+BlinkyHawk auto-tune  2026-10-02 01:04:50
+MODE: ON BATTERY, floating -- passes read back from the unit's RAM log after each unplug cycle
+relay:  $ID,RelayJig,1.3
+fgen:   RIGOL TECHNOLOGIES,DG852 Pro,DG8R273M00069,00.01.00.00.22
+scope:  not connected
+load:   RIGOL TECHNOLOGIES,DL3021A,DL3B26BM00237,00.01.05.00.01
+target trip +/-0.6 V; CLOSED <= 150k, OPEN >= 1M
+active threshold slot: THRESH11 (dip=3); STABLECOUNT 2
+6 passes minimum per condition, 2.2 s dwell, 0.5 s settle
+
+VOLTAGE -- front-end transfer (input V -> resting differential, median of passes)
+    -1.200 V  ->   -0.1221 V   (sd   1.23 mV, n=5)
+    -1.100 V  ->   -0.1147 V   (sd  36.46 mV, n=6)
+    -1.000 V  ->   -0.1055 V   (sd  33.03 mV, n=6)
+    -0.900 V  ->   -0.0974 V   (sd  29.95 mV, n=6)
+    -0.800 V  ->   -0.0902 V   (sd  26.71 mV, n=6)
+    -0.700 V  ->   -0.0805 V   (sd   0.97 mV, n=5)
+    -0.600 V  ->   -0.0732 V   (sd  18.96 mV, n=6)
+    -0.500 V  ->   -0.0651 V   (sd   0.83 mV, n=6)
+    -0.400 V  ->   -0.0563 V   (sd  13.14 mV, n=6)
+    -0.300 V  ->   -0.0484 V   (sd   1.07 mV, n=6)
+    -0.200 V  ->   -0.0399 V   (sd   6.42 mV, n=6)
+    -0.100 V  ->   -0.0329 V   (sd   0.72 mV, n=6)
+    +0.000 V  ->   -0.0257 V   (sd   1.61 mV, n=6)
+    +0.100 V  ->   -0.0153 V   (sd   2.02 mV, n=6)
+    +0.200 V  ->   -0.0069 V   (sd   1.53 mV, n=6)
+    +0.300 V  ->   -0.0001 V   (sd   0.95 mV, n=6)
+    +0.400 V  ->   +0.0078 V   (sd   1.08 mV, n=6)
+    +0.500 V  ->   +0.0171 V   (sd   1.89 mV, n=6)
+    +0.600 V  ->   +0.0246 V   (sd   1.51 mV, n=6)
+    +0.700 V  ->   +0.0320 V   (sd   1.17 mV, n=5)
+    +0.800 V  ->   +0.0407 V   (sd   1.59 mV, n=6)
+    +0.900 V  ->   +0.0492 V   (sd   0.48 mV, n=6)
+    +1.000 V  ->   +0.0569 V   (sd   1.56 mV, n=6)
+    +1.100 V  ->   +0.0658 V   (sd   0.71 mV, n=6)
+    +1.200 V  ->   +0.0740 V   (sd   1.63 mV, n=6)
+   gain: +side 83.8 mV/V, -side 79.2 mV/V   (asymmetry +5.5 %)
+
+For a trip at +/-0.6 V:  REFCENTER = -0.0243   REFBAND = 0.0489
+
+No-voltage conditions re-decided with those values (VOLTFAST 1.5):
+        SHORT: rest -0.0245 V (sd 1.71 mV), at   0.4 % of band, false-voltage rate   0.0 %
+          10K: rest -0.0241 V (sd 1.96 mV), at   0.4 % of band, false-voltage rate   0.0 %
+         150K: rest -0.0243 V (sd 1.46 mV), at   0.1 % of band, false-voltage rate   0.0 %
+           1M: rest -0.0247 V (sd 1.48 mV), at   0.8 % of band, false-voltage rate   0.0 %
+        10.6M: rest -0.0244 V (sd 1.23 mV), at   0.1 % of band, false-voltage rate   0.0 %
+         OPEN: rest -0.0240 V (sd 0.98 mV), at   0.6 % of band, false-voltage rate   0.0 %
+   worst averaged deviation 8.1 % of the band (want <= 80 %), worst single read 0.41 x band (VOLTFAST is 1.5)
+   Smallest trip voltage that stays clean with a 1.25x guard: +/-0.062 V
+
+Detection rate per swept DC level (per pass, re-decided):
+    -1.200 V :  100.0 %
+    -1.100 V :   83.3 %
+    -1.000 V :   83.3 %
+    -0.900 V :   83.3 %
+    -0.800 V :   83.3 %
+    -0.700 V :  100.0 %
+    -0.600 V :   50.0 %
+    -0.500 V :    0.0 %
+    -0.400 V :    0.0 %
+    -0.300 V :    0.0 %
+    -0.200 V :    0.0 %
+    -0.100 V :    0.0 %
+    +0.000 V :    0.0 %
+    +0.100 V :    0.0 %
+    +0.200 V :    0.0 %
+    +0.300 V :    0.0 %
+    +0.400 V :    0.0 %
+    +0.500 V :    0.0 %
+    +0.600 V :   50.0 %
+    +0.700 V :  100.0 %
+    +0.800 V :  100.0 %
+    +0.900 V :  100.0 %
+    +1.000 V :  100.0 %
+    +1.100 V :  100.0 %
+    +1.200 V :  100.0 %
+   Always detected from 0.7 V (+) and -0.7 V (-); never detected up to 0.5 V (+) / 0.5 V (-)
+
+AC conditions (per pass, then through STABLECOUNT debounce):
+   AC 5Vrms 60Hz:  80.0 % of passes see voltage, lead state VOLTAGE 100.0 % of the time
+              (the misses are passes whose ten reads landed near a zero crossing -- raise VOLTAVG or lower the trip voltage)
+
+VOLTAGE VERDICT: clean -- trips at +/-0.6 V with no false positives
+
+   battery mode: DETBAND 0.03 only (each extra candidate would cost another unplug cycle)
+OPEN/CLOSED -- must read CLOSED at <= 150k and OPEN at >= 1M
+
+[time-to-return, DETBAND 0.03]  (DETMETHOD 1, units ms)
+     SHORT ( short): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+       10K (   10k): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+      150K (  150k): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+        1M (    1M): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+     10.6M ( 10.6M): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+      OPEN (  open): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+   clean cut points between adjacent loads: none
+   OVERLAP: SHORT and 1M distributions overlap by -0.0000 ms; best threshold 1.5000 still misreads 50.00 % of passes
+
+[tail area (method 2)]  (DETMETHOD 2, units V*ms)
+     SHORT ( short): mean    0.1801  sd   0.0006  range    0.1791 ..    0.1807  n=6
+       10K (   10k): mean    0.1807  sd   0.0007  range    0.1801 ..    0.1818  n=6
+      150K (  150k): mean    0.1962  sd   0.0008  range    0.1952 ..    0.1972  n=6
+        1M (    1M): mean    0.2550  sd   0.0005  range    0.2544 ..    0.2558  n=6
+     10.6M ( 10.6M): mean    0.3502  sd   0.0004  range    0.3495 ..    0.3506  n=6
+      OPEN (  open): mean    0.3748  sd   0.0004  range    0.3741 ..    0.3752  n=6
+   clean cut points between adjacent loads: 10K|150K, 150K|1M, 1M|10.6M, 10.6M|OPEN
+   CLEAN: threshold 0.2320 V*ms, 45.9 sigma / 0.0224 V*ms from the nearest recorded pass (150K vs 1M)
+
+[single |diff| (method 0)]  (DETMETHOD 0, units V)
+     SHORT ( short): mean    0.5107  sd   0.0052  range    0.5026 ..    0.5181  n=6
+       10K (   10k): mean    0.5072  sd   0.0066  range    0.4961 ..    0.5128  n=6
+      150K (  150k): mean    0.5339  sd   0.0026  range    0.5314 ..    0.5374  n=6
+        1M (    1M): mean    0.6133  sd   0.0014  range    0.6119 ..    0.6156  n=6
+     10.6M ( 10.6M): mean    0.7008  sd   0.0022  range    0.6982 ..    0.7034  n=6
+      OPEN (  open): mean    0.7216  sd   0.0050  range    0.7135 ..    0.7255  n=6
+   !! medians are not in resistance order -- this metric does not track resistance monotonically here
+   clean cut points between adjacent loads: 10K|150K, 150K|1M, 1M|10.6M, 10.6M|OPEN
+   CLEAN: threshold 0.5849 V, 19.8 sigma / 0.0270 V from the nearest recorded pass (150K vs 1M)
+
+OPEN/CLOSED VERDICT: clean with [tail area (method 2)], threshold 0.232 V*ms
+
+   SLEEPTHR11 set to the same value -- the sleep/wake check in VERIFY is what proves it wakes.
+VERIFY -- the tuned settings, run for real (lead state after STABLECOUNT debounce):
+               load SHORT: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                 load 10K: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                load 150K: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                  load 1M: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+               load 10.6M: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+                load OPEN: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+               DC -0.800V: expect VDC-  C/F/V   0.0/  0.0/100.0 %   PASS
+               DC -0.690V: expect VDC-  C/F/V   0.0/  0.0/100.0 %   PASS
+               DC -0.510V: expect !V  C/F/V   0.0/100.0/  0.0 %   PASS
+               DC +0.510V: expect !V  C/F/V 100.0/  0.0/  0.0 %   PASS
+               DC +0.690V: expect VDC+  C/F/V   0.0/  0.0/100.0 %   PASS
+               DC +0.800V: expect VDC+  C/F/V   0.0/  0.0/100.0 %   PASS
+            AC 5Vrms 60Hz: expect VAC  C/F/V   0.0/  0.0/100.0 %   PASS
+           gen output off: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+
+SLEEP/WAKE CHECK (on battery; SLEEPTHR in force: 0.2320)
+   woke from the deep stage on a probe reading C (metric 0.20081, threshold 0.232)
+   the last 4 deep stage probe(s) before it -- load 1M on the leads -- all FLOAT, metric 0.2602..0.2618 (margin +0.0282 over the threshold)
+   10 deep stage probe(s) before the wake, ~10 expected
+   verdict: PASS
+
+VERIFY VERDICT: every condition read as expected
+
+Applied to device RAM (NOT saved): REFCENTER=-0.0243, REFBAND=0.0489, DETMETHOD=2, THRESH11=0.2320, SLEEPTHR11=0.2320
+Press 'Save to EEPROM' to keep them, or 'Revert' to put back config_before.csv.
+[01:08:18] TUNE_DONE {"applied": {"REFCENTER": "-0.0243", "REFBAND": "0.0489", "DETMETHOD": "2", "THRESH11": "0.2320", "SLEEPTHR11": "0.2320"}, "ok": true, "dir": "C:\\Users\\Nick\\Documents\\GitHub\\Micro-DMM\\TestBench\\BlinkyHawkTestSuite\\Runs\\2026-10-02_010450_AutoTune_study_3.60V"}
+[01:08:18] log:    load relay: electronic load ON the battery
+[01:08:19] ======== level 9/14: 3.55V ========
+[01:08:20] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[01:08:32] log:    drain round 1: rested 3.627 V -> 3.551 V at 156 mA (~487 mohm); draining to an estimated rest of 3.55 V
+[01:20:19] log:    rested at 3.580 V
+[01:20:21] log:    drain round 2: rested 3.580 V -> 3.504 V at 156 mA (~491 mohm); draining to an estimated rest of 3.55 V
+[01:23:14] log:    rested at 3.578 V
+[01:23:15] log:    drain round 3: rested 3.578 V -> 3.501 V at 156 mA (~495 mohm); draining to an estimated rest of 3.55 V
+[01:25:36] log:    rested at 3.575 V
+[01:25:38] log:    drain round 4: rested 3.575 V -> 3.498 V at 156 mA (~492 mohm); draining to an estimated rest of 3.55 V
+[01:27:38] log:    rested at 3.573 V
+[01:27:40] log:    drain round 5: rested 3.573 V -> 3.496 V at 156 mA (~496 mohm); draining to an estimated rest of 3.55 V
+[01:29:28] log:    rested at 3.571 V
+[01:29:29] log:    drain round 6: rested 3.571 V -> 3.494 V at 156 mA (~497 mohm); draining to an estimated rest of 3.55 V
+[01:31:15] log:    rested at 3.571 V
+[01:31:16] log:    drain round 7: rested 3.571 V -> 3.493 V at 156 mA (~499 mohm); draining to an estimated rest of 3.55 V
+[01:32:52] log:    rested at 3.569 V
+[01:32:54] log:    drain round 8: rested 3.569 V -> 3.491 V at 156 mA (~500 mohm); draining to an estimated rest of 3.55 V
+[01:34:19] log:    rested at 3.568 V
+[01:34:20] log:    drain round 9: rested 3.568 V -> 3.490 V at 156 mA (~499 mohm); draining to an estimated rest of 3.55 V
+[01:35:46] log:    rested at 3.567 V
+[01:35:48] log:    drain round 10: rested 3.567 V -> 3.489 V at 156 mA (~502 mohm); draining to an estimated rest of 3.55 V
+[01:37:08] log:    rested at 3.566 V
+[01:37:09] log:    drain round 11: rested 3.566 V -> 3.488 V at 156 mA (~502 mohm); draining to an estimated rest of 3.55 V
+[01:38:21] log:    rested at 3.565 V
+[01:38:23] log:    drain round 12: rested 3.565 V -> 3.487 V at 156 mA (~502 mohm); draining to an estimated rest of 3.55 V
+[01:39:29] log:    rested at 3.564 V
+[01:39:30] log:    load relay: electronic load disconnected
+[01:39:37]    meter L09_3.55V_SHORT: 7 passes, cadence 55.946098149637976, node peak 2.450 V, floor 0.742 V
+[01:39:43]    meter L09_3.55V_OPEN: 7 passes, cadence 55.94609814963796, node peak 2.467 V, floor 0.742 V
+[01:39:43] log:    USB relay: BlinkyHawk USB connected
+[01:39:46]    unit says battv=3.673 (0 %), cell rested 3.564 V
+[01:39:46] log: == auto-tune -> C:\Users\Nick\Documents\GitHub\Micro-DMM\TestBench\BlinkyHawkTestSuite\Runs\2026-10-02_013946_AutoTune_study_3.55V
+[01:39:46] stage: Voltage: characterising
+[01:39:46] log:    battery capture: 32 condition(s) in 2 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[01:39:47] stage: volt 1/2: UNPLUG USB
+[01:39:48] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[01:40:35] stage: volt 1/2: PLUG USB BACK IN
+[01:40:35] log:    USB relay: BlinkyHawk USB connected
+[01:40:39] stage: volt 2/2: UNPLUG USB
+[01:40:40] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[01:41:18] stage: volt 2/2: PLUG USB BACK IN
+[01:41:18] log:    USB relay: BlinkyHawk USB connected
+[01:41:21] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[01:41:21] log:                load 10K:  n=  5  lead C/F/V 100/  0/  0 %  PASS
+[01:41:21] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[01:41:21] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:41:21] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:41:21] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:41:21] log:              DC -1.200V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[01:41:21] log:              DC -1.100V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[01:41:21] log:              DC -1.000V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[01:41:21] log:              DC -0.900V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[01:41:21] log:              DC -0.800V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[01:41:21] log:              DC -0.700V:  n=  5  lead C/F/V   0/  0/100 % VDC-  
+[01:41:21] log:              DC -0.600V:  n=  5  lead C/F/V   0/ 40/ 60 % VDC-  
+[01:41:21] log:              DC -0.500V:  n=  6  lead C/F/V   0/100/  0 %  
+[01:41:21] log:              DC -0.400V:  n=  6  lead C/F/V   0/100/  0 %  
+[01:41:21] log:              DC -0.300V:  n=  6  lead C/F/V   0/100/  0 %  
+[01:41:21] log:              DC -0.200V:  n=  6  lead C/F/V   0/100/  0 %  
+[01:41:21] log:              DC -0.100V:  n=  6  lead C/F/V   0/100/  0 %  
+[01:41:21] log:              DC +0.000V:  n=  6  lead C/F/V 100/  0/  0 %  
+[01:41:21] log:              DC +0.100V:  n=  6  lead C/F/V 100/  0/  0 %  
+[01:41:21] log:              DC +0.200V:  n=  6  lead C/F/V 100/  0/  0 %  
+[01:41:21] log:              DC +0.300V:  n=  6  lead C/F/V 100/  0/  0 %  
+[01:41:21] log:              DC +0.400V:  n=  6  lead C/F/V 100/  0/  0 %  
+[01:41:21] log:              DC +0.500V:  n=  6  lead C/F/V 100/  0/  0 %  
+[01:41:21] log:              DC +0.600V:  n=  6  lead C/F/V 100/  0/  0 %  
+[01:41:21] log:              DC +0.700V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[01:41:21] log:              DC +0.800V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[01:41:21] log:              DC +0.900V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[01:41:21] log:              DC +1.000V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[01:41:21] log:              DC +1.100V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[01:41:21] log:              DC +1.200V:  n=  6  lead C/F/V   0/  0/100 % VDC+  
+[01:41:21] log:           AC 5Vrms 60Hz:  n=  6  lead C/F/V   0/  0/100 % VAC  PASS
+[01:41:21] log:    applied (RAM): REFCENTER=-0.0253, REFBAND=0.0474
+[01:41:21] stage: Open/closed: characterising
+[01:41:22] log:    battery capture: 6 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[01:41:22] stage: thr0 1/1: UNPLUG USB
+[01:41:23] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[01:41:41] stage: thr0 1/1: PLUG USB BACK IN
+[01:41:41] log:    USB relay: BlinkyHawk USB connected
+[01:41:44] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[01:41:44] log:                load 10K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[01:41:44] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[01:41:44] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:41:44] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:41:44] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:41:45] log:    battery capture: 6 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[01:41:45] stage: thr1 1/1: UNPLUG USB
+[01:41:46] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[01:42:04] stage: thr1 1/1: PLUG USB BACK IN
+[01:42:04] log:    USB relay: BlinkyHawk USB connected
+[01:42:07] log:              load SHORT:  n=  6  lead C/F/V   0/100/  0 %  FAIL
+[01:42:07] log:                load 10K:  n=  7  lead C/F/V   0/100/  0 %  FAIL
+[01:42:07] log:               load 150K:  n=  6  lead C/F/V   0/100/  0 %  FAIL
+[01:42:07] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:42:07] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:42:07] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:42:08] stage: Verify
+[01:42:08] log:    battery capture: 14 condition(s) in 1 unplug cycle(s); one log entry per 252 ms (~6 per condition)
+[01:42:09] stage: verify 1/1: UNPLUG USB
+[01:42:10] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[01:42:47] stage: verify 1/1: PLUG USB BACK IN
+[01:42:47] log:    USB relay: BlinkyHawk USB connected
+[01:42:50] log:              load SHORT:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[01:42:50] log:                load 10K:  n=  6  lead C/F/V  83/ 17/  0 %  FAIL
+[01:42:50] log:               load 150K:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[01:42:50] log:                 load 1M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:42:50] log:              load 10.6M:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:42:50] log:               load OPEN:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:42:50] log:              DC -0.800V:  n=  6  lead C/F/V   0/ 17/ 83 % VDC-  FAIL
+[01:42:50] log:              DC -0.690V:  n=  6  lead C/F/V   0/  0/100 % VDC-  PASS
+[01:42:50] log:              DC -0.510V:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:42:50] log:              DC +0.510V:  n=  6  lead C/F/V 100/  0/  0 %  PASS
+[01:42:50] log:              DC +0.690V:  n=  6  lead C/F/V   0/  0/100 % VDC+  PASS
+[01:42:50] log:              DC +0.800V:  n=  6  lead C/F/V   0/  0/100 % VDC+  PASS
+[01:42:50] log:           AC 5Vrms 60Hz:  n=  6  lead C/F/V   0/  0/100 % VAC  PASS
+[01:42:50] log:          gen output off:  n=  6  lead C/F/V   0/100/  0 %  PASS
+[01:42:50] stage: Verify: sleep/wake
+[01:42:51] stage: wake check: UNPLUG USB
+[01:42:52] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[01:43:10] stage: wake check: PLUG USB BACK IN
+[01:43:10] log:    USB relay: BlinkyHawk USB connected
+[01:43:14] log: SLEEP/WAKE CHECK (on battery; SLEEPTHR in force: 0.2223)
+[01:43:14] log:    woke from the deep stage on a probe reading C (metric 0.20539, threshold 0.2223)
+[01:43:14] log:    the last 4 deep stage probe(s) before it -- load 1M on the leads -- all FLOAT, metric 0.2540..0.2662 (margin +0.0317 over the threshold)
+[01:43:14] log:    10 deep stage probe(s) before the wake, ~10 expected
+[01:43:14] log:    verdict: PASS
+BlinkyHawk auto-tune  2026-10-02 01:39:46
+MODE: ON BATTERY, floating -- passes read back from the unit's RAM log after each unplug cycle
+relay:  $ID,RelayJig,1.3
+fgen:   RIGOL TECHNOLOGIES,DG852 Pro,DG8R273M00069,00.01.00.00.22
+scope:  not connected
+load:   RIGOL TECHNOLOGIES,DL3021A,DL3B26BM00237,00.01.05.00.01
+target trip +/-0.6 V; CLOSED <= 150k, OPEN >= 1M
+active threshold slot: THRESH11 (dip=3); STABLECOUNT 2
+6 passes minimum per condition, 2.2 s dwell, 0.5 s settle
+
+VOLTAGE -- front-end transfer (input V -> resting differential, median of passes)
+    -1.200 V  ->   -0.1192 V   (sd   2.94 mV, n=5)
+    -1.100 V  ->   -0.1134 V   (sd   2.93 mV, n=5)
+    -1.000 V  ->   -0.1029 V   (sd   1.96 mV, n=5)
+    -0.900 V  ->   -0.0975 V   (sd   1.18 mV, n=5)
+    -0.800 V  ->   -0.0884 V   (sd   1.69 mV, n=5)
+    -0.700 V  ->   -0.0825 V   (sd   2.68 mV, n=5)
+    -0.600 V  ->   -0.0727 V   (sd   1.94 mV, n=5)
+    -0.500 V  ->   -0.0614 V   (sd   3.45 mV, n=6)
+    -0.400 V  ->   -0.0531 V   (sd   1.16 mV, n=6)
+    -0.300 V  ->   -0.0461 V   (sd   2.58 mV, n=6)
+    -0.200 V  ->   -0.0359 V   (sd   2.95 mV, n=6)
+    -0.100 V  ->   -0.0300 V   (sd   4.29 mV, n=6)
+    +0.000 V  ->   -0.0245 V   (sd   0.91 mV, n=6)
+    +0.100 V  ->   -0.0165 V   (sd   3.76 mV, n=6)
+    +0.200 V  ->   -0.0079 V   (sd   1.03 mV, n=6)
+    +0.300 V  ->   +0.0009 V   (sd   9.85 mV, n=6)
+    +0.400 V  ->   +0.0083 V   (sd   1.84 mV, n=6)
+    +0.500 V  ->   +0.0156 V   (sd  16.79 mV, n=6)
+    +0.600 V  ->   +0.0221 V   (sd   2.26 mV, n=6)
+    +0.700 V  ->   +0.0340 V   (sd   1.29 mV, n=6)
+    +0.800 V  ->   +0.0390 V   (sd  24.53 mV, n=6)
+    +0.900 V  ->   +0.0519 V   (sd  32.63 mV, n=6)
+    +1.000 V  ->   +0.0561 V   (sd  35.52 mV, n=6)
+    +1.100 V  ->   +0.0651 V   (sd  38.16 mV, n=6)
+    +1.200 V  ->   +0.0751 V   (sd  40.09 mV, n=6)
+   gain: +side 77.6 mV/V, -side 80.4 mV/V   (asymmetry -3.6 %)
+
+For a trip at +/-0.6 V:  REFCENTER = -0.0253   REFBAND = 0.0474
+
+No-voltage conditions re-decided with those values (VOLTFAST 1.5):
+        SHORT: rest -0.0240 V (sd 2.43 mV), at   2.9 % of band, false-voltage rate   0.0 %
+          10K: rest -0.0240 V (sd 2.04 mV), at   2.8 % of band, false-voltage rate   0.0 %
+         150K: rest -0.0248 V (sd 2.45 mV), at   1.0 % of band, false-voltage rate   0.0 %
+           1M: rest -0.0248 V (sd 1.23 mV), at   1.0 % of band, false-voltage rate   0.0 %
+        10.6M: rest -0.0274 V (sd 1.83 mV), at   4.4 % of band, false-voltage rate   0.0 %
+         OPEN: rest -0.0229 V (sd 2.62 mV), at   5.0 % of band, false-voltage rate   0.0 %
+   worst averaged deviation 11.5 % of the band (want <= 80 %), worst single read 0.54 x band (VOLTFAST is 1.5)
+   Smallest trip voltage that stays clean with a 1.25x guard: +/-0.142 V
+
+Detection rate per swept DC level (per pass, re-decided):
+    -1.200 V :  100.0 %
+    -1.100 V :  100.0 %
+    -1.000 V :  100.0 %
+    -0.900 V :  100.0 %
+    -0.800 V :  100.0 %
+    -0.700 V :  100.0 %
+    -0.600 V :   40.0 %
+    -0.500 V :    0.0 %
+    -0.400 V :    0.0 %
+    -0.300 V :    0.0 %
+    -0.200 V :    0.0 %
+    -0.100 V :    0.0 %
+    +0.000 V :    0.0 %
+    +0.100 V :    0.0 %
+    +0.200 V :    0.0 %
+    +0.300 V :    0.0 %
+    +0.400 V :    0.0 %
+    +0.500 V :    0.0 %
+    +0.600 V :   50.0 %
+    +0.700 V :  100.0 %
+    +0.800 V :   83.3 %
+    +0.900 V :   83.3 %
+    +1.000 V :   83.3 %
+    +1.100 V :   83.3 %
+    +1.200 V :   83.3 %
+   Always detected from 0.7 V (+) and -0.7 V (-); never detected up to 0.5 V (+) / 0.5 V (-)
+
+AC conditions (per pass, then through STABLECOUNT debounce):
+   AC 5Vrms 60Hz:  83.3 % of passes see voltage, lead state VOLTAGE 100.0 % of the time
+              (the misses are passes whose ten reads landed near a zero crossing -- raise VOLTAVG or lower the trip voltage)
+
+VOLTAGE VERDICT: clean -- trips at +/-0.6 V with no false positives
+
+   battery mode: DETBAND 0.03 only (each extra candidate would cost another unplug cycle)
+OPEN/CLOSED -- must read CLOSED at <= 150k and OPEN at >= 1M
+
+[time-to-return, DETBAND 0.03]  (DETMETHOD 1, units ms)
+     SHORT ( short): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+       10K (   10k): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+      150K (  150k): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+        1M (    1M): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+     10.6M ( 10.6M): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+      OPEN (  open): mean    1.5000  sd   0.0000  range    1.5000 ..    1.5000  n=6
+   clean cut points between adjacent loads: none
+   OVERLAP: SHORT and 1M distributions overlap by -0.0000 ms; best threshold 1.5000 still misreads 50.00 % of passes
+
+[tail area (method 2)]  (DETMETHOD 2, units V*ms)
+     SHORT ( short): mean    0.1799  sd   0.0003  range    0.1795 ..    0.1803  n=6
+       10K (   10k): mean    0.1816  sd   0.0005  range    0.1810 ..    0.1824  n=6
+      150K (  150k): mean    0.1963  sd   0.0010  range    0.1950 ..    0.1978  n=6
+        1M (    1M): mean    0.2560  sd   0.0012  range    0.2547 ..    0.2575  n=6
+     10.6M ( 10.6M): mean    0.3506  sd   0.0009  range    0.3491 ..    0.3514  n=6
+      OPEN (  open): mean    0.3748  sd   0.0008  range    0.3738 ..    0.3760  n=6
+   clean cut points between adjacent loads: SHORT|10K, 10K|150K, 150K|1M, 1M|10.6M, 10.6M|OPEN
+   CLEAN: threshold 0.2223 V*ms, 27.3 sigma / 0.0244 V*ms from the nearest recorded pass (150K vs 1M)
+
+[single |diff| (method 0)]  (DETMETHOD 0, units V)
+     SHORT ( short): mean    0.5137  sd   0.0058  range    0.5036 ..    0.5185  n=6
+       10K (   10k): mean    0.5104  sd   0.0043  range    0.5064 ..    0.5193  n=7
+      150K (  150k): mean    0.5364  sd   0.0035  range    0.5328 ..    0.5410  n=6
+        1M (    1M): mean    0.6124  sd   0.0030  range    0.6075 ..    0.6160  n=6
+     10.6M ( 10.6M): mean    0.7025  sd   0.0039  range    0.6957 ..    0.7066  n=6
+      OPEN (  open): mean    0.7224  sd   0.0023  range    0.7183 ..    0.7247  n=6
+   !! medians are not in resistance order -- this metric does not track resistance monotonically here
+   clean cut points between adjacent loads: 10K|150K, 150K|1M, 1M|10.6M, 10.6M|OPEN
+   CLEAN: threshold 0.5775 V, 11.7 sigma / 0.0300 V from the nearest recorded pass (150K vs 1M)
+
+OPEN/CLOSED VERDICT: clean with [tail area (method 2)], threshold 0.2223 V*ms
+
+   SLEEPTHR11 set to the same value -- the sleep/wake check in VERIFY is what proves it wakes.
+VERIFY -- the tuned settings, run for real (lead state after STABLECOUNT debounce):
+               load SHORT: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                 load 10K: expect  C  C/F/V  83.3/ 16.7/  0.0 %   FAIL
+                load 150K: expect  C  C/F/V 100.0/  0.0/  0.0 %   PASS
+                  load 1M: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+               load 10.6M: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+                load OPEN: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+               DC -0.800V: expect VDC-  C/F/V   0.0/ 16.7/ 83.3 %   FAIL
+               DC -0.690V: expect VDC-  C/F/V   0.0/  0.0/100.0 %   PASS
+               DC -0.510V: expect !V  C/F/V   0.0/100.0/  0.0 %   PASS
+               DC +0.510V: expect !V  C/F/V 100.0/  0.0/  0.0 %   PASS
+               DC +0.690V: expect VDC+  C/F/V   0.0/  0.0/100.0 %   PASS
+               DC +0.800V: expect VDC+  C/F/V   0.0/  0.0/100.0 %   PASS
+            AC 5Vrms 60Hz: expect VAC  C/F/V   0.0/  0.0/100.0 %   PASS
+           gen output off: expect  F  C/F/V   0.0/100.0/  0.0 %   PASS
+
+SLEEP/WAKE CHECK (on battery; SLEEPTHR in force: 0.2223)
+   woke from the deep stage on a probe reading C (metric 0.20539, threshold 0.2223)
+   the last 4 deep stage probe(s) before it -- load 1M on the leads -- all FLOAT, metric 0.2540..0.2662 (margin +0.0317 over the threshold)
+   10 deep stage probe(s) before the wake, ~10 expected
+   verdict: PASS
+
+VERIFY VERDICT: 2 condition(s) failed: load 10K, DC -0.800V
+
+Applied to device RAM (NOT saved): REFCENTER=-0.0253, REFBAND=0.0474, DETMETHOD=2, THRESH11=0.2223, SLEEPTHR11=0.2223
+Press 'Save to EEPROM' to keep them, or 'Revert' to put back config_before.csv.
+[01:43:14] TUNE_DONE {"applied": {"REFCENTER": "-0.0253", "REFBAND": "0.0474", "DETMETHOD": "2", "THRESH11": "0.2223", "SLEEPTHR11": "0.2223"}, "ok": false, "dir": "C:\\Users\\Nick\\Documents\\GitHub\\Micro-DMM\\TestBench\\BlinkyHawkTestSuite\\Runs\\2026-10-02_013946_AutoTune_study_3.55V"}
+[01:43:14] log:    load relay: electronic load ON the battery
+[01:43:15] ======== level 10/14: 3.50V ========
+[01:43:16] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[01:43:28] log:    drain round 1: rested 3.578 V -> 3.500 V at 156 mA (~506 mohm); draining to an estimated rest of 3.5 V
+[01:51:14] log:    rested at 3.532 V
+[01:51:16] log:    drain round 2: rested 3.532 V -> 3.455 V at 149 mA (~516 mohm); draining to an estimated rest of 3.5 V
+[01:53:33] log:    rested at 3.529 V
+[01:53:34] log:    drain round 3: rested 3.529 V -> 3.448 V at 156 mA (~519 mohm); draining to an estimated rest of 3.5 V
+[01:55:19] log:    rested at 3.525 V
+[01:55:21] log:    drain round 4: rested 3.525 V -> 3.444 V at 156 mA (~522 mohm); draining to an estimated rest of 3.5 V
+[01:56:52] log:    rested at 3.523 V
+[01:56:53] log:    drain round 5: rested 3.523 V -> 3.442 V at 156 mA (~521 mohm); draining to an estimated rest of 3.5 V
+[01:58:22] log:    rested at 3.524 V
+[01:58:24] log:    drain round 6: rested 3.524 V -> 3.442 V at 156 mA (~528 mohm); draining to an estimated rest of 3.5 V
+[01:59:54] log:    rested at 3.523 V
+[01:59:56] log:    drain round 7: rested 3.523 V -> 3.444 V at 149 mA (~531 mohm); draining to an estimated rest of 3.5 V
+[02:01:23] log:    rested at 3.522 V
+[02:01:24] log:    drain round 8: rested 3.522 V -> 3.439 V at 156 mA (~534 mohm); draining to an estimated rest of 3.5 V
+[02:02:42] log:    rested at 3.520 V
+[02:02:44] log:    drain round 9: rested 3.520 V -> 3.437 V at 156 mA (~535 mohm); draining to an estimated rest of 3.5 V
+[02:03:56] log:    rested at 3.519 V
+[02:03:58] log:    drain round 10: rested 3.519 V -> 3.440 V at 156 mA (~509 mohm); draining to an estimated rest of 3.5 V
+[02:04:59] log:    rested at 3.519 V
+[02:05:00] log:    drain round 11: rested 3.519 V -> 3.439 V at 149 mA (~538 mohm); draining to an estimated rest of 3.5 V
+[02:06:08] log:    rested at 3.518 V
+[02:06:10] log:    drain round 12: rested 3.518 V -> 3.434 V at 156 mA (~538 mohm); draining to an estimated rest of 3.5 V
+[02:07:09] log:    rested at 3.517 V
+[02:07:09] !! level 3.50V failed: drain did not settle inside the band in 12 rounds
+[02:07:09] log:    USB relay: BlinkyHawk USB connected
+[02:07:12] ======== level 11/14: 3.45V ========
+[02:07:13] log:    USB relay: BlinkyHawk USB DISCONNECTED
+[02:07:25] log:    drain round 1: rested 3.520 V -> 3.436 V at 156 mA (~540 mohm); draining to an estimated rest of 3.45 V
+[02:11:53] log:    rested at 3.496 V
+[02:11:55] log:    drain round 2: rested 3.496 V -> 3.414 V at 149 mA (~548 mohm); draining to an estimated rest of 3.45 V
+[02:14:02] log:    rested at 3.491 V
+[02:14:04] log:    drain round 3: rested 3.491 V -> 3.404 V at 156 mA (~559 mohm); draining to an estimated rest of 3.45 V
+[02:16:03] log:    rested at 3.489 V
+[02:16:05] log:    drain round 4: rested 3.489 V -> 3.402 V at 156 mA (~559 mohm); draining to an estimated rest of 3.45 V
+[02:17:44] log:    rested at 3.486 V
+[02:17:45] log:    drain round 5: rested 3.486 V -> 3.398 V at 156 mA (~565 mohm); draining to an estimated rest of 3.45 V
+[02:19:20] log:    rested at 3.484 V
+[02:19:22] log:    drain round 6: rested 3.484 V -> 3.395 V at 156 mA (~570 mohm); draining to an estimated rest of 3.45 V
+[02:20:53] log:    rested at 3.483 V
+[02:20:54] log:    drain round 7: rested 3.483 V -> 3.393 V at 156 mA (~573 mohm); draining to an estimated rest of 3.45 V
+[02:22:14] log:    rested at 3.480 V
+[02:22:16] log:    drain round 8: rested 3.480 V -> 3.395 V at 149 mA (~573 mohm); draining to an estimated rest of 3.45 V
+[02:23:27] log:    rested at 3.479 V
+[02:23:28] log:    drain round 9: rested 3.479 V -> 3.389 V at 156 mA (~577 mohm); draining to an estimated rest of 3.45 V
+[02:24:39] log:    rested at 3.478 V
+[02:24:40] log:    drain round 10: rested 3.478 V -> 3.392 V at 149 mA (~577 mohm); draining to an estimated rest of 3.45 V
+[02:25:47] log:    rested at 3.476 V
+[02:25:49] log:    drain round 11: rested 3.476 V -> 3.386 V at 156 mA (~578 mohm); draining to an estimated rest of 3.45 V
+[02:26:54] log:    rested at 3.476 V
+[02:26:55] log:    drain round 12: rested 3.476 V -> 3.385 V at 156 mA (~582 mohm); draining to an estimated rest of 3.45 V
+[02:28:00] log:    rested at 3.475 V
+[02:28:00] !! level 3.45V failed: drain did not settle inside the band in 12 rounds
+[02:28:00] log:    USB relay: BlinkyHawk USB connected
+[02:28:03] !! two levels in a row failed -- stopping the study
+[02:28:03] cleanup
+[02:28:03] log:    load relay: electronic load disconnected
+[02:28:04] BEEP restored to 1
+[02:28:04] STUDY DIR C:\Users\Nick\Documents\GitHub\Micro-DMM\TestBench\BlinkyHawkTestSuite\Runs\2026-10-01_222351_BattStudy_SN20260928_002
+[02:28:04] END

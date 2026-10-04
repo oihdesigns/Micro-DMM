@@ -1,0 +1,2 @@
+level,after_V,applied,open_floor_V,open_passes,open_peak_V,rest_V,short_floor_V,short_passes,short_peak_V,tune_dir,tune_ok,unit_battv
+asfound,3.9124,"{""REFCENTER"": ""-0.0284"", ""REFBAND"": ""0.0487"", ""DETMETHOD"": ""2"", ""THRESH11"": ""0.2341"", ""SLEEPTHR11"": ""0.2341""}",0.74,8,2.3788,4.0596,0.7425,7,2.3732,2026-10-03_124316_AutoTune_u4study_asfound,False,4.169

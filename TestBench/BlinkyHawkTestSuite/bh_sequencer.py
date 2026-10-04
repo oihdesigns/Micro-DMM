@@ -717,11 +717,20 @@ class Runner:
     def drain_to(self, target, amps, tol, rest_s, floor, max_s):
         """Drain until the RESTED voltage is within `tol` of `target`.
 
-        Loaded voltage sits below the resting voltage by I x R, and the cell
-        recovers when the load comes off, so the loop is: estimate R from the
-        step when the load goes on, drain until (loaded V + I x R) reaches the
-        target, rest, measure, and repeat.  Each round removes less; it stops
-        at the first rest inside the band.  Returns the rested voltage.
+        Loaded voltage sits below the resting voltage, and the cell recovers
+        when the load comes off, so the loop is: drain until (loaded V +
+        expected recovery) reaches the target, rest, measure, and repeat.  It
+        stops at the first rest inside the band.  Returns the rested voltage.
+
+        The expected recovery starts as I x R from the step when the load goes
+        on, but that is only the ohmic part: the slow polarisation recovers
+        too, and near the bottom of the curve it is the larger share (Oct 2026,
+        3.5 V: I x R said 80 mV, the cell came back ~100 mV, so 12 rounds
+        each removed 1-2 mV and never reached the band).  So each round that
+        rests above the band adds HALF its miss to the expected recovery for the
+        next round.  Half, not all: a long first round builds up more slow
+        polarisation than the short top-up rounds after it, and learning the
+        whole miss overshot by ~40 mV in the sim.
         """
         L = self.load
         if target - tol <= floor:
@@ -734,6 +743,7 @@ class Runner:
         L.set_cc(amps, floor)
         self.load_link(True)                  # rest_ocv did this; be explicit before input ON
         t_start = time.time()
+        extra = 0.0                           # learned recovery beyond I x R
         try:
             for rnd in range(1, 13):
                 L.input(True)
@@ -746,8 +756,8 @@ class Runner:
                         f"the {floor:g} V floor")
                 r = max(0.0, (v - v_on) / i)
                 self.log(f"   drain round {rnd}: rested {v:.3f} V -> {v_on:.3f} V at "
-                         f"{i * 1000:.0f} mA (~{r * 1000:.0f} mohm); draining to an "
-                         f"estimated rest of {target:g} V")
+                         f"{i * 1000:.0f} mA (~{r * 1000:.0f} mohm); expecting I x R "
+                         f"+ {extra * 1000:.0f} mV of recovery")
                 while True:
                     vl, il = L.volts(), L.amps()
                     self.emit("status", f"{self._batt_phase}: draining, {vl:.3f} V at "
@@ -757,15 +767,17 @@ class Runner:
                         break
                     if time.time() - t_start > max_s:
                         raise InstrumentError(f"drain took longer than {max_s:g} s")
-                    if vl + il * r <= target:
+                    if vl + il * r + extra <= target:
                         break
                     self.sleep(1.0)
+                v_end = vl
                 L.input(False)
                 self.emit("status", f"{self._batt_phase}: resting")
                 v = self.rest_ocv(rest_s)
-                self.log(f"   rested at {v:.3f} V")
+                self.log(f"   rested at {v:.3f} V (recovered {(v - v_end) * 1000:.0f} mV)")
                 if v <= target + tol:
                     return v
+                extra += 0.5 * (v - target)
             raise InstrumentError("drain did not settle inside the band in 12 rounds")
         finally:
             L.input(False)

@@ -1,0 +1,39 @@
+BlinkyHawk auto-tune  2026-10-03 17:59:49
+MODE: ON BATTERY, floating -- passes read back from the unit's RAM log after each unplug cycle
+relay:  $ID,RelayJig,1.3
+fgen:   RIGOL TECHNOLOGIES,DG852 Pro,DG8R273M00069,00.01.00.00.22
+scope:  not connected
+load:   RIGOL TECHNOLOGIES,DL3021A,DL3B26BM00237,00.01.05.00.01
+target trip +/-0.6 V; CLOSED <= 150k, OPEN >= 1M
+active threshold slot: THRESH11 (dip=3); STABLECOUNT 2
+6 passes minimum per condition, 2.2 s dwell, 0.5 s settle
+
+VOLTAGE -- front-end transfer (input V -> resting differential, median of passes)
+    -1.200 V  ->   -0.0508 V   (sd  45.82 mV, n=6)
+    -1.100 V  ->   -0.1236 V   (sd  35.71 mV, n=6)
+    -1.000 V  ->   -0.1177 V   (sd  41.70 mV, n=5)
+    -0.900 V  ->   -0.1235 V   (sd  17.71 mV, n=5)
+    -0.800 V  ->   -0.1111 V   (sd   5.74 mV, n=5)
+    -0.700 V  ->   -0.0955 V   (sd  29.27 mV, n=5)
+    -0.600 V  ->   -0.0936 V   (sd  30.48 mV, n=6)
+    -0.500 V  ->   -0.0958 V   (sd  23.08 mV, n=6)
+    -0.400 V  ->   -0.0723 V   (sd  21.53 mV, n=6)
+    -0.300 V  ->   -0.0731 V   (sd  19.03 mV, n=6)
+    -0.200 V  ->   -0.0568 V   (sd  20.03 mV, n=6)
+    -0.100 V  ->   -0.0611 V   (sd   9.55 mV, n=5)
+    +0.000 V  ->   +0.1055 V   (sd  76.77 mV, n=6)
+    +0.100 V  ->   -0.0497 V   (sd   9.51 mV, n=5)
+    +0.200 V  ->   -0.0503 V   (sd  12.03 mV, n=6)
+    +0.300 V  ->   -0.0461 V   (sd  18.28 mV, n=6)
+    +0.400 V  ->   -0.0287 V   (sd  11.97 mV, n=6)
+    +0.500 V  ->   -0.0229 V   (sd  22.50 mV, n=6)
+    +0.600 V  ->   -0.0024 V   (sd  16.26 mV, n=6)
+    +0.700 V  ->   -0.0055 V   (sd  12.82 mV, n=6)
+    +0.800 V  ->   +0.0056 V   (sd  25.28 mV, n=6)
+    +0.900 V  ->   +0.0109 V   (sd  27.81 mV, n=6)
+    +1.000 V  ->   +0.0172 V   (sd  40.25 mV, n=6)
+    +1.100 V  ->   +0.0406 V   (sd  31.70 mV, n=6)
+    +1.200 V  ->   +0.0529 V   (sd  10.97 mV, n=5)
+   !! +0.6 V and -0.6 V do not move the differential in opposite directions (d(+)=-0.0024, d(0)=+0.1055, d(-)=-0.0936).  The front end is saturated or not responding at this level -- no symmetric band exists.
+
+   battery mode: DETBAND 0.03 only (each extra candidate would cost another unplug cycle)
