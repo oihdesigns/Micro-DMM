@@ -30,6 +30,14 @@ Use **BlinkyHawk_V3b_Shell_SlideSwitch_AboveXIAO_Inward5mm.3mf** (or its equival
 
 Both exports pass watertight single-solid and dimensional checks. The shift increases longitudinal separation from the end screw mount by 5 mm; actual switch flange, screw-head, and body clearance still require a fit check. See `SlideSwitch_AboveXIAO_Inward5mm_Preview.png` and `SlideSwitch_AboveXIAO_Inward5mm_Validation.json`. Reproduce with `work/add_slide_switch.py --above-xiao --shift-inward-5mm`.
 
+## Latest revision: 2.1 mm switch holes, PCB stop lips removed — 4 October 2026
+
+Use **BlinkyHawk_V3b_Shell_SlideSwitch_AboveXIAO_Inward5mm_2p1mm_NoLip.3mf** (or its equivalent STL) with the existing lid. The switch stays in the inward-shifted position, with unchanged opening and 15 mm mounting-hole pitch. Both switch holes are now Ø2.1 mm.
+
+Removed the 0.25 mm PCB-facing overhang on both front PCB stops opposite USB-C (X=2.3–11.3 and 19.7–28.7 mm; Y=22.057–22.307 mm; Z=4.06–5.06 mm). Their main bodies and 5.06 mm height remain intact. Total lip material removed: 4.5 mm³.
+
+Both exports pass watertight single-solid checks and have matching volumes. Section checks confirm Ø2.1 mm holes; boolean checks confirm the lips are absent and edits are confined to the switch cuts and stop lips. Earlier variants remain available. Reproduce with `work/add_slide_switch.py --above-xiao --shift-inward-5mm --holes-2p1-no-lip`. Preview and validation use the prefix `SlideSwitch_AboveXIAO_Inward5mm_2p1mm_NoLip`.
+
 ## Configuration
 
 - PCB: `PCBDesigns/BlinkyHawk_V3b/BlinkyHawk_V3b.kicad_pcb`, as supplied.

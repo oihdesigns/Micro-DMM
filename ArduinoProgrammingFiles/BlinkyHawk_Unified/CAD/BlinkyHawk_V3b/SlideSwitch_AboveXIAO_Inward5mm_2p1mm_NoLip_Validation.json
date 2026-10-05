@@ -1,0 +1,49 @@
+{
+  "source": "BlinkyHawk_V3b_Shell.stl",
+  "source_sha256": "d829db84b77b7f7bdefa9990b9f28dccb65dc8ab1aba0b222eb31554ede1d9a3",
+  "opening_mm": [
+    10.66,
+    5.8
+  ],
+  "top_mm": 16.0,
+  "center_y_mm": 59.75515937805176,
+  "center_z_mm": 13.1,
+  "mounting_hole_diameter_mm": 2.1,
+  "mounting_hole_pitch_mm": 15.0,
+  "hole_centers_yz_mm": [
+    [
+      52.25515937805176,
+      13.1
+    ],
+    [
+      67.25515937805176,
+      13.1
+    ]
+  ],
+  "watertight": true,
+  "connected_solids": 1,
+  "stl_3mf_volume_match": true,
+  "removed_material_mm3": 162.63058902885433,
+  "modification_confined_to_opposite_side_wall": false,
+  "tolerance_allowance_mm": 0,
+  "switch_body_depth_not_supplied": true,
+  "xiao_board_bounds_mm": [
+    [
+      6.975599765777588,
+      54.27766036987305,
+      4.276000022888184
+    ],
+    [
+      24.755599975585938,
+      75.23265838623047,
+      5.526000022888184
+    ]
+  ],
+  "shift_from_enclosure_center_mm": 21.056657791137695,
+  "position": "above XIAO, moved 5 mm toward enclosure middle",
+  "shift_from_xiao_center_mm": -5.0,
+  "pcb_stop_overhang_removed_mm": 0.25,
+  "pcb_stop_lip_removed_volume_mm3": 4.500000059604645,
+  "pcb_stop_height_preserved_mm": 5.06,
+  "changes_confined_to_switch_and_stop_lips": true
+}

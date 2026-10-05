@@ -24,6 +24,8 @@ vertices[np.abs(vertices) < 1e-9] = 0
 source.vertices = vertices
 above_xiao = '--above-xiao' in sys.argv
 shifted = '--shift-inward-5mm' in sys.argv
+revised = '--holes-2p1-no-lip' in sys.argv
+assert not revised or (above_xiao and shifted), 'Use latest switch position for this revision'
 assert not shifted or above_xiao, 'Use --above-xiao with --shift-inward-5mm'
 xiao = trimesh.load_mesh(OUT / 'work' / 'pcb_part____0_1_1_39_.ply') if above_xiao else None
 center_y = float(xiao.bounds[:, 1].mean() if above_xiao else source.bounds[:, 1].mean())
@@ -34,8 +36,12 @@ prefix = 'SlideSwitch_AboveXIAO' if above_xiao else 'SlideSwitch'
 if shifted:
     label = 'above XIAO, moved 5 mm toward enclosure middle'
     prefix += '_Inward5mm'
+if revised:
+    prefix += '_2p1mm_NoLip'
 top = float(source.bounds[1, 2])
 width, height, diameter, pitch = 10.66, 5.8, 1.8, 15.0
+if revised:
+    diameter = 2.1
 center_z = top - height / 2
 
 # LED is on the X=31 side. Cut only the opposite wall, at X=0.
@@ -47,6 +53,18 @@ for y in [center_y - pitch / 2, center_y + pitch / 2]:
     hole.apply_transform(trimesh.transformations.rotation_matrix(np.pi / 2, [0, 1, 0]))
     hole.apply_translation([1, y, center_z])
     cutters.append(hole)
+lip_volume = 0.0
+if revised:
+    # Original STL coordinates: remove only the 0.25 mm overhang on
+    # the two PCB stops. Preserve their 5.06 mm height and flat faces.
+    for x0, x1 in [(2.3, 11.3), (19.7, 28.7)]:
+        lo = np.array([x0, 22.057, 4.06], dtype=np.float32).astype(float)
+        hi = np.array([x1, 22.307, 5.06], dtype=np.float32).astype(float)
+        lip = trimesh.creation.box(extents=hi-lo,
+            transform=trimesh.transformations.translation_matrix((hi+lo)/2))
+        lip_volume += float(trimesh.boolean.intersection([source, lip], engine='manifold').volume)
+        cutters.append(lip)
+    assert abs(lip_volume - 4.5) < 1e-4
 result = trimesh.boolean.difference([source, *cutters], engine='manifold')
 assert result.is_watertight and result.is_volume and len(result.split()) == 1
 assert np.all(result.area_faces > 1e-10)
@@ -54,10 +72,11 @@ assert np.allclose(result.bounds, source.bounds, atol=1e-5)
 # Confirm the notch and both through-holes at the middle of the wall.
 section = result.section(plane_origin=[1, 0, 0], plane_normal=[1, 0, 0])
 polygons = [Polygon(p[:, [1, 2]]) for p in section.discrete]
-holes = sorted([p for p in polygons if p.area < 3], key=lambda p: p.centroid.x)
+holes = sorted([p for p in polygons if p.area < 4], key=lambda p: p.centroid.x)
 assert len(holes) == 2
 for p, y in zip(holes, [center_y - pitch / 2, center_y + pitch / 2]):
-    assert np.allclose(p.bounds, [y - .9, center_z - .9, y + .9, center_z + .9], atol=1e-5)
+    r = diameter / 2
+    assert np.allclose(p.bounds, [y-r, center_z-r, y+r, center_z+r], atol=1e-5)
 outer = max(polygons, key=lambda p: p.area)
 assert not outer.contains(Polygon([(center_y-width/2+.01, top-height+.01),
                                  (center_y+width/2-.01, top-height+.01),
@@ -66,7 +85,10 @@ assert not outer.contains(Polygon([(center_y-width/2+.01, top-height+.01),
 added = trimesh.boolean.difference([result, source], engine='manifold')
 assert abs(added.volume) < 1e-5
 removed = trimesh.boolean.difference([source, result], engine='manifold')
-assert removed.bounds[1, 0] <= 3.00001
+assert removed.bounds[1, 0] <= (28.70001 if revised else 3.00001)
+if revised:
+    for lip in cutters[3:]:
+        assert abs(trimesh.boolean.intersection([result, lip], engine='manifold').volume) < 1e-5
 outside_cutters = trimesh.boolean.difference([removed, *cutters], engine='manifold')
 # Boolean roundoff can leave zero-thickness faces at old wall boundaries.
 assert abs(outside_cutters.volume) < 1e-5
@@ -74,6 +96,8 @@ assert abs(outside_cutters.volume) < 1e-5
 stem = 'BlinkyHawk_V3b_Shell_SlideSwitch' + ('_AboveXIAO' if above_xiao else '')
 if shifted:
     stem += '_Inward5mm'
+if revised:
+    stem += '_2p1mm_NoLip'
 result.export(OUT / (stem + '.stl'))
 ns = 'http://schemas.microsoft.com/3dmanufacturing/core/2015/02'
 ET.register_namespace('', ns)
@@ -92,8 +116,8 @@ with zipfile.ZipFile(mf_source) as z:
     for f in result.faces:
         ET.SubElement(triangles, q('triangle'), **dict(zip(['v1', 'v2', 'v3'], [str(int(i)) for i in f])))
     for item in root.findall(q('metadata')):
-        if item.get('name') == 'ModificationDate': item.text = '2026-10-03' if above_xiao else '2026-10-02'
-        if item.get('name') == 'Description': item.text = f'Slide switch opposite LED, {label}: 10.66 x 5.8 mm top-flush notch; diameter 1.8 mm holes, pitch 15 mm.'
+        if item.get('name') == 'ModificationDate': item.text = '2026-10-04' if revised else ('2026-10-03' if above_xiao else '2026-10-02')
+        if item.get('name') == 'Description': item.text = f'Slide switch opposite LED, {label}: 10.66 x 5.8 mm top-flush notch; diameter {diameter} mm holes, pitch 15 mm.' + (' PCB stop overhangs removed.' if revised else '')
     with zipfile.ZipFile(OUT / (stem + '.3mf'), 'w', zipfile.ZIP_DEFLATED) as dest:
         for item in z.infolist():
             # Remove the old thumbnail rather than showing obsolete geometry.
@@ -116,7 +140,7 @@ ax.set_aspect('equal'); ax.set_xlim(center_y-15, center_y+15); ax.set_ylim(7, 19
 ax.annotate('', (center_y-width/2, 17.3), (center_y+width/2, 17.3), arrowprops={'arrowstyle':'<->'})
 ax.text(center_y, 17.6, '10.66 mm', ha='center')
 ax.annotate('', (center_y-7.5, 8.6), (center_y+7.5, 8.6), arrowprops={'arrowstyle':'<->'})
-ax.text(center_y, 7.8, '15.0 mm hole spacing; diameter 1.8 mm', ha='center')
+ax.text(center_y, 7.8, f'15.0 mm hole spacing; diameter {diameter} mm', ha='center')
 ax.text(center_y+6, 14.6, '5.8 mm deep\nTop edge at enclosure lip', fontsize=10)
 ax.set_xlabel('Position along enclosure (mm)'); ax.set_ylabel('Height (mm)')
 ax.set_title('Slide-switch mounting: opposite the LED, ' + label)
@@ -136,12 +160,17 @@ report = dict(source=SOURCE.name, source_sha256=hashlib.sha256(SOURCE.read_bytes
               mounting_hole_diameter_mm=diameter, mounting_hole_pitch_mm=pitch,
               hole_centers_yz_mm=[[center_y-pitch/2,center_z],[center_y+pitch/2,center_z]],
               watertight=True, connected_solids=1, stl_3mf_volume_match=True,
-              removed_material_mm3=float(removed.volume), modification_confined_to_opposite_side_wall=True,
+              removed_material_mm3=float(removed.volume), modification_confined_to_opposite_side_wall=not revised,
               tolerance_allowance_mm=0, switch_body_depth_not_supplied=True)
 if above_xiao:
     report['xiao_board_bounds_mm'] = xiao.bounds.tolist()
     report['shift_from_enclosure_center_mm'] = center_y - float(source.bounds[:, 1].mean())
     report['position'] = label
     report['shift_from_xiao_center_mm'] = center_y - float(xiao.bounds[:, 1].mean())
+if revised:
+    report['pcb_stop_overhang_removed_mm'] = .25
+    report['pcb_stop_lip_removed_volume_mm3'] = lip_volume
+    report['pcb_stop_height_preserved_mm'] = 5.06
+    report['changes_confined_to_switch_and_stop_lips'] = True
 (OUT / (prefix + '_Validation.json')).write_text(json.dumps(report, indent=2))
 print(json.dumps(report, indent=2))

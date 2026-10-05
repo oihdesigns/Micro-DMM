@@ -1,0 +1,668 @@
+<title>LiPo Runtime Calculator</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Saira+Condensed:wght@500;700&display=swap">
+<style>
+/* Layout: bench-sheet tool. Inputs (cell, load profile) on the left, a sticky readout on the right; stacks on narrow screens. */
+:root {
+  --bg: #eceff2;
+  --surface: #ffffff;
+  --sunk: #f4f6f8;
+  --ink: #17202a;
+  --muted: #5b6876;
+  --line: #d2d9e0;
+  --accent: #0d6a88;
+  --accent-ink: #ffffff;
+  --warn: #9a6212;
+  --warn-bg: #fbf1df;
+  --bad: #b3261e;
+  --bad-bg: #fbe5e3;
+  --idle: #b9c2cb;
+  --f-display: "Saira Condensed", "Arial Narrow", sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
+  --r: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1419; --surface: #172029; --sunk: #121a21; --ink: #e2e8ee; --muted: #8e9ba8;
+    --line: #2a3641; --accent: #52b6d6; --accent-ink: #06151c; --warn: #e3ac55; --warn-bg: #2d2412;
+    --bad: #f2786d; --bad-bg: #321816; --idle: #3a4652; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1419; --surface: #172029; --sunk: #121a21; --ink: #e2e8ee; --muted: #8e9ba8;
+  --line: #2a3641; --accent: #52b6d6; --accent-ink: #06151c; --warn: #e3ac55; --warn-bg: #2d2412;
+  --bad: #f2786d; --bad-bg: #321816; --idle: #3a4652; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 var(--f-body); }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 28px 20px 48px; display: grid; gap: 20px; }
+header h1 { font: 700 2rem/1.1 var(--f-display); letter-spacing: .01em; margin: 0; text-wrap: balance; }
+header p { margin: 6px 0 0; color: var(--muted); max-width: 70ch; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; align-items: start; }
+.col { display: grid; gap: 20px; min-width: 0; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; min-width: 0; }
+.panel h2 { font: 600 .75rem/1 var(--f-body); text-transform: uppercase; letter-spacing: .09em; color: var(--muted); margin: 0 0 14px; }
+.panel h2 .hint { text-transform: none; letter-spacing: 0; font-weight: 400; }
+aside { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); display: grid; gap: 20px; }
+
+label.f { display: grid; gap: 4px; font-size: .8rem; color: var(--muted); min-width: 0; }
+input, select, button { font: inherit; color: inherit; }
+input[type=number], input[type=text], select {
+  background: var(--sunk); border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; width: 100%; min-width: 0; color: var(--ink);
+}
+input[type=number] { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.unitbox { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+.unitbox input { border-radius: 4px 0 0 4px; }
+.unitbox select, .unitbox .suffix { border-radius: 0 4px 4px 0; border-left: 0; width: auto; }
+.unitbox .suffix { background: var(--sunk); border: 1px solid var(--line); border-left: 0; padding: 6px 8px; color: var(--muted); font-family: var(--f-mono); font-size: .85rem; }
+
+.cellgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.chip { border: 1px solid var(--line); background: var(--sunk); border-radius: 999px; padding: 2px 10px; cursor: pointer; font-family: var(--f-mono); font-size: .8rem; color: var(--muted); }
+.chip:hover { color: var(--ink); border-color: var(--muted); }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+.periodrow { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 14px; }
+.periodrow label.f { width: 200px; }
+.periodrow p { margin: 0; color: var(--muted); font-size: .8rem; flex: 1 1 240px; }
+
+.rows { display: grid; gap: 8px; }
+.rowhead, .row { display: grid; grid-template-columns: 8px minmax(110px, 1.2fr) minmax(150px, 1fr) 132px minmax(200px, 1.3fr) 56px 30px; gap: 8px; align-items: center; }
+.rowhead { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; padding: 0 0 2px; }
+.rowhead span:nth-child(6) { text-align: right; }
+.row { background: var(--sunk); border: 1px solid var(--line); border-radius: 4px; padding: 6px 6px 6px 0; }
+.row input, .row select { background: var(--surface); }
+.row .unitbox .suffix { background: var(--surface); }
+.sw { width: 8px; align-self: stretch; border-radius: 4px 0 0 4px; margin: -6px 0; }
+.timecell { display: grid; grid-template-columns: minmax(0, 1fr) auto auto 52px; align-items: center; gap: 0; }
+.timecell .x { padding: 0 6px; color: var(--muted); font-family: var(--f-mono); }
+.timecell.pct { grid-template-columns: minmax(0, 1fr) auto; }
+.timecell.rem { display: block; color: var(--muted); font-size: .85rem; font-style: italic; }
+.share { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; font-size: .85rem; }
+.del { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 1.1rem; line-height: 1; border-radius: 4px; padding: 4px; }
+.del:hover { color: var(--bad); background: var(--bad-bg); }
+.addbar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 4px; padding: 6px 12px; cursor: pointer; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 500; }
+.empty { padding: 18px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 4px; }
+
+.msg { border-radius: 4px; padding: 8px 10px; font-size: .85rem; margin-top: 12px; }
+.msg.warn { background: var(--warn-bg); color: var(--warn); }
+.msg.bad { background: var(--bad-bg); color: var(--bad); }
+
+.readout .big { font: 700 3.1rem/1 var(--f-display); letter-spacing: .01em; font-variant-numeric: tabular-nums; }
+.readout .big.na { color: var(--muted); }
+.readout .sub { color: var(--muted); font-size: .85rem; margin-top: 4px; }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.stat .k { font-size: .72rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.stat .v { font-family: var(--f-mono); font-variant-numeric: tabular-nums; font-size: 1rem; }
+
+.barlabel { font-size: .72rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 16px 0 6px; display: flex; justify-content: space-between; }
+.cellbar { position: relative; display: flex; height: 26px; border: 2px solid var(--ink); border-radius: 4px; padding: 2px; gap: 1px; margin-right: 8px; }
+.cellbar::after { content: ""; position: absolute; right: -8px; top: 6px; width: 5px; height: 10px; background: var(--ink); border-radius: 0 2px 2px 0; }
+.timebar { display: flex; height: 10px; border-radius: 3px; overflow: hidden; gap: 1px; background: var(--line); }
+.seg { min-width: 0; height: 100%; border-radius: 1px; }
+.legend { display: grid; gap: 4px; margin-top: 12px; font-size: .82rem; }
+.legend .li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; }
+.legend .dot { width: 10px; height: 10px; border-radius: 2px; }
+.legend .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.legend .n { font-family: var(--f-mono); font-variant-numeric: tabular-nums; color: var(--muted); text-align: right; }
+.legend .n.c { color: var(--ink); min-width: 4.5ch; }
+
+.sizes { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.sizes th, .sizes td { padding: 5px 4px; text-align: right; border-bottom: 1px solid var(--line); }
+.sizes th { font-size: .72rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 500; }
+.sizes th:first-child, .sizes td:first-child { text-align: left; }
+.sizes td { font-family: var(--f-mono); font-size: .85rem; }
+.sizes tr.cur td { color: var(--accent); font-weight: 500; }
+.sizes tbody tr { cursor: pointer; }
+.sizes tbody tr:hover td { background: var(--sunk); }
+
+.steps { display: grid; gap: 8px; }
+.step { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto minmax(0, 1fr) 96px 30px; gap: 8px; align-items: center; background: var(--sunk); border: 1px solid var(--line); border-radius: 4px; padding: 6px 6px 6px 10px; }
+.step input, .step select, .step .unitbox .suffix { background: var(--surface); }
+.step .lbl { font-size: .72rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.step .for { color: var(--muted); font-size: .85rem; }
+.step .q { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; font-size: .85rem; }
+.evres { display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: end; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.evres .big { font: 700 2.6rem/1 var(--f-display); font-variant-numeric: tabular-nums; }
+.evres .big.na { color: var(--muted); }
+.evres .sub { color: var(--muted); font-size: .85rem; margin-top: 4px; }
+.evres .stats { flex: 1 1 280px; margin: 0; padding: 0; border: 0; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+.evpush { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; font-size: .85rem; color: var(--muted); }
+.evpush input { width: 90px; }
+@media (max-width: 560px) {
+  .step { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 30px; grid-template-areas: "lbl q del" "draw dur dur"; }
+  .step > .lbl { grid-area: lbl; } .step > .q { grid-area: q; } .step > .del { grid-area: del; }
+  .step > .draw { grid-area: draw; } .step > .dur { grid-area: dur; } .step > .for { display: none; }
+}
+
+.notes { color: var(--muted); font-size: .82rem; }
+.notes ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.notes code { font-family: var(--f-mono); font-size: .8rem; }
+.copied { color: var(--accent); font-size: .8rem; margin-left: 4px; }
+
+@media (max-width: 1000px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  aside { position: static; }
+}
+@media (max-width: 760px) {
+  .rowhead { display: none; }
+  .row { grid-template-columns: 8px minmax(0, 1fr) minmax(0, 1fr) 30px; grid-template-areas: "sw name name del" "sw draw mode mode" "sw time time share"; padding: 8px 8px 8px 0; }
+  .row > .sw { grid-area: sw; }
+  .row > .nm { grid-area: name; }
+  .row > .draw { grid-area: draw; }
+  .row > .mode { grid-area: mode; }
+  .row > .timecell { grid-area: time; }
+  .row > .share { grid-area: share; }
+  .row > .del { grid-area: del; }
+  .sw { margin: -8px 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .seg { transition: flex-grow .25s ease; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>LiPo Runtime Calculator</h1>
+    <p>Describe what the device draws and for how long in each operating state. Rows can be a percent of the time, minutes per day, a fixed time per cycle, or "the rest" (usually sleep). Runtime is computed from the average current against the usable capacity of a 3.7&nbsp;V cell.</p>
+  </header>
+
+  <div class="layout">
+    <div class="col">
+      <section class="panel" aria-labelledby="h-cell">
+        <h2 id="h-cell">Cell</h2>
+        <div class="cellgrid">
+          <label class="f">Rated capacity
+            <span class="unitbox"><input id="cap" type="number" min="0" step="any" inputmode="decimal"><span class="suffix">mAh</span></span>
+          </label>
+          <label class="f">Usable fraction
+            <span class="unitbox"><input id="usable" type="number" min="0" max="100" step="any" inputmode="decimal"><span class="suffix">%</span></span>
+          </label>
+          <label class="f">Average cell voltage
+            <span class="unitbox"><input id="vnom" type="number" min="0" step="any" inputmode="decimal"><span class="suffix">V</span></span>
+          </label>
+          <label class="f">Self-discharge
+            <span class="unitbox"><input id="selfdis" type="number" min="0" step="any" inputmode="decimal"><span class="suffix">%/mo</span></span>
+          </label>
+          <label class="f">Converter efficiency (mW rows)
+            <span class="unitbox"><input id="eff" type="number" min="1" max="100" step="any" inputmode="decimal"><span class="suffix">%</span></span>
+          </label>
+        </div>
+        <div class="chips" id="chips" role="group" aria-label="Common cell sizes"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-prof">
+        <h2 id="h-prof">Load profile <span class="hint">· example rows, edit freely</span></h2>
+        <div class="periodrow">
+          <label class="f">Cycle period
+            <span class="unitbox"><input id="period" type="number" min="0" step="any" inputmode="decimal">
+              <select id="periodUnit" aria-label="Period unit"><option value="s">s</option><option value="min">min</option><option value="h">h</option><option value="day">day</option></select></span>
+          </label>
+          <p>"Time per cycle" rows are measured against this period. A 50&nbsp;ms burst ×4 in a 60&nbsp;s period is 0.33% of the time. Percent and minutes-per-day rows ignore it.</p>
+        </div>
+        <div class="rows" id="rows"></div>
+        <div class="addbar">
+          <button class="btn primary" id="addRow" type="button">+ Add row</button>
+          <button class="btn" id="resetEx" type="button">Load example</button>
+          <button class="btn" id="clearAll" type="button">Clear rows</button>
+        </div>
+        <div id="msgs"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-evt">
+        <h2 id="h-evt">Event budget <span class="hint">· how many times can one event run on this cell?</span></h2>
+        <div class="steps" id="steps"></div>
+        <div class="addbar"><button class="btn primary" id="addStep" type="button">+ Add step</button></div>
+        <div class="evres" aria-live="polite">
+          <div>
+            <div class="big" id="evN">—</div>
+            <div class="sub" id="evSub"></div>
+          </div>
+          <div class="stats">
+            <div class="stat"><div class="k">Charge / event</div><div class="v" id="evQ">—</div></div>
+            <div class="stat"><div class="k">Energy / event</div><div class="v" id="evE">—</div></div>
+            <div class="stat"><div class="k">Event length</div><div class="v" id="evT">—</div></div>
+            <div class="stat"><div class="k">Avg during event</div><div class="v" id="evI">—</div></div>
+          </div>
+        </div>
+        <div class="evpush">
+          <span>Add this event to the load profile at</span>
+          <input id="perDay" type="number" min="0" step="any" inputmode="decimal" aria-label="Events per day">
+          <span>events/day</span>
+          <button class="btn" id="pushEvent" type="button">Add to profile</button>
+          <span class="copied" id="pushed" hidden>Added as minutes-per-day rows</span>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-sizes">
+        <h2 id="h-sizes">Same profile, other cell sizes <span class="hint">· click a row to use it</span></h2>
+        <table class="sizes">
+          <thead><tr><th>Cell</th><th>Usable</th><th>Runtime</th><th>Hours</th><th>Events</th></tr></thead>
+          <tbody id="sizesBody"></tbody>
+        </table>
+      </section>
+
+      <section class="panel notes" aria-labelledby="h-notes">
+        <h2 id="h-notes">How it's calculated</h2>
+        <ul>
+          <li>Each row contributes <code>current × fraction of time</code>. Time rows: <code>duration × count ÷ period</code>. Minutes-per-day rows: <code>minutes ÷ 1440</code>. A "rest of period" row takes whatever is left; several of them split it evenly.</li>
+          <li>mW rows are converted to battery current as <code>P ÷ (V<sub>avg</sub> × efficiency)</code>. Enter µA/mA/A when you measured current at the cell itself.</li>
+          <li>Self-discharge is added as a constant drain of <code>capacity × rate ÷ 730 h</code>. Typical LiPo is 2–5 %/month; it only matters for sleepy µA-class designs.</li>
+          <li>Usable fraction covers the cutoff voltage, ageing and temperature. 80–90 % is a reasonable planning figure for a 3.0–3.3 V cutoff on a healthy cell.</li>
+          <li>Event budget: charge per event = <code>Σ current × duration</code>; events = <code>usable capacity ÷ charge per event</code>. It assumes nothing else draws from the cell (no sleep current, no self-discharge), so it's the upper bound. To see an event alongside a real sleep profile, add it to the load profile at a daily rate.</li>
+          <li>Runtime = <code>capacity × usable ÷ average current</code>. It ignores peak-current sag, so very high burst currents on a small cell will do somewhat worse.</li>
+        </ul>
+      </section>
+    </div>
+
+    <aside>
+      <section class="panel readout" aria-labelledby="h-res" aria-live="polite">
+        <h2 id="h-res">Estimated runtime</h2>
+        <div class="big" id="rt">—</div>
+        <div class="sub" id="rtSub"></div>
+        <div class="stats">
+          <div class="stat"><div class="k">Avg current</div><div class="v" id="avgI">—</div></div>
+          <div class="stat"><div class="k">Avg power</div><div class="v" id="avgP">—</div></div>
+          <div class="stat"><div class="k">Usable charge</div><div class="v" id="usableQ">—</div></div>
+          <div class="stat"><div class="k">Charge / day</div><div class="v" id="perDay">—</div></div>
+        </div>
+        <div class="barlabel"><span>Where the charge goes</span></div>
+        <div class="cellbar" id="chargeBar" role="img" aria-label="Share of charge by row"></div>
+        <div class="barlabel"><span>Share of time</span></div>
+        <div class="timebar" id="timeBar" role="img" aria-label="Share of time by row"></div>
+        <div class="legend" id="legend"></div>
+        <div class="addbar">
+          <button class="btn" id="copy" type="button">Copy summary</button><span class="copied" id="copied" hidden>Copied</span>
+        </div>
+        <textarea id="copyFallback" hidden readonly style="width:100%;height:120px;margin-top:8px;font:12px var(--f-mono);background:var(--sunk);color:var(--ink);border:1px solid var(--line)"></textarea>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  const KEY = "lipo-runtime-v1";
+  const COLORS = ["#2f7fc1", "#d9822b", "#3ba272", "#c2457a", "#7b61c9", "#2aa5a5", "#b39a2a", "#d0533f", "#5a8f3a", "#8a6d55"];
+  const I_UNITS = { uA: 0.001, mA: 1, A: 1000 };
+  const T_UNITS = { ms: 0.001, s: 1, min: 60, h: 3600, day: 86400 };
+  const SIZES = [100, 150, 250, 350, 400, 500, 1000, 1200, 2000, 2500, 4400];
+  const SD_COLOR = "var(--idle)";
+
+  let nextId = 1;
+  const row = (name, val, unit, mode, tval, tunit, count) => ({ id: nextId++, name, val, unit, mode, tval, tunit: tunit || "s", count: count ?? 1 });
+  const step = (val, unit, dur, tunit) => ({ id: nextId++, val, unit, dur, tunit });
+  const exampleEvent = () => ({ perDay: 20, steps: [step(10, "mA", 3, "s"), step(1.5, "mA", 15, "s")] });
+  const example = () => ({
+    cap: 500, usable: 85, vnom: 3.7, selfdis: 3, eff: 90, period: 60, periodUnit: "s", event: exampleEvent(),
+    rows: [
+      row("Sleep", 18, "uA", "rem", 0, "s", 1),
+      row("Measure (ADC + sensor on)", 6.5, "mA", "time", 2, "s", 1),
+      row("Radio TX burst", 28, "mA", "time", 50, "ms", 4),
+      row("Status LED", 2, "mA", "pct", 1, "s", 1),
+    ],
+  });
+
+  let S;
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) {
+      S = JSON.parse(raw);
+      S.rows.forEach(r => { r.id = nextId++; });
+    }
+  } catch (e) { S = null; }
+  if (!S || !Array.isArray(S.rows)) S = example();
+  if (!S.event || !Array.isArray(S.event.steps)) S.event = exampleEvent();
+  else S.event.steps.forEach(st => { st.id = nextId++; });
+
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+  const num = v => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
+  const $ = id => document.getElementById(id);
+  const colorOf = i => COLORS[i % COLORS.length];
+
+  // ---------- formatting ----------
+  const sig = (x, d = 3) => {
+    if (!Number.isFinite(x)) return "—";
+    if (x === 0) return "0";
+    const a = Math.abs(x);
+    if (a >= 1000) return Math.round(x).toLocaleString();
+    return parseFloat(x.toPrecision(d)).toString();
+  };
+  const fmtI = mA => mA < 1 ? sig(mA * 1000) + " µA" : mA >= 1000 ? sig(mA / 1000) + " A" : sig(mA) + " mA";
+  const fmtP = mW => mW < 1 ? sig(mW * 1000) + " µW" : mW >= 1000 ? sig(mW / 1000) + " W" : sig(mW) + " mW";
+  const fmtQ = mAh => mAh < 1 ? sig(mAh * 1000) + " µAh" : sig(mAh) + " mAh";
+  const pct = f => { const p = f * 100; return p === 0 ? "0%" : p < 0.01 ? "<0.01%" : p < 1 ? p.toFixed(2) + "%" : p < 10 ? p.toFixed(1) + "%" : Math.round(p) + "%"; };
+  function fmtDur(h) {
+    if (!Number.isFinite(h) || h <= 0) return "—";
+    if (h < 1) return Math.round(h * 60) + " min";
+    if (h < 48) { const H = Math.floor(h), M = Math.round((h - H) * 60); return M ? `${H} h ${M} min` : `${H} h`; }
+    const d = h / 24;
+    if (d < 60) { const D = Math.floor(d), H = Math.round((d - D) * 24); return H ? `${D} d ${H} h` : `${D} d`; }
+    if (d < 730) return sig(d / 30.44, 3) + " months";
+    return sig(d / 365.25, 3) + " years";
+  }
+  function durSub(h) {
+    if (!Number.isFinite(h) || h <= 0) return "";
+    const d = h / 24;
+    if (h < 48) return `${sig(h)} hours`;
+    if (d < 60) return `${sig(h)} hours · ${sig(d)} days`;
+    return `${sig(d)} days · ${sig(d / 7)} weeks`;
+  }
+
+  // ---------- calculation ----------
+  // Battery-side current in mA; mW loads go through the converter efficiency.
+  function toMA(val, unit, s) {
+    if (unit !== "mW") return num(val) * (I_UNITS[unit] ?? 1);
+    return num(val) / ((num(s.vnom) || 3.7) * Math.max(num(s.eff), 1) / 100);
+  }
+  function calcEvent(s, capOverride) {
+    const cap = capOverride ?? num(s.cap);
+    let q = 0, t = 0; // mA·s, s
+    const st = s.event.steps.map(x => {
+      const I = toMA(x.val, x.unit, s), d = num(x.dur) * (T_UNITS[x.tunit] || 1);
+      q += I * d; t += d;
+      return { x, I, d, qmAh: I * d / 3600 };
+    });
+    const qmAh = q / 3600;
+    const usableQ = cap * num(s.usable) / 100;
+    return { st, qmAh, t, avgI: t > 0 ? q / t : 0, mWh: qmAh * (num(s.vnom) || 3.7), events: qmAh > 0 ? usableQ / qmAh : NaN, usableQ };
+  }
+  function calc(s, capOverride) {
+    const cap = capOverride ?? num(s.cap);
+    const V = num(s.vnom) || 3.7;
+    const T = num(s.period) * (T_UNITS[s.periodUnit] || 1);
+    let used = 0;
+    const rems = [];
+    const rs = s.rows.map(r => {
+      const I = toMA(r.val, r.unit, s);
+      let f = 0;
+      if (r.mode === "pct") f = num(r.tval) / 100;
+      else if (r.mode === "perday") f = num(r.tval) / 1440;
+      else if (r.mode === "time") f = T > 0 ? num(r.tval) * (T_UNITS[r.tunit] || 1) * num(r.count) / T : 0;
+      const o = { r, I, f };
+      if (r.mode === "rem") rems.push(o); else used += f;
+      return o;
+    });
+    const left = 1 - used;
+    rems.forEach(o => { o.f = left > 0 ? left / rems.length : 0; });
+    const sdI = cap * num(s.selfdis) / 100 / 730.5;
+    const loadI = rs.reduce((a, o) => a + o.I * o.f, 0);
+    const avg = loadI + sdI;
+    const usableQ = cap * num(s.usable) / 100;
+    const over = used > 1 + 1e-9;
+    const hours = !over && avg > 0 ? usableQ / avg : NaN;
+    return { rs, used, left, rems, sdI, avg, usableQ, hours, over, T, V };
+  }
+
+  // ---------- rendering ----------
+  function el(tag, attrs = {}, kids = []) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === "class") e.className = v;
+      else if (k === "text") e.textContent = v;
+      else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+      else e.setAttribute(k, v);
+    }
+    kids.forEach(k => k && e.appendChild(k));
+    return e;
+  }
+  function select(opts, value, label, onchange) {
+    const s = el("select", { "aria-label": label, onchange });
+    opts.forEach(([v, t]) => { const o = el("option", { value: v, text: t }); if (v === value) o.selected = true; s.appendChild(o); });
+    return s;
+  }
+  function numIn(value, label, oninput, extra = {}) {
+    const i = el("input", { type: "number", step: "any", min: "0", inputmode: "decimal", "aria-label": label, oninput, ...extra });
+    i.value = value;
+    return i;
+  }
+
+  function renderRows() {
+    const box = $("rows");
+    box.replaceChildren();
+    if (!S.rows.length) {
+      box.appendChild(el("div", { class: "empty", text: "No rows yet. Add a row for each operating state: sleep, measuring, transmitting, display on, and so on." }));
+      return;
+    }
+    box.appendChild(el("div", { class: "rowhead", "aria-hidden": "true" }, ["", "State", "Draw", "Time basis", "Amount", "Charge", ""].map(t => el("span", { text: t }))));
+    S.rows.forEach((r, i) => {
+      const upd = (k, rerender) => e => { r[k] = e.target.value; if (rerender) renderRows(); update(); };
+      const name = el("input", { type: "text", class: "nm", "aria-label": "State name", placeholder: "State name", oninput: upd("name") });
+      name.value = r.name;
+
+      const draw = el("span", { class: "unitbox draw" }, [
+        numIn(r.val, "Draw", upd("val")),
+        select([["uA", "µA"], ["mA", "mA"], ["A", "A"], ["mW", "mW"]], r.unit, "Draw unit", upd("unit")),
+      ]);
+      const mode = select([["pct", "% of time"], ["perday", "Minutes per day"], ["time", "Time per cycle"], ["rem", "Rest of period"]], r.mode, "Time basis", upd("mode", true));
+      mode.classList.add("mode");
+
+      let tc;
+      if (r.mode === "pct") {
+        tc = el("span", { class: "timecell pct unitbox" }, [numIn(r.tval, "Percent of time", upd("tval"), { max: "100" }), el("span", { class: "suffix", text: "%" })]);
+      } else if (r.mode === "perday") {
+        tc = el("span", { class: "timecell pct unitbox" }, [numIn(r.tval, "Minutes per day", upd("tval"), { max: "1440" }), el("span", { class: "suffix", text: "min/day" })]);
+      } else if (r.mode === "time") {
+        tc = el("span", { class: "timecell" }, [
+          numIn(r.tval, "Duration per cycle", upd("tval")),
+          select([["ms", "ms"], ["s", "s"], ["min", "min"], ["h", "h"]], r.tunit, "Duration unit", upd("tunit")),
+          el("span", { class: "x", text: "×" }),
+          numIn(r.count, "Times per cycle", upd("count")),
+        ]);
+      } else {
+        tc = el("span", { class: "timecell rem", id: "remtxt-" + r.id, text: "whatever time is left" });
+      }
+
+      box.appendChild(el("div", { class: "row" }, [
+        el("span", { class: "sw", style: `background:${colorOf(i)}` }),
+        name, draw, mode, tc,
+        el("span", { class: "share", id: "share-" + r.id, title: "Share of total charge" }),
+        el("button", { class: "del", type: "button", "aria-label": "Remove row", title: "Remove row", text: "×", onclick: () => { S.rows.splice(i, 1); renderRows(); update(); } }),
+      ]));
+    });
+  }
+
+  const fmtSec = sec => sec < 1 ? sig(sec * 1000) + " ms" : sec < 120 ? sig(sec) + " s" : sec < 7200 ? sig(sec / 60) + " min" : sig(sec / 3600) + " h";
+  const fmtCount = n => Number.isFinite(n) ? Math.floor(n).toLocaleString() : "—";
+
+  function renderSteps() {
+    const box = $("steps");
+    box.replaceChildren();
+    if (!S.event.steps.length) {
+      box.appendChild(el("div", { class: "empty", text: "No steps. Add one step per current level in the event, e.g. 10 mA for 3 s, then 1.5 mA for 15 s." }));
+      return;
+    }
+    S.event.steps.forEach((x, i) => {
+      const upd = k => e => { x[k] = e.target.value; update(); };
+      box.appendChild(el("div", { class: "step" }, [
+        el("span", { class: "lbl", text: `Step ${i + 1}` }),
+        el("span", { class: "unitbox draw" }, [
+          numIn(x.val, "Step draw", upd("val")),
+          select([["uA", "µA"], ["mA", "mA"], ["A", "A"], ["mW", "mW"]], x.unit, "Step draw unit", upd("unit")),
+        ]),
+        el("span", { class: "for", text: "for" }),
+        el("span", { class: "unitbox dur" }, [
+          numIn(x.dur, "Step duration", upd("dur")),
+          select([["ms", "ms"], ["s", "s"], ["min", "min"], ["h", "h"]], x.tunit, "Step duration unit", upd("tunit")),
+        ]),
+        el("span", { class: "q", id: "sq-" + x.id, title: "Charge used by this step" }),
+        el("button", { class: "del", type: "button", "aria-label": "Remove step", title: "Remove step", text: "×", onclick: () => { S.event.steps.splice(i, 1); renderSteps(); update(); } }),
+      ]));
+    });
+  }
+
+  function updateEvent() {
+    const e = calcEvent(S);
+    e.st.forEach(o => { const q = $("sq-" + o.x.id); if (q) q.textContent = fmtQ(o.qmAh); });
+    const ok = Number.isFinite(e.events);
+    $("evN").textContent = ok ? fmtCount(e.events) + " events" : "—";
+    $("evN").classList.toggle("na", !ok);
+    $("evSub").textContent = ok ? `from ${fmtQ(e.usableQ)} usable (${sig(num(S.cap))} mAh cell, ${sig(num(S.usable))}%)` : "Add a step with a non-zero draw and duration.";
+    $("evQ").textContent = ok ? fmtQ(e.qmAh) : "—";
+    $("evE").textContent = ok ? (e.mWh < 1 ? sig(e.mWh * 1000) + " µWh" : sig(e.mWh) + " mWh") : "—";
+    $("evT").textContent = e.t > 0 ? fmtSec(e.t) : "—";
+    $("evI").textContent = e.t > 0 ? fmtI(e.avgI) : "—";
+  }
+
+  function update() {
+    save();
+    updateEvent();
+    const c = calc(S);
+    const cap = num(S.cap);
+
+    // messages
+    const msgs = $("msgs");
+    msgs.replaceChildren();
+    if (c.over) msgs.appendChild(el("div", { class: "msg bad", text: `Rows add up to ${pct(c.used)} of the period. Shorten some durations or lengthen the cycle period.` }));
+    else if (!c.rems.length && c.left > 1e-6 && S.rows.length) msgs.appendChild(el("div", { class: "msg warn", text: `${pct(c.left)} of the time isn't covered by any row and is counted as 0 mA. Set your sleep row to "Rest of period" to fill it.` }));
+    else if (c.rems.length && c.left <= 1e-9) msgs.appendChild(el("div", { class: "msg warn", text: `The other rows already use the whole period, so "Rest of period" rows get no time.` }));
+    if (c.rems.length > 1) msgs.appendChild(el("div", { class: "msg warn", text: `${c.rems.length} rows are set to "Rest of period"; the leftover time is split evenly between them.` }));
+
+    // per-row share + rem text
+    c.rs.forEach(o => {
+      const s = $("share-" + o.r.id);
+      if (s) s.textContent = c.avg > 0 && !c.over ? pct(o.I * o.f / c.avg) : "—";
+      const t = $("remtxt-" + o.r.id);
+      if (t) t.textContent = c.over ? "no time left" : `the remaining ${pct(o.f)}`;
+    });
+
+    // readout
+    const ok = Number.isFinite(c.hours);
+    $("rt").textContent = ok ? fmtDur(c.hours) : "—";
+    $("rt").classList.toggle("na", !ok);
+    $("rtSub").textContent = ok
+      ? `${durSub(c.hours)} on a ${sig(cap)} mAh cell`
+      : c.over ? "Fix the load profile to see a runtime." : "Add a row with a non-zero draw.";
+    $("avgI").textContent = c.over ? "—" : fmtI(c.avg);
+    $("avgP").textContent = c.over ? "—" : fmtP(c.avg * c.V);
+    $("usableQ").textContent = fmtQ(c.usableQ);
+    $("perDay").textContent = c.over ? "—" : fmtQ(c.avg * 24);
+
+    // bars + legend
+    const cb = $("chargeBar"), tb = $("timeBar"), lg = $("legend");
+    cb.replaceChildren(); tb.replaceChildren(); lg.replaceChildren();
+    if (!c.over && c.avg > 0) {
+      c.rs.forEach((o, i) => {
+        const q = o.I * o.f;
+        if (q > 0) cb.appendChild(el("span", { class: "seg", style: `flex-grow:${q};background:${colorOf(i)}`, title: `${o.r.name || "Row"}: ${pct(q / c.avg)}` }));
+      });
+      if (c.sdI > 0) cb.appendChild(el("span", { class: "seg", style: `flex-grow:${c.sdI};background:${SD_COLOR}`, title: `Self-discharge: ${pct(c.sdI / c.avg)}` }));
+    }
+    if (!c.over) {
+      c.rs.forEach((o, i) => { if (o.f > 0) tb.appendChild(el("span", { class: "seg", style: `flex-grow:${o.f};background:${colorOf(i)}` })); });
+      if (!c.rems.length && c.left > 0) tb.appendChild(el("span", { class: "seg", style: `flex-grow:${c.left};background:transparent` }));
+    }
+    if (S.rows.length) {
+      lg.appendChild(el("div", { class: "li" }, [el("span"), el("span", { class: "nm", style: "color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.07em", text: "State" }),
+        el("span", { class: "n", style: "font-size:.72rem", text: "time" }), el("span", { class: "n c", style: "font-size:.72rem;color:var(--muted)", text: "charge" })]));
+      c.rs.forEach((o, i) => lg.appendChild(el("div", { class: "li" }, [
+        el("span", { class: "dot", style: `background:${colorOf(i)}` }),
+        el("span", { class: "nm", text: `${o.r.name || "Unnamed"} · ${fmtI(o.I)}` }),
+        el("span", { class: "n", text: c.over ? "—" : pct(o.f) }),
+        el("span", { class: "n c", text: c.over || !(c.avg > 0) ? "—" : pct(o.I * o.f / c.avg) }),
+      ])));
+      if (c.sdI > 0) lg.appendChild(el("div", { class: "li" }, [
+        el("span", { class: "dot", style: `background:${SD_COLOR}` }),
+        el("span", { class: "nm", text: `Self-discharge · ${fmtI(c.sdI)}` }),
+        el("span", { class: "n", text: "" }),
+        el("span", { class: "n c", text: c.over || !(c.avg > 0) ? "—" : pct(c.sdI / c.avg) }),
+      ]));
+    }
+
+    // chips
+    document.querySelectorAll("#chips .chip").forEach(b => b.setAttribute("aria-pressed", String(num(b.dataset.cap) === cap)));
+
+    // sizes table
+    const sizes = [...new Set([...SIZES, cap].filter(x => x > 0))].sort((a, b) => a - b);
+    const body = $("sizesBody");
+    body.replaceChildren();
+    sizes.forEach(sz => {
+      const k = calc(S, sz);
+      const ok2 = Number.isFinite(k.hours);
+      const tr = el("tr", { class: sz === cap ? "cur" : "", tabindex: "0", onclick: () => setCap(sz), onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCap(sz); } } }, [
+        el("td", { text: `${sig(sz)} mAh` }),
+        el("td", { text: fmtQ(k.usableQ) }),
+        el("td", { text: ok2 ? fmtDur(k.hours) : "—" }),
+        el("td", { text: ok2 ? sig(k.hours) : "—" }),
+        el("td", { text: fmtCount(calcEvent(S, sz).events) }),
+      ]);
+      body.appendChild(tr);
+    });
+  }
+
+  function setCap(v) { S.cap = v; $("cap").value = v; update(); }
+
+  // ---------- cell + period inputs ----------
+  ["cap", "usable", "vnom", "selfdis", "eff", "period"].forEach(k => {
+    const i = $(k);
+    i.value = S[k];
+    i.addEventListener("input", () => { S[k] = i.value; update(); });
+  });
+  $("periodUnit").value = S.periodUnit;
+  $("periodUnit").addEventListener("change", e => { S.periodUnit = e.target.value; update(); });
+
+  SIZES.forEach(sz => $("chips").appendChild(el("button", { class: "chip", type: "button", "data-cap": sz, "aria-pressed": "false", text: `${sz}`, onclick: () => setCap(sz) })));
+
+  $("addRow").addEventListener("click", () => {
+    S.rows.push(row("", 1, "mA", "pct", 10, "s", 1));
+    renderRows(); update();
+    const inputs = $("rows").querySelectorAll("input.nm");
+    inputs[inputs.length - 1]?.focus();
+  });
+  $("resetEx").addEventListener("click", () => {
+    S = example();
+    ["cap", "usable", "vnom", "selfdis", "eff", "period"].forEach(k => { $(k).value = S[k]; });
+    $("periodUnit").value = S.periodUnit;
+    $("perDay").value = S.event.perDay;
+    renderRows(); renderSteps(); update();
+  });
+
+  $("addStep").addEventListener("click", () => { S.event.steps.push(step(1, "mA", 1, "s")); renderSteps(); update(); });
+  $("perDay").value = S.event.perDay;
+  $("perDay").addEventListener("input", e => { S.event.perDay = e.target.value; save(); });
+  $("pushEvent").addEventListener("click", () => {
+    const n = num(S.event.perDay);
+    if (!(n > 0) || !S.event.steps.length) return;
+    S.event.steps.forEach((x, i) => {
+      const mins = num(x.dur) * (T_UNITS[x.tunit] || 1) * n / 60;
+      S.rows.push(row(`Event step ${i + 1} (${sig(n)}/day)`, x.val, x.unit, "perday", parseFloat(mins.toPrecision(6)), "s", 1));
+    });
+    renderRows(); update();
+    $("pushed").hidden = false; setTimeout(() => { $("pushed").hidden = true; }, 2000);
+  });
+  $("clearAll").addEventListener("click", () => { S.rows = []; renderRows(); update(); });
+
+  $("copy").addEventListener("click", () => {
+    const c = calc(S);
+    const T = `${num(S.period)} ${S.periodUnit}`;
+    const lines = [
+      `LiPo runtime estimate: ${fmtDur(c.hours)} (${Number.isFinite(c.hours) ? sig(c.hours) + " h" : "n/a"})`,
+      `Cell: ${num(S.cap)} mAh @ ${num(S.vnom)} V, ${num(S.usable)}% usable, self-discharge ${num(S.selfdis)}%/mo`,
+      `Average current: ${fmtI(c.avg)}  |  Average power: ${fmtP(c.avg * c.V)}`,
+      `Cycle period: ${T}`,
+      ...c.rs.map(o => `  - ${o.r.name || "Unnamed"}: ${fmtI(o.I)} for ${pct(o.f)} of time -> ${c.avg > 0 ? pct(o.I * o.f / c.avg) : "-"} of charge`),
+    ];
+    const ev = calcEvent(S);
+    if (ev.st.length) lines.push(
+      `Event (${ev.st.map(o => `${fmtI(o.I)} x ${fmtSec(o.d)}`).join(" + ")}): ${fmtQ(ev.qmAh)}/event -> ${fmtCount(ev.events)} events from usable capacity`);
+    const text = lines.join("\n");
+    const done = () => { $("copied").hidden = false; setTimeout(() => { $("copied").hidden = true; }, 1500); };
+    const fallback = () => { const t = $("copyFallback"); t.value = text; t.hidden = false; t.select(); };
+    try {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } catch (e) { fallback(); }
+  });
+
+  renderRows();
+  renderSteps();
+  update();
+})();
+</script>
