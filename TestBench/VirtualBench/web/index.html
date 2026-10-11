@@ -1,0 +1,851 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Virtual Bench</title>
+<style>
+:root {
+  --bg: #141414; --panel: #1d1d1d; --panel2: #242424; --line: #323232;
+  --text: #dedede; --muted: #8a8a8a; --accent: #00ff32; --accent-dim: #0b5a1c;
+  --warn: #ffb020; --danger: #ff4d4d; --danger-dim: #5a1515; --info: #4db8ff;
+  --mono: Consolas, "Cascadia Mono", "SF Mono", Menlo, monospace;
+  --c1: #f5e400; --c2: #ff4fd8; --c3: #22d3ee; --c4: #38e07b;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.4 "Segoe UI", system-ui, sans-serif; }
+a { color: inherit; text-decoration: none; }
+button, input, select { font: inherit; color: var(--text); }
+header.top { display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+  border-bottom: 1px solid var(--line); background: #101010; position: sticky; top: 0; z-index: 5; }
+header.top h1 { font-size: 17px; margin: 0; font-weight: 600; letter-spacing: .5px; }
+header.top h1 span { color: var(--accent); }
+header.top .grow { flex: 1; }
+main { padding: 16px; max-width: 1400px; margin: 0 auto; }
+
+/* buttons & inputs */
+.btn { background: var(--panel2); border: 1px solid var(--line); border-radius: 6px;
+  padding: 5px 12px; cursor: pointer; white-space: nowrap; }
+.btn:hover { border-color: #555; }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.on { background: var(--accent-dim); border-color: var(--accent); color: #c8ffd4; }
+.btn.danger { background: var(--danger-dim); border-color: var(--danger); color: #ffd6d6; font-weight: 600; }
+.btn.small { padding: 2px 8px; font-size: 12px; }
+input[type=text], input:not([type]), select {
+  background: #0f0f0f; border: 1px solid var(--line); border-radius: 5px; padding: 4px 7px;
+  font-family: var(--mono); min-width: 0; }
+input.dirty { border-color: var(--warn); }
+select { font-family: inherit; }
+label.f { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); }
+label.f input, label.f select { width: 100%; color: var(--text); font-size: 14px; }
+.row { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
+.row > label.f { flex: 1 1 90px; }
+
+/* dashboard */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; min-height: 170px;
+  transition: border-color .15s; }
+.card:hover { border-color: #4a4a4a; }
+.card .hd { display: flex; align-items: center; gap: 8px; }
+.card .hd b { font-size: 15px; }
+.card .hd .addr { margin-left: auto; color: var(--muted); font: 12px var(--mono); }
+.card .model { color: var(--muted); font-size: 12px; min-height: 1.2em; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: #555; flex: none; }
+.dot.ok { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+.dot.bad { background: var(--danger); }
+.dot.idle { background: #555; }
+.err { color: var(--danger); font-size: 12px; overflow-wrap: anywhere; }
+.big { font: 600 34px/1.1 var(--mono); color: var(--accent); }
+.big small { font-size: 16px; color: var(--muted); margin-left: 4px; }
+.mono { font-family: var(--mono); }
+.muted { color: var(--muted); }
+.tag { display: inline-block; font: 600 11px var(--mono); padding: 1px 6px; border-radius: 4px;
+  border: 1px solid var(--line); color: var(--muted); }
+.tag.on { color: #04150a; background: var(--accent); border-color: var(--accent); }
+.tag.warn { color: #1a1000; background: var(--warn); border-color: var(--warn); }
+.tag.info { color: #001420; background: var(--info); border-color: var(--info); }
+table.mini { border-collapse: collapse; width: 100%; font: 13px var(--mono); }
+table.mini td, table.mini th { padding: 2px 6px 2px 0; text-align: right; white-space: nowrap; }
+table.mini th { color: var(--muted); font-weight: normal; font-size: 11px; }
+table.mini td:first-child, table.mini th:first-child { text-align: left; }
+
+/* panels */
+.panel-hd { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.panel-hd h2 { margin: 0; font-size: 20px; }
+.panel-hd .ident { color: var(--muted); font: 12px var(--mono); }
+.panel-hd .grow { flex: 1; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; align-items: start; }
+.box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.box h3 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted);
+  display: flex; align-items: center; gap: 8px; }
+.box h3 .grow { flex: 1; }
+.wide { grid-column: 1 / -1; }
+.readout { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+.readout div { background: #0f0f0f; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+.readout span { display: block; font-size: 11px; color: var(--muted); }
+.readout b { font: 600 18px var(--mono); color: var(--accent); }
+.chbox { border-left: 3px solid var(--accent); }
+.chbox.off { border-left-color: #444; }
+canvas.plot { width: 100%; height: 300px; background: #0b0b0b; border: 1px solid var(--line); border-radius: 6px; display: block; }
+canvas.plot.tall { height: 420px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; border-right: 1px solid var(--line); background: var(--panel2); padding: 4px 10px; cursor: pointer; }
+.seg button:last-child { border-right: 0; }
+.seg button.on { background: var(--accent-dim); color: #c8ffd4; }
+.console { display: flex; flex-direction: column; gap: 6px; }
+.console pre { margin: 0; background: #0b0b0b; border: 1px solid var(--line); border-radius: 6px; padding: 8px;
+  height: 160px; overflow: auto; font: 12px var(--mono); white-space: pre-wrap; }
+.console pre .q { color: var(--info); }
+.console pre .e { color: var(--danger); }
+details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.shot { max-width: 100%; border: 1px solid var(--line); border-radius: 6px; display: block; }
+.note { font-size: 12px; color: var(--muted); }
+.note.warn { color: var(--warn); }
+
+/* toast + modal */
+#toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 20; max-width: min(420px, calc(100vw - 32px)); }
+.toast { background: #2a1010; border: 1px solid var(--danger); color: #ffd6d6; padding: 8px 12px; border-radius: 8px; font-size: 13px; overflow-wrap: anywhere; }
+.toast.ok { background: #0f2414; border-color: var(--accent); color: #c8ffd4; }
+#modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 30; padding: 16px; }
+#modal .dlg { background: var(--panel); border: 1px solid var(--warn); border-radius: 10px; padding: 18px; max-width: 420px; width: 100%; }
+#modal .dlg p { margin: 0 0 16px; }
+#modal .dlg .row { justify-content: flex-end; }
+
+@media (max-width: 600px) {
+  main { padding: 12px; }
+  header.top { padding: 8px 12px; flex-wrap: wrap; }
+  .big { font-size: 28px; }
+  canvas.plot { height: 240px; } canvas.plot.tall { height: 300px; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <a href="#/"><h1>VIRTUAL <span>BENCH</span></h1></a>
+  <span class="grow"></span>
+  <span id="clock" class="muted mono"></span>
+  <button class="btn danger" id="alloff" title="Power supply, function generator and load outputs off">ALL OUTPUTS OFF</button>
+</header>
+<main id="view"></main>
+<div id="toasts"></div>
+<div id="modal"><div class="dlg"><p id="modal-text"></p>
+  <div class="row"><button class="btn" id="modal-no">Cancel</button><button class="btn on" id="modal-yes">Turn on</button></div></div></div>
+
+<script>
+"use strict";
+// ---------------------------------------------------------------- helpers
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+function h(html) { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstElementChild; }
+
+async function api(path, body) {
+  const opt = body === undefined ? {} : {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)};
+  const r = await fetch(path, opt);
+  const j = await r.json().catch(() => ({ok: false, error: `HTTP ${r.status}`}));
+  if (!j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  return j;
+}
+function toast(msg, ok = false) {
+  const t = h(`<div class="toast ${ok ? "ok" : ""}">${esc(msg)}</div>`);
+  $("#toasts").append(t); setTimeout(() => t.remove(), ok ? 2500 : 6000);
+}
+function confirmBox(text, yes = "Turn on") {
+  return new Promise(res => {
+    $("#modal-text").textContent = text; $("#modal-yes").textContent = yes;
+    $("#modal").style.display = "flex"; $("#modal-yes").focus();
+    const done = v => { $("#modal").style.display = "none"; $("#modal-yes").onclick = $("#modal-no").onclick = null; res(v); };
+    $("#modal-yes").onclick = () => done(true); $("#modal-no").onclick = () => done(false);
+  });
+}
+
+const PFX = [[1e9, "G"], [1e6, "M"], [1e3, "k"], [1, ""], [1e-3, "m"], [1e-6, "µ"], [1e-9, "n"], [1e-12, "p"]];
+function si(v, unit = "", digits = 4) {
+  if (v === null || v === undefined || !isFinite(v)) return "—";
+  if (v === 0) return `0 ${unit}`.trim();
+  const a = Math.abs(v);
+  for (const [m, p] of PFX) if (a >= m * 0.9995) return `${(v / m).toPrecision(digits)} ${p}${unit}`.trim();
+  return `${(v / 1e-12).toPrecision(digits)} p${unit}`.trim();
+}
+// "-30.58 mV" -> ["-30.58", "mV"] for a big number with a small unit
+function siParts(v, unit, digits) { const t = si(v, unit, digits); const k = t.lastIndexOf(" "); return k < 0 ? [t, ""] : [t.slice(0, k), t.slice(k + 1)]; }
+function bigVal(v, unit, digits, extra = "") { const [n, u] = siParts(v, unit, digits); return `<div class="big">${n}<small>${u}${extra}</small></div>`; }
+// DMM readout, 5½ digits fixed to the range: the range picks the prefix and
+// the decimals (10 V range -> "  9.1234 V" / "-10.0021 V"; 100 mV -> " 12.345 mV";
+// 1000 V -> "1000.00 V"), padded with spaces so the sign and the decimal point
+// never move while the range stays put.  Functions without a range fall back to
+// 6 significant figures.
+function dmmParts(st) {
+  if (st.overload) return ["OL", ""];
+  const v = st.value, unit = st.unit || "";
+  if (v === null || v === undefined || !isFinite(v)) return ["—", unit];
+  const r = st.range;
+  if (!r || !isFinite(r) || r <= 0) return siParts(v, unit, 6);
+  let m = 1, p = "";
+  for (const [mm, pp] of PFX) if (r >= mm * 0.9995) { m = mm; p = pp; break; }
+  if (m > 1 && (unit === "V" || unit === "A")) { m = 1; p = ""; }   // "1000.00 V", not "1.00000 kV"
+  const rs = r / m;                                       // 1, 10 or 100 (x prefix)
+  const ints = Math.floor(Math.log10(rs) + 1e-9) + 1;      // digits left of the point
+  const dec = Math.max(0, 6 - ints);                       // 1 half + 5 full digits
+  const n = Math.abs(v / m).toFixed(dec);
+  const width = ints + (dec ? dec + 1 : 0);
+  return [((v < 0 ? "-" : "") + n).padStart(width + 1, " "), p + unit];   // white-space:pre + mono font
+}
+// fixed decimals for readouts that should not jump around
+function fx(v, d = 3) { return (v === null || v === undefined || !isFinite(v)) ? "—" : v.toFixed(d); }
+function parseSI(s) {
+  s = String(s).trim().replace(/\s+/g, "").replace(/(hz|v|a|w|s|ohm|Ω|f)$/i, "");
+  const m = s.match(/^([-+]?\d*\.?\d+(?:e[-+]?\d+)?)([GMkmunpµ]?)$/i);
+  if (!m) throw new Error(`can't read "${s}" as a number`);
+  const mult = {G: 1e9, M: 1e6, k: 1e3, K: 1e3, m: 1e-3, u: 1e-6, "µ": 1e-6, n: 1e-9, p: 1e-12, "": 1}[m[2]];
+  return parseFloat(m[1]) * mult;
+}
+// Inputs: the poller fills them, except while focused or edited-but-not-applied.
+function setVal(el, v) {
+  if (!el || el === document.activeElement || el.classList.contains("dirty")) return;
+  if (el.value !== String(v)) el.value = v;
+}
+function markDirty(root) {
+  root.addEventListener("input", e => { if (e.target.matches("input")) e.target.classList.add("dirty"); });
+}
+function clean(...els) { els.forEach(e => e && e.classList.remove("dirty")); }
+function num(el) { return parseSI(el.value); }
+
+// ---------------------------------------------------------------- plotting
+function niceStep(range, n) {
+  const raw = range / n, p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p;
+  return (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * p;
+}
+function canvasCtx(cv) {
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, hgt = cv.clientHeight;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(hgt * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(hgt * dpr); }
+  const c = cv.getContext("2d"); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, w, hgt);
+  return [c, w, hgt];
+}
+// series: [{x:[], y:[], color, label}]  opts: {xunit, yunit, xfmt, timeAxis}
+function plotXY(cv, series, opts = {}) {
+  const [c, W, H] = canvasCtx(cv);
+  const L = 64, R = 12, T = 10, B = 26, pw = W - L - R, ph = H - T - B;
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const s of series) for (let i = 0; i < s.x.length; i++) {
+    const y = s.y[i]; if (y === null || !isFinite(y)) continue;
+    x0 = Math.min(x0, s.x[i]); x1 = Math.max(x1, s.x[i]); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+  }
+  c.font = "11px Consolas, monospace"; c.fillStyle = "#777";
+  if (!isFinite(x0)) { c.fillText("no data yet", L + 8, T + 18); return; }
+  if (opts.xmin !== undefined) x0 = opts.xmin;
+  if (x1 === x0) x1 = x0 + 1;
+  if (y1 === y0) { const d = Math.abs(y0) * 0.01 || 1e-3; y0 -= d; y1 += d; }
+  const pad = (y1 - y0) * 0.08; y0 -= pad; y1 += pad;
+  const X = x => L + (x - x0) / (x1 - x0) * pw, Y = y => T + (1 - (y - y0) / (y1 - y0)) * ph;
+  c.strokeStyle = "#262626"; c.lineWidth = 1; c.textAlign = "right"; c.textBaseline = "middle";
+  const ys = niceStep(y1 - y0, Math.max(3, ph / 45));
+  for (let y = Math.ceil(y0 / ys) * ys; y <= y1; y += ys) {
+    c.beginPath(); c.moveTo(L, Y(y) + .5); c.lineTo(L + pw, Y(y) + .5); c.stroke();
+    c.fillText(si(Math.abs(y) < ys * 1e-6 ? 0 : y, opts.yunit || "", 3), L - 6, Y(y));
+  }
+  c.textAlign = "center"; c.textBaseline = "top";
+  const xs = niceStep(x1 - x0, Math.max(3, pw / 90));
+  for (let x = Math.ceil(x0 / xs) * xs; x <= x1; x += xs) {
+    c.beginPath(); c.moveTo(X(x) + .5, T); c.lineTo(X(x) + .5, T + ph); c.stroke();
+    const lbl = opts.timeAxis ? new Date(x * 1000).toLocaleTimeString() : si(Math.abs(x) < xs * 1e-6 ? 0 : x, opts.xunit || "", 3);
+    const lw = c.measureText(lbl).width / 2;
+    if (X(x) - lw >= 0 && X(x) + lw <= W) c.fillText(lbl, X(x), T + ph + 6);
+  }
+  c.strokeStyle = "#444"; c.strokeRect(L + .5, T + .5, pw, ph);
+  c.save(); c.beginPath(); c.rect(L, T, pw, ph); c.clip();
+  for (const s of series) {
+    c.strokeStyle = s.color; c.lineWidth = 1.4; c.beginPath(); let pen = false;
+    for (let i = 0; i < s.x.length; i++) {
+      const y = s.y[i]; if (y === null || !isFinite(y)) { pen = false; continue; }
+      pen ? c.lineTo(X(s.x[i]), Y(y)) : c.moveTo(X(s.x[i]), Y(y)); pen = true;
+    }
+    c.stroke();
+  }
+  c.restore();
+  let lx = L + 8; c.textAlign = "left"; c.textBaseline = "top";
+  for (const s of series) if (s.label) {
+    c.fillStyle = s.color; c.fillRect(lx, T + 8, 10, 3); c.fillStyle = "#bbb"; c.fillText(s.label, lx + 14, T + 3);
+    lx += c.measureText(s.label).width + 30;
+  }
+}
+// Scope-style: 10 x 8 divisions, each channel at its own V/div and offset.
+const CHCOL = {C1: "var(--c1)", C2: "var(--c2)", C3: "var(--c3)", C4: "var(--c4)"};
+function cssVar(v) { return v.startsWith("var(") ? getComputedStyle(document.documentElement).getPropertyValue(v.slice(4, -1)).trim() : v; }
+function plotScope(cv, wf, st) {
+  const [c, W, H] = canvasCtx(cv);
+  const L = 8, R = 8, T = 8, B = 22, pw = W - L - R, ph = H - T - B, dx = pw / 10, dy = ph / 8;
+  c.strokeStyle = "#2a2a2a"; c.lineWidth = 1;
+  for (let i = 0; i <= 10; i++) { c.beginPath(); c.moveTo(L + i * dx + .5, T); c.lineTo(L + i * dx + .5, T + ph); c.stroke(); }
+  for (let j = 0; j <= 8; j++) { c.beginPath(); c.moveTo(L, T + j * dy + .5); c.lineTo(L + pw, T + j * dy + .5); c.stroke(); }
+  c.strokeStyle = "#444"; c.beginPath(); c.moveTo(L + 5 * dx + .5, T); c.lineTo(L + 5 * dx + .5, T + ph);
+  c.moveTo(L, T + 4 * dy + .5); c.lineTo(L + pw, T + 4 * dy + .5); c.stroke();
+  c.font = "11px Consolas, monospace"; c.fillStyle = "#777"; c.textBaseline = "top";
+  if (!wf || !wf.waves.length) { c.fillText("press Fetch to read the waveform", L + 8, T + 8); return; }
+  const tdiv = wf.tdiv, tl = wf.waves[0].t0, tr = tl + 10 * tdiv;
+  c.textAlign = "left"; c.fillText(si(tl, "s", 3), L, T + ph + 5);
+  c.textAlign = "center"; c.fillText(`${si(tdiv, "s", 3)}/div`, L + 5 * dx, T + ph + 5);
+  c.textAlign = "right"; c.fillText(si(tr, "s", 3), L + pw, T + ph + 5);
+  c.save(); c.beginPath(); c.rect(L, T, pw, ph); c.clip();
+  for (const w of wf.waves) {
+    c.strokeStyle = cssVar(CHCOL[w.ch] || "#fff"); c.lineWidth = 1.2; c.beginPath();
+    for (let i = 0; i < w.v.length; i++) {
+      const x = L + ((w.t0 + i * w.dt) - tl) / (tr - tl) * pw;
+      const y = T + ph / 2 - ((w.v[i] + w.offset) / w.vdiv) * dy;
+      i ? c.lineTo(x, y) : c.moveTo(x, y);
+    }
+    c.stroke();
+    // ground marker
+    const gy = T + ph / 2 - (w.offset / w.vdiv) * dy;
+    c.fillStyle = cssVar(CHCOL[w.ch]); c.beginPath(); c.moveTo(L, gy - 5); c.lineTo(L + 8, gy); c.lineTo(L, gy + 5); c.fill();
+  }
+  // trigger level marker on the source channel
+  const src = st && wf.waves.find(w => w.ch === st.trig_src);
+  if (src && st.trig_level !== null) {
+    const ty = T + ph / 2 - ((st.trig_level + src.offset) / src.vdiv) * dy;
+    c.fillStyle = cssVar(CHCOL[src.ch]); c.beginPath(); c.moveTo(L + pw, ty - 5); c.lineTo(L + pw - 8, ty); c.lineTo(L + pw, ty + 5); c.fill();
+  }
+  c.restore();
+}
+
+// ---------------------------------------------------------------- trend (history) widget
+// Keeps the history the server sends (incremental via ?since=), plots chosen keys.
+function Trend(box, keys, opts = {}) {
+  const el = h(`<div class="box wide"><h3>Trend <span class="grow"></span>
+      <span class="seg win">${[60, 300, 1800, 0].map(s => `<button data-s="${s}">${s ? (s < 60 ? s + "s" : s / 60 + " min") : "all"}</button>`).join("")}</span>
+      <button class="btn small clr">Clear</button><button class="btn small csv">CSV</button></h3>
+      <canvas class="plot"></canvas><div class="stats note mono"></div></div>`);
+  box.append(el);
+  let win = opts.window ?? 300, data = [];
+  const segs = $$(".win button", el);
+  const upd = () => segs.forEach(b => b.classList.toggle("on", +b.dataset.s === win));
+  segs.forEach(b => b.onclick = () => { win = +b.dataset.s; upd(); draw(); }); upd();
+  $(".clr", el).onclick = () => act(opts.key, "clear_history").then(() => { data = []; draw(); });
+  $(".csv", el).onclick = () => {
+    const ks = Object.keys(keys);
+    const rows = ["time," + ks.join(","), ...data.map(([t, v]) => [new Date(t * 1000).toISOString(), ...ks.map(k => v[k] ?? "")].join(","))];
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([rows.join("\r\n")], {type: "text/csv"}));
+    a.download = `${opts.key}_${new Date().toISOString().replace(/[:.]/g, "-")}.csv`; a.click();
+  };
+  const draw = () => {
+    const tmax = data.length ? data[data.length - 1][0] : 0, tmin = win ? tmax - win : -Infinity;
+    const d = data.filter(r => r[0] >= tmin);
+    const series = Object.entries(keys).filter(([, k]) => !k.hidden || !k.hidden()).map(([k, s]) => ({
+      x: d.map(r => r[0]), y: d.map(r => r[1][k] ?? null), color: cssVar(s.color), label: s.label}));
+    plotXY($("canvas", el), series, {timeAxis: true, yunit: opts.unit ? opts.unit() : ""});
+    const st = $(".stats", el);
+    st.textContent = opts.stats ? Object.entries(keys).filter(([, k]) => !k.hidden || !k.hidden()).map(([k, s]) => {
+      const v = d.map(r => r[1][k]).filter(x => x !== null && x !== undefined && isFinite(x));
+      if (!v.length) return "";
+      const mean = v.reduce((a, b) => a + b, 0) / v.length;
+      const sd = Math.sqrt(v.reduce((a, b) => a + (b - mean) ** 2, 0) / v.length);
+      const u = s.unit || (opts.unit ? opts.unit() : "");
+      return `${s.label}:  n ${v.length}   mean ${si(mean, u, 6)}   min ${si(Math.min(...v), u, 6)}   max ${si(Math.max(...v), u, 6)}   σ ${si(sd, u, 3)}`;
+    }).join("\n") : "";
+    st.style.whiteSpace = "pre";
+  };
+  const t = {
+    add(rows) { if (rows.length) { data.push(...rows); if (data.length > 20000) data = data.slice(-20000); } draw(); },
+    reset() { data = []; draw(); }, draw,
+  };
+  TRENDS.push(t);
+  return t;
+}
+const TRENDS = [];      // Trend widgets on the open panel; the router feeds them history
+
+// ---------------------------------------------------------------- SCPI console
+function Console(box, key) {
+  const el = h(`<details class="box wide"><summary>SCPI console — raw commands to ${esc(key)}</summary>
+    <div class="console"><pre></pre><div class="row"><input placeholder="*IDN?   (a query ends in ?)" style="flex:1"><button class="btn">Send</button></div>
+    <div class="note">A query that gets no reply times out and the bench reconnects (so replies stay in step). Up/down recalls history.</div></div></details>`);
+  box.append(el);
+  const pre = $("pre", el), inp = $("input", el), hist = []; let hi = 0;
+  const send = async () => {
+    const cmd = inp.value.trim(); if (!cmd) return;
+    hist.push(cmd); hi = hist.length; inp.value = "";
+    pre.insertAdjacentHTML("beforeend", `<span class="q">&gt; ${esc(cmd)}</span>\n`);
+    try { const r = await api(`/api/inst/${key}/scpi`, {cmd}); if (r.reply) pre.insertAdjacentHTML("beforeend", esc(r.reply) + "\n"); }
+    catch (e) { pre.insertAdjacentHTML("beforeend", `<span class="e">${esc(e.message)}</span>\n`); }
+    pre.scrollTop = pre.scrollHeight;
+  };
+  $("button", el).onclick = send;
+  inp.onkeydown = e => {
+    if (e.key === "Enter") send();
+    else if (e.key === "ArrowUp" && hi > 0) { inp.value = hist[--hi]; e.preventDefault(); }
+    else if (e.key === "ArrowDown") { inp.value = hi < hist.length - 1 ? hist[++hi] : ""; hi = Math.min(hi, hist.length); e.preventDefault(); }
+  };
+}
+
+// ---------------------------------------------------------------- actions
+async function act(key, action, args = {}, okMsg) {
+  try { const r = await api(`/api/inst/${key}/act`, {action, args}); if (okMsg) toast(okMsg, true); refreshSoon(); return r.result; }
+  catch (e) { toast(e.message); throw e; }
+}
+async function outputOn(key, action, args, what) {
+  if (await confirmBox(`Turn ON ${what}?`)) return act(key, action, args);
+}
+
+// ---------------------------------------------------------------- dashboard summaries
+const SUMMARY = {
+  dmm: s => s.func ? `<div class="muted">${esc(s.label)}${s.auto ? " · auto" : s.range ? " · " + si(s.range, s.unit, 3) + " range" : ""}</div>
+      <div class="big" style="white-space:pre">${dmmParts(s)[0]}<small>${dmmParts(s)[1]}</small></div>` : `<div class="muted">${esc(s.func_raw || "")}</div>`,
+  psu: s => `<table class="mini"><tr><th></th><th>set</th><th>V</th><th>I</th><th></th></tr>${(s.channels || []).map(c =>
+      `<tr><td>CH${c.ch}</td><td class="muted">${fx(c.vset, 3)}</td><td>${fx(c.v, 3)} V</td><td>${fx(c.i, 4)} A</td>
+       <td>${c.on ? `<span class="tag on">ON</span>${c.cc ? ' <span class="tag warn">CC</span>' : ""}` : '<span class="tag">off</span>'}</td></tr>`).join("")}</table>`,
+  load: s => `<div class="row" style="gap:6px"><span class="tag ${s.input ? "on" : ""}">${s.input ? "INPUT ON" : "input off"}</span>
+      <span class="mono muted">${esc(s.mode)} ${si(s.levels?.[s.mode], s.units?.[s.mode], 4)}</span></div>
+      <div class="big" style="font-size:24px">${fx(s.v, 3)}<small>V</small> ${fx(s.i, 4)}<small>A</small> ${fx(s.p, 2)}<small>W</small></div>`,
+  fgen: s => `<table class="mini">${(s.channels || []).map(c =>
+      `<tr><td>CH${c.ch}</td><td>${esc(c.func)}</td><td>${c.func === "DC" ? "" : si(c.freq, "Hz", 4)}</td>
+       <td>${c.func === "DC" ? si(c.offset, "V", 4) : si(c.amp, "", 4) + esc(c.unit.toLowerCase().replace("vpp", "Vpp").replace("vrms", "Vrms"))}</td>
+       <td>${c.highz ? '<span class="tag">HiZ</span>' : '<span class="tag warn">50Ω</span>'} ${c.on ? '<span class="tag on">ON</span>' : '<span class="tag">off</span>'}</td></tr>`).join("")}</table>`,
+  scope: s => `<div class="row" style="gap:6px"><span class="tag ${s.trig_state === "Stop" ? "" : "on"}">${esc(s.trig_state)}</span>
+      <span class="mono muted">${si(s.tdiv, "s", 3)}/div · ${si(s.srate, "Sa/s", 3)} · ${esc(s.trig_mode)}</span></div>
+      <div class="row" style="gap:6px">${(s.channels || []).filter(c => c.on).map(c =>
+      `<span class="mono" style="color:${CHCOL["C" + c.ch]}">C${c.ch} ${si(c.vdiv, "V", 3)}/div ${esc(c.coupling)}</span>`).join("") || '<span class="muted">no channels on</span>'}</div>`,
+  giga: s => `<div class="mono muted">${esc(s.preset)} · ${esc(s.pair || "")}</div>
+      ${s.streaming ? `<span class="tag on">STREAMING ${s.stream_hz} Hz</span>` : ""}
+      ${s.last ? `${bigVal(s.last.mean, "V", 5, " mean")}
+      <div class="mono muted">last capture: ${si(s.last.min, "V", 4)} … ${si(s.last.max, "V", 4)}, ${s.last.n} pts</div>` : '<div class="muted">no capture yet</div>'}`,
+};
+
+let pollTimer = null, pollFn = null;
+function refreshSoon() { if (pollFn) { clearTimeout(pollTimer); pollTimer = setTimeout(pollFn, 150); } }
+function startPolling(fn, ms) {
+  clearTimeout(pollTimer); let alive = true;
+  pollFn = async () => { if (!alive) return; try { await fn(); } catch (e) { /* server away: keep trying */ } if (alive) pollTimer = setTimeout(pollFn, ms); };
+  pollFn();
+  return () => { alive = false; clearTimeout(pollTimer); pollFn = null; };
+}
+
+function statusDot(i) { return i.connected ? "ok" : (i.want && i.error ? "bad" : "idle"); }
+
+function dashboard(view) {
+  view.innerHTML = `<div class="grid" id="cards"></div>
+    <p class="note" style="margin-top:14px">Click an instrument to open its controls (Ctrl+click for a new tab).
+    Connecting only reads settings; nothing changes until you press a button. While the bench holds an instrument
+    the test suite can't use it — disconnect it on its panel first.</p>`;
+  const cards = $("#cards", view);
+  return startPolling(async () => {
+    const j = await api("/api/bench");
+    for (const i of j.instruments) {
+      let card = $(`#card-${i.key}`, cards);
+      if (!card) { card = h(`<a class="card" id="card-${i.key}" href="#/${i.key}"></a>`); cards.append(card); }
+      card.innerHTML = `<div class="hd"><span class="dot ${statusDot(i)}"></span><b>${esc(i.name)}</b>
+          <span class="addr">${esc(i.host)}:${i.port}</span></div>
+        <div class="model">${esc(i.ident.split(",").slice(0, 2).join(" ") || (i.want ? "connecting…" : "disconnected"))}</div>
+        ${i.connected && i.state && SUMMARY[i.kind] ? SUMMARY[i.kind](i.state) : ""}
+        ${i.error ? `<div class="err">${esc(i.error)}</div>` : ""}`;
+    }
+  }, 1000);
+}
+
+// ---------------------------------------------------------------- instrument panels
+function panelFrame(view, key) {
+  view.innerHTML = `<div class="panel-hd"><a class="btn" href="#/">← Bench</a><span class="dot" id="pdot"></span>
+      <h2 id="pname"></h2><span class="ident" id="pident"></span><span class="grow"></span>
+      <span class="err" id="perr"></span><button class="btn" id="pconn"></button></div>
+      <div id="pbody"></div>`;
+  $("#pconn").onclick = async () => {
+    const on = $("#pconn").dataset.connected === "1";
+    try { await api(`/api/inst/${key}/${on ? "disconnect" : "connect"}`, {}); refreshSoon(); }
+    catch (e) { toast(e.message); }
+  };
+  return $("#pbody");
+}
+function frameUpdate(i) {
+  $("#pdot").className = "dot " + statusDot(i);
+  $("#pname").textContent = i.name;
+  $("#pident").textContent = i.ident ? `${i.ident}  ·  ${i.host}:${i.port}` : `${i.host}:${i.port}`;
+  $("#perr").textContent = i.error || "";
+  $("#pconn").textContent = i.connected ? "Disconnect" : "Connect";
+  $("#pconn").dataset.connected = i.connected ? "1" : "0";
+}
+
+const PANELS = {};
+
+// ---------- DMM
+PANELS.dmm = (body, key) => {
+  body.innerHTML = `<div class="cols">
+    <div class="box"><h3>Reading</h3><div class="big" id="val" style="font-size:clamp(28px,4.2vw,52px);white-space:pre">—</div><div class="muted" id="sub"></div></div>
+    <div class="box"><h3>Function</h3><div class="row" id="funcs"></div>
+      <div class="row"><label class="f">Range<select id="range"></select></label>
+      <label class="f" id="nplcw">Integration (NPLC)<select id="nplc"></select></label></div>
+      <div class="note">Integration time: 20 PLC (0.4 s) gives full 5½-digit resolution; 5 and 0.4 PLC are faster but lose a digit or two.
+      The DM858 has no remote command for its input impedance.</div></div></div>`;
+  const cols = $(".cols", body);
+  let st = {};
+  const trend = Trend(cols, {value: {label: "reading", color: "var(--accent)"}}, {key, stats: true, unit: () => st.unit || ""});
+  Console(cols, key);
+  let built = false;
+  $("#range", body).onchange = e => act(key, "range", {value: e.target.value});
+  $("#nplc", body).onchange = e => act(key, "nplc", {value: e.target.value});
+  return i => {
+    st = i.state || {};
+    if (!st.funcs) return;
+    if (!built) {
+      $("#funcs", body).innerHTML = Object.entries(st.funcs).map(([k, f]) => `<button class="btn" data-f="${k}">${esc(f.label)}</button>`).join("");
+      $$("#funcs button", body).forEach(b => b.onclick = () => { trend.reset(); act(key, "function", {func: b.dataset.f}); });
+      $("#nplc", body).innerHTML = st.nplcs.map(n => `<option value="${n}">${n} PLC — ${{0.4: "fast", 5: "medium", 20: "slow"}[n] || ""}</option>`).join("");
+      built = true;
+    }
+    $$("#funcs button", body).forEach(b => b.classList.toggle("on", b.dataset.f === st.func));
+    const [dn, du] = dmmParts(st);
+    $("#val", body).innerHTML = `${esc(dn)}<small>${esc(du)}</small>`;
+    $("#sub", body).textContent = `${st.label || st.func_raw}${st.range ? (st.auto ? " · auto range (" + si(st.range, st.unit, 3) + ")" : " · " + si(st.range, st.unit, 3) + " range") : ""}${st.note ? " · " + st.note : ""}`;
+    const f = st.funcs[st.func] || {};
+    const rsel = $("#range", body), want = f.ranges ? ["AUTO", ...f.ranges].join() : "";
+    if (rsel.dataset.opts !== want) {
+      rsel.innerHTML = f.ranges ? `<option value="AUTO">Auto</option>` + f.ranges.map(r => `<option value="${r}">${si(r, f.unit, 3)}</option>`).join("") : `<option>—</option>`;
+      rsel.dataset.opts = want; rsel.disabled = !f.ranges;
+    }
+    if (f.ranges && document.activeElement !== rsel) rsel.value = st.auto ? "AUTO" : String(f.ranges.find(r => Math.abs(r - st.range) < r * 1e-6) ?? "AUTO");
+    $("#nplcw", body).style.display = f.nplc ? "" : "none";
+    if (f.nplc && st.nplc !== undefined && document.activeElement !== $("#nplc", body)) $("#nplc", body).value = String(st.nplc);
+  };
+};
+
+// ---------- Power supply
+PANELS.psu = (body, key) => {
+  body.innerHTML = `<div class="cols" id="pc"></div>`;
+  const cols = $("#pc", body); markDirty(cols);
+  const colors = ["var(--c1)", "var(--c3)", "var(--c2)", "var(--c4)"];
+  for (let ch = 1; ch <= 4; ch++) cols.append(h(`<div class="box chbox off" id="ch${ch}">
+      <h3>Channel ${ch} <span class="muted" id="rt${ch}" style="text-transform:none"></span><span class="grow"></span><span id="tag${ch}"></span></h3>
+      <div class="readout"><div><span>Voltage</span><b id="v${ch}">—</b></div><div><span>Current</span><b id="i${ch}">—</b></div><div><span>Power</span><b id="p${ch}">—</b></div></div>
+      <div class="row"><label class="f">Set V<input id="vs${ch}"></label><label class="f">Limit A<input id="is${ch}"></label>
+        <button class="btn" id="ap${ch}">Set</button></div>
+      <div class="row"><button class="btn" id="on${ch}">Output ON</button><button class="btn" id="off${ch}">Output OFF</button></div></div>`));
+  for (let ch = 1; ch <= 4; ch++) {
+    const apply = async () => {
+      let a;
+      try { a = {ch, volts: num($(`#vs${ch}`)), amps: num($(`#is${ch}`))}; } catch (e) { toast(e.message); return; }
+      try { await act(key, "set", a, `CH${ch} set`); clean($(`#vs${ch}`), $(`#is${ch}`)); } catch (e) { /* act toasted it */ }
+    };
+    $(`#ap${ch}`).onclick = apply;
+    [$(`#vs${ch}`), $(`#is${ch}`)].forEach(el => el.onkeydown = e => { if (e.key === "Enter") apply(); });
+    $(`#on${ch}`).onclick = () => outputOn(key, "output", {ch, on: true}, `power supply CH${ch} (${$(`#vs${ch}`).value} V, ${$(`#is${ch}`).value} A limit)`);
+    $(`#off${ch}`).onclick = () => act(key, "output", {ch, on: false});
+  }
+  cols.append(h(`<div class="box wide"><div class="row" style="align-items:center">
+     <span class="muted">CH2 / CH3</span><span class="seg" id="track"><button data-m="0">Independent</button><button data-m="1">Series</button><button data-m="2">Parallel</button></span>
+     <span class="grow" style="flex:1"></span><button class="btn danger" id="psuoff">All channels OFF</button></div>
+     <div class="note" id="tracknote"></div>
+     <div class="note">CC tag = the channel's current has reached its limit. Every setting is read back from the supply; if it keeps a different value you get an error.</div></div>`));
+  $("#psuoff").onclick = () => act(key, "all_off", {}, "all PSU channels off");
+  let st = {};
+  $$("#track button").forEach(b => b.onclick = async () => {
+    const m = +b.dataset.m;
+    if (m === st.track) return;
+    const name = st.track_modes?.[m] || m;
+    if (await confirmBox(`Switch CH2/CH3 to ${name} mode? The supply switches CH3's output OFF and copies CH2's settings onto CH3 when the mode changes.`, `Switch to ${name}`))
+      act(key, "track", {mode: m}, `CH2/CH3: ${name}`);
+  });
+  const trend = Trend(cols, {V1: {label: "CH1 V", color: colors[0], unit: "V"}, I1: {label: "CH1 A", color: colors[0], unit: "A", hidden: () => true},
+    V2: {label: "CH2 V", color: colors[1], unit: "V"}, V3: {label: "CH3 V", color: colors[2], unit: "V"}, V4: {label: "CH4 V", color: colors[3], unit: "V"},
+    I2: {label: "CH2 A", unit: "A", hidden: () => true}, I3: {label: "CH3 A", unit: "A", hidden: () => true}, I4: {label: "CH4 A", unit: "A", hidden: () => true}},
+    {key, unit: () => "V"});
+  Console(cols, key);
+  return i => {
+    st = i.state || {};
+    const tr = st.track;
+    $$("#track button").forEach(b => b.classList.toggle("on", +b.dataset.m === tr));
+    $("#tracknote").textContent = tr === 1 ? "Series: set the COMBINED voltage on CH2 (it reads 2× a single channel); CH3 follows."
+      : tr === 2 ? "Parallel: set the voltage and the COMBINED current limit on CH2; CH3 follows." : "";
+    for (const c of st.channels || []) {
+      const n = c.ch;
+      $(`#ch${n}`).classList.toggle("off", !c.on);
+      $(`#rt${n}`).textContent = n === 2 && tr ? `(${st.track_modes[tr]} master)` : n === 3 && tr ? "(follows CH2)" : "";
+      $$(`#ch${n} input, #ap${n}`).forEach(e => e.disabled = n === 3 && !!tr);
+      $(`#tag${n}`).innerHTML = c.on ? `<span class="tag on">ON</span>${c.cc ? ' <span class="tag warn">CC</span>' : ""}` : '<span class="tag">off</span>';
+      $(`#v${n}`).textContent = fx(c.v, 3) + " V"; $(`#i${n}`).textContent = fx(c.i, 4) + " A"; $(`#p${n}`).textContent = fx(c.p, 3) + " W";
+      setVal($(`#vs${n}`), c.vset); setVal($(`#is${n}`), c.iset);
+      $(`#on${n}`).classList.toggle("on", c.on);
+    }
+  };
+};
+
+// ---------- Electronic load
+PANELS.load = (body, key) => {
+  body.innerHTML = `<div class="cols">
+    <div class="box"><h3>Measured <span class="grow"></span><span id="intag"></span></h3>
+      <div class="readout"><div><span>Voltage</span><b id="lv">—</b></div><div><span>Current</span><b id="li">—</b></div>
+      <div><span>Power</span><b id="lp">—</b></div><div><span>Resistance</span><b id="lr">—</b></div></div>
+      <div class="row"><button class="btn" id="inon">Input ON</button><button class="btn" id="inoff">Input OFF</button></div></div>
+    <div class="box"><h3>Mode</h3><div class="seg" id="modes">${["CC", "CV", "CR", "CP"].map(m => `<button data-m="${m}">${m}</button>`).join("")}</div>
+      <div class="row"><label class="f"><span id="lvlname">Level</span><input id="lvl"></label><button class="btn" id="lvlset">Set</button></div>
+      <div class="row"><label class="f">Von (V) — sinks only above this<input id="von"></label><button class="btn" id="vonset">Set</button></div>
+      <div class="row"><label class="f">Current range<select id="rng"><option value="4">4 A (low)</option><option value="40">40 A (high)</option></select></label></div>
+      <div class="note">Changing the current range resets the CC level to 0 A (the load does that itself).
+      Von only gates sinking with "Von Latch" OFF on the front panel.</div></div></div>`;
+  const cols = $(".cols", body); markDirty(cols);
+  let st = {};
+  $$("#modes button", body).forEach(b => b.onclick = () => act(key, "mode", {mode: b.dataset.m}));
+  const setLvl = () => act(key, "level", {mode: st.mode, value: num($("#lvl"))}).then(() => clean($("#lvl"))).catch(() => {});
+  $("#lvlset").onclick = setLvl; $("#lvl").onkeydown = e => { if (e.key === "Enter") setLvl(); };
+  const setVon = () => act(key, "von", {value: num($("#von"))}).then(() => clean($("#von"))).catch(() => {});
+  $("#vonset").onclick = setVon; $("#von").onkeydown = e => { if (e.key === "Enter") setVon(); };
+  $("#rng").onchange = e => act(key, "range", {value: e.target.value});
+  $("#inon").onclick = () => outputOn(key, "input", {on: true}, `the load input (${st.mode} ${si(st.levels?.[st.mode], st.units?.[st.mode])})`);
+  $("#inoff").onclick = () => act(key, "input", {on: false});
+  Trend(cols, {V: {label: "V", color: "var(--c1)", unit: "V"}, I: {label: "A", color: "var(--c3)", unit: "A"}, P: {label: "W", color: "var(--c2)", unit: "W"}}, {key, stats: true});
+  Console(cols, key);
+  let lastMode = null;
+  return i => {
+    st = i.state || {};
+    $("#lv").textContent = fx(st.v, 3) + " V"; $("#li").textContent = fx(st.i, 4) + " A";
+    $("#lp").textContent = fx(st.p, 3) + " W"; $("#lr").textContent = si(st.r, "Ω", 4);
+    $("#intag").innerHTML = st.input ? '<span class="tag on">INPUT ON</span>' : '<span class="tag">input off</span>';
+    $("#inon").classList.toggle("on", !!st.input);
+    $$("#modes button", body).forEach(b => b.classList.toggle("on", b.dataset.m === st.mode));
+    $("#lvlname").textContent = `${st.mode} level (${st.units?.[st.mode] || ""})`;
+    if (lastMode !== st.mode) { clean($("#lvl")); lastMode = st.mode; }
+    setVal($("#lvl"), st.levels?.[st.mode]); setVal($("#von"), st.von);
+    if (document.activeElement !== $("#rng") && st.range) $("#rng").value = String(st.range >= 10 ? 40 : 4);
+  };
+};
+
+// ---------- Function generator
+PANELS.fgen = (body, key) => {
+  body.innerHTML = `<div class="cols" id="fc"></div>`;
+  const cols = $("#fc", body); markDirty(cols);
+  for (const n of [1, 2]) cols.append(h(`<div class="box chbox off" id="g${n}">
+      <h3>Channel ${n}<span class="grow"></span><span id="gt${n}"></span></h3>
+      <div class="seg" id="gf${n}">${["SIN", "SQU", "RAMP", "PULS", "NOIS", "DC"].map(f => `<button data-f="${f}">${f}</button>`).join("")}</div>
+      <div class="row"><label class="f">Frequency (Hz)<input id="gfr${n}"></label><label class="f">Amplitude<input id="ga${n}"></label>
+        <label class="f">Unit<select id="gu${n}"><option>VPP</option><option>VRMS</option><option>DBM</option></select></label></div>
+      <div class="row"><label class="f">Offset (V)<input id="go${n}"></label><label class="f">Phase (°)<input id="gp${n}"></label>
+        <label class="f" id="gdw${n}">Duty (%)<input id="gd${n}"></label><button class="btn" id="gap${n}">Apply</button></div>
+      <div class="row"><label class="f">Output load<select id="gl${n}"><option value="1">HighZ</option><option value="0">50 Ω</option></select></label>
+        <button class="btn" id="gon${n}">Output ON</button><button class="btn" id="goff${n}">Output OFF</button></div>
+      <div class="note warn" id="gw${n}"></div></div>`));
+  let st = {};
+  for (const n of [1, 2]) {
+    const ch = () => (st.channels || [])[n - 1] || {};
+    $$(`#gf${n} button`).forEach(b => b.onclick = () => act(key, "set", {ch: n, func: b.dataset.f}));
+    const apply = () => {
+      const c = ch(), a = {ch: n};
+      try {
+        a.offset = num($(`#go${n}`));
+        if (c.func !== "DC") { a.freq = num($(`#gfr${n}`)); a.amp = num($(`#ga${n}`)); }
+        if (!["DC", "NOIS"].includes(c.func)) a.phase = num($(`#gp${n}`));
+        if (c.func === "SQU") a.duty = num($(`#gd${n}`));
+        if (c.func === "RAMP") a.symmetry = num($(`#gd${n}`));
+      } catch (e) { toast(e.message); return; }
+      act(key, "set", a, `CH${n} applied`).then(() => clean(...$$(`#g${n} input`))).catch(() => {});
+    };
+    $(`#gap${n}`).onclick = apply;
+    $$(`#g${n} input`).forEach(el => el.onkeydown = e => { if (e.key === "Enter") apply(); });
+    $(`#gu${n}`).onchange = e => act(key, "set", {ch: n, unit: e.target.value});
+    $(`#gl${n}`).onchange = e => act(key, "load", {ch: n, highz: e.target.value === "1"});
+    $(`#gon${n}`).onclick = () => { const c = ch(); outputOn(key, "output", {ch: n, on: true},
+      `generator CH${n}: ${c.func} ${c.func === "DC" ? si(c.offset, "V") : si(c.freq, "Hz") + ", " + c.amp + " " + c.unit + ", offset " + si(c.offset, "V")}` +
+      (c.highz ? "" : "  — NOTE: load is set to 50 Ω, so into a high-impedance input the output is TWICE the programmed level")); };
+    $(`#goff${n}`).onclick = () => act(key, "output", {ch: n, on: false});
+  }
+  cols.append(h(`<div class="box wide note">Amplitude is in the unit shown and assumes the output load setting: at 50 Ω the generator
+     doubles its output into a high-impedance input. Waveforms other than these six (e.g. ARB) show their name but are set on the front panel.</div>`));
+  Console(cols, key);
+  return i => {
+    st = i.state || {};
+    for (const c of st.channels || []) {
+      const n = c.ch;
+      $(`#g${n}`).classList.toggle("off", !c.on);
+      $(`#gt${n}`).innerHTML = `${c.highz ? '<span class="tag">HighZ</span>' : '<span class="tag warn">50 Ω</span>'} ` + (c.on ? '<span class="tag on">ON</span>' : '<span class="tag">off</span>') +
+        (["SIN", "SQU", "RAMP", "PULS", "NOIS", "DC"].includes(c.func) ? "" : ` <span class="tag info">${esc(c.func)}</span>`);
+      $$(`#gf${n} button`).forEach(b => b.classList.toggle("on", b.dataset.f === c.func));
+      setVal($(`#gfr${n}`), c.freq); setVal($(`#ga${n}`), c.amp); setVal($(`#go${n}`), c.offset); setVal($(`#gp${n}`), c.phase);
+      if (document.activeElement !== $(`#gu${n}`)) $(`#gu${n}`).value = c.unit;
+      if (document.activeElement !== $(`#gl${n}`)) $(`#gl${n}`).value = c.highz ? "1" : "0";
+      const dw = $(`#gdw${n}`);
+      dw.style.display = ["SQU", "RAMP"].includes(c.func) ? "" : "none";
+      dw.firstChild.textContent = c.func === "RAMP" ? "Symmetry (%)" : "Duty (%)";
+      setVal($(`#gd${n}`), c.func === "RAMP" ? c.symmetry : c.duty);
+      $(`#gfr${n}`).disabled = $(`#ga${n}`).disabled = c.func === "DC";
+      $(`#gon${n}`).classList.toggle("on", c.on);
+      $(`#gw${n}`).textContent = c.highz ? "" : "Load is 50 Ω: into a scope or the DUT (high impedance) you get twice the programmed amplitude.";
+    }
+  };
+};
+
+// ---------- Oscilloscope
+PANELS.scope = (body, key) => {
+  body.innerHTML = `<div class="cols">
+    <div class="box wide"><h3>Display <span class="grow"></span>
+        <span class="seg" id="sview"><button data-v="wave" class="on">Waveform</button><button data-v="shot">Screen</button></span>
+        <label class="muted" style="text-transform:none;display:flex;gap:4px;align-items:center"><input type="checkbox" id="sauto"> auto</label>
+        <button class="btn small" id="sfetch">Fetch</button></h3>
+      <canvas class="plot tall" id="scv"></canvas><img class="shot" id="simg" style="display:none" alt="scope screen">
+      <div class="note" id="snote"></div>
+      <div class="readout" id="smeas"></div></div>
+    <div class="box"><h3>Acquisition <span class="grow"></span><span id="sstate"></span></h3>
+      <div class="row"><button class="btn" id="srun">Run</button><button class="btn" id="sstop">Stop</button>
+        <button class="btn" id="ssingle">Single</button><button class="btn" id="sautoset">Autoset</button></div>
+      <div class="row"><label class="f">Time/div<input id="stdiv"></label><label class="f">Delay (s)<input id="sdel"></label><button class="btn" id="stbset">Set</button></div>
+      <div class="note mono" id="sacq"></div></div>
+    <div class="box"><h3>Trigger (edge)</h3>
+      <div class="row"><label class="f">Source<select id="tsrc"><option>C1</option><option>C2</option><option>C3</option><option>C4</option><option>EX</option><option>LINE</option></select></label>
+        <label class="f">Slope<select id="tslope"><option value="RIS">Rising</option><option value="FALL">Falling</option><option value="ALT">Either</option></select></label>
+        <label class="f">Mode<select id="tmode"><option>AUTO</option><option>NORM</option><option>SING</option></select></label></div>
+      <div class="row"><label class="f">Level (V)<input id="tlev"></label><button class="btn" id="tset">Set</button></div></div>
+    <div class="cols wide" id="schs" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))"></div></div>`;
+  const cols = $(".cols", body); markDirty(body);
+  for (let n = 1; n <= 4; n++) $("#schs").append(h(`<div class="box chbox off" id="sc${n}" style="border-left-color:${CHCOL["C" + n]}">
+      <h3 style="color:${CHCOL["C" + n]}">C${n}<span class="grow"></span><button class="btn small" id="scon${n}">On</button></h3>
+      <div class="row"><label class="f">V/div<input id="svd${n}"></label><label class="f">Offset (V)<input id="sof${n}"></label></div>
+      <div class="row"><label class="f">Coupling<select id="scp${n}"><option>DC</option><option>AC</option><option>GND</option></select></label>
+        <label class="f">Probe<select id="spr${n}"><option value="1">1x</option><option value="10">10x</option><option value="100">100x</option></select></label>
+        <label class="f">BW<select id="sbw${n}"><option value="0">Full</option><option value="1">20 MHz</option></select></label></div>
+      <button class="btn" id="sset${n}">Set</button></div>`));
+  let st = {}, wf = null, view = "wave", busy = false;
+  const fetchWave = async () => {
+    if (busy) return; busy = true;
+    try {
+      if (view === "wave") { wf = await act(key, "waveform"); drawWave(); }
+      else {
+        const r = await fetch(`/api/inst/${key}/screenshot?t=${Date.now()}`);
+        if (!r.ok) throw new Error((await r.json()).error);
+        const b = await r.blob(); const img = $("#simg");
+        URL.revokeObjectURL(img.src); img.src = URL.createObjectURL(b);
+        $("#snote").textContent = b.size < 6000 ? "The screen came back blank — the scope's screen saver is probably on (Utility → Display → Screen Saver). Touch the scope to wake it." : "";
+      }
+    } catch (e) { toast(e.message); } finally { busy = false; }
+  };
+  const drawWave = () => {
+    plotScope($("#scv"), wf, st);
+    $("#smeas").innerHTML = (wf?.waves || []).map(w => `<div style="border-left:3px solid ${CHCOL[w.ch]}"><span>${w.ch}${w.sparse > 1 ? ` (every ${w.sparse}th pt)` : ""}</span>
+      <b style="font-size:13px;color:var(--text)">pk-pk ${si(w.stats.pkpk, "V", 4)}<br>mean ${si(w.stats.mean, "V", 4)}<br>rms ${si(w.stats.rms, "V", 4)} (ac ${si(w.stats.acrms, "V", 3)})<br>
+      ${si(w.stats.min, "V", 4)} … ${si(w.stats.max, "V", 4)}<br>freq ${si(w.stats.freq, "Hz", 5)}</b></div>`).join("");
+    if (wf) $("#snote").textContent = `read ${new Date(wf.t * 1000).toLocaleTimeString()} · frequency is estimated from crossings of the record shown`;
+  };
+  $$("#sview button").forEach(b => b.onclick = () => {
+    view = b.dataset.v; $$("#sview button").forEach(x => x.classList.toggle("on", x === b));
+    $("#scv").style.display = view === "wave" ? "" : "none"; $("#simg").style.display = view === "shot" ? "" : "none";
+    $("#smeas").style.display = view === "wave" ? "" : "none"; $("#snote").textContent = ""; fetchWave();
+  });
+  $("#sfetch").onclick = fetchWave;
+  const autoT = setInterval(() => { if ($("#sauto")?.checked) fetchWave(); }, 1500);
+  $("#srun").onclick = () => act(key, "run"); $("#sstop").onclick = () => act(key, "stop");
+  $("#ssingle").onclick = () => act(key, "single"); $("#sautoset").onclick = () => act(key, "autoset");
+  const tb = () => { try { act(key, "timebase", {tdiv: num($("#stdiv")), delay: num($("#sdel"))}).then(() => clean($("#stdiv"), $("#sdel"))).catch(() => {}); } catch (e) { toast(e.message); } };
+  $("#stbset").onclick = tb; [$("#stdiv"), $("#sdel")].forEach(el => el.onkeydown = e => { if (e.key === "Enter") tb(); });
+  $("#tsrc").onchange = e => act(key, "trigger", {source: e.target.value});
+  $("#tslope").onchange = e => act(key, "trigger", {slope: e.target.value});
+  $("#tmode").onchange = e => act(key, "trigger", {mode: e.target.value});
+  const tl = () => { try { act(key, "trigger", {level: num($("#tlev"))}).then(() => clean($("#tlev"))).catch(() => {}); } catch (e) { toast(e.message); } };
+  $("#tset").onclick = tl; $("#tlev").onkeydown = e => { if (e.key === "Enter") tl(); };
+  for (let n = 1; n <= 4; n++) {
+    $(`#scon${n}`).onclick = () => act(key, "channel", {ch: n, on: !(st.channels?.[n - 1]?.on)});
+    const set = () => { try { act(key, "channel", {ch: n, vdiv: num($(`#svd${n}`)), offset: num($(`#sof${n}`))}).then(() => clean($(`#svd${n}`), $(`#sof${n}`))).catch(() => {}); } catch (e) { toast(e.message); } };
+    $(`#sset${n}`).onclick = set; [$(`#svd${n}`), $(`#sof${n}`)].forEach(el => el.onkeydown = e => { if (e.key === "Enter") set(); });
+    $(`#scp${n}`).onchange = e => act(key, "channel", {ch: n, coupling: e.target.value});
+    $(`#spr${n}`).onchange = e => act(key, "channel", {ch: n, probe: e.target.value});
+    $(`#sbw${n}`).onchange = e => act(key, "channel", {ch: n, bwl: e.target.value === "1"});
+  }
+  Console(cols, key);
+  plotScope($("#scv"), null, st);
+  setTimeout(fetchWave, 300);
+  const sel = (id, v) => { const el = $(id); if (el && document.activeElement !== el && v !== undefined && v !== null) el.value = String(v); };
+  const upd = i => {
+    st = i.state || {};
+    $("#sstate").innerHTML = `<span class="tag ${st.trig_state === "Stop" ? "" : "on"}">${esc(st.trig_state)}</span>`;
+    $("#sacq").textContent = `${si(st.srate, "Sa/s", 4)} · ${st.mdepth} points · trigger ${st.trig_src} ${st.trig_slope} ${si(st.trig_level, "V", 4)}`;
+    setVal($("#stdiv"), si(st.tdiv, "", 4).replace(" ", "")); setVal($("#sdel"), si(st.delay, "", 4).replace(" ", ""));
+    sel("#tsrc", st.trig_src); sel("#tslope", st.trig_slope); sel("#tmode", st.trig_mode);
+    setVal($("#tlev"), st.trig_level);
+    for (const c of st.channels || []) {
+      const n = c.ch;
+      $(`#sc${n}`).classList.toggle("off", !c.on); $(`#scon${n}`).textContent = c.on ? "On" : "Off"; $(`#scon${n}`).classList.toggle("on", c.on);
+      setVal($(`#svd${n}`), si(c.vdiv, "", 4).replace(" ", "")); setVal($(`#sof${n}`), c.offset);
+      sel(`#scp${n}`, c.coupling); sel(`#spr${n}`, c.probe); sel(`#sbw${n}`, c.bwl ? "1" : "0");
+    }
+  };
+  upd.cleanup = () => clearInterval(autoT);
+  return upd;
+};
+
+// ---------- GigaMeter
+PANELS.giga = (body, key) => {
+  body.innerHTML = `<div class="cols">
+    <div class="box"><h3>Setup</h3>
+      <div class="row"><label class="f">Preset (giga_presets.json, differential pair)<select id="gpre"></select></label></div>
+      <div class="note mono" id="ginfo"></div>
+      <div class="note">The meter is battery powered and isolated — it can watch a floating circuit the earthed scope can't.</div></div>
+    <div class="box"><h3>Capture</h3>
+      <div class="row"><label class="f">Window (ms)<input id="gms" value="200"></label><label class="f">Smoothing (blank = preset)<input id="gsm"></label>
+        <button class="btn" id="gcap">Capture</button></div>
+      <div class="readout" id="gstats"></div></div>
+    <div class="box wide"><h3>Capture plot</h3><canvas class="plot" id="gcv"></canvas>
+      <div class="note">Captures over ~4000 points are drawn as a min/max envelope, so short pulses still show.</div></div>
+    <div class="box wide"><h3>Live stream <span class="grow"></span>
+        <label class="f" style="flex-direction:row;align-items:center;gap:6px;text-transform:none">rate <select id="ghz"><option>1</option><option>2</option><option selected>4</option><option>5</option><option>10</option><option>20</option></select> Hz</label>
+        <button class="btn" id="gstart">Start</button><button class="btn" id="gstop">Stop</button></h3>
+      <div class="note">Each point is the mean/min/max of EVERY sample in the period (no gaps), so it catches what a capture's transfer time misses.
+      A stream holds the meter: a capture stops it first.</div></div></div>`;
+  const cols = $(".cols", body);
+  let st = {};
+  const trend = Trend(cols, {mean: {label: "mean", color: "var(--accent)", unit: "V"}, max: {label: "max", color: "var(--c2)", unit: "V"},
+    min: {label: "min", color: "var(--c3)", unit: "V"}}, {key, stats: true, unit: () => "V", window: 60});
+  $("#gpre").onchange = e => act(key, "preset", {name: e.target.value}).then(() => trend.reset()).catch(() => {});
+  $("#gcap").onclick = async () => {
+    const b = $("#gcap"); b.disabled = true; b.textContent = "Capturing…";
+    try {
+      const r = await act(key, "capture", {ms: num($("#gms")), smooth: $("#gsm").value.trim() ? num($("#gsm")) : null});
+      plotXY($("#gcv"), [{x: r.t.map(t => t / 1000), y: r.v, color: cssVar("var(--accent)"), label: r.label}], {xunit: "s", yunit: "V"});
+      const s = r.stats;
+      $("#gstats").innerHTML = [["mean", si(s.mean, "V", 5)], ["min", si(s.min, "V", 4)], ["max", si(s.max, "V", 4)], ["σ", si(s.std, "V", 3)],
+        ["pk-pk", si(s.pkpk, "V", 4)], ["freq", si(s.freq, "Hz", 4)], ["points", s.n], ["elapsed", s.elapsed_ms + " ms"]].map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join("");
+    } catch (e) { /* toast shown */ } finally { b.disabled = false; b.textContent = "Capture"; }
+  };
+  $("#gstart").onclick = () => { trend.reset(); act(key, "stream_start", {hz: +$("#ghz").value}); };
+  $("#gstop").onclick = () => act(key, "stream_stop");
+  plotXY($("#gcv"), [], {});
+  return i => {
+    st = i.state || {};
+    const sel = $("#gpre");
+    if (st.presets && sel.dataset.opts !== st.presets.join()) { sel.innerHTML = st.presets.map(p => `<option>${esc(p)}</option>`).join(""); sel.dataset.opts = st.presets.join(); }
+    if (document.activeElement !== sel && st.preset) sel.value = st.preset;
+    $("#ginfo").textContent = st.pair ? `pair ${st.pair} ×${st.scale} · ${st.bits}-bit · ${si(st.rate, "S/s", 3)} · smoothing ${st.smooth}` : "";
+    $("#gstart").classList.toggle("on", !!st.streaming);
+    $("#gstart").textContent = st.streaming ? `Streaming ${st.stream_hz} Hz` : "Start";
+  };
+};
+
+// ---------------------------------------------------------------- router
+let stop = null;
+function route() {
+  if (stop) { stop(); stop = null; }
+  const key = location.hash.replace(/^#\/?/, "");
+  const view = $("#view");
+  if (!key || !PANELS[key]) { document.title = "Virtual Bench"; stop = dashboard(view); return; }
+  const body = panelFrame(view, key);
+  TRENDS.length = 0;
+  const update = PANELS[key](body, key);
+  const trends = TRENDS.splice(0);       // the panel's Trend widgets, fed with history below
+  let since = 0;
+  const s = startPolling(async () => {
+    const i = await api(`/api/inst/${key}?since=${since}`);
+    document.title = `${i.name} — Virtual Bench`;
+    frameUpdate(i);
+    if (i.connected) update(i);
+    if (i.history.length) since = i.history[i.history.length - 1][0];
+    trends.forEach(t => t.add(i.history));
+  }, key === "dmm" ? 400 : 800);
+  stop = () => { s(); update.cleanup && update.cleanup(); };
+}
+
+window.addEventListener("hashchange", route);
+window.addEventListener("resize", () => { if (pollFn) refreshSoon(); });
+$("#alloff").onclick = async () => {
+  try { const r = await api("/api/alloff", {}); toast("All outputs off: " + Object.entries(r.results).map(([k, v]) => `${k} ${v}`).join(", "), true); }
+  catch (e) { toast("ALL OFF: " + e.message); }
+};
+setInterval(() => { $("#clock").textContent = new Date().toLocaleTimeString(); }, 1000);
+route();
+</script>
+</body>
+</html>
