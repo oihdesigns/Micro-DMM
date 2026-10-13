@@ -9,7 +9,7 @@
     5V  -> strip +5V, GND -> strip GND (common ground with the Uno is required)
     Put a 500-1000 uF cap across the strip's 5V/GND at the input end.
 
-    POWER: 60 pixels at full white is ~3.6 A. Do NOT run that from the Uno's 5V pin.
+    POWER: 240 pixels draw several amps (measured 3.7 A at 50% white). Do NOT run that from the Uno's 5V pin.
     Feed the strip from its own 5 V supply and set MAX_MILLIAMPS to what that supply
     can deliver -- the sketch dims each frame so its estimated draw stays under it.
     (On USB power only, leave it at 400 or so.)
@@ -26,11 +26,16 @@
     /api/bright?v=0..255      -> brightness
     /api/speed?v=1..100       -> animation speed
     /api/effect?n=<name>      -> solid | breathe | rainbow | colorcycle | chase | comet | twinkle | fire
+    /api/preset/save?name=X   -> save the current look as preset X (same name overwrites)
+    /api/preset/load?name=X   -> apply preset X (also turns the strip on)
+    /api/preset/delete?name=X
 
   Serial commands (115200 baud, newline terminated):
     ON | OFF | TOGGLE | COLOR RRGGBB | BRIGHT n | SPEED n | EFFECT name | STATUS | IP
+    PRESETS | PRESET SAVE name | PRESET LOAD name | PRESET DEL name
 
   Settings are saved to EEPROM a few seconds after the last change and restored at boot.
+  Up to 16 named presets are stored in EEPROM too, so every browser sees the same list.
 */
 
 #include <WiFiS3.h>
@@ -58,9 +63,16 @@ const unsigned long SAVE_DELAY_MS   = 5000;   // write EEPROM this long after th
 const unsigned long WIFI_RETRY_MS   = 15000;
 const unsigned long HTTP_TIMEOUT_MS = 1000;
 
-// Per-pixel current estimate for the limiter (WS2812B: ~20 mA per channel at full, ~1 mA idle).
-const uint16_t MA_PER_CHANNEL = 20;
-const uint16_t MA_IDLE_PER_PX = 1;
+// Per-pixel current estimate for the limiter, in 0.1 mA per channel at full (255).
+// Calibrated 2026-10-12 on the 240-px strip + Adafruit 10 A supply, fed from one end:
+//   full red 2.9 A, full blue 3.3 A, green preset (00FF40) 3.4 A, white @ 50% 3.7 A.
+// Fit from the single-colour readings (idle assumed ~0.6 mA/px). Mixed colours read
+// ~25% high (white @ 50% estimates ~4.6 A) because the strip's voltage sags along its
+// length under heavy load -- that errs on the safe side for a limiter.
+const uint16_t MA10_RED   = 115;
+const uint16_t MA10_GREEN = 103;
+const uint16_t MA10_BLUE  = 132;
+const uint16_t MA10_IDLE_PER_PX = 6;
 
 // ---------------- effects ----------------
 enum Effect : uint8_t { FX_SOLID, FX_BREATHE, FX_RAINBOW, FX_COLORCYCLE, FX_CHASE, FX_COMET, FX_TWINKLE, FX_FIRE, FX_COUNT };
@@ -353,12 +365,12 @@ void showFrame() {
   uint32_t sum = 0;
   for (int i = 0; i < PIXEL_COUNT; i++) {
     uint32_t c = frame[i];
-    sum += ((c >> 16) & 0xFF) + ((c >> 8) & 0xFF) + (c & 0xFF);
+    sum += ((c >> 16) & 0xFF) * MA10_RED + ((c >> 8) & 0xFF) * MA10_GREEN + (c & 0xFF) * MA10_BLUE;
   }
   uint8_t bright = cfg.on ? cfg.bright : 0;
-  const uint32_t idle   = (uint32_t)MA_IDLE_PER_PX * PIXEL_COUNT;
+  const uint32_t idle   = (uint32_t)MA10_IDLE_PER_PX * PIXEL_COUNT / 10;
   const uint32_t budget = MAX_MILLIAMPS > idle ? MAX_MILLIAMPS - idle : 0;
-  uint32_t fullMa = sum * MA_PER_CHANNEL / 255;     // draw at brightness 255
+  uint32_t fullMa = sum / 2550;                     // draw at brightness 255 (0.1 mA units / 255)
   if (fullMa > 0 && (uint32_t)bright * fullMa / 255 > budget) {
     bright = budget * 255 / fullMa;
   }
@@ -391,6 +403,118 @@ void updateStrip() {
   needRender = false;
 }
 
+// ---------------- presets ----------------
+// Named snapshots of colour/brightness/speed/effect, kept in EEPROM after the settings
+// block. Each slot is written individually, only when saved or deleted.
+const int      MAX_PRESETS   = 16;
+const int      PRESET_NAME_LEN = 20;           // including the terminator
+const uint32_t PRESETS_MAGIC = 0x4E505031;     // "NPP1" -- bump if Preset changes
+const int      PRESETS_ADDR  = 64;
+
+struct Preset {
+  char    name[PRESET_NAME_LEN];               // "" = empty slot
+  uint8_t r, g, b, bright, speed, effect;
+};
+Preset presets[MAX_PRESETS];
+
+int presetSlotAddr(int i) { return PRESETS_ADDR + sizeof(uint32_t) + i * sizeof(Preset); }
+
+void loadPresets() {
+  uint32_t magic;
+  EEPROM.get(PRESETS_ADDR, magic);
+  if (magic != PRESETS_MAGIC) {
+    memset(presets, 0, sizeof(presets));
+    EEPROM.put(PRESETS_ADDR, PRESETS_MAGIC);
+    for (int i = 0; i < MAX_PRESETS; i++) EEPROM.put(presetSlotAddr(i), presets[i]);
+    Serial.println("Preset storage initialised.");
+    return;
+  }
+  for (int i = 0; i < MAX_PRESETS; i++) {
+    EEPROM.get(presetSlotAddr(i), presets[i]);
+    Preset& p = presets[i];
+    p.name[PRESET_NAME_LEN - 1] = 0;
+    if (p.effect >= FX_COUNT || p.speed < 1 || p.speed > 100) p.name[0] = 0;   // corrupt -> empty
+  }
+}
+
+// Printable ASCII only, no quotes/backslashes (names go straight into JSON), trimmed.
+String cleanPresetName(const String& raw) {
+  String n;
+  for (unsigned i = 0; i < raw.length() && n.length() < PRESET_NAME_LEN - 1; i++) {
+    char ch = raw[i];
+    if (ch >= 0x20 && ch <= 0x7E && ch != '"' && ch != '\\') n += ch;
+  }
+  n.trim();
+  return n;
+}
+
+int findPreset(const String& name) {
+  for (int i = 0; i < MAX_PRESETS; i++)
+    if (presets[i].name[0] && name.equalsIgnoreCase(presets[i].name)) return i;
+  return -1;
+}
+
+// Save the current look under `name`, overwriting a preset with the same name.
+// Returns false if the name is empty or every slot is taken.
+bool savePreset(const String& raw) {
+  String name = cleanPresetName(raw);
+  if (name.length() == 0) return false;
+  int i = findPreset(name);
+  for (int k = 0; i < 0 && k < MAX_PRESETS; k++) if (!presets[k].name[0]) i = k;
+  if (i < 0) return false;
+  Preset& p = presets[i];
+  memset(&p, 0, sizeof(p));
+  name.toCharArray(p.name, PRESET_NAME_LEN);
+  p.r = cfg.r; p.g = cfg.g; p.b = cfg.b;
+  p.bright = cfg.bright; p.speed = cfg.speed; p.effect = cfg.effect;
+  EEPROM.put(presetSlotAddr(i), p);
+  Serial.print("Preset saved: ");
+  Serial.println(p.name);
+  return true;
+}
+
+bool loadPreset(const String& raw) {
+  int i = findPreset(cleanPresetName(raw));
+  if (i < 0) return false;
+  const Preset& p = presets[i];
+  setEffect(EFFECT_NAMES[p.effect]);
+  cfg.r = p.r; cfg.g = p.g; cfg.b = p.b;
+  cfg.bright = p.bright; cfg.speed = p.speed;
+  cfg.on = true;
+  markChanged();
+  Serial.print("Preset loaded: ");
+  Serial.println(p.name);
+  return true;
+}
+
+bool deletePreset(const String& raw) {
+  int i = findPreset(cleanPresetName(raw));
+  if (i < 0) return false;
+  memset(&presets[i], 0, sizeof(Preset));
+  EEPROM.put(presetSlotAddr(i), presets[i]);
+  return true;
+}
+
+String presetsJson() {
+  String j = "[";
+  bool first = true;
+  for (int i = 0; i < MAX_PRESETS; i++) {
+    const Preset& p = presets[i];
+    if (!p.name[0]) continue;
+    char hex[8];
+    snprintf(hex, sizeof(hex), "%02X%02X%02X", p.r, p.g, p.b);
+    if (!first) j += ",";
+    first = false;
+    j += "{\"n\":\"";  j += p.name;  j += "\"";
+    j += ",\"c\":\"";  j += hex;     j += "\"";
+    j += ",\"b\":";    j += p.bright;
+    j += ",\"s\":";    j += p.speed;
+    j += ",\"e\":\"";  j += EFFECT_NAMES[p.effect];  j += "\"}";
+  }
+  j += "]";
+  return j;
+}
+
 // ---------------- status ----------------
 String stateJson() {
   char hex[8];
@@ -409,7 +533,9 @@ String stateJson() {
     if (i) j += ",";
     j += "\""; j += EFFECT_NAMES[i]; j += "\"";
   }
-  j += "],\"pixels\":";  j += PIXEL_COUNT;
+  j += "],\"presets\":"; j += presetsJson();
+  j += ",\"maxpresets\":"; j += MAX_PRESETS;
+  j += ",\"pixels\":";   j += PIXEL_COUNT;
   j += ",\"rssi\":";     j += WiFi.RSSI();
   j += ",\"uptime\":";   j += millis() / 1000;
   j += "}";
@@ -443,8 +569,13 @@ void handleSerial() {
   else if (upper.startsWith("SPEED "))  ok = arg.length() > 0 && setSpeed(arg.toInt());
   else if (upper.startsWith("EFFECT ")) ok = setEffect(arg);
   else if (upper == "STATUS" || upper == "IP") printStatus();
+  else if (upper == "PRESETS") { Serial.println(presetsJson()); return; }
+  else if (upper.startsWith("PRESET SAVE ")) ok = savePreset(command.substring(12));
+  else if (upper.startsWith("PRESET LOAD ")) ok = loadPreset(command.substring(12));
+  else if (upper.startsWith("PRESET DEL "))  ok = deletePreset(command.substring(11));
   else {
     Serial.println("Commands: ON | OFF | TOGGLE | COLOR RRGGBB | BRIGHT 0-255 | SPEED 1-100 | EFFECT name | STATUS | IP");
+    Serial.println("          PRESETS | PRESET SAVE name | PRESET LOAD name | PRESET DEL name");
     Serial.print("Effects:");
     for (int i = 0; i < FX_COUNT; i++) { Serial.print(' '); Serial.print(EFFECT_NAMES[i]); }
     Serial.println();
@@ -530,11 +661,30 @@ h1{font-size:1.4rem;margin:0 0 16px}
 .colors button{width:36px;height:36px;border-radius:50%;border:2px solid var(--line);cursor:pointer;padding:0}
 input[type=color]{width:52px;height:40px;border:1px solid var(--line);border-radius:10px;background:transparent;padding:2px;cursor:pointer}
 input[type=range]{width:100%;accent-color:var(--accent);height:32px}
+.plist{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.plist:empty::before{content:'No presets yet -- set up a look, name it below and press Save.';color:var(--muted);font-size:.85rem}
+.chip{display:flex;align-items:center;border:1px solid var(--line);border-radius:999px;overflow:hidden}
+.chip.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.chip button{background:transparent;border:0;color:var(--fg);cursor:pointer;font:inherit}
+.chip .load{display:flex;align-items:center;gap:8px;padding:8px 6px 8px 10px;font-weight:600;font-size:.9rem}
+.chip .dot{width:14px;height:14px;border-radius:50%;flex:none;border:1px solid #0003}
+.chip .del{padding:8px 10px 8px 4px;color:var(--muted);font-size:1rem;line-height:1}
+.chip .del:hover{color:var(--bad)}
+.saverow{display:flex;gap:8px}
+.saverow input{flex:1;min-width:0;padding:10px 12px;font:inherit;border:1px solid var(--line);border-radius:10px;background:transparent;color:var(--fg)}
+.saverow button{padding:10px 16px;font:inherit;font-weight:600;border:0;border-radius:10px;background:var(--accent);color:var(--accent-fg);cursor:pointer}
+#perr{color:var(--bad);font-size:.8rem;margin-top:6px;min-height:1em}
 #status{font-size:.85rem;color:var(--muted);text-align:center}
 #status.bad{color:var(--bad)}
 </style></head><body><main>
 <h1>NeoPixel Strip</h1>
 <div class="card"><button id="power">…</button></div>
+<div class="card">
+  <div class="label"><span>Presets</span><span id="pcount"></span></div>
+  <div class="plist" id="plist"></div>
+  <form class="saverow" id="psave"><input id="pname" maxlength="19" placeholder="Name this look" autocomplete="off"><button>Save</button></form>
+  <div id="perr"></div>
+</div>
 <div class="card">
   <div class="label"><span>Effect</span></div>
   <div class="fx" id="fx"></div>
@@ -566,9 +716,47 @@ function render(s){
   if(active!=='speed')$('speed').value=s.speed;
   $('brText').textContent=Math.round(s.bright*100/255)+'%'+(s.on&&s.shown<s.bright?' (power-limited to '+Math.round(s.shown*100/255)+'%)':'');
   $('spText').textContent=s.speed;
+  renderPresets(s);
   const st=$('status');st.classList.remove('bad');
   st.textContent='Connected · ~'+s.ma+' mA of '+s.maxma+' · signal '+s.rssi+' dBm';
 }
+let lastPresets='';
+function renderPresets(s){
+  const key=JSON.stringify(s.presets);
+  if(key!==lastPresets){
+    lastPresets=key;
+    const pl=$('plist');pl.textContent='';
+    s.presets.forEach(p=>{
+      const chip=document.createElement('div');chip.className='chip';chip.dataset.n=p.n;
+      chip.dataset.k=[p.c,p.b,p.s,p.e].join('|');
+      const ld=document.createElement('button');ld.className='load';
+      ld.title=p.e+' · '+Math.round(p.b*100/255)+'% · speed '+p.s;
+      const dot=document.createElement('span');dot.className='dot';
+      dot.style.background=(p.e==='rainbow'||p.e==='colorcycle')?'conic-gradient(red,yellow,lime,cyan,blue,magenta,red)':(p.e==='fire'?'linear-gradient(#ffd000,#ff3000)':'#'+p.c);
+      ld.append(dot,document.createTextNode(p.n));
+      ld.onclick=()=>send('/api/preset/load?name='+encodeURIComponent(p.n));
+      const del=document.createElement('button');del.className='del';del.textContent='×';del.title='Delete '+p.n;
+      del.onclick=()=>{if(confirm('Delete preset "'+p.n+'"?'))send('/api/preset/delete?name='+encodeURIComponent(p.n));};
+      chip.append(ld,del);pl.appendChild(chip);
+    });
+    $('pcount').textContent=s.presets.length+' / '+s.maxpresets;
+  }
+  // Highlight presets that match what's on the strip right now.
+  const cur=[s.color,s.bright,s.speed,s.effect].join('|');
+  [...$('plist').children].forEach(c=>c.classList.toggle('sel',s.on&&c.dataset.k===cur));
+}
+$('psave').onsubmit=async e=>{
+  e.preventDefault();
+  const n=$('pname').value.trim();
+  if(!n){$('perr').textContent='Type a name first.';return;}
+  if(lastPresets&&JSON.parse(lastPresets).some(p=>p.n.toLowerCase()===n.toLowerCase())&&!confirm('Replace preset "'+n+'" with the current look?'))return;
+  try{
+    const r=await fetch('/api/preset/save?name='+encodeURIComponent(n),{method:'POST'});
+    const j=await r.json();
+    if(r.ok){render(j);$('pname').value='';$('perr').textContent='';}
+    else $('perr').textContent=j.error;
+  }catch(e){fail();}
+};
 function fail(){const st=$('status');st.classList.add('bad');st.textContent='Lost contact with the strip controller';}
 // One request at a time (the board serves one connection at once); while a request is
 // in flight, keep only the newest pending one so sliders stay live without piling up.
@@ -606,6 +794,23 @@ String queryParam(const String& path, const char* key) {
     start = amp + 1;
   }
   return "";
+}
+
+// Undo URL encoding (%XX and '+').
+String urlDecode(const String& s) {
+  String out;
+  for (unsigned i = 0; i < s.length(); i++) {
+    char ch = s[i];
+    if (ch == '+') {
+      out += ' ';
+    } else if (ch == '%' && i + 2 < s.length() && isHexadecimalDigit(s[i + 1]) && isHexadecimalDigit(s[i + 2])) {
+      out += (char)strtol(s.substring(i + 1, i + 3).c_str(), nullptr, 16);
+      i += 2;
+    } else {
+      out += ch;
+    }
+  }
+  return out;
 }
 
 void sendResponse(WiFiClient& c, int code, const char* type, const char* body, size_t len) {
@@ -681,6 +886,15 @@ void handleWeb() {
   } else if (route == "/api/effect") {
     ok = setEffect(queryParam(path, "n"));
     err = "{\"error\":\"unknown effect\"}";
+  } else if (route == "/api/preset/save") {
+    ok = savePreset(urlDecode(queryParam(path, "name")));
+    err = "{\"error\":\"need a name, or all preset slots are full\"}";
+  } else if (route == "/api/preset/load") {
+    ok = loadPreset(urlDecode(queryParam(path, "name")));
+    err = "{\"error\":\"no such preset\"}";
+  } else if (route == "/api/preset/delete") {
+    ok = deletePreset(urlDecode(queryParam(path, "name")));
+    err = "{\"error\":\"no such preset\"}";
   } else {
     sendJson(c, 404, "{\"error\":\"not found\"}");
     ok = false; err = nullptr;
@@ -710,6 +924,7 @@ void setup() {
   randomSeed(analogRead(A0));
 
   loadSettings();
+  loadPresets();
   needRender = true;
 
   connectWifi();
