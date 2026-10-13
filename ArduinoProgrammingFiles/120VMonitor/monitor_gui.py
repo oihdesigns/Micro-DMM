@@ -30,9 +30,15 @@ from matplotlib.figure import Figure
 
 import bench_psu
 import calibrate as cal
-from monitor_link import SAFE_WHY, TRIG_MODES, LinkError, MonitorLink, capture_stats, flag_text
+from monitor_link import (RANGE_MODES, RANGE_NAMES, SAFE_WHY, TRIG_MODES, LinkError, MonitorLink,
+                          capture_stats, flag_text)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+TIMING_MODES = ["Rate + samples", "Rate + duration", "Samples + duration"]
+CAP_MAX = 7168                  # int16 values in the board's capture buffer
+RANGE_FULL = {0: "HIGH ±25 A", 1: "LOW ±2.5 A"}
+CAP_RANGES = ["Follow mode", "HIGH", "LOW"]   # !CAP rng -1 / 0 / 1
+CAL_IPTS = {0: "0.25, 0.5, 1.0, 1.5, 2.0, 2.5", 1: "0.1, 0.25, 0.5, 1.0, 1.5, 2.0"}
 
 BG, FG, ACC = "#1A1A1A", "#00FF32", "#FFB000"
 
@@ -56,7 +62,7 @@ class App(tk.Tk):
         self.hist = deque(maxlen=36000)        # $PWR records
         self.csv_fh = self.csv_w = None
         self.last_cap = None
-        self.cal_v = self.cal_i = None
+        self.cal_v = self.cal_i = self.cal_ilo = None
         self.cal_phase = None
         self.stop_evt = threading.Event()
         self.repeat_job = None
@@ -87,6 +93,14 @@ class App(tk.Tk):
         self.stream_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(top, text="Stream", variable=self.stream_var,
                         command=self._stream_changed).pack(side="left")
+        ttk.Label(top, text="Range").pack(side="left", padx=(12, 2))
+        self.rng_mode = tk.StringVar(value=RANGE_MODES[0])
+        self.rng_cb = ttk.Combobox(top, textvariable=self.rng_mode, values=list(RANGE_MODES.values()),
+                                   width=9, state="disabled")
+        self.rng_cb.pack(side="left")
+        self.rng_cb.bind("<<ComboboxSelected>>", self._range_selected)
+        self.rng_lbl = tk.Label(top, text="", width=24, anchor="w", font=("Segoe UI", 10, "bold"))
+        self.rng_lbl.pack(side="left", padx=4)
         self.flag_lbl = tk.Label(top, text="", fg="red", font=("Segoe UI", 10, "bold"))
         self.flag_lbl.pack(side="left", padx=10)
         self.status_lbl = ttk.Label(top, text="not connected")
@@ -157,9 +171,10 @@ class App(tk.Tk):
                 w = ttk.Entry(ctl, textvariable=var, width=width)
             w.grid(row=row, column=col + 1, sticky="w")
             self.cap_vars[key] = var
+            return w
 
-        field(0, 0, "Rate (S/s, 0=max)", "rate", 20000)
-        field(0, 2, "Samples", "n", 3000)
+        self.cap_entries = {"rate": field(0, 0, "Rate (S/s, 0=max)", "rate", 20000),
+                            "n": field(0, 2, "Samples", "n", 3000)}
         field(0, 4, "Channels", "ch", "V + I", values=["V + I", "V only", "I only"])
         field(0, 6, "Trigger", "trig", TRIG_MODES[2], values=list(TRIG_MODES.values()))
         field(1, 0, "Level (A or V)", "level", 0.5)
@@ -167,6 +182,18 @@ class App(tk.Tk):
         field(1, 4, "Timeout (s)", "timeout", 5)
         field(1, 6, "Relay close delay after V zero-x (µs, -1 = now)", "relay_us", -1)
         field(0, 8, "Average N scans/sample", "avg", 7, width=4)
+        field(1, 8, "Current range", "rng", CAP_RANGES[0], width=4, values=CAP_RANGES)
+        # timing: any two of rate / samples / duration, the third is worked out
+        field(2, 0, "Set by", "tmode", TIMING_MODES[0], width=8, values=TIMING_MODES)
+        self.cap_entries["dur"] = field(2, 2, "Duration (ms)", "dur", 150)
+        self.timing_note = ttk.Label(ctl, text="", foreground="#b05000")
+        self.timing_note.grid(row=2, column=4, columnspan=6, sticky="w", padx=8)
+        self.spike_lbl = ttk.Label(ctl, text="")
+        self.spike_lbl.grid(row=3, column=0, columnspan=10, sticky="w", padx=8)
+        self._timing_busy = False
+        for k in ("rate", "n", "dur", "tmode", "ch", "avg"):
+            self.cap_vars[k].trace_add("write", self._timing_update)
+        self._timing_update()
 
         safe = ttk.LabelFrame(f, text="Safe start — the board opens the relay itself (recording continues)",
                               padding=4)
@@ -254,7 +281,16 @@ class App(tk.Tk):
 
         box = ttk.LabelFrame(left, text="2. Current (short / power resistor in the outlet)", padding=6)
         box.pack(fill="x", pady=6)
-        self.ipts = tk.StringVar(value="0.25, 0.5, 1.0, 1.5, 2.0, 2.5")
+        row = ttk.Frame(box)
+        row.pack(fill="x", pady=1)
+        ttk.Label(row, text="Range", width=16).pack(side="left")
+        self.cal_rng = tk.StringVar(value=RANGE_FULL[0])
+        cb = ttk.Combobox(row, textvariable=self.cal_rng, values=list(RANGE_FULL.values()), width=14,
+                          state="readonly")
+        cb.pack(side="left")
+        cb.bind("<<ComboboxSelected>>",
+                lambda _e: self.ipts.set(CAL_IPTS[self._cal_rng_idx()]))
+        self.ipts = tk.StringVar(value=CAL_IPTS[0])
         self.ivlim = tk.StringVar(value="5")
         self._entry_row(box, "Setpoints (A)", self.ipts, 26)
         self._entry_row(box, "Voltage limit (V)", self.ivlim, 8)
@@ -361,6 +397,7 @@ class App(tk.Tk):
         self.relay_btn.configure(state="normal")
         st = link.status
         self.status_lbl.configure(text=f"{self.port_var.get()}  {ident}  scan {st.get('scanus4', '?')} µs")
+        self._spike_update()                  # now with the board's real scan times
         try:
             s4 = float(st.get("scanus4", 0)); s2 = float(st.get("scanus2", 0))
             self.rate_lbl.configure(text=f"max ≈ {1e6 / s4:,.0f} S/s (V+I), {1e6 / s2:,.0f} S/s (one channel)"
@@ -368,6 +405,7 @@ class App(tk.Tk):
         except ValueError:
             pass
         self._set_relay_ui(st.get("relay") == "1")
+        self._range_ui(st.get("rng"), st.get("rngmode"))
         self._fill_cfg()
         if self.port_var.get().upper() == "SIM":
             self.sim_cb.pack(anchor="w", pady=4)
@@ -392,6 +430,8 @@ class App(tk.Tk):
         link.close()
         self.conn_btn.configure(text="Connect")
         self.relay_btn.configure(state="disabled")
+        self.rng_cb.configure(state="disabled")
+        self.rng_lbl.configure(text="")
         self.status_lbl.configure(text="not connected")
 
     def _quit(self):
@@ -422,6 +462,30 @@ class App(tk.Tk):
         self.safe_msg = ""
         on = self.relay_btn.cget("text") == "LOAD OFF"
         self._cmd(f"!RELAY,{1 if on else 0}")
+
+    # ── current range ───────────────────────────────────────────────────────
+    def _range_selected(self, _e=None):
+        mode = [k for k, n in RANGE_MODES.items() if n == self.rng_mode.get()][0]
+        self._cmd(f"!RANGE,{mode}")
+
+    def _range_ui(self, rng, mode=None, note=""):
+        """rng/mode as reported by the board (str or int, None = unknown)."""
+        if not self.link:
+            return
+        two = bool(self.link.cfg.get("RNGPIN", {}).get("value"))
+        self.rng_cb.configure(state="readonly" if two else "disabled")
+        if mode is not None:
+            self.rng_mode.set(RANGE_MODES.get(int(mode), RANGE_MODES[0]))
+        if not two:
+            self.rng_lbl.configure(text="single range (RNGPIN 0)", fg="#777")
+            return
+        if rng is None:
+            return
+        rng = int(rng)
+        if note or rng != getattr(self, "_rng_now", None):
+            self.rng_lbl.configure(text=RANGE_FULL[rng] + (f"  {note}" if note else ""),
+                                   fg="#1565c0" if rng else "#444")
+        self._rng_now = rng
 
     def _set_relay_ui(self, on):
         self.relay_btn.configure(text="LOAD ON" if on else "LOAD OFF",
@@ -460,6 +524,12 @@ class App(tk.Tk):
         self._con_add(line)
         if line.startswith("$RLY,"):
             self._set_relay_ui(line.endswith("1"))
+        elif line.startswith("$RNG,"):
+            p = line[5:].split(",")
+            note = f"(overload {float(p[3]):.2f} A)" if p[1] == "OVER" and len(p) > 3 else \
+                {"AUTO": "(auto)", "CLOSE": "(load closing)", "CAP": "(capture)"}.get(p[1], "")
+            self._rng_now = None
+            self._range_ui(p[0], p[2], note)
         elif line.startswith("$TRIP"):
             self.flag_lbl.configure(text="TRIPPED: " + line[6:])
         elif line.startswith("$REMOTE,"):
@@ -500,13 +570,15 @@ class App(tk.Tk):
             else:
                 var.set(f"{v:,.{dp}f} {unit}".strip())
         self._set_relay_ui(r["relay"] >= 1)
+        if "rng" in r:
+            self._range_ui(r["rng"])
         fl = int(r["flags"])
         self.flag_lbl.configure(text="   ".join(x for x in (self.safe_msg, flag_text(fl)) if x))
         if self.csv_w:
             self.csv_w.writerow([time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(r["t"])),
                                  f"{r['t']:.3f}"] + [r[k] for k in
                                 ("vrms", "irms", "p", "s", "q", "pf", "hz", "vpk", "ipk", "wh",
-                                 "vdc", "idc", "relay", "flags")])
+                                 "vdc", "idc", "relay", "flags")] + [RANGE_NAMES.get(int(r.get("rng", 0)), "")])
 
     def _redraw_trends(self):
         try:
@@ -551,13 +623,94 @@ class App(tk.Tk):
         self.csv_fh = open(path, "w", newline="")
         self.csv_w = csv.writer(self.csv_fh)
         self.csv_w.writerow(["time", "unix", "vrms", "irms", "w", "va", "var", "pf", "hz", "vpk",
-                             "ipk", "wh", "vdc", "idc", "relay", "flags"])
+                             "ipk", "wh", "vdc", "idc", "relay", "flags", "range"])
         self.log_btn.configure(text="Stop CSV log")
         self.log_lbl.configure(text=os.path.basename(path))
 
     # ═══ capture ════════════════════════════════════════════════════════════
+    def _timing_update(self, *_):
+        """Work out whichever of rate / samples / duration isn't being set."""
+        if self._timing_busy:
+            return
+        v, e = self.cap_vars, self.cap_entries
+        mode = TIMING_MODES.index(v["tmode"].get())
+        derived = ("dur", "n", "rate")[mode]
+        for k, w in e.items():
+            w.configure(state="readonly" if k == derived else "normal")
+        max_n = CAP_MAX // (2 if v["ch"].get() == "V + I" else 1)
+        note = ""
+        try:
+            rate = float(v["rate"].get()) if derived != "rate" else None
+            n = int(float(v["n"].get())) if derived != "n" else None
+            dur = float(v["dur"].get()) if derived != "dur" else None
+        except ValueError:
+            self.timing_note.configure(text="")
+            return
+        if derived == "dur":
+            out = f"{n / rate * 1000:.4g}" if rate > 0 else "?"
+            if rate <= 0:
+                note = "rate 0 = as fast as the ADC goes, so the duration isn't known in advance"
+        elif derived == "n":
+            if rate <= 0:
+                out, note = "?", "set a rate: 0 (max) can't be combined with a duration"
+            else:
+                want = int(round(rate * dur / 1000))
+                out = str(min(want, max_n))
+                if want > max_n:
+                    note = (f"buffer holds {max_n} samples here: {max_n / rate * 1000:.4g} ms "
+                            f"at this rate")
+        else:
+            out = f"{n / dur * 1000:.6g}" if dur > 0 else "?"
+        if derived != "n" and n is not None and n > max_n:
+            note = f"buffer holds {max_n} samples with these channels; the board will clamp"
+        self._timing_busy = True
+        try:
+            v[derived].set(out)
+        finally:
+            self._timing_busy = False
+        self.timing_note.configure(text=note)
+        self._spike_update()
+
+    def _spike_update(self):
+        """Shortest spike the averaged samples still show at full height.
+
+        The N scans of a sample are spread evenly over its period T, so scans are
+        d = T/N apart everywhere.  A spike covering 2N-1 consecutive scans must
+        contain one whole sample's group of N, whatever its timing, so it needs to
+        last (2N-1)·d.  Anything lasting d hits at least one scan, so it shows up,
+        but at as little as 1/N of its height."""
+        v = self.cap_vars
+        try:
+            rate = float(v["rate"].get())
+            n_avg = int(float(v["avg"].get()))
+        except ValueError:
+            self.spike_lbl.configure(text="")
+            return
+        both = v["ch"].get() == "V + I"
+        st = self.link.status if self.link else {}
+        try:
+            scan_us = float(st.get("scanus4" if both else "scanus2", 0))
+        except ValueError:
+            scan_us = 0
+        est = "" if scan_us > 0 else "≈"
+        scan_us = scan_us or (4.2 if both else 2.2)        # typical, until a board reports it
+        n_avg = max(n_avg, 1)
+        d = 1e6 / (rate * n_avg) if rate > 0 else scan_us
+        late = d < scan_us
+        d = max(d, scan_us)
+        full = (2 * n_avg - 1) * d
+        fmt = lambda us: f"{us / 1000:.3g} ms" if us >= 1000 else f"{us:.3g} µs"   # noqa: E731
+        txt = (f"Spike fully captured if it lasts ≥ {est}{fmt(full)}"
+               + (f"   (≥ {est}{fmt(d)} always shows, at ≥ 1/{n_avg} of its height)" if n_avg > 1 else "")
+               + f"   max rate at N={n_avg}: {est}{1e6 / (scan_us * n_avg):,.0f} S/s")
+        if late:
+            txt += "   — rate × N is more than the ADC can do; the capture will run LATE"
+        self.spike_lbl.configure(text=txt)
+
     def _cap_args(self):
         v = self.cap_vars
+        if "?" in (v["rate"].get(), v["n"].get()):
+            raise ValueError(self.timing_note.cget("text") or "incomplete timing")
         ch = {"V + I": 2, "V only": 0, "I only": 1}[v["ch"].get()]
         trig = [k for k, name in TRIG_MODES.items() if name == v["trig"].get()][0]
         sf = self.safe
@@ -570,7 +723,8 @@ class App(tk.Tk):
                     ov_cyc=int(float(sf["ov_cyc"].get())),
                     auto_ms=int(float(sf["auto_ms"].get())) if sf["auto_on"].get() else 0,
                     open_after=sf["open_after"].get(),
-                    avg=int(float(v["avg"].get())))
+                    avg=int(float(v["avg"].get())),
+                    rng=CAP_RANGES.index(v["rng"].get()) - 1)
         if (args["ipk_a"] or args["ov_a"]) and ch == 0:
             raise ValueError("the current limits need the current channel (V + I or I only)")
         if not 1 <= args["avg"] <= 64:
@@ -643,6 +797,11 @@ class App(tk.Tk):
         if cap.open_idx >= 0:
             ax.axvline((cap.open_idx - t0) * cap.dt_us / 1000, color="tab:purple", lw=1.2, ls="--",
                        label="relay open: " + SAFE_WHY.get(cap.open_why, "?"))
+        if cap.rng_idx >= 0 and cap.i is not None:
+            x0 = (cap.rng_idx - t0) * cap.dt_us / 1000
+            axi.axvspan(x0, x0 + cap.settle_us / 1000, color="tab:orange", alpha=.15,
+                        label="range relay moving (LOW → HIGH)")
+            axi.legend(loc="upper right", fontsize=8)
         if cap.relay_idx >= 0 or cap.open_idx >= 0:
             ax.legend(loc="upper left", fontsize=8)
         ax.set_xlabel("ms from trigger" if cap.trig_idx >= 0 else "ms")
@@ -650,6 +809,11 @@ class App(tk.Tk):
         s = f"{cap.n} samples @ {st['rate']:,.0f} S/s ({cap.dt_us:.2f} µs)   f {st['hz']:.3f} Hz"
         if cap.avg > 1:
             s += f"   each the mean of {cap.avg} scans"
+        if cap.i is not None and self.link and self.link.cfg.get("RNGPIN", {}).get("value"):
+            s += f"   range {RANGE_NAMES.get(cap.rng, '?')}"
+            if cap.rng_idx >= 0:
+                s += (f" → HIGH (overload) at {(cap.rng_idx - max(cap.trig_idx, 0)) * cap.dt_us / 1000:.2f} ms;"
+                      f" the next {cap.settle_us / 1000:g} ms is the relay moving")
         if "vrms" in st:
             lines.append(f"V  {st['vrms']:8.3f} Vrms  pk {st['vpk']:7.2f}  crest {st['vcrest']:.3f}  THD {st['vthd'] * 100:5.2f} %")
         if "irms" in st:
@@ -690,7 +854,8 @@ class App(tk.Tk):
             w = csv.writer(fh)
             w.writerow([f"# dt_us={cap.dt_us}", f"trig_idx={cap.trig_idx}", f"relay_idx={cap.relay_idx}",
                         f"open_idx={cap.open_idx}", f"open_why={SAFE_WHY.get(cap.open_why, '')}",
-                        f"flags={cap.flags}", f"scans_per_sample={cap.avg}"])
+                        f"flags={cap.flags}", f"scans_per_sample={cap.avg}",
+                        f"range={RANGE_NAMES.get(cap.rng, '')}", f"range_high_from_idx={cap.rng_idx}"])
             w.writerow(["t_ms"] + (["v"] if cap.v is not None else []) + (["i"] if cap.i is not None else []))
             for k in range(cap.n):
                 row = [f"{cap.t_ms[k]:.5f}"]
@@ -792,12 +957,16 @@ class App(tk.Tk):
             self._cal_log(self.cal_v.report())
         self._run_cal("voltage sweep", fn)
 
+    def _cal_rng_idx(self):
+        return 1 if self.cal_rng.get() == RANGE_FULL[1] else 0
+
     def _cal_current(self):
+        rng = self._cal_rng_idx()
         if not messagebox.askokcancel("Current sweep",
                                       "Mains DISCONNECTED, bench supply on the input, and a SHORT or a "
                                       "low-ohm power resistor plugged into the outlet.\nThe relay will be "
                                       f"closed and CH{self.psu_ch.get()} run in constant current up to "
-                                      f"{self.ivlim.get()} V. Continue?"):
+                                      f"{self.ivlim.get()} V, on the {RANGE_FULL[rng]} range. Continue?"):
             return
 
         psu, ch = self._need_psu()
@@ -807,10 +976,14 @@ class App(tk.Tk):
         lim = float(self.mains_lim.get())
 
         def fn():
-            self.cal_i = cal.cal_current(self.link, psu, ch, pts, vlim, log=self._cal_log,
-                                         stop=self.stop_evt, limit_vac=lim)
-            self._cal_log(self.cal_i.report())
-        self._run_cal("current sweep", fn)
+            fit = cal.cal_current(self.link, psu, ch, pts, vlim, log=self._cal_log,
+                                  stop=self.stop_evt, limit_vac=lim, rng=rng)
+            if rng:
+                self.cal_ilo = fit
+            else:
+                self.cal_i = fit
+            self._cal_log(fit.report())
+        self._run_cal(f"current sweep, {RANGE_FULL[rng]}", fn)
 
     def _cal_phase(self):
         if not messagebox.askokcancel("Phase", "Needs MAINS on the input (bench supply disconnected!) "
@@ -834,6 +1007,8 @@ class App(tk.Tk):
             out["VGAIN"], out["VOFF"] = self.cal_v.gain, self.cal_v.off
         if self.cal_i:
             out["IGAIN"], out["IOFF"] = self.cal_i.gain, self.cal_i.off
+        if self.cal_ilo:
+            out["IGAINLO"], out["IOFFLO"] = self.cal_ilo.gain, self.cal_ilo.off
         if self.cal_phase is not None:
             out["PHASEUS"] = self.cal_phase
         return out
@@ -859,15 +1034,19 @@ class App(tk.Tk):
     def _cal_plot(self):
         for a in self.kax:
             a.cla()
-        for a, fit in zip(self.kax, (self.cal_v, self.cal_i)):
-            if fit is None:
+        for a, fits in zip(self.kax, ((self.cal_v,), (self.cal_i, self.cal_ilo))):
+            fits = [f for f in fits if f is not None]
+            if not fits:
                 a.set_title(("Voltage" if a is self.kax[0] else "Current") + ": not run", fontsize=9)
                 continue
-            t = [p[0] for p in fit.points]
-            a.plot(t, fit.resid, "o-")
+            for fit in fits:
+                t = [p[0] for p in fit.points]
+                a.plot(t, fit.resid, "o-", label=fit.what)
             a.axhline(0, color="k", lw=.6)
-            a.set_title(f"{fit.what} residuals ({fit.unit})", fontsize=9)
-            a.set_xlabel(f"truth ({fit.unit})")
+            a.set_title(f"{fits[0].what[0]} residuals ({fits[0].unit})", fontsize=9)
+            a.set_xlabel(f"truth ({fits[0].unit})")
+            if len(fits) > 1:
+                a.legend(fontsize=8)
             a.grid(alpha=.3)
         self.kfig.tight_layout()
         self.kcanvas.draw_idle()

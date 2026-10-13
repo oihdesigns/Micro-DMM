@@ -17,7 +17,11 @@ import numpy as np
 
 # true front end: adc_volts = x / scale + offset
 TRUE_V_SCALE, TRUE_V_OFF = 178.0, 0.0031
-TRUE_I_SCALE, TRUE_I_OFF = 2.43, -0.0017
+# current: 0.01 ohm shunt -> +/-25 A (HIGH) and 0.1 ohm -> +/-2.5 A (LOW), each
+# about 2 V out of the isolation amp at full scale, which clips at I_CLIP_V
+TRUE_I_SCALE, TRUE_I_OFF = 12.4, -0.0017
+TRUE_I_SCALE_LO, TRUE_I_OFF_LO = 1.18, 0.0009      # not quite 10x, so LOW needs its own cal
+I_CLIP_V = 2.2
 TRUE_I_DELAY = 25e-6
 ADC_VREF = 3.3
 LSB = ADC_VREF / 16384
@@ -69,11 +73,12 @@ WORLD = World()
 
 class SimSerial:
     def __init__(self):
-        self.cfg = {"VGAIN": 170.0, "VOFF": 0.0, "IGAIN": 2.5, "IOFF": 0.0, "PHASEUS": 0.0,
+        self.cfg = {"VGAIN": 170.0, "VOFF": 0.0, "IGAIN": 12.0, "IOFF": 0.0, "PHASEUS": 0.0,
                     "ADCVREF": 3.3, "MAINS": 60.0, "SPC": 128, "CYCLES": 10, "TRIPA": 0.0,
                     "TRIPPK": 0.0, "RLYPIN": 6, "RLYINV": 0, "OLED": 1, "OLEDADDR": 60,
                     "IRPIN": 9, "IRADDR": 0, "IROK": 28, "IRCONF": 22, "IRARMMS": 5000, "PIXEL": 40,
-                    "LIVEVAC": 30.0}
+                    "LIVEVAC": 30.0, "IGAINLO": 1.2, "IOFFLO": 0.0, "RNGPIN": 10, "RNGINV": 0,
+                    "RNGMODE": 0, "RNGUPA": 2.2, "RNGDNA": 1.5, "RNGHOLD": 3000, "RNGSETMS": 20}
         self.saved = dict(self.cfg)
         self.out = bytearray(b"$READY,120VMON,1.0-sim\r\n")
         self.lock = threading.Lock()
@@ -83,6 +88,9 @@ class SimSerial:
         self.last_win = time.time()
         self.t0 = time.time()
         self.is_open = True
+        self.rng = 0                # 0 HIGH, 1 LOW
+        self.rng_at = time.time()
+        self.latched = False
 
     # ── pyserial surface ────────────────────────────────────────────────────
     def write(self, data):
@@ -111,19 +119,43 @@ class SimSerial:
         with self.lock:
             self.out += (s + "\r\n").encode()
 
-    def _adc(self, t, avg=1):
+    def _adc(self, t, avg=1, lo=None):
+        """lo: per-sample bool (or one bool) for the LOW range; default = the range now."""
         v, i = WORLD.vi(t)
         _, i_late = WORLD.vi(np.asarray(t) - TRUE_I_DELAY)
         rng = np.random.default_rng()
+        lo = (self.rng == 1) if lo is None else lo
+        scale = np.where(lo, TRUE_I_SCALE_LO, TRUE_I_SCALE)
+        off = np.where(lo, TRUE_I_OFF_LO, TRUE_I_OFF)
         va = v / TRUE_V_SCALE + TRUE_V_OFF + rng.normal(0, 0.4e-3 / np.sqrt(avg), np.shape(t))
-        ia = i_late / TRUE_I_SCALE + TRUE_I_OFF + rng.normal(0, 0.4e-3 / np.sqrt(avg), np.shape(t))
+        ia = i_late / scale + off + rng.normal(0, 0.4e-3 / np.sqrt(avg), np.shape(t))
+        ia = np.clip(ia, -I_CLIP_V, I_CLIP_V)          # the isolation amp's output swing
         vc = np.round(va / LSB)
         ic = np.round(ia / LSB)
         return vc, ic
 
+    def _igo(self, r=None):
+        c = self.cfg
+        r = self.rng if r is None else r
+        return (c["IGAINLO"], c["IOFFLO"]) if r == 1 else (c["IGAIN"], c["IOFF"])
+
     def _real(self, vc, ic):
         c = self.cfg
-        return (vc * LSB - c["VOFF"]) * c["VGAIN"], (ic * LSB - c["IOFF"]) * c["IGAIN"]
+        g, o = self._igo()
+        return (vc * LSB - c["VOFF"]) * c["VGAIN"], (ic * LSB - o) * g
+
+    def _set_rng(self, r, why, amps=None, force=False):
+        if not self.cfg["RNGPIN"]:
+            r = 0
+        if r != self.rng or force:
+            self.rng = r
+            self.rng_at = time.time()
+            self._emit(f"$RNG,{r},{why},{int(self.cfg['RNGMODE'])}" + (f",{amps:.3f}" if amps else ""))
+
+    def _range_refresh(self, why="CMD", force=False):
+        m = int(self.cfg["RNGMODE"])
+        r = self.rng if m == 0 else (1 if m == 2 and not self.latched else 0)
+        self._set_rng(r, why, force=force)
 
     def _cfgrow(self, k):
         lo, hi = (-1e6, 1e6)
@@ -144,6 +176,12 @@ class SimSerial:
         t = now + np.arange(0, 10 / 60.0, 1 / 7680.0)
         vc, ic = self._adc(t)
         v, i = self._real(vc, ic)
+        clip = np.max(np.abs(ic)) * LSB >= I_CLIP_V - 1e-3
+        if self.rng == 1 and (clip or np.max(np.abs(i)) > self.cfg["RNGUPA"]):   # overload -> HIGH
+            self.latched = int(self.cfg["RNGMODE"]) == 2
+            self.over_at = now
+            self._set_rng(0, "OVER", float(np.max(np.abs(i))))
+            return
         vm, im = v.mean(), i.mean()
         vrms = float(np.sqrt(np.mean((v - vm) ** 2)))
         irms = float(np.sqrt(np.mean((i - im) ** 2)))
@@ -153,15 +191,22 @@ class SimSerial:
         q = math.sqrt(max(s * s - p * p, 0))
         self.wh += p * dt_win / 3600
         flags = 0 if WORLD.mains and not WORLD.psu_on else 1
+        flags |= 4 if clip else 0
         if self.cfg["TRIPA"] > 0 and irms > self.cfg["TRIPA"] and WORLD.relay:
             self.trip = True
             self._relay(False)
             self._emit(f"$TRIP,RMS,{irms:.4f},{self.cfg['TRIPA']:.4f}")
         flags |= 8 if self.trip else 0
         hz = 60.0 if not flags & 1 else 0.0
+        c = self.cfg
+        if c["RNGPIN"] and int(c["RNGMODE"]) == 0 and self.rng == 0:
+            if np.max(np.abs(i - im)) + abs(im) >= c["RNGDNA"]:
+                self.over_at = now
+            elif now - max(getattr(self, "over_at", 0), self.rng_at) > c["RNGHOLD"] / 1000:
+                self._set_rng(1, "AUTO")
         self._emit(f"$PWR,{vrms:.4f},{irms:.5f},{p:.4f},{s:.4f},{q:.4f},{pf:.4f},{hz:.3f},"
                    f"{np.max(np.abs(v - vm)):.3f},{np.max(np.abs(i - im)):.5f},{self.wh:.6f},"
-                   f"{now - self.t0:.2f},1536,24,{1 if WORLD.relay else 0},{flags},{vm:.4f},{im:.5f}")
+                   f"{now - self.t0:.2f},1536,24,{1 if WORLD.relay else 0},{flags},{vm:.4f},{im:.5f},{self.rng}")
 
     # ── commands ────────────────────────────────────────────────────────────
     def _cmd(self, cmd):
@@ -176,7 +221,8 @@ class SimSerial:
         elif c == "!STATUS":
             self._emit(f"$STATUS,fw=1.0-sim,stream={int(self.streaming)},relay={int(WORLD.relay)},"
                        f"trip={int(self.trip)},dirty={int(self.cfg != self.saved)},scanus4=4.2,"
-                       f"scanus2=2.2,capmax=7168,oled=1,ch=9/0/1/2,wh={self.wh:.6f}")
+                       f"scanus2=2.2,capmax=7168,oled=1,ch=9/0/1/2,rng={self.rng},"
+                       f"rngmode={int(self.cfg['RNGMODE'])},rngpin={int(self.cfg['RNGPIN'])},wh={self.wh:.6f}")
         elif c == "!CFG":
             for k in self.cfg:
                 self._emit(self._cfgrow(k))
@@ -186,6 +232,9 @@ class SimSerial:
         elif c == "!SET" and len(p) > 2 and p[1].upper() in self.cfg:
             self.cfg[p[1].upper()] = float(p[2])
             self._emit(self._cfgrow(p[1].upper()))
+            if p[1].upper() == "RNGMODE":
+                self.latched = False
+            self._range_refresh()
         elif c == "!SAVE":
             self.saved = dict(self.cfg); self._emit("$OK,save")
         elif c == "!LOAD":
@@ -194,11 +243,27 @@ class SimSerial:
             on = p[1] != "0"
             if on:
                 self.trip = False
+                if self.cfg["RNGPIN"] and int(self.cfg["RNGMODE"]) == 0 and self.rng == 1:
+                    self._set_rng(0, "CLOSE")
+                self.over_at = time.time()
             self._relay(on)
+        elif c == "!RANGE" and len(p) > 1:
+            self.cfg["RNGMODE"] = float(min(max(int(p[1]), 0), 2))
+            self.latched = False
+            if not self.cfg["RNGPIN"]:
+                self._emit("$ERR,no range relay (RNGPIN 0) - HIGH only")
+            self._range_refresh(force=True)
         elif c == "!ZERO":
-            vc, ic = self._adc(time.time() + np.arange(0, 0.2, 1e-4))
+            tt = time.time() + np.arange(0, 0.2, 1e-4)
+            vc, ic = self._adc(tt, lo=False)
             self.cfg["VOFF"], self.cfg["IOFF"] = vc.mean() * LSB, ic.mean() * LSB
-            self._emit(self._cfgrow("VOFF")); self._emit(self._cfgrow("IOFF")); self._emit("$OK,zero")
+            if self.cfg["RNGPIN"]:
+                _, ic = self._adc(tt, lo=True)
+                self.cfg["IOFFLO"] = ic.mean() * LSB
+            self._emit(self._cfgrow("VOFF")); self._emit(self._cfgrow("IOFF"))
+            if self.cfg["RNGPIN"]:
+                self._emit(self._cfgrow("IOFFLO"))
+            self._emit("$OK,zero")
         elif c == "!EZERO":
             self.wh = 0.0; self._emit("$OK,ezero")
         elif c == "!DC":
@@ -207,8 +272,14 @@ class SimSerial:
             vc, ic = self._adc(time.time() + np.arange(0, ms / 1000, 1e-4))
             va, ia = vc.mean() * LSB, ic.mean() * LSB
             v, i = self._real(np.array([vc.mean()]), np.array([ic.mean()]))
+            changed = 0
+            clip = np.max(np.abs(ic)) * LSB >= I_CLIP_V - 1e-3
+            if self.rng == 1 and (clip or abs(i[0]) > self.cfg["RNGUPA"]):
+                self.latched = int(self.cfg["RNGMODE"]) == 2
+                self._set_rng(0, "OVER", abs(i[0]))
+                changed = 1
             self._emit(f"$DC,{va:.7f},{ia:.7f},{v[0]:.5f},{i[0]:.6f},{vc.std() * LSB:.7f},"
-                       f"{ic.std() * LSB:.7f},{len(vc) * 40},0")
+                       f"{ic.std() * LSB:.7f},{len(vc) * 40},{4 if clip else 0},{self.rng},{changed}")
         elif c == "!CAP":
             self._capture(p[1:])
         elif c == "!ABORT":
@@ -225,6 +296,14 @@ class SimSerial:
         ipk_a, ov_a = f[8] or 0.0, f[9] or 0.0
         ov_cyc, auto_ms, open_after = int(f[10] or 3), f[11] or 0.0, bool(f[12])
         avg = min(max(int(f[13] or 1), 1), 64)
+        want = int(f[14]) if f[14] is not None else -1
+        if want < 0:
+            want = 0 if (trig == 3 and int(self.cfg["RNGMODE"]) == 0) else self.rng
+        if ch == 0:
+            want = 0
+        if want != self.rng:
+            self._set_rng(want, "CAP")
+        rng0 = self.rng
         n = min(n, 7168 // (2 if ch == 2 else 1))
         dt = 1.0 / rate
         pre_n = int(n * pre / 100) if trig else 0
@@ -241,17 +320,33 @@ class SimSerial:
             relay_idx = pre_n
             v, _ = WORLD.vi(t)
             vc, ic = self._adc(t, avg)
-            ic = np.where(np.arange(n) < pre_n, np.round(TRUE_I_OFF / LSB), ic)
+            ic = np.where(np.arange(n) < pre_n, np.round((TRUE_I_OFF_LO if rng0 else TRUE_I_OFF) / LSB), ic)
         else:
             t = start + np.arange(n) * dt
             if trig == 2:
                 t = t + (math.ceil(t[pre_n] * 60) / 60 - t[pre_n])
             vc, ic = self._adc(t, avg)
+        # LOW range: the first sample over RNGUPA goes HIGH (the relay moves within RNGSETMS)
+        rng_idx = -1
+        if rng0 == 1 and ch != 0:
+            g, o = self._igo(1)
+            hit = np.nonzero((np.abs((ic * LSB - o) * g) > self.cfg["RNGUPA"])
+                             | (np.abs(ic) * LSB >= I_CLIP_V - 1e-3))[0]
+            if len(hit):
+                rng_idx = int(hit[0])
+                settle = int(self.cfg["RNGSETMS"] / 1000 / dt)
+                lo = np.arange(n) < rng_idx + settle
+                _, ic = self._adc(t, avg, lo=lo)
+                self.latched = int(self.cfg["RNGMODE"]) == 2
+                self._set_rng(0, "OVER", float(np.abs((ic[rng_idx] * LSB - o) * g)))
         trig_idx = pre_n if trig else 0
         # safe start: find where the relay would have opened, then zero the current after it
         open_idx, why = -1, 0
         if WORLD.relay and ch != 0:
-            i_real = (ic * LSB - self.cfg["IOFF"]) * self.cfg["IGAIN"]
+            g, o = self._igo(rng0)
+            i_real = (ic * LSB - o) * g
+            if rng_idx >= 0:
+                i_real[rng_idx:] = (ic[rng_idx:] * LSB - self.cfg["IOFF"]) * self.cfg["IGAIN"]
             k0 = trig_idx
             cands = []
             if ipk_a > 0:
@@ -278,8 +373,10 @@ class SimSerial:
             WORLD.relay = False
         time.sleep(n * dt)
         c = self.cfg
+        g0, o0 = self._igo(rng0)
         hdr = (f"$CAP,{n},{ch},{dt * 1e6:.4f},{LSB * c['VGAIN']:.9f},{c['VOFF'] / LSB:.3f},"
-               f"{LSB * c['IGAIN']:.9f},{c['IOFF'] / LSB:.3f},{trig_idx},0,{relay_idx},{open_idx},{why},{avg}")
+               f"{LSB * g0:.9f},{o0 / LSB:.3f},{trig_idx},0,{relay_idx},{open_idx},{why},{avg},"
+               f"{rng0},{rng_idx},{LSB * c['IGAIN']:.9f},{c['IOFF'] / LSB:.3f},{c['RNGSETMS'] * 1000:.0f}")
         self._emit(hdr)
         if ch == 2:
             vals = np.column_stack([vc, ic]).ravel()

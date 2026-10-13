@@ -15,13 +15,16 @@ from dataclasses import dataclass, field
 import numpy as np
 
 PWR_FIELDS = ("vrms", "irms", "p", "s", "q", "pf", "hz", "vpk", "ipk", "wh", "uptime",
-              "n", "depth", "relay", "flags", "vdc", "idc")
+              "n", "depth", "relay", "flags", "vdc", "idc", "rng")
 
 FLAG_NAMES = {1: "NO V ZERO-X", 2: "V CLIP", 4: "I CLIP", 8: "TRIPPED",
               16: "TRUNCATED", 32: "LATE"}
 
 SAFE_WHY = {0: "", 1: "instant limit", 2: "over-current (time delay)", 3: "auto-open timer",
             4: "capture complete", 5: "TRIPPK"}
+
+RANGE_NAMES = {0: "HIGH", 1: "LOW"}          # 0.01 ohm / 0.1 ohm shunt
+RANGE_MODES = {0: "Auto", 1: "HIGH only", 2: "LOW"}
 
 TRIG_MODES = {0: "Immediate", 1: "|I| above level", 2: "V rising zero-cross",
               3: "Close relay (inrush)", 4: "|V| above level"}
@@ -50,6 +53,11 @@ class Capture:
     open_idx: int = -1      # sample where safe start opened the relay
     open_why: int = 0       # SAFE_WHY key
     avg: int = 1            # ADC scans averaged into each sample
+    rng: int = 0            # current range the data starts in (0 HIGH, 1 LOW)
+    rng_idx: int = -1       # sample from which the range was HIGH (overload), -1 never
+    i_per_hi: float = None  # HIGH-range scaling for samples from rng_idx on
+    i_off_hi: float = None
+    settle_us: float = 0.0  # range relay moving after rng_idx
     raw: list = field(default_factory=list)
     v: np.ndarray = None    # volts
     i: np.ndarray = None    # amps
@@ -67,6 +75,9 @@ class Capture:
             self.v = (vc - self.v_off) * self.v_per
         if ic is not None:
             self.i = (ic - self.i_off) * self.i_per
+            if self.rng_idx >= 0 and self.i_per_hi is not None:
+                k = self.rng_idx
+                self.i[k:] = (ic[k:] - self.i_off_hi) * self.i_per_hi
         n = len(vc if vc is not None else ic)
         t0 = self.trig_idx if self.trig_idx >= 0 else 0
         self.t_ms = (np.arange(n) - t0) * self.dt_us / 1000.0
@@ -146,6 +157,10 @@ class MonitorLink:
                                     int(p[10]) if len(p) > 10 else -1,
                                     int(p[11]) if len(p) > 11 else 0,
                                     int(p[12]) if len(p) > 12 else 1)
+                if len(p) > 17:
+                    c = self._cap
+                    c.rng, c.rng_idx = int(p[13]), int(p[14])
+                    c.i_per_hi, c.i_off_hi, c.settle_us = float(p[15]), float(p[16]), float(p[17])
             except (ValueError, IndexError):
                 self._cap = None
             self.events.put(("line", line))
@@ -238,6 +253,11 @@ class MonitorLink:
     def stream(self, on):
         self.request("!START" if on else "!STOP", ("$OK",), 2.0)
 
+    def range_mode(self, mode):
+        """RNGMODE (RAM): 0 auto, 1 HIGH only, 2 LOW. Returns the range now in use."""
+        line = self.request(f"!RANGE,{int(mode)}", ("$RNG",), 2.0)
+        return int(line.split(",")[1])
+
     def zero(self):
         self.request("!ZERO", ("$OK", "$ERR"), 3.0)
         return self.cfg["VOFF"]["value"], self.cfg["IOFF"]["value"]
@@ -246,18 +266,20 @@ class MonitorLink:
         """Averaged DC of both channels -> dict(v_adc, i_adc, v, i, v_sd, i_sd, n, flags)."""
         line = self.request(f"!DC,{int(ms)}", ("$DC",), ms / 1000.0 + 3.0)
         p = [float(x) for x in line[4:].split(",")]
-        d = dict(zip(("v_adc", "i_adc", "v", "i", "v_sd", "i_sd", "n", "flags"), p))
+        d = dict(zip(("v_adc", "i_adc", "v", "i", "v_sd", "i_sd", "n", "flags", "rng", "rng_changed"), p))
         d["n"], d["flags"] = int(d["n"]), int(d["flags"])
+        d["rng"], d["rng_changed"] = int(d.get("rng", 0)), int(d.get("rng_changed", 0))
         return d
 
     def capture(self, rate=20000, n=3000, ch=2, trig=0, level=0.5, pre=10.0,
                 timeout_ms=5000, relay_us=-1, ipk_a=0.0, ov_a=0.0, ov_cyc=3, auto_ms=0,
-                open_after=False, avg=1):
+                open_after=False, avg=1, rng=-1):
         """Safe start (0 = off): ipk_a instant trip; ov_a for ov_cyc cycles of per-cycle
         Irms; auto_ms opens that long after the trigger; open_after at the end.
-        avg: each stored sample is the mean of this many consecutive ADC scans."""
+        avg: each stored sample is the mean of this many consecutive ADC scans.
+        rng: -1 follow RNGMODE, 0 HIGH, 1 LOW."""
         cmd = (f"!CAP,{int(rate)},{int(n)},{int(ch)},{int(trig)},{level:g},{pre:g},{int(timeout_ms)},"
-               f"{int(relay_us)},{ipk_a:g},{ov_a:g},{int(ov_cyc)},{int(auto_ms)},{1 if open_after else 0},{int(avg)}")
+               f"{int(relay_us)},{ipk_a:g},{ov_a:g},{int(ov_cyc)},{int(auto_ms)},{1 if open_after else 0},{int(avg)},{int(rng)}")
         obj = self.request(cmd, ("$CEND", "$CAPTMO", "$ERR"), timeout_ms / 1000.0 + 15.0)
         if isinstance(obj, str):
             if obj.startswith("$CAPTMO"):

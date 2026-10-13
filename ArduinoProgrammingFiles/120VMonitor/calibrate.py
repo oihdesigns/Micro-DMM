@@ -11,7 +11,8 @@ so real power reads positive for a consuming load once mains is connected.
             supply's own MEAS:VOLT? read either side of the monitor's !DC.
   Current   needs a short (or a low-ohm power resistor) in the outlet and
             the relay closed; supply in CC at a low voltage limit, a sweep of
-            current setpoints; truth is MEAS:CURR?.
+            current setpoints; truth is MEAS:CURR?.  Run once per current
+            range: HIGH (0.01 ohm, IGAIN/IOFF) and LOW (0.1 ohm, IGAINLO/IOFFLO).
   Phase     needs MAINS and a purely resistive load: the delay between the
             fundamentals of V and I in a raw capture IS the front ends' skew,
             and becomes PHASEUS.
@@ -146,16 +147,45 @@ def cal_voltage(link, psu, ch=2, points=(0, 5, 10, 15, 20, 25, 30), ilim=0.05,
     return fit_line("V", "V", pts)
 
 
+def _check_range(d, rng, truth):
+    if d.get("rng", 0) != rng or d.get("rng_changed"):
+        raise CalError(f"the board left the {'LOW' if rng else 'HIGH'} range at {truth:.3f} A "
+                       "(overload: lower the setpoints or raise RNGUPA)")
+
+
 def cal_current(link, psu, ch=2, points=(0.25, 0.5, 1.0, 1.5, 2.0, 2.5), vlim=5.0,
-                settle=1.5, dc_ms=500, log=None, stop=None, limit_vac=5.0):
-    """Needs a short / low-ohm load in the outlet; closes the relay itself."""
+                settle=1.5, dc_ms=500, log=None, stop=None, limit_vac=5.0, rng=0):
+    """Needs a short / low-ohm load in the outlet; closes the relay itself.
+    rng 0 calibrates the HIGH range (IGAIN/IOFF), 1 the LOW one (IGAINLO/IOFFLO)."""
     check_no_mains(link, log, limit_vac)
+    if "RNGMODE" not in link.cfg:
+        link.read_cfg()
+    prev_mode = link.cfg.get("RNGMODE", {}).get("value")
+    if rng and not link.cfg.get("RNGPIN", {}).get("value"):
+        raise CalError("RNGPIN is 0: the board has no range relay configured")
+    if prev_mode is not None:
+        got = link.range_mode(2 if rng else 1)          # pin the range for the sweep
+        if got != rng:
+            raise CalError("the board would not switch range")
+        _log(log, f"range pinned to {'LOW (IGAINLO)' if rng else 'HIGH (IGAIN)'}")
+    try:
+        fit = _sweep_current(link, psu, ch, points, vlim, settle, dc_ms, log, stop, rng)
+    finally:
+        if prev_mode is not None:
+            link.range_mode(int(prev_mode))
+    if rng:
+        fit.what = "I LOW"
+    return fit
+
+
+def _sweep_current(link, psu, ch, points, vlim, settle, dc_ms, log, stop, rng):
     pts = []
     with _PsuSession(psu, ch, log):
         # 0 A point with the output genuinely off
         link.relay(True)
         time.sleep(0.3)
         d = link.dc(dc_ms)
+        _check_range(d, rng, 0.0)
         pts.append((0.0, d["i_adc"], d["i_sd"]))
         _log(log, f"  output off      0.0000 A meas   adc {d['i_adc']:+.6f} V")
         try:
@@ -173,6 +203,7 @@ def cal_current(link, psu, ch=2, points=(0.25, 0.5, 1.0, 1.5, 2.0, 2.5), vlim=5.
                 if truth < 0.9 * iset:
                     _log(log, f"  warning: only {truth:.3f} A of {iset:g} A at {vout:.2f} V -- the load "
                               "is too high a resistance for the voltage limit (not in CC)")
+                _check_range(d, rng, truth)
                 if d["flags"] & 4:
                     raise CalError(f"current channel clipped at {truth:.3f} A")
                 pts.append((truth, d["i_adc"], d["i_sd"]))

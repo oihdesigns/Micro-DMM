@@ -22,6 +22,7 @@ SSD1306 OLED, load relay, Python GUI, bench-supply calibration.
 | Relay driver | **D6 by default**, `RLYPIN` key; `RLYINV 1` if active-low |
 | IR receiver (TSOP-style, active-low out) | **D9** by default, `IRPIN` key, 0 = off. It needs a pin with an edge interrupt; **D10 (P109) has none on the XIAO RA4M1**. D7, D8 and D9 all work |
 | Status NeoPixel | the XIAO's built-in RGB (P112, enabled by P500) |
+| Current-range relay driver | **D7** (`RNGPIN 7`, `RNGINV 0`). Its NC contact shorts the 0.1 Ω shunt, so energized (pin HIGH) = LOW range |
 
 The relay is driven open in `setup()` before anything else runs, and the GUI
 opens it on disconnect.
@@ -46,6 +47,12 @@ instant, so V and I are effectively simultaneous.
   do, the `LATE` flag is set and the real rate is reported. Occasional samples
   carry a few µs of jitter from the USB interrupt.
 
+**Timing** (Capture tab, `Set by`). Pick any two of rate, samples and
+duration, and the GUI works out the third. That third field is greyed out.
+When the buffer can't hold the requested duration at the chosen rate, the
+sample count is capped and the note beside the field says how long you
+actually get.
+
 Triggers: immediate · |I| ≥ level · V rising zero crossing · **close the
 relay** (inrush, optionally *n* µs after a V zero crossing, e.g. 4167 µs for
 the 60 Hz peak, though the relay's own mechanical delay adds to that) ·
@@ -61,6 +68,14 @@ work on the averaged samples. `TRIPPK` and the instant trip still check every
 single scan. `$CAP` reports N as its last field, and the CSV header records
 `scans_per_sample`.
 
+Under the timing fields, the GUI shows the shortest spike you will capture at
+full height whatever its timing. That is (2N−1)·T/N, where T is the sample
+period: a spike that long covers 2N−1 scans in a row, and so always covers
+every scan of at least one sample. A spike that lasts one scan spacing (T/N)
+always lands on at least one scan, but it may only reach 1/N of its height.
+The calculation uses the board's measured scan time (`$STATUS scanus4/2`) once
+you're connected.
+
 **Safe start** (Capture tab). These checks run on the board, inside the
 capture loop, so they react within one sample. Recording continues after the
 relay opens, and the plot marks the open point and its reason.
@@ -74,6 +89,65 @@ relay opens, and the plot marks the open point and its reason.
 
 Instant trip and over-current latch "TRIPPED" until the relay is next
 commanded closed. The board reports each opening as `$SAFE,<reason>,<amps>`.
+
+## Current ranges
+
+| Range | Shunt | Full scale | Calibration |
+|---|---|---|---|
+| HIGH | 0.01 Ω | ±25 A | `IGAIN` / `IOFF` |
+| LOW | 0.1 Ω | ±2.5 A | `IGAINLO` / `IOFFLO` |
+
+**Wiring.** Put the shunts in series and let the relay **short out the 0.1 Ω
+one** for the HIGH range, so the load circuit is never broken while the
+relay moves. A changeover contact that picks one shunt or the other opens the
+load for a few ms on every switch. Use the relay's **normally-closed** contact
+for that short, so an unpowered or resetting board sits in HIGH. Read each
+shunt with its own Kelvin taps, and use a second pole to move the isolation
+amp's input between them. Then the bypass contact's resistance never appears
+in the reading.
+
+**Before you switch it on:**
+- When the LOW range overloads, the 0.1 Ω shunt carries the full fault
+  current until the relay opens, which takes a few ms. 25 A is 62 W, so for a
+  few ms that's fine for a power resistor.
+- The isolation amp's input sees 10× its rated input in that time. Check its
+  absolute maximum rating, or clamp the input.
+- A fuse is still what clears a real short.
+
+**As built:** the shunts are in series, and D7's relay shorts out the 0.1 Ω
+one through its NC contact. The board is wired as recommended, so an unpowered
+board sits in HIGH.
+
+`RNGPIN` stays 0 until the relay is wired. With it at 0 the board runs HIGH
+only, exactly as before. Set `RNGPIN` and `RNGINV` in the Config tab, then
+calibrate the LOW range. When the stored config upgrades to v3, `IGAINLO`
+starts as `IGAIN`/10.
+
+| `RNGMODE` | Behaviour |
+|---|---|
+| 0 auto (default) | Overloads go HIGH. After `RNGHOLD` (3 s) of window peaks below `RNGDNA` (1.5 A), it drops back to LOW. Closing the load relay goes HIGH first, so inrush never hits the 0.1 Ω shunt |
+| 1 | HIGH only |
+| 2 | LOW. An overload still goes HIGH, and it stays HIGH until you select the range again |
+
+**Overload** is any single scan above `RNGUPA` (2.2 A), or a clipped reading,
+while in LOW. It's checked in every hot loop, in the same place as `TRIPPK`,
+so the relay is told within µs. The reading is meaningless while the relay
+moves, so for `RNGSETMS` (20 ms) after a switch:
+- the current trips ignore it;
+- a metering window that spans a switch is thrown away;
+- a capture keeps recording. It reports the sample where the range changed,
+  and the GUI scales the samples after it with the HIGH calibration and shades
+  the settling time.
+
+**In the GUI:**
+- **Top bar:** range mode (Auto / HIGH only / LOW) and the range in use.
+- **Capture tab:** *Current range* is Follow mode, HIGH or LOW for that one
+  capture. V-only captures always run HIGH, because there's no current
+  reading to catch an overload.
+- **Calibration tab:** pick the range before the current sweep. The sweep pins
+  the board to that range, checks it didn't switch range part-way through, and
+  restores the mode afterwards. Default LOW setpoints stop at 2 A.
+- **Zero offsets:** zeroes both ranges.
 
 ## Remote and status light
 
@@ -111,8 +185,8 @@ reads positive on mains.
 2. **Voltage sweep.** Mains disconnected. The relay opens and the supply runs
    in CV 0…30 V with a 50 mA limit. Truth is the supply's `MEAS:VOLT?`, read
    either side of a 500 ms `!DC`. If the input shows AC, the sweep is refused.
-3. **Current sweep.** Mains disconnected, with a **short or low-ohm power
-   resistor in the outlet**. The relay closes and the supply runs in CC,
+3. **Current sweep**, once per range. Mains disconnected, with a **short or
+   low-ohm power resistor in the outlet**. The relay closes and the supply runs in CC,
    0.25…2.5 A under a 5 V limit. Truth is `MEAS:CURR?`. It warns if the supply
    is not actually in CC.
 4. **Phase.** Mains on, supply removed, a purely resistive load. It measures
@@ -125,7 +199,9 @@ reads positive on mains.
 See the header of `120VMonitor.ino`. In short: `!CMD,args` in; `$TYPE,fields`
 out. Config uses the BlinkyHawk pattern (`!CFG` / `!SET,K,V` / `!SAVE`), with a
 CRC over `offsetof(Config, crc)`. Captures come back as `$CAP` header,
-`$CD,<hex int16 ×32>` lines, then `$CEND`.
+`$CD,<hex int16 ×32>` lines, then `$CEND`. Range changes arrive as
+`$RNG,<0 HIGH|1 LOW>,<BOOT|CMD|AUTO|OVER|CLOSE|CAP>,<mode>[,<amps>]`, and
+`!RANGE,<0|1|2>` sets the mode.
 
 ## Safety
 
