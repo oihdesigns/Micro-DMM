@@ -62,7 +62,31 @@ struct Config {
   uint8_t  rngMode;      /*!< 0 auto, 1 HIGH only, 2 LOW (an overload latches HIGH) */
   uint8_t  rngSetMs;     /*!< range relay settle time */
 
+  // v4
+  uint8_t  oledRot;      /*!< 0 = right side up, 1 = upside down */
+
   uint16_t crc;          /*!< CRC16-CCITT over [0, offsetof(Config, crc)) */
+};
+
+/*! The version-3 layout: v4 minus oledRot. */
+struct ConfigV3 {
+  char     magic[4];
+  uint16_t version, size;
+  float    vGain, vOff, iGain, iOff, phaseUs, adcVref;
+  float    mainsHz;
+  uint16_t spc;
+  uint8_t  cycles;
+  float    tripA, tripPk;
+  uint8_t  relayPin, relayInv, oled, oledAddr;
+  uint8_t  irPin, irConfirm;
+  uint16_t irAddr;
+  uint8_t  irOk, pixel;
+  uint16_t irArmMs;
+  float    liveVac;
+  float    iGainLo, iOffLo, rngUpA, rngDnA;
+  uint16_t rngHoldMs;
+  uint8_t  rngPin, rngInv, rngMode, rngSetMs;
+  uint16_t crc;
 };
 
 /*! The version-2 layout, read once to migrate a stored calibration. */

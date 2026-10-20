@@ -18,7 +18,7 @@ SSD1306 OLED, load relay, Python GUI, bench-supply calibration.
 |---|---|
 | Current, isolation amp OUTP / OUTN | A0 (+) / A1 (−) |
 | Voltage, isolation amp OUTP / OUTN | A2 (+) / A3 (−) |
-| OLED SSD1306 128x64 | D4 SDA / D5 SCL, 0x3C (`OLEDADDR`) |
+| OLED SSD1306 128x64 | D4 SDA / D5 SCL, 0x3C (`OLEDADDR`). `OLEDROT 1` flips it upside down |
 | Relay driver | **D6 by default**, `RLYPIN` key; `RLYINV 1` if active-low |
 | IR receiver (TSOP-style, active-low out) | **D9** by default, `IRPIN` key, 0 = off. It needs a pin with an edge interrupt; **D10 (P109) has none on the XIAO RA4M1**. D7, D8 and D9 all work |
 | Status NeoPixel | the XIAO's built-in RGB (P112, enabled by P500) |

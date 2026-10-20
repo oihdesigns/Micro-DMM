@@ -135,7 +135,7 @@
 #include "monitor_types.h"
 
 #define FW_VERSION   "1.3"
-#define CFG_VERSION  3
+#define CFG_VERSION  4
 #define CFG_ADDR     0
 
 // ── analog pins: A0/A1 current, A2/A3 voltage ─────────────────────────────────
@@ -276,6 +276,7 @@ static const CfgField CFG_FIELDS[] = {
   {"RLYINV",  FT_U8,    CF(relayInv),0,     1,     "relay active-low"},
   {"OLED",    FT_U8,    CF(oled),    0,     1,     "drive the OLED"},
   {"OLEDADDR",FT_U8,    CF(oledAddr),0x3C,  0x3D,  "OLED I2C address"},
+  {"OLEDROT", FT_U8,    CF(oledRot), 0,     1,     "OLED 0 = right side up, 1 = upside down"},
   {"IRPIN",   FT_U8,    CF(irPin),   0,     21,    "IR receiver pin, 0=off"},
   {"IRADDR",  FT_U16,   CF(irAddr),  0,     65535, "remote NEC address"},
   {"IROK",    FT_U8,    CF(irOk),    0,     255,   "NEC cmd: prime close / open"},
@@ -322,6 +323,7 @@ void configDefaults() {
   cfg.relayInv = 0;
   cfg.oled     = 1;
   cfg.oledAddr = 0x3C;
+  cfg.oledRot  = 0;
   cfg.irPin     = 9;
   cfg.irAddr    = 0x00;
   cfg.irOk      = 0x1C;
@@ -354,6 +356,7 @@ static uint16_t configCrc(const Config& c) {
 }
 
 static bool g_migrated = false;
+static bool g_migratedLo = false;          // came from v1/v2: IGAINLO was seeded
 
 // A v1 block keeps its calibration; the new fields take their defaults.
 static bool configMigrateV1() {
@@ -366,6 +369,20 @@ static bool configMigrateV1() {
   cfg.phaseUs = o.phaseUs; cfg.adcVref = o.adcVref; cfg.mainsHz = o.mainsHz;
   cfg.spc = o.spc; cfg.cycles = o.cycles; cfg.tripA = o.tripA; cfg.tripPk = o.tripPk;
   cfg.relayPin = o.relayPin; cfg.relayInv = o.relayInv; cfg.oled = o.oled; cfg.oledAddr = o.oledAddr;
+  return true;
+}
+
+// A v3 block is the v4 layout minus oledRot at the end.
+static_assert(offsetof(ConfigV3, crc) == offsetof(Config, oledRot), "ConfigV3 must prefix Config");
+static bool configMigrateV3() {
+  ConfigV3 o;
+  EEPROM.get(CFG_ADDR, o);
+  if (memcmp(o.magic, "M120", 4) != 0 || o.version != 3 || o.size != sizeof(ConfigV3) ||
+      o.crc != crc16_ccitt((const uint8_t*)&o, offsetof(ConfigV3, crc))) return false;
+  configDefaults();
+  memcpy(&cfg, &o, offsetof(ConfigV3, crc));
+  cfg.version = CFG_VERSION;
+  cfg.size = sizeof(Config);
   return true;
 }
 
@@ -387,10 +404,12 @@ static bool configLoad() {
   EEPROM.get(CFG_ADDR, t);
   if (memcmp(t.magic, "M120", 4) != 0 || t.version != CFG_VERSION ||
       t.size != sizeof(Config) || t.crc != configCrc(t)) {
+    if (configMigrateV3()) { g_migrated = true; return true; }
     if (!configMigrateV2() && !configMigrateV1()) return false;
     // the LOW range starts as the HIGH calibration scaled by the shunt ratio
     cfg.iGainLo = cfg.iGain * 0.1f;
     cfg.iOffLo  = cfg.iOff;
+    g_migratedLo = true;
     g_migrated = true;
     return true;
   }
@@ -1451,6 +1470,7 @@ static void oledInit() {
   if (!cfg.oled) return;
   if (!display.begin(SSD1306_SWITCHCAPVCC, cfg.oledAddr)) return;
   g_oledOk = true;
+  display.setRotation(cfg.oledRot ? 2 : 0);
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
   display.setTextSize(1);
@@ -1604,7 +1624,7 @@ void handleCommand(char* cmd) {
       if (!cfg.pixel) { pixelInit(); }
       else if (g_haveLast) pixelUpdate(g_last.vrms);
     }
-    if (cfg.oled != oldOled || cfg.oledAddr != oldAddr) {
+    if (cfg.oled != oldOled || cfg.oledAddr != oldAddr || f->offset == offsetof(Config, oledRot)) {
       if (g_oledOk && !cfg.oled) { display.clearDisplay(); display.display(); }
       oledInit();
     }
@@ -1720,8 +1740,9 @@ void setup() {
   if (!loaded) Serial.println(F("$ERR,no valid config in EEPROM - defaults loaded (uncalibrated)"));
   if (g_migrated) {
     bool ok = configSave();
-    Serial.println(ok ? F("$OK,config migrated to v3, calibration kept (IGAINLO = IGAIN/10 until calibrated)")
-                      : F("$ERR,config migrated to v3 but the save failed"));
+    if (!ok) Serial.println(F("$ERR,config migrated to v4 but the save failed"));
+    else if (g_migratedLo) Serial.println(F("$OK,config migrated to v4, calibration kept (IGAINLO = IGAIN/10 until calibrated)"));
+    else Serial.println(F("$OK,config migrated to v4, calibration kept"));
   }
   rangeRefresh(RW_BOOT);                // RNGMODE 2 starts LOW
   rangeReport();

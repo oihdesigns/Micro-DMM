@@ -75,7 +75,7 @@ class SimSerial:
     def __init__(self):
         self.cfg = {"VGAIN": 170.0, "VOFF": 0.0, "IGAIN": 12.0, "IOFF": 0.0, "PHASEUS": 0.0,
                     "ADCVREF": 3.3, "MAINS": 60.0, "SPC": 128, "CYCLES": 10, "TRIPA": 0.0,
-                    "TRIPPK": 0.0, "RLYPIN": 6, "RLYINV": 0, "OLED": 1, "OLEDADDR": 60,
+                    "TRIPPK": 0.0, "RLYPIN": 6, "RLYINV": 0, "OLED": 1, "OLEDADDR": 60, "OLEDROT": 0,
                     "IRPIN": 9, "IRADDR": 0, "IROK": 28, "IRCONF": 22, "IRARMMS": 5000, "PIXEL": 40,
                     "LIVEVAC": 30.0, "IGAINLO": 1.2, "IOFFLO": 0.0, "RNGPIN": 10, "RNGINV": 0,
                     "RNGMODE": 0, "RNGUPA": 2.2, "RNGDNA": 1.5, "RNGHOLD": 3000, "RNGSETMS": 20}
