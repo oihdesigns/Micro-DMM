@@ -53,6 +53,14 @@
  *      All three keep "larger metric = more open", so the threshold table and
  *      the compare are shared -- but the threshold's UNITS change with the
  *      method (V / ms / V*ms), so THRESH00..11 must be re-tuned after a switch.
+ *      HUMCANCEL (v10): a test that reads CLOSED is repeated half a mains
+ *      cycle later and decided on the averaged curve, so 50/60 Hz from a
+ *      mains-powered DUT cancels instead of passing an open lead as closed.
+ *      A test that follows another test first waits out a matching
+ *      bridge-on rest (the dip depends on it) -- see runMosfetTest().
+ *   4. Debounce: a new state must repeat STABLECOUNT passes.  A sleeping
+ *      probe that finds something only wakes the board (WAKECONF); the first
+ *      awake pass must agree before the alert.
  *
  * ── Board revisions (HWREV) ───────────────────────────────────────
  * HWREV (EEPROM config) says which PCB is under the XIAO.  It is read before
@@ -132,7 +140,7 @@
  *
  * ── EEPROM configuration ──────────────────────────────────────────
  * Nearly every tunable lives in a Config struct persisted to the RA4M1's
- * data-flash-backed EEPROM ("BHK1" at address 0, CFG_VERSION 9).  On boot the
+ * data-flash-backed EEPROM ("BHK1" at address 0, CFG_VERSION 10).  On boot the
  * stored config is validated (magic + version + CRC); an older layout is
  * migrated, anything unreadable is replaced with defaults.  Data flash is
  * not erased by a sketch upload, so a unit keeps its tuning across a reflash.
@@ -161,6 +169,7 @@
  *                       allowed (arm over USB, then unplug); ,0 = disarm
  *   !SLEEPTEST          run one sleeping-mode probe now and report it
  *   !SLEEPLOG[,0]       dump the probes made while asleep (,0 = clear)
+ *   !PAIRDUMP           both curves of the last HUMCANCEL pair ($PAIRPT rows)
  *   !FLOOR,<0-3>        park the board for a current measurement (see below)
  *   !DEEP[,0|1]         report the two-stage sleep schedule, or (while
  *                       asleep) force stage 2 (1) / back to stage 1 (0)
@@ -340,9 +349,11 @@ const float ADC_FULL_SCALE  = 16383.0f;
 // (edited by !SET, applied immediately) and persisted to EEPROM by !SAVE.
 // Layout changes REQUIRE bumping CFG_VERSION and adding a migration.
 #define CFG_MAGIC   0x42484B31UL   // "BHK1" -- the production block
-#define CFG_VERSION 9              // v9: gates, two-stage sleep, CHGINHIBIT and
-                                   //     the PAM8904 volume keys, APPENDED to v8
-                                   // (v8 added the voltage-kind classifier;
+#define CFG_VERSION 10             // v10: mains-hum pairing + wake confirmation,
+                                   //      APPENDED to v9
+                                   // (v9 gates, two-stage sleep, CHGINHIBIT and
+                                   //  the PAM8904 volume keys, appended to v8;
+                                   //  v8 added the voltage-kind classifier;
                                    //  v7 the beep pulse-shape and alert LED keys;
                                    //  v6 hwRev + threshSel + spkDiff (V3);
                                    //  v5 sleepTickMs; v4 sleepThresh[];
@@ -512,6 +523,31 @@ struct Config {
   // 12 = -8 dB, 5 = -16 dB.  Above 50 is the same waveform inverted, hence the cap.
   uint8_t  spkDuty;
 
+  // ════ v10: everything below was APPENDED to the v9 layout ════════
+  // configMigrateV9() relies on that, exactly as configMigrateV8() does.
+
+  // -- Mains-hum rejection -----------------------------------------
+  // A mains-powered DUT (wall adapter, Y-cap leakage) puts a faint 50/60 Hz on
+  // its ground.  The recovery window is ~1.5 ms of a 16.7 ms cycle, so inside
+  // it the hum is an offset plus a slope -- and an offset of the right sign
+  // hollows out an open lead's area until it reads CLOSED.  With humCancel on,
+  // any test that reads CLOSED is repeated half a mains cycle later, when the
+  // hum has inverted but the circuit's own recovery has not, and the decision
+  // is taken on the AVERAGE of the two signed curves (the hum cancels).  Half
+  // their difference is the hum itself; above humRejectV the pass is judged
+  // unreadable and reads open.  A real closed lead shorts the differential, so
+  // it carries almost no hum and is never rejected.  Open-lead tests are never
+  // repeated, so the sleeping probe's normal cost is unchanged.
+  uint8_t  humCancel;      // 1 = pair every CLOSED test with a half-cycle partner
+  uint8_t  mainsHz;        // 50 or 60: sets the half-cycle delay
+  float    humRejectV;     // hum (V at the ADC) above which a pair is discarded; 0 = never
+
+  // -- Wake confirmation -------------------------------------------
+  // 1 = a sleeping probe that finds something only WAKES the board; the alert
+  // waits for the first awake pass to read the same.  0 = the probe's single
+  // test is adopted outright (pre-v10 behaviour, skips TESTAGREE/STABLECOUNT).
+  uint8_t  wakeConfirm;
+
   uint16_t crc;            // CRC16 over everything above (must stay LAST)
 };
 
@@ -635,6 +671,12 @@ void configDefaults() {
   cfg.contVol        = 2;        // 2x: continuity repeats, so a step down
   cfg.voltVol        = 3;        // 3x: the safety alert gets everything
   cfg.spkDuty        = 50;       // full
+
+  // -- v10 -----------------------------------------------------------
+  cfg.humCancel      = 1;
+  cfg.mainsHz        = 60;
+  cfg.humRejectV     = 0.10f;    // ~1.2 V at the leads; see the Oct 2026 capture
+  cfg.wakeConfirm    = 1;
 }
 
 // CRC16-CCITT over an arbitrary byte range (shared by Config and SerialId).
@@ -763,6 +805,118 @@ static_assert(offsetof(Config, loopDelayMs) == offsetof(ConfigV8, loopDelayMs) &
               offsetof(Config, acBandV) == offsetof(ConfigV8, acBandV) &&
               offsetof(Config, hwRev) == offsetof(ConfigV8, hwRev),
               "Config v9 must keep every v8 field at its v8 offset");
+
+// ── v9 -> v10 ─────────────────────────────────────────────────────
+// v9 EXACTLY as it shipped in BlinkyHawk_Unified (Sep 2026).  Frozen -- never
+// edit.  Same scheme as v8 -> v9: v10 appends before crc, so the v9 image up
+// to its crc is a byte-identical prefix of Config.
+struct ConfigV9 {
+  uint32_t magic;
+  uint16_t version;
+  uint8_t  hwRev;
+  float    refCenterV;
+  float    refBandV;
+  float    thresh[4];
+  uint8_t  threshSel;
+  float    voltFastMult;
+  uint8_t  voltAvgSamples;
+  uint8_t  testAgree;
+  uint8_t  stableCount;
+  uint16_t settlePreUs;
+  uint8_t  settlePostMs;
+  uint8_t  negFix;
+  float    negFixV;
+  uint8_t  detectMethod;
+  float    detReturnBand;
+  uint16_t detWindowUs;
+  uint16_t detAreaStartUs;
+  uint8_t  voltClassify;
+  uint16_t acWindowMs;
+  float    acBandV;
+  uint8_t  ledEnable;
+  uint8_t  beepEnable;
+  uint8_t  bootMute;
+  uint8_t  passiveBuzzer;
+  uint8_t  spkDiff;
+  uint16_t contFreqHz;
+  uint16_t voltFreqHz;
+  uint8_t  contPulses;
+  uint8_t  voltPulses;
+  uint8_t  contRepeat;
+  uint8_t  voltRepeat;
+  uint16_t contRepeatMs;
+  uint16_t voltRepeatMs;
+  uint16_t beepMinMs;
+  uint16_t contOnMs;
+  uint16_t contHoldMs;
+  uint16_t contOffMs;
+  uint16_t voltOnMs;
+  uint16_t voltOffMs;
+  uint16_t voltNegLongMs;
+  uint8_t  voltAcPulses;
+  uint8_t  ledFloatBright;
+  uint8_t  ledClosedBright;
+  uint8_t  ledVoltBright;
+  uint16_t ledFloatMs;
+  uint16_t ledClosedMs;
+  uint16_t ledVoltMs;
+  uint16_t ledFloatPerMs;
+  uint16_t ledClosedPerMs;
+  uint16_t ledVoltPerMs;
+  float    chargeThreshV;
+  float    battEmptyV;
+  float    battFullV;
+  uint8_t  battFullPct;
+  uint16_t idleTimeoutS;
+  uint16_t sleepTickMs;
+  uint8_t  sleepPollTicks;
+  uint8_t  sleepVoltAvg;
+  uint8_t  sleepHbTicks;
+  uint8_t  sleepParkOff;
+  float    sleepThresh[4];
+  uint16_t loopDelayMs;
+  uint8_t  gAnaMode;
+  uint16_t gAnaSettleUs;
+  uint8_t  gLedMode;
+  uint16_t gLedSettleMs;
+  uint16_t deepSec;
+  float    deepHz;
+  uint8_t  deepParkOff;
+  uint8_t  chargeInhibit;
+  uint8_t  contVol;
+  uint8_t  voltVol;
+  uint8_t  spkDuty;
+  uint16_t crc;
+};
+
+// v9 ended on a byte (spkDuty) followed by a padding byte before its crc, and
+// humCancel now sits in that padding -- so the prefix is "through spkDuty", not
+// "up to crc", or the copy would overwrite humCancel with v9's padding.
+#define CFG_V9_DATA_END (offsetof(ConfigV9, spkDuty) + sizeof(uint8_t))
+static_assert(offsetof(Config, humCancel) >= CFG_V9_DATA_END &&
+              offsetof(Config, humCancel) <= offsetof(ConfigV9, crc),
+              "Config v10 must be ConfigV9 with fields appended before crc");
+static_assert(offsetof(Config, spkDuty) == offsetof(ConfigV9, spkDuty) &&
+              offsetof(Config, gAnaMode) == offsetof(ConfigV9, gAnaMode) &&
+              offsetof(Config, loopDelayMs) == offsetof(ConfigV9, loopDelayMs),
+              "Config v10 must keep every v9 field at its v9 offset");
+
+// Upgrade a stored v9 image.  Everything v9 knew is carried across, deep
+// sleep included (v9 already had it); the v10 keys start at their defaults,
+// i.e. hum pairing and wake confirmation ON -- they are the fix, not a new
+// behaviour an owner has to opt into.
+bool configMigrateV9() {
+  ConfigV9 old;
+  EEPROM.get(CFG_EEPROM_ADDR, old);
+  if (old.magic != CFG_MAGIC) return false;
+  if (old.version != 9)       return false;
+  if (old.crc != crc16_ccitt((const uint8_t *)&old, offsetof(ConfigV9, crc))) return false;
+
+  memcpy(&cfg, &old, CFG_V9_DATA_END);           // cfg holds defaults beyond this
+  cfg.magic   = CFG_MAGIC;
+  cfg.version = CFG_VERSION;
+  return true;
+}
 
 // Upgrade a stored v8 image.  hwRev is carried across (v8 knew about V3).
 // The appended fields keep their defaults -- except that the caller turns the
@@ -1629,6 +1783,14 @@ const ConfigField CFG_FIELDS[] = {
   { "DEEPPARK",    FT_U8,    &cfg.deepParkOff,     0,      2      },
   // 0 = charge detection inhibits nothing (bench supply / boost on the 5 V in)
   { "CHGINHIBIT",  FT_BOOL,  &cfg.chargeInhibit,   0,      1      },
+  // Mains-hum rejection (v10).  HUMCANCEL pairs each CLOSED test with one half
+  // a mains cycle later; HUMREJ (V at the ADC, 0 = never) discards a pair
+  // whose two halves differ by more than that.  WAKECONF 1 = a probe's wake
+  // alerts only once the first awake pass agrees.
+  { "HUMCANCEL",   FT_BOOL,  &cfg.humCancel,       0,      1      },
+  { "MAINSHZ",     FT_U8,    &cfg.mainsHz,         45,     65     },
+  { "HUMREJ",      FT_FLOAT, &cfg.humRejectV,      0.0f,   3.3f   },
+  { "WAKECONF",    FT_BOOL,  &cfg.wakeConfirm,     0,      1      },
 };
 const int CFG_FIELD_COUNT = sizeof(CFG_FIELDS) / sizeof(CFG_FIELDS[0]);
 
@@ -2049,6 +2211,32 @@ float lastRestV = 0.0f, lastTestV = 0.0f;
 float lastMetric = 0.0f;      // scalar actually compared to the threshold
 float lastReturnMs = 0.0f;    // method 1 result (ms), or window on timeout
 float lastAreaVms  = 0.0f;    // method 2 result (V*ms)
+// Mains-hum pairing (HUMCANCEL), for the last test.  pair: '-' the test was
+// not paired (it read open, or HUMCANCEL=0), 'K' paired and kept, 'R' paired
+// and rejected (hum above HUMREJ), 'X' could not pair (curve buffer too short
+// for the window -- raise REC_MAX).  metricA = the first test's own metric,
+// before the averaging, so a log shows what the pairing changed.
+char  lastPair    = '-';
+float lastHumV    = 0.0f;     // estimated hum at the ADC (V); 0 when unpaired
+float lastMetricA = 0.0f;
+// The first test's signed recovery curve (v - refCenterV), kept so the second
+// can be averaged against it sample by sample.  Both are taken by the same
+// loop, so sample i lands at (nearly) the same time from the toggle in each.
+// int16 in 0.1 mV (finer than the ~0.2 mV ADC step, +/-3.2 V of range) because
+// the sleep log already takes most of the RAM.
+const int   REC_MAX     = 128;
+const float REC_SCALE   = 10000.0f;      // counts per volt
+int16_t  recDev[REC_MAX];
+// !PAIRDUMP: the partner's raw curve and each sample's time from its toggle
+// (A's times; B's land within a few us of them), kept for the last pair only.
+int16_t  recDevB[REC_MAX];
+uint16_t recT[REC_MAX];
+int      recNB = 0;
+// When runMosfetTest() last turned the bridge back on (see its rest matching).
+unsigned long testBridgeOnUs    = 0;
+bool          testBridgeStamped = false;
+int      recN    = 0;
+bool     recFull = false;     // the window held more samples than REC_MAX
 // Voltage classifier, for $STATUS / !VTEST / $DET / the debug line.  Peaks are
 // signed excursions from cfg.refCenterV, each measured as a positive magnitude
 // on its own side, so both being large is what "AC" means.
@@ -2067,6 +2255,10 @@ int   lastVSamples  = 0;      // reads taken in the last classification window
 // is skipped anyway, so the open/closed metric is not disturbed.
 bool    detLogOn    = false;
 LeadState lastRawState = STATE_FLOAT;  // runDetection()'s undebounced result
+// WAKECONF: set by the sleeping probe that woke the board, consumed by the
+// first awake detection pass (see runDetection's debounce).
+bool      wakePending = false;
+LeadState wakeState   = STATE_FLOAT;
 uint8_t detRestN    = 0;       // resting reads taken this pass
 float   detRestMean = 0.0f, detRestMin = 0.0f, detRestMax = 0.0f;
 char    detVoltPath = '-';     // F fast trip, A averaged trip, - none, L locked on, D disabled
@@ -2250,6 +2442,8 @@ struct SleepLogEntry {
   uint8_t tested;      // 1 = the open/closed test ran (metric fields fresh)
   uint8_t rawkind;     // VoltKind classified this pass, 255 = none
   uint8_t kind;        // debounced VoltKind
+  char    pair;        // HUMCANCEL pairing of the last test: - K R X (see lastPair)
+  uint16_t hum01mV;    // its estimated hum in 0.1 mV (16 bits: the log fills RAM)
 };
 bool slogFullReads = false;    // !SLEEPLOG,2: voltagePresent() takes every read
 SleepLogEntry slog[SLOG_MAX];
@@ -2546,6 +2740,9 @@ LeadState lowPowerProbe() {
   // from voltagePresent()'s ten reads; the probe has to do it explicitly, and
   // needs it more, having just come out of standby with the ADC clock restarted.
   digitalWrite(MOSFET_PIN, MOSFET_ON);        // bridge to resting for the test
+  // micros() stood still in Standby, so a stamp from the last probe would look
+  // fresh and buy a needless wait with the rails up; this rest is its own.
+  testBridgeStamped = false;
   sleepMs(cfg.settlePostMs);                  // rest at baseline (CPU idles)
   readVoltage();                              // throwaway: flush the ADC after the wake
 
@@ -2604,6 +2801,8 @@ void slogRecord(LeadState s, bool awake) {
   e.rawkind = (awake && voltKindRawFresh) ? (uint8_t)voltKindRaw : 255;
   e.kind    = (uint8_t)voltKind;
   e.vpos    = lastVPosPeakV;  e.vneg = lastVNegPeakV;
+  e.pair    = lastPair;
+  e.hum01mV = (uint16_t)min(lastHumV * 10000.0f + 0.5f, 65535.0f);
   slogHead = (slogHead + 1) % SLOG_MAX;
   if (slogValid < SLOG_MAX) slogValid++;
   slogTotal++;
@@ -2611,7 +2810,7 @@ void slogRecord(LeadState s, bool awake) {
 
 // Detailed dump, oldest first:
 //   $SLOGD,<i>,<ms>,<src>,<raw>,<lead>,<n>,<mean>,<min>,<max>,<metric>,<retms>,
-//          <area>,<thr>,<rawkind>,<kind>,<vpos>,<vneg>
+//          <area>,<thr>,<rawkind>,<kind>,<vpos>,<vneg>,<pair>,<hum>
 // src = A awake / S light sleep / D deep.  Fields after <src> follow $DET, with
 // blanks where the pass did not produce them.
 void dumpSleepLogDetail() {
@@ -2646,7 +2845,16 @@ void dumpSleepLogDetail() {
     Serial.print(',');
     Serial.print(voltKindName((VoltKind)e.kind)); Serial.print(',');
     if (e.rawkind != 255) {
-      Serial.print(e.vpos, 4); Serial.print(','); Serial.println(e.vneg, 4);
+      Serial.print(e.vpos, 4); Serial.print(','); Serial.print(e.vneg, 4);
+    } else {
+      Serial.print(',');
+    }
+    // HUMCANCEL, appended: pair,hum (blank unless the test ran).  No metricA
+    // here, unlike $DET -- the log has no RAM to spare for it.
+    Serial.print(',');
+    if (e.tested) {
+      Serial.print(e.pair);                    Serial.print(',');
+      Serial.println(e.hum01mV / 10000.0f, 4);
     } else {
       Serial.println(',');
     }
@@ -2750,7 +2958,11 @@ void serviceLowPower() {
     LeadState s = lowPowerProbe();
     slogRecord(s, false);            // for !SLEEPLOG -- no serial while asleep
     if (s != STATE_FLOAT) {          // something is connected -- wake up properly
-      leadState = s;
+      // WAKECONF: the probe is one undebounced test, so it only wakes the
+      // board; runDetection() adopts its state once the first awake pass
+      // agrees.  (Mains hum on a floating lead used to alert from here.)
+      if (cfg.wakeConfirm) { wakePending = true; wakeState = s; }
+      else                 leadState = s;
       exitLowPower();
       return;
     }
@@ -2991,7 +3203,25 @@ VoltKind classifyVoltage() {
 //                  (or detWindowUs, expressed in ms, if it never does -> OPEN)
 //   lastAreaVms  = integral of |diff-refCentre| over [detAreaStartUs, window]
 // Returns the metric selected by cfg.detectMethod (ms for 1, V*ms for 2).
-float sampleRecovery() {
+//
+// mode REC_PLAIN: as above.  REC_STORE: the same, and the signed curve is kept
+// in recDev[] (the whole window is sampled, method 1 included, because the
+// partner needs all of it).  REC_PAIR: this is the half-cycle partner -- each
+// sample is averaged with the stored one BEFORE the metrics see it, and half
+// their difference (the hum, which inverted between the two) is accumulated
+// into lastHumV.
+static inline int16_t recPack(float v) {
+  float c = v * REC_SCALE;
+  if (c >  32767.0f) c =  32767.0f;
+  if (c < -32767.0f) c = -32767.0f;
+  return (int16_t)lroundf(c);
+}
+
+// (plain constants, not an enum: the Arduino builder's generated prototypes
+// land above any type declared this far down the file)
+const uint8_t REC_PLAIN = 0, REC_STORE = 1, REC_PAIR = 2;
+
+float sampleRecovery(uint8_t mode) {
   unsigned long t0 = micros();
   float area       = 0.0f;
   float prevDev    = 0.0f;
@@ -3001,10 +3231,26 @@ float sampleRecovery() {
   bool  returned   = false;
   float returnMs   = (float)cfg.detWindowUs / 1000.0f;   // timeout default
   unsigned long elapsed;
+  int   i      = 0;
+  float humSum = 0.0f;
+
+  if (mode == REC_STORE) recFull = false;
 
   while ((elapsed = micros() - t0) < cfg.detWindowUs) {
-    float v   = readVoltage();
-    float dev = fabs(v - cfg.refCenterV);
+    float v    = readVoltage();
+    float sdev = v - cfg.refCenterV;
+    if (mode == REC_STORE) {
+      if (i < REC_MAX) { recDev[i] = recPack(sdev); recT[i] = (uint16_t)elapsed; }
+      else recFull = true;
+    } else if (mode == REC_PAIR) {
+      if (i >= recN) break;      // partner ran a sample longer: stop on the shorter
+      float a = recDev[i] / REC_SCALE;
+      recDevB[i] = recPack(sdev);
+      humSum += fabs(sdev - a) * 0.5f;
+      sdev    = 0.5f * (sdev + a);
+    }
+    i++;
+    float dev = fabs(sdev);
     lastTestV = v;
 
     if (dev > DET_TROUGH_MIN_V) seenTrough = true;
@@ -3020,39 +3266,114 @@ float sampleRecovery() {
     if (!returned && seenTrough && dev <= cfg.detReturnBand) {
       returnMs = (float)elapsed / 1000.0f;
       returned = true;
-      if (cfg.detectMethod == 1) break;   // time method needs nothing further
+      // time method needs nothing further -- unless a partner may need the curve
+      if (cfg.detectMethod == 1 && mode == REC_PLAIN) break;
     }
 
     prevDev = dev; prevT = elapsed; havePrev = true;
   }
 
+  if (mode == REC_STORE) recN = (i < REC_MAX) ? i : REC_MAX;
+  if (mode == REC_PAIR)  { lastHumV = (i > 0) ? humSum / i : 0.0f; recNB = i; }
   lastReturnMs = returnMs;
   lastAreaVms  = area;
   return (cfg.detectMethod == 1) ? returnMs : area;
 }
 
+// One test's metric with the MOSFET already switched off: method 0's single
+// read, or the recovery transient (methods 1 & 2).  Method 0 stores/pairs its
+// one read the same way the curve methods store/pair theirs.
+float testMetric(uint8_t mode) {
+  if (cfg.detectMethod != 0) return sampleRecovery(mode);
+  // Legacy single-sample: settle, one differential read, threshold |diff|.
+  delayMicroseconds(cfg.settlePreUs);
+  float v = readVoltage();
+  if (mode == REC_STORE) { recDev[0] = recPack(v); recN = 1; recFull = false; }
+  if (mode == REC_PAIR) {
+    float a  = recDev[0] / REC_SCALE;
+    lastHumV = 0.5f * fabs(v - a);
+    v        = 0.5f * (v + a);
+  }
+  lastTestV = v;
+  return fabs(v);
+}
+
 // One open/closed test: MOSFET off, derive the metric per cfg.detectMethod,
 // MOSFET back on.  For every method a LARGER metric means MORE OPEN, so the
 // threshold comparison and DIP table are shared across methods.
-LeadState runMosfetTest() {
-  digitalWrite(MOSFET_PIN, MOSFET_OFF);
+//
+// HUMCANCEL: a test that reads CLOSED is repeated with its MOSFET toggle half a
+// mains cycle after the first one's (or 3/2, 5/2... if SETTLEPOSTMS runs past
+// the half), and the decision is taken on the averaged curve -- see the v10
+// config notes.  An open read is never repeated: hum can make an open lead look
+// closed, and the pair is what catches that; the converse costs nothing to miss
+// because the next pass tests again anyway.
+//
+// Rest matching: the dip right after the toggle is roughly twice as deep after
+// a few ms of bridge-on rest as after none (measured Oct 2026: -0.98 vs -0.52 V
+// at 3 us), so a pair is only comparable if both tests had the same rest.  The
+// partner always gets ~(half cycle - window - SETTLEPOSTMS), ~3.8 ms at 60 Hz,
+// which is already a full rest; the only test that gets LESS is one that
+// follows another test back to back (TESTAGREE > 1), so with HUMCANCEL on such
+// a test first waits out the difference.  testBridgeOnUs is stamped by this
+// function alone -- every other path rests for milliseconds before testing.
+// (testBridgeOnUs / testBridgeStamped are declared with the rec* globals.)
 
-  float metric;
-  if (cfg.detectMethod == 0) {
-    // Legacy single-sample: settle, one differential read, threshold |diff|.
-    delayMicroseconds(cfg.settlePreUs);
-    lastTestV = readVoltage();
-    metric    = fabs(lastTestV);
-  } else {
-    // Methods 1 & 2 sample the recovery from the toggle instant (no pre-settle:
-    // the early samples carry the transient the metrics are built from).
-    metric = sampleRecovery();
+LeadState runMosfetTest() {
+  bool pairable = cfg.humCancel && cfg.mainsHz;
+  lastPair = '-';
+  lastHumV = 0.0f;
+
+  if (pairable && testBridgeStamped) {
+    unsigned long need = pairRestUs();
+    while (micros() - testBridgeOnUs < need) { }
   }
-  lastMetric = metric;
+
+  digitalWrite(MOSFET_PIN, MOSFET_OFF);
+  unsigned long tOff = micros();
+  // Methods 1 & 2 sample the recovery from the toggle instant (no pre-settle:
+  // the early samples carry the transient the metrics are built from).
+  float metric = testMetric(pairable ? REC_STORE : REC_PLAIN);
+  lastMetricA  = metric;
 
   sleepMs(cfg.settlePostMs);
   digitalWrite(MOSFET_PIN, MOSFET_ON);
+  testBridgeOnUs = micros();  testBridgeStamped = true;
+
+  if (pairable && metric <= activeThreshV) {
+    if (recFull) {
+      lastPair = 'X';                    // can't average a truncated curve: as before
+    } else {
+      unsigned long half   = 500000UL / cfg.mainsHz;
+      unsigned long target = half;
+      while (micros() - tOff >= target) target += 2 * half;   // odd half-cycles only
+      while (micros() - tOff < target) { }                    // a few ms at most
+      digitalWrite(MOSFET_PIN, MOSFET_OFF);
+      metric = testMetric(REC_PAIR);
+      sleepMs(cfg.settlePostMs);
+      digitalWrite(MOSFET_PIN, MOSFET_ON);
+      testBridgeOnUs = micros();
+      if (cfg.humRejectV > 0.0f && lastHumV > cfg.humRejectV) {
+        lastPair   = 'R';
+        lastMetric = metric;
+        return STATE_FLOAT;              // unreadable -- a closed lead carries no hum
+      }
+      lastPair = 'K';
+    }
+  }
+  lastMetric = metric;
   return (metric > activeThreshV) ? STATE_FLOAT : STATE_CLOSED;
+}
+
+// The rest a half-cycle partner gets: the half cycle minus the first test's
+// window and SETTLEPOSTMS, capped at PAIR_REST_MAX_US (fully rested by then).
+const unsigned long PAIR_REST_MAX_US = 4000;
+unsigned long pairRestUs() {
+  unsigned long half = 500000UL / cfg.mainsHz;
+  unsigned long busy = (cfg.detectMethod == 0 ? cfg.settlePreUs : cfg.detWindowUs)
+                     + 1000UL * cfg.settlePostMs;
+  unsigned long r = (busy < half) ? half - busy : 0;
+  return (r < PAIR_REST_MAX_US) ? r : PAIR_REST_MAX_US;
 }
 
 // Repeat the test until the same result appears cfg.testAgree times in a row
@@ -3654,6 +3975,14 @@ void runDetection() {
   // alert and cancel an in-progress LED flash.
   static LeadState candidate   = STATE_VOLTAGE;
   static int       stableCount = 0;
+  // A wake that WAKECONF held back: the probe's reading plus this agreeing
+  // pass are two independent tests, enough to alert without the full
+  // STABLECOUNT wait.  If this pass disagrees, the wake was spurious and the
+  // ordinary debounce below carries on from here.
+  if (wakePending) {
+    wakePending = false;
+    if (rawState == wakeState) leadState = rawState;
+  }
   if (rawState == leadState) {
     candidate   = rawState;
     stableCount = 0;
@@ -3672,7 +4001,9 @@ void runDetection() {
 
 // one detection pass for the test suite.
 //   $DET,<ms>,<raw>,<lead>,<vpath>,<n>,<restMean>,<restMin>,<restMax>,
-//        <metric>,<retms>,<areavms>,<thr>,<rawkind>,<kind>,<vpos>,<vneg>
+//        <metric>,<retms>,<areavms>,<thr>,<rawkind>,<kind>,<vpos>,<vneg>,
+//        <pair>,<hum>,<metricA>
+// pair/hum/metricA: HUMCANCEL pairing of the pass's last test (see lastPair).
 // raw/lead: F float, C closed, V voltage (lead = after STABLECOUNT debounce).
 // vpath: F fast single-read trip, A averaged trip, - no voltage, L VMODE 1
 // (locked on), D VMODE 2 (disabled).  n = 0 means no resting reads were taken
@@ -3717,9 +4048,19 @@ void printDetLine(LeadState rawState) {
   Serial.print(',');
   if (voltKindRawFresh) {
     Serial.print(lastVPosPeakV, 4); Serial.print(',');
-    Serial.println(lastVNegPeakV, 4);
+    Serial.print(lastVNegPeakV, 4);
   } else {
-    Serial.println(',');
+    Serial.print(',');
+  }
+  // HUMCANCEL, appended: pair (- K R X), hum (V), metricA = the first test's
+  // own metric before averaging.  Blank when the test did not run.
+  Serial.print(',');
+  if (detTestRan) {
+    Serial.print(lastPair);          Serial.print(',');
+    Serial.print(lastHumV, 5);       Serial.print(',');
+    Serial.println(lastMetricA, 5);
+  } else {
+    Serial.println(",,");
   }
 }
 
@@ -4247,6 +4588,19 @@ void handleLine(char *line) {
       Serial.println("$OK,sleep,armed");
     }
     printStatus();
+  } else if (strcmp(cmd, "PAIRDUMP") == 0) {
+    // !PAIRDUMP  the two signed curves (V from REFCENTER) of the last HUMCANCEL
+    // pair: $PAIRPT,<i>,<us>,<A>,<B> per sample, for tuning the hum estimate.
+    Serial.print("$PAIRSTART,"); Serial.print(recNB);
+    Serial.print(",pair=");      Serial.print(lastPair);
+    Serial.print(",hum=");       Serial.println(lastHumV, 5);
+    for (int k = 0; k < recNB; k++) {
+      Serial.print("$PAIRPT,"); Serial.print(k);  Serial.print(',');
+      Serial.print(recT[k]);    Serial.print(',');
+      Serial.print(recDev[k] / REC_SCALE, 4);  Serial.print(',');
+      Serial.println(recDevB[k] / REC_SCALE, 4);
+    }
+    Serial.println("$PAIREND");
   } else if (strcmp(cmd, "SLEEPLOG") == 0) {
     // !SLEEPLOG    dump every probe the board made while it was asleep
     // !SLEEPLOG,0  clear the log
@@ -4472,13 +4826,16 @@ void setup() {
     // Newest layout first, so an image is never mis-read as something older.
     // v6-v8 carry their stored hwRev across; v5 and older pin it to 2,
     // because a config in one of those layouts means a pre-V3 unit.
-    migrated = configMigrateV8() || configMigrateV7() || configMigrateV6() ||
+    bool fromV9 = configMigrateV9();
+    migrated = fromV9 ||
+               configMigrateV8() || configMigrateV7() || configMigrateV6() ||
                configMigrateV5() || configMigrateV4() || configMigrateV3() ||
                configMigrateV2();
     // A migrated unit is a field unit with a sleep behaviour its owner knows.
     // The deep stage is new in v9, so it starts OFF for them and has to be
     // turned on deliberately (!SET,DEEPSEC,5); only a blank board gets it.
-    if (migrated) cfg.deepSec = 0;
+    // A v9 image already carries its own DEEPSEC, which is kept.
+    if (migrated && !fromV9) cfg.deepSec = 0;
     configSave();                        // persist the migration (or seed defaults)
   }
   snLoad();                              // unit serial number (separate block)
@@ -4511,7 +4868,7 @@ void setup() {
   Serial.print("SN: ");
   Serial.println(unitSN[0] ? unitSN : "(unassigned -- write with !SN,<value>)");
   Serial.print("Config: ");
-  if (loaded)        Serial.println("loaded from EEPROM (v9)");
+  if (loaded)        Serial.println("loaded from EEPROM (v10)");
   else if (migrated) Serial.println("MIGRATED from an older layout (tuning preserved; "
                                     "new keys at defaults, DEEPSEC=0)");
   else               Serial.println("defaults (EEPROM seeded)");

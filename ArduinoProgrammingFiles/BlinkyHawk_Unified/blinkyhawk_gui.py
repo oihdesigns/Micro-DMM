@@ -162,6 +162,17 @@ KEY_META = {
                                           "full mains cycle -- below 20 ms, AC can read as DC"),
     "ACBAND":       ("Detection", "num",  "Peak needed on BOTH sides to call AC (V). "
                                           "0 = use VOLTFAST x REFBAND"),
+    # Mains-hum rejection (config v10).  A wall-adapter-powered DUT carries
+    # 50/60 Hz on its ground, which can make a floating lead read CLOSED.
+    "HUMCANCEL":    ("Detection", "bool", "1 = repeat any CLOSED test half a mains cycle later and "
+                                          "decide on the averaged curve (the hum cancels). Open "
+                                          "reads are never repeated, so sleep cost is unchanged"),
+    "MAINSHZ":      ("Detection", "choice", "Local mains frequency: sets the half-cycle delay "
+                                            "(60 = 8.33 ms, 50 = 10 ms)",
+                     ["50", "60"]),
+    "HUMREJ":       ("Detection", "num",  "Discard a pair (reads open) whose estimated hum exceeds "
+                                          "this (V at the ADC; 0 = never). A closed lead carries "
+                                          "~0.003, hum on a floating lead 0.1-0.2"),
     # --- Alerts ---
     "LED":          ("Alerts", "bool", "Master enable: detection LED alerts"),
     "BEEP":         ("Alerts", "bool", "Master enable: speaker"),
@@ -242,6 +253,9 @@ KEY_META = {
     "SLEEPTHR01":   ("Low power", "num",  "Wake threshold, position 01 (0 = use THRESH01)"),
     "SLEEPTHR10":   ("Low power", "num",  "Wake threshold, position 10 (0 = use THRESH10)"),
     "SLEEPTHR11":   ("Low power", "num",  "Wake threshold, position 11 (0 = use THRESH11)"),
+    "WAKECONF":     ("Low power", "bool", "1 = a sleeping probe only wakes the board; the alert "
+                                          "waits for the first awake pass to agree. 0 = alert on "
+                                          "the probe's single test (pre-v10)"),
     # --- Deep sleep, stage 2 ---
     # The board sleeps in two stages: SLEEPSEC gets it into stage 1 (the normal
     # operating mode), then DEEPSEC of uninterrupted open leads drops it to

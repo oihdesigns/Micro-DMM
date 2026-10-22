@@ -101,18 +101,64 @@ Gate rules carried over from the bench fork:
   rail, and the next dark write drops it. That is how the heartbeat and the
   boot cue work in every mode.
 
-## Config (v9) and migration
+## Mains hum (v10)
+
+**The symptom:** a DUT powered from a wall adapter, with one probe on its GND
+and the other floating, gave a false CLOSED alert about every second. From a
+power bank it was fine. The adapter's Y-capacitor leaks 50/60 Hz onto the
+DUT's ground: on SN 20260928_003 that was 0.1–0.2 V at the ADC, about
+1–2.5 V at the leads. The recovery window (`DETWINUS`, 1.5 ms) is a tenth of a
+mains cycle, so inside it the hum is just an offset. An offset of the wrong
+sign hollows out an open lead's area until it passes as closed. Almost every
+audible alert came from a sleeping probe: one undebounced test woke the board
+straight into CLOSED.
+
+| Key | Default | Means |
+|---|---|---|
+| `HUMCANCEL` | 1 | A test that reads CLOSED is repeated half a mains cycle later. The hum has inverted by then and the circuit's recovery hasn't, so the decision is taken on the **averaged signed curve** and the hum cancels. Open reads are never repeated, so sleep cost is unchanged |
+| `MAINSHZ` | 60 | Sets the half-cycle delay: 8.33 ms at 60, 10 ms at 50 |
+| `HUMREJ` | 0.10 | Half the difference between the two curves is the hum. Above this (V at the ADC) the pair is discarded and reads open. 0 = never discard |
+| `WAKECONF` | 1 | A sleeping probe only wakes the board. The alert waits for the first awake pass to agree. 0 = the old behaviour |
+
+- **Rest matching.** The dip right after the bridge switches off is about
+  twice as deep after a few ms of bridge-on rest as after none (−0.98 vs
+  −0.52 V at 3 µs). The partner always gets about 3.8 ms of rest, so a test
+  that follows another test (`TESTAGREE` > 1) first waits for the same rest.
+  Without that, a shorted lead "measured" 0.053 V of hum; with it, 0.003 V.
+  A side effect is that `TESTAGREE` tests 2 and 3 are now rested like test 1.
+  The shorted area on USB moved from 0.079 to 0.085.
+- **A closed lead carries no differential hum**, so it is never discarded. On
+  the adapter-powered Nano, both probes on GND read CLOSED every pass, with
+  hum 0.002–0.007 V.
+- **Verified on SN 20260928_003, on battery:** one probe on the adapter's GND,
+  the other floating. Before: about 15 false alerts in 20 s. After: none. All
+  54 probes whose first test read closed averaged to 0.327–0.336, the unit's
+  clean-open area.
+- **Not covered:** the voltage-present check. A few single passes per capture
+  read "voltage" from the hum, and the debounce absorbed them.
+- `!PAIRDUMP` prints both curves of the last pair (`$PAIRPT,<i>,<µs>,<A>,<B>`,
+  V from `REFCENTER`). `$DET` gains `,<pair>,<hum>,<metricA>`, and `$SLOGD`
+  gains `,<pair>,<hum>`. `pair` is `-` (not paired), `K` (kept), `R`
+  (rejected) or `X` (curve longer than the 128-sample buffer).
+
+## Config (v10) and migration
 
 Production's block: magic `BHK1` at address 0. v9 is the v8 layout with these
 fields **appended** before `crc`: the gate modes and settles, `DEEPSEC` /
 `DEEPHZ` / `DEEPPARK`, `CHGINHIBIT`, and `CONTVOL` / `VOLTVOL` / `SPKDUTY`.
+v10 appends `HUMCANCEL` / `MAINSHZ` / `HUMREJ` / `WAKECONF` to v9.
 
+- **v9 → v10** is a prefix copy of the frozen `ConfigV9`, **through
+  `spkDuty` only**. v9 had a padding byte between `spkDuty` and `crc`, and
+  `humCancel` now sits in it. Copying up to `crc` would overwrite `humCancel`
+  with v9's padding (0) and turn the fix off on every upgraded unit. A
+  v9 unit keeps its `DEEPSEC`, and the v10 keys start at their defaults (on).
 - **v8 → v9** is a prefix copy of the frozen `ConfigV8`. `static_assert`s pin
   the layout, and a field-by-field check against production's struct was run
   when this was written.
 - v2–v7 use production's migrations unchanged.
-- **Any migrated unit starts with `DEEPSEC=0`**, so a field unit's sleep
-  behaves exactly as before. Turn the deep stage on deliberately.
+- **Any unit migrated from v8 or older starts with `DEEPSEC=0`**, so a field
+  unit's sleep behaves exactly as before. Turn the deep stage on deliberately.
 - The bench block (`BHKX` at 1024) is never read or written. A unit can still
   go back to the bench firmware and find its bench settings.
 - Keep appending future fields before `crc`, and bump the version.
@@ -140,11 +186,13 @@ doubles as a battery-side `$DET`:
 | Command | Does |
 |---|---|
 | `!SLEEPLOG,2` | Clear and arm: every awake pass takes all `VOLTAVG` reads (full rest mean/min/max), and the log **stops when full** instead of wrapping |
-| `!SLEEPLOG,D` | Detailed dump: `$SLOGD,<i>,<ms>,<src A/S/D>,<raw>,<lead>,<n>,<mean>,<min>,<max>,<metric>,<retms>,<area>,<thr>,<rawkind>,<kind>,<vpos>,<vneg>` |
+| `!SLEEPLOG,D` | Detailed dump: `$SLOGD,<i>,<ms>,<src A/S/D>,<raw>,<lead>,<n>,<mean>,<min>,<max>,<metric>,<retms>,<area>,<thr>,<rawkind>,<kind>,<vpos>,<vneg>,<pair>,<hum>` |
 | `!SLEEPLOG,0` | Clear, back to normal wrapping |
 
 The log holds 192 entries, which is the most that fits beside the core's
-fixed 8 KB heap. Awake entries are recorded only while charge does not
+fixed 8 KB heap. RAM is tight: when it overflows, the linker reports
+`.stack_dummy overlaps .heap`. That is why the log stores `hum` in 16 bits
+and the pair buffers are `int16`. Awake entries are recorded only while charge does not
 inhibit, i.e. on battery. `TestBench/BlinkyHawkTestSuite` drives all of this:
 its Auto-Tune tab measures on battery by default.
 
@@ -184,7 +232,10 @@ On this machine `arduino-cli` is at
 `C:\Program Files\Arduino IDE\resources\app\lib\backend\resources\arduino-cli.exe`
 and needs `--config-file %USERPROFILE%\.arduinoIDE\arduino-cli.yaml`.
 
-Current build: 91 KB flash (34 %), 12.7 KB RAM.
+Current build (v10): 94 KB flash (35 %), 23.0 KB RAM (70 %, mostly the sleep
+log). The Arduino builder puts its generated prototypes above any type
+declared lower down the file, so don't use a later-declared enum or struct in
+a function signature.
 
 ## Not yet verified on hardware
 
