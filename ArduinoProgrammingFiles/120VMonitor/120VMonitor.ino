@@ -2,11 +2,12 @@
  * 120VMonitor — bench 120 VAC power monitor
  *
  * ── Hardware ────────────────────────────────────────────────────────────────
- *   Seeed XIAO RA4M1 (also builds for the UNO R4 — same ADC channel mapping)
+ *   Seeed XIAO RA4M1 (also builds for the UNO R4 — same ADC channel mapping),
+ *   or Adafruit Feather STM32F405 (picked automatically; see "Feather" below)
  *   Isolation-amp front end, each output pair read pseudo-differentially:
- *     A0 (+) / A1 (−)   load current
+ *     A0 (+) / A1 (−)   load current      (Feather: A4 / A5)
  *     A2 (+) / A3 (−)   mains voltage
- *   SSD1306 128x64 OLED on I2C (D4 SDA / D5 SCL), 0x3C
+ *   SSD1306 128x64 OLED on I2C (D4 SDA / D5 SCL; Feather SDA / SCL), 0x3C
  *   Relay driver on RLYPIN (config key, default D6), driven OPEN at boot
  *   IR receiver (TSOP-style, active low) on IRPIN, default D9 — the pin needs
  *     an edge interrupt, which D10 (P109) does not have on the XIAO RA4M1
@@ -22,6 +23,13 @@
  *     HIGH first, so inrush never lands on the 0.1 ohm shunt.
  *   RNGMODE 1: HIGH only.   RNGMODE 2: LOW; an overload latches HIGH until
  *     the range is selected again.
+ *   RNGMODE 3 auto-delayed: starts LOW and stays there through short
+ *     overloads; only when |i| passes RNGUPA (or clips) in more than RNGCYC
+ *     (2) mains cycles in a row does it go HIGH. It drops back to LOW like
+ *     auto, and closing the load relay does NOT switch to HIGH first, so a
+ *     short inrush is recorded clipped on the LOW range. While LOW the
+ *     current reading tops out near 2.5 A, so TRIPPK and safe start cannot
+ *     see a fault above that until the range goes HIGH.
  *   Overload = any single scan above RNGUPA (or clipped) in the LOW range, checked inside
  *   every hot loop (the same place as TRIPPK), so the relay is told within
  *   microseconds. For RNGSETMS after a switch the reading is the relay in
@@ -49,6 +57,21 @@
  *   on the same instant and there is no inherent V/I skew to correct. PHASEUS
  *   is left for what the two front ends do differently.
  *
+ * ── Feather STM32F405 ───────────────────────────────────────────────────────
+ *   ADC1 and ADC2 run in dual injected-simultaneous mode: a scan converts V+
+ *   (ADC1) with V− (ADC2) at one instant, then I+ with I− at the next, so each
+ *   pair's two halves are sampled together and common-mode noise cancels at
+ *   any frequency rather than only below a few kHz. The current pair lands one
+ *   conversion (~1.9 us) after the voltage pair — 0.04 degrees at 60 Hz, well
+ *   inside what PHASEUS calibrates out. Injected results each have their own
+ *   data register, so an interrupt mid-scan cannot overrun anything, and
+ *   adcScan() keeps exactly the same shape as on the RA4M1.
+ *   Other differences: 12-bit ADC; current moves to A4/A5 so A0/A1 (the two
+ *   DACs) stay free for !DACTEST; the arena is the F405's 64 KB core-coupled
+ *   RAM, so a capture holds 32768 values instead of 7168; config lives in
+ *   flash (no EEPROM on the chip), and a !SAVE stalls the board for ~1-2 s
+ *   while the sector erases, so it is refused with the load relay closed.
+ *
  * ── Metering (always running, also feeds the OLED) ──────────────────────────
  *   Each window is CYCLES+2 mains cycles cut into SPC equal time buckets per
  *   cycle; every scan landing in a bucket is averaged into one stored sample.
@@ -70,6 +93,13 @@
  *   !START / !STOP            stream / stop $PWR lines
  *   !STATUS                   $STATUS line
  *   !CFG                      every key: $CFG,<key>,<value>,<min>,<max>,<help> … $CFGEND
+ *   !DUMP[,SAVED]             snapshot for copying settings between boards:
+ *                             $DUMPHDR,fw=,board=,uid=,cfgver=,src=<RAM|SAVED>,dirty=
+ *                             then $DUMP,<group>,<key>,<value> per key, $DUMPEND.
+ *                             SAVED reads the flash/EEPROM block (RAM untouched).
+ *                             group: CAL analog calibration · FUSE TRIPA/TRIPPK ·
+ *                             RANGE switching · METER window · WIRING pins ·
+ *                             UI OLED/IR remote/pixel
  *   !GET,<key>                one $CFG row
  *   !SET,<key>,<value>        RAM only, immediate
  *   !SAVE / !LOAD / !DEFAULTS EEPROM
@@ -82,19 +112,23 @@
  *        n         samples per channel (clamped to the buffer)
  *        ch        0 = V, 1 = I, 2 = both
  *        trig      0 now · 1 |I| >= level A · 2 V rising zero crossing ·
- *                  3 close the relay (inrush) · 4 |V| >= level V
+ *                  3 close the relay (inrush) · 4 |V| >= level V ·
+ *                  5 close the relay once the pretrigger is full, then
+ *                    trigger on |I| >= level A (needs ch 1/2)
  *        pre_pct   share of the buffer kept from before the trigger
- *        timeout   ms to wait for the trigger (also aborted by any serial byte)
+ *        timeout   ms to wait for the trigger (also aborted by any serial byte);
+ *                  trig 5 leaves the relay closed on a timeout unless open_after
  *        relay_us  trig 3 only: -1 = close as soon as armed, otherwise close
  *                  this many us after a rising V zero crossing (needs ch 0/2)
  *      ,<ipk_a>,<ov_a>,<ov_cyc>,<auto_ms>,<open_after>   safe start, 0 = off:
  *        ipk_a     open the relay on any sample with |i| above this
  *        ov_a      open when the per-mains-cycle Irms stays above ov_a for
- *        ov_cyc    this many consecutive cycles (counted from the trigger)
+ *        ov_cyc    this many consecutive cycles (counted from the trigger,
+ *                  or from the relay close for trig 5)
  *        auto_ms   open this long after the trigger (the relay close for
- *                  trig 3); keeps running after the capture ends, max 60 s;
- *                  any !RELAY command cancels it
- *        open_after open as soon as the capture completes
+ *                  trig 3 and 5); keeps running after the capture ends, max
+ *                  60 s; any !RELAY command cancels it
+ *        open_after open as soon as the capture completes (trig 5: or times out)
  *        Recording continues after the relay opens.
  *      ,<avg>   oversampling, 1…64 (default 1): every stored sample is the mean
  *        of avg consecutive scans, spread evenly across the sample period
@@ -102,8 +136,11 @@
  *        the averages; TRIPPK and the instant trip see every single scan.
  *      ,<rng>  -1 follow RNGMODE (V-only captures and auto-mode inrush
  *                captures go HIGH), 0 HIGH, 1 LOW
- *   !RANGE,<0|1|2>            RNGMODE (RAM): auto / HIGH / LOW
+ *   !RANGE,<0|1|2|3>          RNGMODE (RAM): auto / HIGH / LOW / auto-delayed
  *   !ABORT                    stop waiting for a trigger
+ *   !DACTEST,<hz>,<deg>[,<amp>]  Feather only: loopback test sines, A0 "voltage"
+ *                             and A1 "current" lagging it by <deg>, <amp> V peak
+ *                             about mid-rail (default 1.0); !DACTEST,0 stops
  *
  * ── Output ──────────────────────────────────────────────────────────────────
  *   $READY,120VMON,<fw>
@@ -122,6 +159,7 @@
  *        open_why: 0 none 1 instant 2 over-current 3 timer 4 end 5 TRIPPK
  *   $SAFE,<INST|OVERCURRENT|TIMER|END|TRIPPK|REMOTE>,<amps>   relay opened by itself
  *   $IR,<addr>,<cmd>   $REMOTE,<PRIMED|CANCEL|TIMEOUT|CLOSE|OPEN>
+ *   $DAC,<hz>,<deg>,<amp>   the test generator's actual settings (hz 0 = off)
  *   $CD,<hex>   4 hex digits per int16 sample, V,I interleaved when ch = 2
  *   $CEND,<n>   $CAPTMO   $RLY,<0|1>   $TRIP,<RMS|PK>,<value>,<limit>
  *   $STATUS,…   $OK,<what>   $ERR,<message>
@@ -134,20 +172,42 @@
 #include <Adafruit_NeoPixel.h>
 #include "monitor_types.h"
 
-#define FW_VERSION   "1.3"
-#define CFG_VERSION  4
+#define FW_VERSION   "1.4"
+#define CFG_VERSION  5
 #define CFG_ADDR     0
 
+#if defined(STM32F4xx)
+  #define BOARD_F405 1
+  #include <PeripheralPins.h>
+#else
+  #define BOARD_F405 0
+#endif
+
+#if BOARD_F405
+// ── analog pins: A4/A5 current, A2/A3 voltage — A0/A1 are the DACs ────────────
+static const uint8_t PIN_IP = A4, PIN_IN = A5, PIN_VP = A2, PIN_VN = A3;
+#define ADC_MAX      4095
+#define PIN_RGB      8                // the Feather's NeoPixel, PC0
+#else
 // ── analog pins: A0/A1 current, A2/A3 voltage ─────────────────────────────────
 static const uint8_t PIN_IP = A0, PIN_IN = A1, PIN_VP = A2, PIN_VN = A3;
-
 #define ADC_MAX      16383
+#endif
 #define CLIP_LO      4
 #define CLIP_HI      (ADC_MAX - 4)
 
 // ── one RAM arena, shared by metering (float pairs) and capture (int16) ───────
+#if BOARD_F405
+// The F405's 64 KB of core-coupled RAM. Only the CPU can reach it, which is
+// all this needs, and the linker script never places anything there, so it is
+// addressed directly and the main RAM is left alone. Not zeroed at boot; the
+// arena is scratch.
+#define ARENA_BYTES  65536
+static uint32_t* const g_arena = (uint32_t*)CCMDATARAM_BASE;
+#else
 #define ARENA_BYTES  14336
 static uint32_t g_arena[ARENA_BYTES / 4];
+#endif
 #define PAIR_MAX     ((uint16_t)(ARENA_BYTES / 8))      // 1792 float V/I pairs
 #define CAP_SAMPLES  ((uint16_t)(ARENA_BYTES / 2))      // 7168 int16 samples
 static float*   const g_vbuf = (float*)g_arena;
@@ -242,6 +302,11 @@ static const char* const RNG_WHY[] = { "BOOT", "CMD", "AUTO", "OVER", "CLOSE", "
 static uint8_t  g_rng = RNG_HI;
 static float    g_ig = 1.0f, g_io = 0.0f;  // the active range's IGAIN / IOFF
 static bool     g_upArmed = false;         // LOW-range overload check, raw counts
+static bool     g_upDelay = false;         // ... counted per mains cycle (RNGMODE 3)
+static bool     g_upHit = false;           // this cycle went over
+static uint8_t  g_upRun = 0;               // overloaded cycles in a row
+static int32_t  g_upVal = 0;               // the reading that went over, for the report
+static uint32_t g_upCycStart = 0, g_cycLen = 1;
 static int32_t  g_upLo, g_upHi;
 static volatile bool g_rngEvt = false;     // the range changed: hot loops rescale / restart
 static bool     g_rngLatched = false;      // RNGMODE 2 after an overload
@@ -259,44 +324,47 @@ static uint32_t g_lastDispMs = 0;
 
 #define CF(f) offsetof(Config, f)
 static const CfgField CFG_FIELDS[] = {
-  {"VGAIN",   FT_FLOAT, CF(vGain),   -1e6f, 1e6f,  "volts per ADC volt"},
-  {"VOFF",    FT_FLOAT, CF(vOff),    -2.0f, 2.0f,  "ADC volts at 0 V"},
-  {"IGAIN",   FT_FLOAT, CF(iGain),   -1e5f, 1e5f,  "HIGH range amps per ADC volt"},
-  {"IOFF",    FT_FLOAT, CF(iOff),    -2.0f, 2.0f,  "HIGH range ADC volts at 0 A"},
-  {"IGAINLO", FT_FLOAT, CF(iGainLo), -1e5f, 1e5f,  "LOW range amps per ADC volt"},
-  {"IOFFLO",  FT_FLOAT, CF(iOffLo),  -2.0f, 2.0f,  "LOW range ADC volts at 0 A"},
-  {"PHASEUS", FT_FLOAT, CF(phaseUs), -2000, 2000,  "current path delay vs voltage, us"},
-  {"ADCVREF", FT_FLOAT, CF(adcVref), 1.0f,  5.5f,  "ADC reference volts"},
-  {"MAINS",   FT_FLOAT, CF(mainsHz), 10.0f, 400.0f,"nominal mains Hz"},
-  {"SPC",     FT_U16,   CF(spc),     16,    256,   "stored samples per cycle"},
-  {"CYCLES",  FT_U8,    CF(cycles),  1,     30,    "mains cycles per window"},
-  {"TRIPA",   FT_FLOAT, CF(tripA),   0,     1000,  "relay trip Irms, 0=off"},
-  {"TRIPPK",  FT_FLOAT, CF(tripPk),  0,     1000,  "relay trip |i| peak, 0=off"},
-  {"RLYPIN",  FT_U8,    CF(relayPin),0,     21,    "relay driver pin"},
-  {"RLYINV",  FT_U8,    CF(relayInv),0,     1,     "relay active-low"},
-  {"OLED",    FT_U8,    CF(oled),    0,     1,     "drive the OLED"},
-  {"OLEDADDR",FT_U8,    CF(oledAddr),0x3C,  0x3D,  "OLED I2C address"},
-  {"OLEDROT", FT_U8,    CF(oledRot), 0,     1,     "OLED 0 = right side up, 1 = upside down"},
-  {"IRPIN",   FT_U8,    CF(irPin),   0,     21,    "IR receiver pin, 0=off"},
-  {"IRADDR",  FT_U16,   CF(irAddr),  0,     65535, "remote NEC address"},
-  {"IROK",    FT_U8,    CF(irOk),    0,     255,   "NEC cmd: prime close / open"},
-  {"IRCONF",  FT_U8,    CF(irConfirm),0,    255,   "NEC cmd: confirm close"},
-  {"IRARMMS", FT_U16,   CF(irArmMs), 500,   30000, "prime waits this long, ms"},
-  {"PIXEL",   FT_U8,    CF(pixel),   0,     255,   "NeoPixel brightness, 0=off"},
-  {"LIVEVAC", FT_FLOAT, CF(liveVac), 1,     500,   "pixel red at/above this Vrms"},
-  {"RNGPIN",  FT_U8,    CF(rngPin),  0,     21,    "range relay pin, 0=one range"},
-  {"RNGINV",  FT_U8,    CF(rngInv),  0,     1,     "0: pin HIGH = LOW range, 1: pin HIGH = HIGH"},
-  {"RNGMODE", FT_U8,    CF(rngMode), 0,     2,     "0 auto, 1 HIGH, 2 LOW"},
-  {"RNGUPA",  FT_FLOAT, CF(rngUpA),  0.05f, 1000,  "LOW: any |i| above -> HIGH"},
-  {"RNGDNA",  FT_FLOAT, CF(rngDnA),  0,     1000,  "auto: window |i| pk below -> LOW"},
-  {"RNGHOLD", FT_U16,   CF(rngHoldMs),0,    60000, "auto: ms in HIGH before LOW"},
-  {"RNGSETMS",FT_U8,    CF(rngSetMs),1,     200,   "range relay settle ms"},
+  {"VGAIN",   FT_FLOAT, CF(vGain),   -1e6f, 1e6f,  "volts per ADC volt", CG_CAL},
+  {"VOFF",    FT_FLOAT, CF(vOff),    -2.0f, 2.0f,  "ADC volts at 0 V", CG_CAL},
+  {"IGAIN",   FT_FLOAT, CF(iGain),   -1e5f, 1e5f,  "HIGH range amps per ADC volt", CG_CAL},
+  {"IOFF",    FT_FLOAT, CF(iOff),    -2.0f, 2.0f,  "HIGH range ADC volts at 0 A", CG_CAL},
+  {"IGAINLO", FT_FLOAT, CF(iGainLo), -1e5f, 1e5f,  "LOW range amps per ADC volt", CG_CAL},
+  {"IOFFLO",  FT_FLOAT, CF(iOffLo),  -2.0f, 2.0f,  "LOW range ADC volts at 0 A", CG_CAL},
+  {"PHASEUS", FT_FLOAT, CF(phaseUs), -2000, 2000,  "current path delay vs voltage, us", CG_CAL},
+  {"ADCVREF", FT_FLOAT, CF(adcVref), 1.0f,  5.5f,  "ADC reference volts", CG_CAL},
+  {"MAINS",   FT_FLOAT, CF(mainsHz), 10.0f, 400.0f,"nominal mains Hz", CG_METER},
+  {"SPC",     FT_U16,   CF(spc),     16,    256,   "stored samples per cycle", CG_METER},
+  {"CYCLES",  FT_U8,    CF(cycles),  1,     30,    "mains cycles per window", CG_METER},
+  {"TRIPA",   FT_FLOAT, CF(tripA),   0,     1000,  "relay trip Irms, 0=off", CG_FUSE},
+  {"TRIPPK",  FT_FLOAT, CF(tripPk),  0,     1000,  "relay trip |i| peak, 0=off", CG_FUSE},
+  {"RLYPIN",  FT_U8,    CF(relayPin),0,     21,    "relay driver pin", CG_WIRING},
+  {"RLYINV",  FT_U8,    CF(relayInv),0,     1,     "relay active-low", CG_WIRING},
+  {"OLED",    FT_U8,    CF(oled),    0,     1,     "drive the OLED", CG_UI},
+  {"OLEDADDR",FT_U8,    CF(oledAddr),0x3C,  0x3D,  "OLED I2C address", CG_UI},
+  {"OLEDROT", FT_U8,    CF(oledRot), 0,     1,     "OLED 0 = right side up, 1 = upside down", CG_UI},
+  {"IRPIN",   FT_U8,    CF(irPin),   0,     21,    "IR receiver pin, 0=off", CG_WIRING},
+  {"IRADDR",  FT_U16,   CF(irAddr),  0,     65535, "remote NEC address", CG_UI},
+  {"IROK",    FT_U8,    CF(irOk),    0,     255,   "NEC cmd: prime close / open", CG_UI},
+  {"IRCONF",  FT_U8,    CF(irConfirm),0,    255,   "NEC cmd: confirm close", CG_UI},
+  {"IRARMMS", FT_U16,   CF(irArmMs), 500,   30000, "prime waits this long, ms", CG_UI},
+  {"PIXEL",   FT_U8,    CF(pixel),   0,     255,   "NeoPixel brightness, 0=off", CG_UI},
+  {"LIVEVAC", FT_FLOAT, CF(liveVac), 1,     500,   "pixel red at/above this Vrms", CG_UI},
+  {"RNGPIN",  FT_U8,    CF(rngPin),  0,     21,    "range relay pin, 0=one range", CG_WIRING},
+  {"RNGINV",  FT_U8,    CF(rngInv),  0,     1,     "0: pin HIGH = LOW range, 1: pin HIGH = HIGH", CG_WIRING},
+  {"RNGMODE", FT_U8,    CF(rngMode), 0,     3,     "0 auto, 1 HIGH, 2 LOW, 3 auto-delayed", CG_RANGE},
+  {"RNGUPA",  FT_FLOAT, CF(rngUpA),  0.05f, 1000,  "LOW: any |i| above -> HIGH", CG_RANGE},
+  {"RNGDNA",  FT_FLOAT, CF(rngDnA),  0,     1000,  "auto: window |i| pk below -> LOW", CG_RANGE},
+  {"RNGHOLD", FT_U16,   CF(rngHoldMs),0,    60000, "auto: ms in HIGH before LOW", CG_RANGE},
+  {"RNGSETMS",FT_U8,    CF(rngSetMs),1,     200,   "range relay settle ms", CG_RANGE},
+  {"RNGCYC",  FT_U8,    CF(rngCyc),  0,     60,    "auto-delayed: HIGH after more than this many overloaded cycles in a row", CG_RANGE},
 };
 #undef CF
 #define CFG_FIELD_COUNT (sizeof(CFG_FIELDS) / sizeof(CFG_FIELDS[0]))
+static const char* const CFG_GROUP_NAMES[] = { "CAL", "FUSE", "RANGE", "METER", "WIRING", "UI" };
 
 // explicit prototypes — the auto-prototype pass would otherwise hoist these
 // above the types they mention
+static float fieldGetFrom(const Config& c, const CfgField& f);
 static float fieldGet(const CfgField& f);
 static void  fieldSet(const CfgField& f, float v);
 static const CfgField* findField(const char* key);
@@ -336,10 +404,15 @@ void configDefaults() {
   cfg.rngUpA    = 2.2f;            // just under the 0.1 ohm shunt's 2.5 A full scale
   cfg.rngDnA    = 1.5f;
   cfg.rngHoldMs = 3000;
+#if BOARD_F405
+  cfg.rngPin    = 5;               // Feather: range relay on D5 (relay D6, IR D9 as above)
+#else
   cfg.rngPin    = 0;               // single range until the relay is wired
+#endif
   cfg.rngInv    = 0;
   cfg.rngMode   = 0;
   cfg.rngSetMs  = 20;
+  cfg.rngCyc    = 2;
 }
 
 static uint16_t crc16_ccitt(const uint8_t* p, size_t n) {
@@ -355,13 +428,34 @@ static uint16_t configCrc(const Config& c) {
   return crc16_ccitt((const uint8_t*)&c, offsetof(Config, crc));
 }
 
+#if BOARD_F405
+// The F405 has no EEPROM; the core emulates one in the last flash sector
+// (128 KB), and its EEPROM.put() flushes — erases that whole sector — once
+// per byte. The block goes through the core's RAM copy instead and is
+// flashed once.
+static void eeRead(void* p, size_t n) {
+  eeprom_buffer_fill();
+  for (size_t k = 0; k < n; k++) ((uint8_t*)p)[k] = eeprom_buffered_read_byte(CFG_ADDR + k);
+}
+static void eeWrite(const void* p, size_t n) {
+  eeprom_buffer_fill();
+  for (size_t k = 0; k < n; k++) eeprom_buffered_write_byte(CFG_ADDR + k, ((const uint8_t*)p)[k]);
+  eeprom_buffer_flush();
+}
+#define EE_GET(x) eeRead(&(x), sizeof(x))
+#define EE_PUT(x) eeWrite(&(x), sizeof(x))
+#else
+#define EE_GET(x) EEPROM.get(CFG_ADDR, x)
+#define EE_PUT(x) EEPROM.put(CFG_ADDR, x)
+#endif
+
 static bool g_migrated = false;
 static bool g_migratedLo = false;          // came from v1/v2: IGAINLO was seeded
 
 // A v1 block keeps its calibration; the new fields take their defaults.
 static bool configMigrateV1() {
   ConfigV1 o;
-  EEPROM.get(CFG_ADDR, o);
+  EE_GET(o);
   if (memcmp(o.magic, "M120", 4) != 0 || o.version != 1 || o.size != sizeof(ConfigV1) ||
       o.crc != crc16_ccitt((const uint8_t*)&o, offsetof(ConfigV1, crc))) return false;
   configDefaults();
@@ -372,11 +466,26 @@ static bool configMigrateV1() {
   return true;
 }
 
+// A v4 block is the v5 layout minus rngCyc. Copy only up to rngCyc: the v4
+// crc sits a padding byte later.
+static_assert(offsetof(ConfigV4, oledRot) + 1 == offsetof(Config, rngCyc), "ConfigV4 must prefix Config");
+static bool configMigrateV4() {
+  ConfigV4 o;
+  EE_GET(o);
+  if (memcmp(o.magic, "M120", 4) != 0 || o.version != 4 || o.size != sizeof(ConfigV4) ||
+      o.crc != crc16_ccitt((const uint8_t*)&o, offsetof(ConfigV4, crc))) return false;
+  configDefaults();
+  memcpy(&cfg, &o, offsetof(Config, rngCyc));
+  cfg.version = CFG_VERSION;
+  cfg.size = sizeof(Config);
+  return true;
+}
+
 // A v3 block is the v4 layout minus oledRot at the end.
 static_assert(offsetof(ConfigV3, crc) == offsetof(Config, oledRot), "ConfigV3 must prefix Config");
 static bool configMigrateV3() {
   ConfigV3 o;
-  EEPROM.get(CFG_ADDR, o);
+  EE_GET(o);
   if (memcmp(o.magic, "M120", 4) != 0 || o.version != 3 || o.size != sizeof(ConfigV3) ||
       o.crc != crc16_ccitt((const uint8_t*)&o, offsetof(ConfigV3, crc))) return false;
   configDefaults();
@@ -389,7 +498,7 @@ static bool configMigrateV3() {
 // A v2 block is the v3 layout minus the range fields at the end.
 static bool configMigrateV2() {
   ConfigV2 o;
-  EEPROM.get(CFG_ADDR, o);
+  EE_GET(o);
   if (memcmp(o.magic, "M120", 4) != 0 || o.version != 2 || o.size != sizeof(ConfigV2) ||
       o.crc != crc16_ccitt((const uint8_t*)&o, offsetof(ConfigV2, crc))) return false;
   configDefaults();
@@ -401,10 +510,10 @@ static bool configMigrateV2() {
 
 static bool configLoad() {
   Config t;
-  EEPROM.get(CFG_ADDR, t);
+  EE_GET(t);
   if (memcmp(t.magic, "M120", 4) != 0 || t.version != CFG_VERSION ||
       t.size != sizeof(Config) || t.crc != configCrc(t)) {
-    if (configMigrateV3()) { g_migrated = true; return true; }
+    if (configMigrateV4() || configMigrateV3()) { g_migrated = true; return true; }
     if (!configMigrateV2() && !configMigrateV1()) return false;
     // the LOW range starts as the HIGH calibration scaled by the shunt ratio
     cfg.iGainLo = cfg.iGain * 0.1f;
@@ -420,14 +529,14 @@ static bool configLoad() {
 static bool configSave();
 static bool configSave() {
   cfg.crc = configCrc(cfg);
-  EEPROM.put(CFG_ADDR, cfg);
+  EE_PUT(cfg);
   Config t;
-  EEPROM.get(CFG_ADDR, t);
+  EE_GET(t);
   return memcmp(&t, &cfg, sizeof(Config)) == 0;
 }
 
-static float fieldGet(const CfgField& f) {
-  const uint8_t* b = (const uint8_t*)&cfg + f.offset;
+static float fieldGetFrom(const Config& c, const CfgField& f) {
+  const uint8_t* b = (const uint8_t*)&c + f.offset;
   switch (f.type) {
     case FT_FLOAT: { float v; memcpy(&v, b, 4); return v; }
     case FT_U8:    return (float)*b;
@@ -435,6 +544,7 @@ static float fieldGet(const CfgField& f) {
   }
   return NAN;
 }
+static float fieldGet(const CfgField& f) { return fieldGetFrom(cfg, f); }
 
 static void fieldSet(const CfgField& f, float v) {
   if (v < f.lo) v = f.lo;
@@ -477,6 +587,93 @@ static void cycInit() {
 
 // ═══ ADC, register level ══════════════════════════════════════════════════════
 
+#if BOARD_F405
+
+// Sample time code for every channel: 2 = 28 ADC clocks, plus 12 to convert,
+// so each simultaneous pair takes ~1.9 us at the 21 MHz ADC clock.
+#define F4_SMP 2
+
+static int32_t g_rIP, g_rIN, g_rVP, g_rVN;   // the last scan's four conversions
+static uint32_t g_mask = 0;
+
+static uint8_t adcChannelOf(uint8_t pin) {
+  return (uint8_t)STM_PIN_CHANNEL(pinmap_function(digitalPinToPinName(pin), PinMap_ADC));
+}
+
+// analogRead() is never called on this board, so the core never touches the
+// ADCs and they are set up here from scratch.
+static void adcInit() {
+  RCC->APB2ENR |= RCC_APB2ENR_ADC1EN | RCC_APB2ENR_ADC2EN;
+  (void)RCC->APB2ENR;
+  pinMode(PIN_IP, INPUT_ANALOG); pinMode(PIN_IN, INPUT_ANALOG);
+  pinMode(PIN_VP, INPUT_ANALOG); pinMode(PIN_VN, INPUT_ANALOG);
+
+  CH_IP = adcChannelOf(PIN_IP); CH_IN = adcChannelOf(PIN_IN);
+  CH_VP = adcChannelOf(PIN_VP); CH_VN = adcChannelOf(PIN_VN);
+  MASK_I   = (1UL << CH_IP) | (1UL << CH_IN);
+  MASK_V   = (1UL << CH_VP) | (1UL << CH_VN);
+  MASK_ALL = MASK_I | MASK_V;
+
+  // ADC clock: the smallest PCLK2 divider that stays within 36 MHz
+  static const uint8_t DIVS[4] = { 2, 4, 6, 8 };
+  uint32_t pclk2 = HAL_RCC_GetPCLK2Freq();
+  uint8_t d = 0;
+  while (d < 3 && pclk2 / DIVS[d] > 36000000UL) d++;
+
+  ADC1->CR2 = 0;
+  ADC2->CR2 = 0;
+  ADC123_COMMON->CCR = ((uint32_t)d << ADC_CCR_ADCPRE_Pos)
+                     | (5U << ADC_CCR_MULTI_Pos);   // dual, injected simultaneous
+  const uint8_t ch[4] = { CH_IP, CH_IN, CH_VP, CH_VN };
+  uint32_t smpr1 = 0, smpr2 = 0;
+  for (uint8_t k = 0; k < 4; k++) {
+    if (ch[k] < 10) smpr2 |= (uint32_t)F4_SMP << (3 * ch[k]);
+    else            smpr1 |= (uint32_t)F4_SMP << (3 * (ch[k] - 10));
+  }
+  ADC1->SMPR1 = smpr1;  ADC2->SMPR1 = smpr1;
+  ADC1->SMPR2 = smpr2;  ADC2->SMPR2 = smpr2;
+  ADC1->CR1 = ADC_CR1_SCAN;      // 12 bit; SCAN lets the injected group run two ranks
+  ADC2->CR1 = ADC_CR1_SCAN;
+  ADC2->CR2 = ADC_CR2_ADON;      // the slave starts with the master
+  ADC1->CR2 = ADC_CR2_ADON;      // software start (JEXTEN = 0)
+  delayMicroseconds(5);          // tSTAB
+}
+
+// ADC1 converts the + pins and ADC2 the − pins. With two ranks the injected
+// sequence runs JSQ3 then JSQ4 (results in JDR1, JDR2); with one, JSQ4 alone.
+static inline void adcMask(uint32_t m) {
+  g_mask = m;
+  uint32_t a, b;
+  if (m == MASK_V)      { a = (uint32_t)CH_VP << 15; b = (uint32_t)CH_VN << 15; }
+  else if (m == MASK_I) { a = (uint32_t)CH_IP << 15; b = (uint32_t)CH_IN << 15; }
+  else {
+    a = (1UL << 20) | ((uint32_t)CH_VP << 10) | ((uint32_t)CH_IP << 15);
+    b = (1UL << 20) | ((uint32_t)CH_VN << 10) | ((uint32_t)CH_IN << 15);
+  }
+  ADC1->JSQR = a;
+  ADC2->JSQR = b;
+}
+
+static inline void adcScan() {
+  ADC1->SR = 0;
+  ADC2->SR = 0;
+  ADC1->CR2 |= ADC_CR2_JSWSTART;
+  while (!(ADC1->SR & ADC_SR_JEOC)) {}
+  while (!(ADC2->SR & ADC_SR_JEOC)) {}
+  if (g_mask == MASK_V)      { g_rVP = ADC1->JDR1; g_rVN = ADC2->JDR1; }
+  else if (g_mask == MASK_I) { g_rIP = ADC1->JDR1; g_rIN = ADC2->JDR1; }
+  else { g_rVP = ADC1->JDR1; g_rIP = ADC1->JDR2; g_rVN = ADC2->JDR1; g_rIN = ADC2->JDR2; }
+}
+
+static inline int32_t rd(uint8_t ch) {
+  if (ch == CH_VP) return g_rVP;
+  if (ch == CH_VN) return g_rVN;
+  if (ch == CH_IP) return g_rIP;
+  return g_rIN;
+}
+
+#else   // RA4M1
+
 static uint8_t adcChannelOf(uint8_t pin) {
   return (uint8_t)GET_CHANNEL(getPinCfgs(digitalPinToAnalogPin(pin), PIN_CFG_REQ_ADC)[0]);
 }
@@ -511,6 +708,8 @@ static inline void adcScan() {
 }
 
 static inline int32_t rd(uint8_t ch) { return (int32_t)R_ADC0->ADDR[ch]; }
+
+#endif
 
 // Both pairs from the last scan, clip flags from the individual conversions
 // (on a pseudo-differential pair a difference of zero could be two rails).
@@ -567,6 +766,8 @@ static void armPeakTrip() {
     g_pkHi = (int32_t)ceilf(c0 + dc);
   }
   g_upArmed = (g_rng == RNG_LO && cfg.iGainLo != 0.0f);
+  g_upDelay = g_upArmed && cfg.rngMode == 3;
+  g_cycLen = (uint32_t)((float)SystemCoreClock / cfg.mainsHz);
   if (g_upArmed) {
     float c0 = cfg.iOffLo / l;
     float dc = fabsf(cfg.rngUpA / cfg.iGainLo) / l;
@@ -577,6 +778,30 @@ static void armPeakTrip() {
 
 static void rangeOverload(int32_t icounts);
 
+// auto-delayed: note an over-threshold (or clipped) LOW reading for this cycle
+static inline void rangeUpHit(int32_t icounts) { g_upHit = true; g_upVal = icounts; }
+
+// auto-delayed: at each mains-cycle boundary, count overloaded cycles in a
+// row and go HIGH once there are more than RNGCYC
+static inline void rangeUpCycle() {
+  uint32_t now = cyc(), el = now - g_upCycStart;
+  if (el < g_cycLen) return;
+  if (el >= 2 * g_cycLen) {              // no samples for a while: count afresh
+    g_upRun = 0; g_upHit = false; g_upCycStart = now;
+    return;
+  }
+  g_upCycStart += g_cycLen;
+  bool hit = g_upHit;
+  g_upHit = false;
+  if (!hit) { g_upRun = 0; return; }
+  if (++g_upRun > cfg.rngCyc) { g_upRun = 0; rangeOverload(g_upVal); }
+}
+
+// a clipped LOW reading: an overload now, or one more hit when delayed
+static inline void rangeClip(int32_t icounts) {
+  if (g_upDelay) rangeUpHit(icounts); else rangeOverload(icounts);
+}
+
 // true while the range relay is still moving: the current reading is junk
 static inline bool tripBlanked() {
   if (g_blank && (int32_t)(cyc() - g_blankEnd) >= 0) g_blank = false;
@@ -584,10 +809,17 @@ static inline bool tripBlanked() {
 }
 
 // Called from the hot loops with every raw current reading: a LOW-range
-// overload goes HIGH at once; TRIPPK opens the load relay at once. Both are
-// reported afterwards.
+// overload goes HIGH at once (auto-delayed: after RNGCYC cycles of it);
+// TRIPPK opens the load relay at once. Both are reported afterwards.
 static inline void checkPeak(int32_t icounts) {
-  if (g_upArmed && (icounts < g_upLo || icounts > g_upHi)) { rangeOverload(icounts); return; }
+  if (g_upArmed && (icounts < g_upLo || icounts > g_upHi)) {
+    if (!g_upDelay) { rangeOverload(icounts); return; }
+    rangeUpHit(icounts);
+  }
+  if (g_upDelay) {
+    rangeUpCycle();
+    if (!g_upArmed) return;              // just went HIGH
+  }
   if (g_pkArmed && g_relay && (icounts < g_pkLo || icounts > g_pkHi) && !tripBlanked()) {
     relayDrive(false);
     g_relay = false;
@@ -648,6 +880,7 @@ static void rangeSet(uint8_t r, uint8_t why, bool wait) {
   if (!cfg.rngPin) r = RNG_HI;
   if (r == g_rng) { rngCal(); return; }
   g_rng = r;
+  g_upRun = 0; g_upHit = false; g_upCycStart = cyc();
   rngDrive(r);
   rngCal();
   rngBlank();
@@ -662,6 +895,7 @@ static void rangeRefresh(uint8_t why) {
   uint8_t r = g_rng;
   if (!cfg.rngPin || cfg.rngMode == 1) r = RNG_HI;
   else if (cfg.rngMode == 2) r = g_rngLatched ? RNG_HI : RNG_LO;
+  else if (cfg.rngMode == 3 && why == RW_BOOT) r = RNG_LO;     // auto-delayed starts LOW
   rangeSet(r, why, false);
 }
 
@@ -672,9 +906,9 @@ static void rangeBeforeClose() {
   g_overAt = millis();
 }
 
-// auto mode, after a clean window: back to LOW once it has been quiet long enough
+// auto / auto-delayed, after a clean window: back to LOW once it has been quiet long enough
 static void rangeAuto(const PowerResult& r) {
-  if (!cfg.rngPin || cfg.rngMode != 0 || g_rng != RNG_HI) return;
+  if (!cfg.rngPin || (cfg.rngMode != 0 && cfg.rngMode != 3) || g_rng != RNG_HI) return;
   uint32_t now = millis();
   if ((r.flags & FLG_ICLIP) || r.ipk + fabsf(r.idc) >= cfg.rngDnA) { g_overAt = now; return; }
   if (now - g_overAt < cfg.rngHoldMs || now - g_rngAt < cfg.rngHoldMs) return;
@@ -732,7 +966,7 @@ uint16_t acquireWindow(uint16_t maxn, uint32_t dur_us, float& dt_s,
       sv += pairV(flags);
       si += i;
       checkPeak(i);
-      if (g_upArmed && (flags & FLG_ICLIP)) rangeOverload(i);   // LOW clipped below RNGUPA
+      if (g_upArmed && (flags & FLG_ICLIP)) rangeClip(i);   // LOW clipped below RNGUPA
       c++;
     } while ((int32_t)(cyc() - deadline) < 0 && c < 4000);
     uint32_t b = cyc();
@@ -982,7 +1216,7 @@ void measureDC(uint32_t ms) {
     adcScan();
     int32_t v = pairV(flags), i = pairI(flags);
     checkPeak(i);
-    if (g_upArmed && (flags & FLG_ICLIP)) rangeOverload(i);
+    if (g_upArmed && (flags & FLG_ICLIP)) rangeClip(i);
     sv += v; si += i; sv2 += (double)v * v; si2 += (double)i * i;
     n++;
   }
@@ -1095,7 +1329,7 @@ void runCapture() {
     Serial.println(F("$ERR,that trigger needs the voltage channel (ch 0 or 2)"));
     return;
   }
-  if (q.trig == 1 && q.ch == 0) {
+  if ((q.trig == 1 || q.trig == 5) && q.ch == 0) {
     Serial.println(F("$ERR,current trigger needs the current channel (ch 1 or 2)"));
     return;
   }
@@ -1112,11 +1346,12 @@ void runCapture() {
   // range: V-only can't watch for an overload, so it always goes HIGH; an
   // auto-mode inrush capture goes HIGH like any other close
   int8_t want = q.rng;
-  if (want < 0) want = (q.trig == 3 && cfg.rngMode == 0) ? RNG_HI : g_rng;
+  const bool closes = (q.trig == 3 || q.trig == 5);
+  if (want < 0) want = (closes && cfg.rngMode == 0) ? RNG_HI : g_rng;
   if (q.ch == 0) want = RNG_HI;
   if (cfg.rngPin && want != g_rng) rangeSet((uint8_t)want, RW_CAP, true);
   { uint32_t since = millis() - g_rngAt; if (since < cfg.rngSetMs) delay(cfg.rngSetMs - since); }
-  if (q.trig == 3) g_overAt = millis();
+  if (closes) g_overAt = millis();
   g_rngEvt = false;
   rangeReport();
   const uint8_t rng0 = g_rng;
@@ -1158,8 +1393,11 @@ void runCapture() {
   uint32_t cycLen = (uint32_t)((float)SystemCoreClock / cfg.mainsHz);
   uint64_t ovSum = 0; uint32_t ovN = 0, ovStart = cyc(); uint16_t ovRun = 0;
   float ovWorst = 0;
+  // auto-open: 64-bit, advanced a sample at a time — at 168 MHz (F405) the
+  // 32-bit cycle counter wraps every 25 s, inside the 60 s this allows
   bool autoArmed = false;
-  uint32_t autoStart = 0, autoCyc = q.auto_ms * 1000UL * CYC_PER_US;
+  uint32_t autoPrev = 0;
+  uint64_t autoEl = 0, autoCyc = (uint64_t)q.auto_ms * 1000ULL * CYC_PER_US;
   int32_t openAt = -1; uint8_t openWhy = SAFE_NONE; float openVal = 0;
   bool wasClosed = g_relay;
   int32_t rngAt = -1;                   // sample where an overload went HIGH
@@ -1181,7 +1419,7 @@ void runCapture() {
       if (q.ch != 0) {
         int32_t r = pairI(flags);
         checkPeak(r);
-        if (g_upArmed && (flags & FLG_ICLIP)) rangeOverload(r);
+        if (g_upArmed && (flags & FLG_ICLIP)) rangeClip(r);
         si += r;
         if (labs(r - i0) > labs(iDev)) iDev = r - i0;
       }
@@ -1215,9 +1453,15 @@ void runCapture() {
     if (trigAt < 0) {
       if (count > pre_n) {
         bool fire = false;
+        if (q.trig == 5 && relayAt < 0) {  // close once the pretrigger is full, then wait for the level
+          g_tripLatch = false;
+          relayDrive(true);
+          g_relay = true;
+          relayAt = (int32_t)(count - 1);
+        }
         switch (q.trig) {
           case 0: fire = true; break;
-          case 1: fire = labs(i - i0) >= lvlI; break;
+          case 1: case 5: fire = labs(i - i0) >= lvlI; break;
           case 4: fire = labs(v - v0) >= lvlV; break;
           case 2:
             if (v < v0 - hystV) vLow = true;
@@ -1251,10 +1495,12 @@ void runCapture() {
       }
     }
     // ── safe start ──
-    if (trigAt == (int32_t)(count - 1)) {
-      ovStart = ts; ovSum = 0; ovN = 0; ovRun = 0;     // cycles count from the trigger / close
-      if (q.auto_ms) { autoArmed = true; autoStart = ts; }
+    // cycles count from the trigger, or from the close when the trigger follows it
+    if ((q.trig == 5 ? relayAt : trigAt) == (int32_t)(count - 1)) {
+      ovStart = ts; ovSum = 0; ovN = 0; ovRun = 0;
+      if (q.auto_ms) { autoArmed = true; autoPrev = ts; autoEl = 0; }
     }
+    if (autoArmed) { autoEl += (uint32_t)(ts - autoPrev); autoPrev = ts; }
     if (g_relay) {
       wasClosed = true;
       uint8_t why = SAFE_NONE;
@@ -1273,7 +1519,7 @@ void runCapture() {
           }
         }
       }
-      if (!why && autoArmed && (uint32_t)(ts - autoStart) >= autoCyc) why = SAFE_TIMER;
+      if (!why && autoArmed && autoEl >= autoCyc) why = SAFE_TIMER;
       if (!why && ir_ready && irOpenRequested()) why = SAFE_REMOTE;
       if (why) {
         relayDrive(false); g_relay = false;
@@ -1291,14 +1537,15 @@ void runCapture() {
     }
   }
   reportPeakTrip();
-  if (q.trig == 3 && relayAt >= 0) Serial.println(F("$RLY,1"));
-  if (!timedOut && q.open_after && g_relay) {
+  if (relayAt >= 0) Serial.println(F("$RLY,1"));
+  // trig 5 has closed the relay before its trigger, so open_after covers a timeout too
+  if ((!timedOut || q.trig == 5) && q.open_after && g_relay) {
     relayDrive(false); g_relay = false;
     openAt = (int32_t)(count - 1); openWhy = SAFE_END; autoArmed = false;
   }
   if (autoArmed && g_relay) {            // capture ended first: keep the timer running
-    uint32_t el = (uint32_t)(cyc() - autoStart);
-    uint32_t left_us = el >= autoCyc ? 0 : (autoCyc - el) / CYC_PER_US;
+    uint64_t el = autoEl + (uint32_t)(cyc() - autoPrev);
+    uint32_t left_us = el >= autoCyc ? 0 : (uint32_t)((autoCyc - el) / CYC_PER_US);
     g_autoOffAt = millis() + (left_us + 999) / 1000;
     g_autoOffArmed = true;
   }
@@ -1337,7 +1584,7 @@ void runCapture() {
   Serial.print(ioS / l, 3); Serial.print(',');
   Serial.print(trigAt >= 0 ? (long)(trigAt - (int32_t)first_abs) : -1L); Serial.print(',');
   Serial.print(flags); Serial.print(',');
-  Serial.print(relayAt >= 0 ? (long)(relayAt - (int32_t)first_abs) : -1L); Serial.print(',');
+  Serial.print(relayAt >= (int32_t)first_abs ? (long)(relayAt - (int32_t)first_abs) : -1L); Serial.print(',');
   Serial.print(openAt >= (int32_t)first_abs ? (long)(openAt - (int32_t)first_abs) : -1L); Serial.print(',');
   Serial.print(openWhy); Serial.print(',');
   Serial.print(q.avg); Serial.print(',');
@@ -1405,10 +1652,12 @@ static void irInit() {
   if (g_irAttached >= 0) { detachInterrupt(digitalPinToInterrupt(g_irAttached)); g_irAttached = -1; }
   ir_ready = false; ir_n = -1; g_primed = false;
   if (!cfg.irPin) return;
+#if !BOARD_F405                  // every F405 pin can take an edge interrupt
   if (getPinCfgs(cfg.irPin, PIN_CFG_REQ_INTERRUPT)[0] == 0) {
     Serial.println(F("$ERR,IRPIN has no edge interrupt (D10 doesn't) - try D9, D8 or D7"));
     return;
   }
+#endif
   pinMode(cfg.irPin, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(cfg.irPin), irIsr, FALLING);
   g_irAttached = cfg.irPin;
@@ -1535,6 +1784,83 @@ static void drawMeter() {
   display.display();
 }
 
+// ═══ DAC loopback test (Feather) ══════════════════════════════════════════════
+
+#if BOARD_F405
+#define DAC_PTS 128
+static uint32_t g_dacTab[DAC_PTS];       // DHR12RD words: DAC2 in 27:16, DAC1 in 11:0
+static float g_dacHz = 0, g_dacDeg = 0, g_dacAmp = 0;
+
+// Timers on an APB bus run at twice the bus clock whenever its prescaler is
+// not 1 (on the Feather APB1 is /4, so TIM4 ticks at 84 MHz).
+static uint32_t apb1TimerClock() {
+  uint32_t pclk = HAL_RCC_GetPCLK1Freq();
+  return ((RCC->CFGR & RCC_CFGR_PPRE1) == RCC_CFGR_PPRE1_DIV1) ? pclk : 2UL * pclk;
+}
+
+void dacTestStop() {
+  TIM4->CR1 = 0;
+  DMA1_Stream5->CR = 0;
+  DAC->CR = 0;
+  g_dacHz = 0;
+}
+
+// Two sines for checking the whole chain without mains: A0 is the "voltage",
+// A1 the "current" lagging it by deg, each amp volts peak about mid-rail, so
+// the readings come back with PF = cos(deg). Jumper A0 to A2 (V+) and A1 to A4
+// (I+), hold A3 and A5 at mid-rail with a divider, and disconnect the
+// isolation amps. TIM4 updates both DACs on the same edge from one DMA stream
+// feeding DHR12RD, so the phase between them is exact. No interrupts.
+void dacTestStart(float hz, float deg, float amp) {
+  dacTestStop();
+  RCC->APB1ENR |= RCC_APB1ENR_DACEN | RCC_APB1ENR_TIM4EN;
+  RCC->AHB1ENR |= RCC_AHB1ENR_DMA1EN;
+  (void)RCC->AHB1ENR;
+  pinMode(A0, INPUT_ANALOG);
+  pinMode(A1, INPUT_ANALOG);
+
+  float a = amp / cfg.adcVref * 4096.0f, ph = deg * (float)M_PI / 180.0f;
+  for (uint16_t k = 0; k < DAC_PTS; k++) {
+    float w = 2.0f * (float)M_PI * (float)k / (float)DAC_PTS;
+    long v = constrain(lroundf(2048.0f + a * sinf(w)),      0L, 4095L);
+    long i = constrain(lroundf(2048.0f + a * sinf(w - ph)), 0L, 4095L);
+    g_dacTab[k] = ((uint32_t)i << 16) | (uint32_t)v;
+  }
+
+  DMA1->HIFCR = 0xF40U;                              // every stream 5 flag
+  DMA1_Stream5->PAR  = (uint32_t)&DAC->DHR12RD;
+  DMA1_Stream5->M0AR = (uint32_t)g_dacTab;
+  DMA1_Stream5->NDTR = DAC_PTS;
+  DMA1_Stream5->FCR  = 0;
+  DMA1_Stream5->CR   = (7U << DMA_SxCR_CHSEL_Pos)    // channel 7 = DAC1
+                     | (2U << DMA_SxCR_MSIZE_Pos) | (2U << DMA_SxCR_PSIZE_Pos)
+                     | DMA_SxCR_MINC | DMA_SxCR_CIRC
+                     | (1U << DMA_SxCR_DIR_Pos);     // memory to peripheral
+  DMA1_Stream5->CR  |= DMA_SxCR_EN;
+
+  DAC->CR = DAC_CR_EN1 | DAC_CR_TEN1 | (5U << DAC_CR_TSEL1_Pos) | DAC_CR_DMAEN1
+          | DAC_CR_EN2 | DAC_CR_TEN2 | (5U << DAC_CR_TSEL2_Pos);   // TSEL 5 = TIM4
+
+  uint32_t clk = apb1TimerClock();
+  uint32_t ticks = (uint32_t)((float)clk / (hz * DAC_PTS) + 0.5f);
+  if (ticks < 2) ticks = 2;
+  uint32_t psc = (ticks - 1) / 65536UL;
+  uint32_t arr = (uint32_t)((float)ticks / (float)(psc + 1) + 0.5f) - 1;
+  TIM4->CR1 = 0;
+  TIM4->CR2 = 0;                       // keep TRGO quiet while the update loads PSC
+  TIM4->PSC = psc;
+  TIM4->ARR = arr;
+  TIM4->EGR = TIM_EGR_UG;
+  TIM4->SR  = 0;
+  TIM4->CR2 = 2U << TIM_CR2_MMS_Pos;   // TRGO = update
+  TIM4->CR1 = TIM_CR1_CEN;
+
+  g_dacHz  = (float)clk / ((float)(psc + 1) * (float)(arr + 1)) / (float)DAC_PTS;
+  g_dacDeg = deg;
+  g_dacAmp = amp;
+}
+#endif
+
 // ═══ commands ═════════════════════════════════════════════════════════════════
 
 static void printStatus() {
@@ -1554,8 +1880,66 @@ static void printStatus() {
   Serial.print(F(",rng=")); Serial.print(g_rng);
   Serial.print(F(",rngmode=")); Serial.print(cfg.rngMode);
   Serial.print(F(",rngpin=")); Serial.print(cfg.rngPin);
-  Serial.print(F(",wh=")); Serial.println((float)g_wh, 6);
+  Serial.print(F(",wh=")); Serial.print((float)g_wh, 6);
+#if BOARD_F405
+  Serial.print(F(",board=F405,dac=")); Serial.println(g_dacHz, 3);
+#else
+  Serial.println(F(",board=RA4M1"));
+#endif
 }
+
+// The chip's factory unique ID as hex, so a snapshot names the board it came from.
+static void printUid() {
+#if BOARD_F405
+  uint32_t w[3] = { HAL_GetUIDw0(), HAL_GetUIDw1(), HAL_GetUIDw2() };
+  const uint8_t n = 3;
+#else
+  const uint32_t* w = R_BSP_UniqueIdGet()->unique_id_words;
+  const uint8_t n = 4;
+#endif
+  for (uint8_t k = 0; k < n; k++)
+    for (int8_t s = 28; s >= 0; s -= 4) Serial.print((w[k] >> s) & 0xF, HEX);
+}
+
+// The stored block as configLoad() sees it (migrations included); RAM is
+// left as it was. Only loop() reads cfg, so the brief swap is invisible.
+static bool configPeek(Config& out) {
+  Config keep = cfg;
+  bool m = g_migrated, ml = g_migratedLo;
+  bool ok = configLoad();
+  out = cfg;
+  cfg = keep; g_migrated = m; g_migratedLo = ml;
+  return ok;
+}
+
+// !DUMP: every key with its group, for a snapshot file that can be copied to
+// another board group by group. src RAM = what is running, SAVED = flash/EEPROM.
+static void printDump(const Config& c, bool saved) {
+  Serial.print(F("$DUMPHDR,fw=")); Serial.print(F(FW_VERSION));
+  Serial.print(F(",board=")); Serial.print(BOARD_F405 ? F("F405") : F("RA4M1"));
+  Serial.print(F(",uid=")); printUid();
+  Serial.print(F(",cfgver=")); Serial.print(c.version);
+  Serial.print(F(",src=")); Serial.print(saved ? F("SAVED") : F("RAM"));
+  Serial.print(F(",dirty=")); Serial.println(g_dirty ? 1 : 0);
+  for (size_t k = 0; k < CFG_FIELD_COUNT; k++) {
+    const CfgField& f = CFG_FIELDS[k];
+    Serial.print(F("$DUMP,")); Serial.print(CFG_GROUP_NAMES[f.group]);
+    Serial.print(','); Serial.print(f.key); Serial.print(',');
+    if (f.type == FT_FLOAT) Serial.println(fieldGetFrom(c, f), 7);
+    else                    Serial.println((long)fieldGetFrom(c, f));
+  }
+  Serial.println(F("$DUMPEND"));
+}
+
+// A digital pin free for the relay, range relay or IR receiver: not analog,
+// I2C, or (Feather) the NeoPixel and the SPI flash.
+#if BOARD_F405
+static bool pinFree(uint8_t p) { return p == 1 || p == 5 || p == 6 || (p >= 9 && p <= 13); }
+#define PIN_RULE "D1, D5, D6 or D9-D13"
+#else
+static bool pinFree(uint8_t p) { return p > 5; }
+#define PIN_RULE "not analog or I2C"
+#endif
 
 // n-th comma-separated field after the command, or def
 static bool argAt(const char* s, uint8_t n, char* out, size_t outn) {
@@ -1582,6 +1966,12 @@ void handleCommand(char* cmd) {
     for (size_t k = 0; k < CFG_FIELD_COUNT; k++) printField(CFG_FIELDS[k]);
     Serial.println(F("$CFGEND"));
   }
+  else if (!strcmp(cmd, "!DUMP")) printDump(cfg, false);
+  else if (!strcasecmp(cmd, "!DUMP,SAVED")) {
+    Config s;
+    if (configPeek(s)) printDump(s, true);
+    else Serial.println(F("$ERR,no valid config stored"));
+  }
   else if (!strncmp(cmd, "!GET,", 5)) {
     const CfgField* f = findField(cmd + 5);
     if (f) printField(*f); else Serial.println(F("$ERR,unknown key"));
@@ -1595,16 +1985,18 @@ void handleCommand(char* cmd) {
     uint8_t oldPin = cfg.relayPin, oldRng = cfg.rngPin;
     uint8_t oldOled = cfg.oled, oldAddr = cfg.oledAddr, oldIr = cfg.irPin;
     fieldSet(*f, (float)atof(val));
-    if (cfg.relayPin == 4 || cfg.relayPin == 5 || cfg.relayPin <= 3 ||
-        (cfg.rngPin && cfg.relayPin == cfg.rngPin)) {
+    if (!pinFree(cfg.relayPin) || (cfg.rngPin && cfg.relayPin == cfg.rngPin)) {
       cfg.relayPin = oldPin;
-      Serial.println(F("$ERR,RLYPIN may not be an analog, I2C or the range relay pin"));
+      Serial.println(F("$ERR,RLYPIN must be " PIN_RULE ", and not the range relay pin"));
     }
-    if (cfg.rngPin != 0 && (cfg.rngPin <= 5 || cfg.rngPin == cfg.relayPin || cfg.rngPin == cfg.irPin)) {
+    if (cfg.rngPin != 0 && (!pinFree(cfg.rngPin) || cfg.rngPin == cfg.relayPin || cfg.rngPin == cfg.irPin)) {
       cfg.rngPin = oldRng;
-      Serial.println(F("$ERR,RNGPIN may not be an analog, I2C, relay or IR pin"));
+      Serial.println(F("$ERR,RNGPIN must be " PIN_RULE ", and not the relay or IR pin"));
     }
-    if (f->offset == offsetof(Config, rngMode)) g_rngLatched = false;
+    if (f->offset == offsetof(Config, rngMode)) {
+      g_rngLatched = false;
+      if (cfg.rngMode == 3) rangeSet(RNG_LO, RW_CMD, false);   // auto-delayed starts LOW
+    }
     if (f->offset == offsetof(Config, rngPin) || f->offset == offsetof(Config, rngInv)) {
       if (oldRng != cfg.rngPin) g_rng = RNG_HI;
       rangePinInit(oldRng);
@@ -1613,9 +2005,9 @@ void handleCommand(char* cmd) {
     if (f->offset == offsetof(Config, relayPin) || f->offset == offsetof(Config, relayInv))
       relayPinInit(oldPin);
     if (f->offset == offsetof(Config, irPin)) {
-      if (cfg.irPin != 0 && (cfg.irPin <= 5 || cfg.irPin == cfg.relayPin || cfg.irPin == cfg.rngPin)) {
+      if (cfg.irPin != 0 && (!pinFree(cfg.irPin) || cfg.irPin == cfg.relayPin || cfg.irPin == cfg.rngPin)) {
         cfg.irPin = oldIr;
-        Serial.println(F("$ERR,IRPIN may not be an analog, I2C or the relay pin"));
+        Serial.println(F("$ERR,IRPIN must be " PIN_RULE ", and not a relay pin"));
       }
       irInit();
     }
@@ -1632,6 +2024,10 @@ void handleCommand(char* cmd) {
     printField(*f);
   }
   else if (!strcmp(cmd, "!SAVE")) {
+#if BOARD_F405
+    // the flash erase stalls the CPU, and with it every trip check, for 1-2 s
+    if (g_relay) { Serial.println(F("$ERR,open the load relay before saving (flash erase stalls the board)")); return; }
+#endif
     if (configSave()) { g_dirty = false; Serial.println(F("$OK,save")); }
     else Serial.println(F("$ERR,save verify failed"));
   }
@@ -1658,10 +2054,11 @@ void handleCommand(char* cmd) {
     setRelay(on);
   }
   else if (!strncmp(cmd, "!RANGE,", 7)) {
-    cfg.rngMode = (uint8_t)constrain(atoi(cmd + 7), 0, 2);
+    cfg.rngMode = (uint8_t)constrain(atoi(cmd + 7), 0, 3);
     g_rngLatched = false;
     g_dirty = true;
     if (!cfg.rngPin) Serial.println(F("$ERR,no range relay (RNGPIN 0) - HIGH only"));
+    if (cfg.rngMode == 3) rangeSet(RNG_LO, RW_CMD, false);    // auto-delayed starts LOW
     rangeRefresh(RW_CMD);
     g_rngReport = RW_CMD;                 // report even when nothing moved
     rangeReport();
@@ -1686,11 +2083,25 @@ void handleCommand(char* cmd) {
     g_cap_req.open_after = (uint8_t)argF(cmd, 12, 0);
     g_cap_req.avg        = (uint8_t)constrain(argF(cmd, 13, 1), 1, 64);
     g_cap_req.rng        = (int8_t)constrain(argF(cmd, 14, -1), -1, 1);
-    if (g_cap_req.ch > 2 || g_cap_req.trig > 4) { Serial.println(F("$ERR,bad CAP args")); return; }
+    if (g_cap_req.ch > 2 || g_cap_req.trig > 5) { Serial.println(F("$ERR,bad CAP args")); return; }
     if (g_cap_req.rate > 500000UL) g_cap_req.rate = 500000UL;
     g_cap_pending = true;
   }
   else if (!strcmp(cmd, "!ABORT")) { /* the byte itself aborts a waiting capture */ }
+#if BOARD_F405
+  else if (!strncmp(cmd, "!DACTEST,", 9)) {
+    float hz = argF(cmd, 0, 0), deg = argF(cmd, 1, 0), amp = argF(cmd, 2, 1.0f);
+    if (hz == 0.0f) dacTestStop();
+    // the DAC output buffer cannot get within ~0.2 V of either rail
+    else if (hz < 0.5f || hz > 1000.0f || amp <= 0.0f || amp > 1.4f) {
+      Serial.println(F("$ERR,DACTEST needs <0.5-1000 Hz>,<deg>[,<0-1.4 V>]; 0 stops")); return;
+    }
+    else dacTestStart(hz, deg, amp);
+    Serial.print(F("$DAC,")); Serial.print(g_dacHz, 3);
+    Serial.print(','); Serial.print(g_dacDeg, 2);
+    Serial.print(','); Serial.println(g_dacAmp, 3);
+  }
+#endif
   else if (!strcmp(cmd, "!ID"))    { Serial.print(F("$READY,120VMON,")); Serial.println(F(FW_VERSION)); }
   else { Serial.print(F("$ERR,unknown command: ")); Serial.println(cmd); }
 }

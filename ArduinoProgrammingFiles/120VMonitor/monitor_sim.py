@@ -78,7 +78,7 @@ class SimSerial:
                     "TRIPPK": 0.0, "RLYPIN": 6, "RLYINV": 0, "OLED": 1, "OLEDADDR": 60, "OLEDROT": 0,
                     "IRPIN": 9, "IRADDR": 0, "IROK": 28, "IRCONF": 22, "IRARMMS": 5000, "PIXEL": 40,
                     "LIVEVAC": 30.0, "IGAINLO": 1.2, "IOFFLO": 0.0, "RNGPIN": 10, "RNGINV": 0,
-                    "RNGMODE": 0, "RNGUPA": 2.2, "RNGDNA": 1.5, "RNGHOLD": 3000, "RNGSETMS": 20}
+                    "RNGMODE": 0, "RNGUPA": 2.2, "RNGDNA": 1.5, "RNGHOLD": 3000, "RNGSETMS": 20, "RNGCYC": 2}
         self.saved = dict(self.cfg)
         self.out = bytearray(b"$READY,120VMON,1.0-sim\r\n")
         self.lock = threading.Lock()
@@ -89,6 +89,7 @@ class SimSerial:
         self.t0 = time.time()
         self.is_open = True
         self.rng = 0                # 0 HIGH, 1 LOW
+        self.up_run = 0             # auto-delayed: overloaded cycles in a row
         self.rng_at = time.time()
         self.latched = False
 
@@ -154,7 +155,7 @@ class SimSerial:
 
     def _range_refresh(self, why="CMD", force=False):
         m = int(self.cfg["RNGMODE"])
-        r = self.rng if m == 0 else (1 if m == 2 and not self.latched else 0)
+        r = self.rng if m in (0, 3) else (1 if m == 2 and not self.latched else 0)
         self._set_rng(r, why, force=force)
 
     def _cfgrow(self, k):
@@ -177,7 +178,17 @@ class SimSerial:
         vc, ic = self._adc(t)
         v, i = self._real(vc, ic)
         clip = np.max(np.abs(ic)) * LSB >= I_CLIP_V - 1e-3
-        if self.rng == 1 and (clip or np.max(np.abs(i)) > self.cfg["RNGUPA"]):   # overload -> HIGH
+        over = clip or np.max(np.abs(i)) > self.cfg["RNGUPA"]
+        if self.rng == 1 and int(self.cfg["RNGMODE"]) == 3:
+            # auto-delayed: HIGH only after more than RNGCYC overloaded cycles in a row
+            hit = (np.abs(i) > self.cfg["RNGUPA"]) | (np.abs(ic) * LSB >= I_CLIP_V - 1e-3)
+            fire = False
+            for seg in np.array_split(hit, 10):
+                self.up_run = self.up_run + 1 if seg.any() else 0
+                fire |= self.up_run > self.cfg["RNGCYC"]
+            over = fire
+        if self.rng == 1 and over:   # overload -> HIGH
+            self.up_run = 0
             self.latched = int(self.cfg["RNGMODE"]) == 2
             self.over_at = now
             self._set_rng(0, "OVER", float(np.max(np.abs(i))))
@@ -199,7 +210,7 @@ class SimSerial:
         flags |= 8 if self.trip else 0
         hz = 60.0 if not flags & 1 else 0.0
         c = self.cfg
-        if c["RNGPIN"] and int(c["RNGMODE"]) == 0 and self.rng == 0:
+        if c["RNGPIN"] and int(c["RNGMODE"]) in (0, 3) and self.rng == 0:
             if np.max(np.abs(i - im)) + abs(im) >= c["RNGDNA"]:
                 self.over_at = now
             elif now - max(getattr(self, "over_at", 0), self.rng_at) > c["RNGHOLD"] / 1000:
@@ -227,6 +238,14 @@ class SimSerial:
             for k in self.cfg:
                 self._emit(self._cfgrow(k))
             self._emit("$CFGEND")
+        elif c == "!DUMP":
+            from monitor_link import GROUP_OF
+            saved = len(p) > 1 and p[1].upper() == "SAVED"
+            self._emit(f"$DUMPHDR,fw=1.0-sim,board=SIM,uid=00000000000051AA,cfgver=4,"
+                       f"src={'SAVED' if saved else 'RAM'},dirty={int(self.cfg != self.saved)}")
+            for k, v in (self.saved if saved else self.cfg).items():
+                self._emit(f"$DUMP,{GROUP_OF.get(k, 'OTHER')},{k},{v:.7f}")
+            self._emit("$DUMPEND")
         elif c == "!GET" and len(p) > 1 and p[1].upper() in self.cfg:
             self._emit(self._cfgrow(p[1].upper()))
         elif c == "!SET" and len(p) > 2 and p[1].upper() in self.cfg:
@@ -234,6 +253,8 @@ class SimSerial:
             self._emit(self._cfgrow(p[1].upper()))
             if p[1].upper() == "RNGMODE":
                 self.latched = False
+                if int(self.cfg["RNGMODE"]) == 3:
+                    self._set_rng(1, "CMD")
             self._range_refresh()
         elif c == "!SAVE":
             self.saved = dict(self.cfg); self._emit("$OK,save")
@@ -248,8 +269,10 @@ class SimSerial:
                 self.over_at = time.time()
             self._relay(on)
         elif c == "!RANGE" and len(p) > 1:
-            self.cfg["RNGMODE"] = float(min(max(int(p[1]), 0), 2))
+            self.cfg["RNGMODE"] = float(min(max(int(p[1]), 0), 3))
             self.latched = False
+            if int(self.cfg["RNGMODE"]) == 3:
+                self._set_rng(1, "CMD")
             if not self.cfg["RNGPIN"]:
                 self._emit("$ERR,no range relay (RNGPIN 0) - HIGH only")
             self._range_refresh(force=True)
@@ -298,7 +321,7 @@ class SimSerial:
         avg = min(max(int(f[13] or 1), 1), 64)
         want = int(f[14]) if f[14] is not None else -1
         if want < 0:
-            want = 0 if (trig == 3 and int(self.cfg["RNGMODE"]) == 0) else self.rng
+            want = 0 if (trig in (3, 5) and int(self.cfg["RNGMODE"]) == 0) else self.rng
         if ch == 0:
             want = 0
         if want != self.rng:
@@ -309,10 +332,11 @@ class SimSerial:
         pre_n = int(n * pre / 100) if trig else 0
         start = time.time()
         relay_idx = -1
-        if trig == 3:
-            # close at the next rising zero crossing + relay_us (or at once)
+        if trig in (3, 5):
+            # close at the next rising zero crossing + relay_us (or at once); trig 5
+            # closes at once and the inrush passes its level straight away
             t_close = start + pre_n * dt
-            if relay_us >= 0:
+            if relay_us >= 0 and trig == 3:
                 t_close = math.ceil(t_close * 60) / 60 + relay_us * 1e-6
             WORLD.relay_t = t_close
             WORLD.relay = True
@@ -385,7 +409,7 @@ class SimSerial:
         vals = np.clip(vals, -32768, 32767).astype(np.int16).view(np.uint16)
         for k in range(0, len(vals), 32):
             self._emit("$CD," + "".join(f"{x:04X}" for x in vals[k:k + 32]))
-        if trig == 3:
+        if trig in (3, 5):
             self._emit("$RLY,1")
         if open_idx >= 0:
             self._emit("$RLY,0")

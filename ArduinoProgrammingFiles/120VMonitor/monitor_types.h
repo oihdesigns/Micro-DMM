@@ -59,13 +59,38 @@ struct Config {
   uint16_t rngHoldMs;    /*!< auto: stay HIGH at least this long after an overload / close */
   uint8_t  rngPin;       /*!< range relay driver pin, 0 = single range */
   uint8_t  rngInv;       /*!< 0: pin HIGH selects LOW; 1: pin HIGH selects HIGH */
-  uint8_t  rngMode;      /*!< 0 auto, 1 HIGH only, 2 LOW (an overload latches HIGH) */
+  uint8_t  rngMode;      /*!< 0 auto, 1 HIGH only, 2 LOW (an overload latches HIGH), 3 auto-delayed */
   uint8_t  rngSetMs;     /*!< range relay settle time */
 
   // v4
   uint8_t  oledRot;      /*!< 0 = right side up, 1 = upside down */
 
+  // v5
+  uint8_t  rngCyc;       /*!< auto-delayed: go HIGH after more than this many overloaded cycles in a row */
+
   uint16_t crc;          /*!< CRC16-CCITT over [0, offsetof(Config, crc)) */
+};
+
+/*! The version-4 layout: v5 minus rngCyc. */
+struct ConfigV4 {
+  char     magic[4];
+  uint16_t version, size;
+  float    vGain, vOff, iGain, iOff, phaseUs, adcVref;
+  float    mainsHz;
+  uint16_t spc;
+  uint8_t  cycles;
+  float    tripA, tripPk;
+  uint8_t  relayPin, relayInv, oled, oledAddr;
+  uint8_t  irPin, irConfirm;
+  uint16_t irAddr;
+  uint8_t  irOk, pixel;
+  uint16_t irArmMs;
+  float    liveVac;
+  float    iGainLo, iOffLo, rngUpA, rngDnA;
+  uint16_t rngHoldMs;
+  uint8_t  rngPin, rngInv, rngMode, rngSetMs;
+  uint8_t  oledRot;
+  uint16_t crc;
 };
 
 /*! The version-3 layout: v4 minus oledRot. */
@@ -162,12 +187,17 @@ typedef void (*IntegrandFn)(int32_t k, double* out);
 
 /*! One row of the config key table. */
 enum FieldType : uint8_t { FT_FLOAT, FT_U8, FT_U16 };
+/*! What a key is for, so a snapshot can copy one kind without the others:
+ *  analog calibration, the virtual fuses, range switching, metering, the
+ *  board's wiring, and the display / remote / pixel. Order = CFG_GROUP_NAMES. */
+enum CfgGroup : uint8_t { CG_CAL, CG_FUSE, CG_RANGE, CG_METER, CG_WIRING, CG_UI };
 struct CfgField {
   const char* key;
   FieldType   type;
   uint16_t    offset;
   float       lo, hi;
   const char* help;
+  CfgGroup    group;
 };
 
 #endif  // MONITOR_TYPES_H

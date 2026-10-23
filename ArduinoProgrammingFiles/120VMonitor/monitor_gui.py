@@ -11,7 +11,9 @@ Tabs
                inrush at a chosen phase, harmonics, CSV export
   Calibration  bench supply (Virtual Bench or direct SCPI) DC sweeps for V and I,
                phase from mains + resistive load, apply / save to EEPROM
-  Config       every firmware key (built from the board's !CFG dump)
+  Config       every firmware key (built from the board's !CFG dump); snapshot
+               export / apply by group (calibration, fuses, wiring …), and a
+               snapshot logged to config_log/ on every connect and save
   Console      raw protocol log and a command line
 """
 
@@ -30,12 +32,14 @@ from matplotlib.figure import Figure
 
 import bench_psu
 import calibrate as cal
-from monitor_link import (RANGE_MODES, RANGE_NAMES, SAFE_WHY, TRIG_MODES, LinkError, MonitorLink,
-                          capture_stats, flag_text)
+from monitor_link import (CLOSE_TRIGS, CFG_GROUPS, GROUP_INFO, GROUP_OF, RANGE_MODES, RANGE_NAMES, SAFE_WHY,
+                          TRIG_MODES, LinkError, MonitorLink, Snapshot, capture_stats, flag_text,
+                          log_snapshot, same_value)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+CFG_LOG_DIR = os.path.join(HERE, "config_log")   # a snapshot per board on connect and on save
 TIMING_MODES = ["Rate + samples", "Rate + duration", "Samples + duration"]
-CAP_MAX = 7168                  # int16 values in the board's capture buffer
+CAP_MAX = 7168                  # int16 values in the XIAO's capture buffer; $STATUS capmax wins
 RANGE_FULL = {0: "HIGH ±25 A", 1: "LOW ±2.5 A"}
 CAP_RANGES = ["Follow mode", "HIGH", "LOW"]   # !CAP rng -1 / 0 / 1
 CAL_IPTS = {0: "0.25, 0.5, 1.0, 1.5, 2.0, 2.5", 1: "0.1, 0.25, 0.5, 1.0, 1.5, 2.0"}
@@ -124,9 +128,10 @@ class App(tk.Tk):
         items = [("vrms", "V rms", "V", 2), ("irms", "I rms", "A", 4), ("p", "Power", "W", 2),
                  ("pf", "PF", "", 3), ("hz", "Freq", "Hz", 3), ("s", "Apparent", "VA", 2),
                  ("q", "Non-active", "var", 2), ("vpk", "V peak", "V", 1), ("ipk", "I peak", "A", 3),
-                 ("crest", "I crest", "", 2), ("wh", "Energy", "Wh", 4), ("idc", "I dc", "A", 4)]
+                 ("crest", "I crest", "", 2), ("wh", "Energy", "Wh", 4), ("vdc", "V dc", "V", 3),
+                 ("idc", "I dc", "A", 4)]
         for k, (key, label, unit, dp) in enumerate(items):
-            r, c = divmod(k, 6)
+            r, c = divmod(k, 7)
             cell = tk.Frame(panel, bg=BG, padx=10, pady=4)
             cell.grid(row=r, column=c, sticky="w")
             tk.Label(cell, text=label, bg=BG, fg="#9a9a9a", font=("Segoe UI", 9)).pack(anchor="w")
@@ -180,7 +185,7 @@ class App(tk.Tk):
         field(1, 0, "Level (A or V)", "level", 0.5)
         field(1, 2, "Pretrigger %", "pre", 10)
         field(1, 4, "Timeout (s)", "timeout", 5)
-        field(1, 6, "Relay close delay after V zero-x (µs, -1 = now)", "relay_us", -1)
+        field(1, 6, "Close delay after V rising zero (µs)", "relay_us", 0)
         field(0, 8, "Average N scans/sample", "avg", 7, width=4)
         field(1, 8, "Current range", "rng", CAP_RANGES[0], width=4, values=CAP_RANGES)
         # timing: any two of rate / samples / duration, the third is worked out
@@ -337,8 +342,18 @@ class App(tk.Tk):
             ttk.Button(bar, text=txt, command=fn).pack(side="left", padx=3)
         self.dirty_lbl = ttk.Label(bar, text="", foreground="#c60")
         self.dirty_lbl.pack(side="left", padx=10)
-        self.tree = ttk.Treeview(f, columns=("value", "range", "help"), show="tree headings", height=20)
+        bar2 = ttk.Frame(f, padding=(4, 0, 4, 4))
+        bar2.pack(fill="x")
+        ttk.Button(bar2, text="Export snapshot…", command=self._cfg_export).pack(side="left", padx=3)
+        ttk.Button(bar2, text="Apply snapshot…", command=self._cfg_apply).pack(side="left", padx=3)
+        ttk.Button(bar2, text="Open log folder",
+                   command=lambda: (os.makedirs(CFG_LOG_DIR, exist_ok=True), os.startfile(CFG_LOG_DIR))
+                   ).pack(side="left", padx=3)
+        self.tree = ttk.Treeview(f, columns=("group", "value", "range", "help"), show="tree headings",
+                                 height=20)
         self.tree.heading("#0", text="Key")
+        self.tree.heading("group", text="Group")
+        self.tree.column("group", width=70)
         self.tree.heading("value", text="Value")
         self.tree.heading("range", text="Range")
         self.tree.heading("help", text="Meaning")
@@ -398,6 +413,7 @@ class App(tk.Tk):
         st = link.status
         self.status_lbl.configure(text=f"{self.port_var.get()}  {ident}  scan {st.get('scanus4', '?')} µs")
         self._spike_update()                  # now with the board's real scan times
+        self._timing_update()                 # and its real capture buffer size
         try:
             s4 = float(st.get("scanus4", 0)); s2 = float(st.get("scanus2", 0))
             self.rate_lbl.configure(text=f"max ≈ {1e6 / s4:,.0f} S/s (V+I), {1e6 / s2:,.0f} S/s (one channel)"
@@ -407,6 +423,7 @@ class App(tk.Tk):
         self._set_relay_ui(st.get("relay") == "1")
         self._range_ui(st.get("rng"), st.get("rngmode"))
         self._fill_cfg()
+        self._log_config("connect")
         if self.port_var.get().upper() == "SIM":
             self.sim_cb.pack(anchor="w", pady=4)
             self.psu_mode.set("sim")
@@ -545,6 +562,8 @@ class App(tk.Tk):
             self.flag_lbl.configure(text=self.safe_msg)
         elif line.startswith("$CFG,") or line.startswith("$OK"):
             self._fill_cfg()
+            if line == "$OK,save":
+                self._log_config("save")
         elif line.startswith("$ERR"):
             self.status_lbl.configure(text=line)
 
@@ -637,7 +656,11 @@ class App(tk.Tk):
         derived = ("dur", "n", "rate")[mode]
         for k, w in e.items():
             w.configure(state="readonly" if k == derived else "normal")
-        max_n = CAP_MAX // (2 if v["ch"].get() == "V + I" else 1)
+        try:                          # the Feather's buffer is 32768
+            cap_max = int(self.link.status.get("capmax", CAP_MAX)) if self.link else CAP_MAX
+        except ValueError:
+            cap_max = CAP_MAX
+        max_n = cap_max // (2 if v["ch"].get() == "V + I" else 1)
         note = ""
         try:
             rate = float(v["rate"].get()) if derived != "rate" else None
@@ -717,7 +740,8 @@ class App(tk.Tk):
         args = dict(rate=float(v["rate"].get()), n=int(float(v["n"].get())), ch=ch, trig=trig,
                     level=float(v["level"].get()), pre=float(v["pre"].get()),
                     timeout_ms=int(float(v["timeout"].get()) * 1000),
-                    relay_us=int(float(v["relay_us"].get())),
+                    # rising zero: close relay_us after it; level trigger: close at once
+                    relay_us=max(0, int(float(v["relay_us"].get()))) if trig == 3 else -1,
                     ipk_a=float(sf["ipk_a"].get()) if sf["ipk_on"].get() else 0.0,
                     ov_a=float(sf["ov_a"].get()) if sf["ov_on"].get() else 0.0,
                     ov_cyc=int(float(sf["ov_cyc"].get())),
@@ -725,6 +749,8 @@ class App(tk.Tk):
                     open_after=sf["open_after"].get(),
                     avg=int(float(v["avg"].get())),
                     rng=CAP_RANGES.index(v["rng"].get()) - 1)
+        if trig in (1, 5) and ch == 0:
+            raise ValueError("a current level trigger needs the current channel (V + I or I only)")
         if (args["ipk_a"] or args["ov_a"]) and ch == 0:
             raise ValueError("the current limits need the current channel (V + I or I only)")
         if not 1 <= args["avg"] <= 64:
@@ -739,15 +765,17 @@ class App(tk.Tk):
         except (ValueError, IndexError) as e:
             messagebox.showerror("Capture", f"bad setting: {e}")
             return
-        if args["trig"] == 3 and not self.repeat_var.get():
+        closes = args["trig"] in CLOSE_TRIGS
+        if closes and not self.repeat_var.get():
             if args["open_after"] or args["auto_ms"]:
                 after = "opens it again " + ("when the capture completes" if args["open_after"]
                                              else f"{args['auto_ms']} ms after closing")
             else:
                 after = "LEAVES THE LOAD SWITCHED ON"
-            if not messagebox.askokcancel("Inrush capture", f"This CLOSES THE RELAY and {after}. Continue?"):
+            if not messagebox.askokcancel("Inrush capture", f"This CLOSES THE RELAY and {after}. "
+                                          "If it is closed now it opens for 1 s first. Continue?"):
                 return
-        if args["trig"] == 3 and self.repeat_var.get():
+        if closes and self.repeat_var.get():
             self.repeat_var.set(False)        # one inrush per click
         self.busy = True
         self.safe_msg = ""
@@ -755,6 +783,11 @@ class App(tk.Tk):
 
         def work():
             try:
+                # an inrush test needs the load off first: open, let it settle 1 s
+                if closes and self.link.get_status().get("relay") == "1":
+                    self.ui(self.cap_stats.set, "relay was closed: opened, waiting 1 s…")
+                    self.link.relay(False)
+                    time.sleep(1.0)
                 cap = self.link.capture(**args)
                 self.ui(self._capture_done, cap, None)
             except Exception as e:                         # noqa: BLE001
@@ -789,6 +822,11 @@ class App(tk.Tk):
         if cap.i is not None:
             axi.plot(cap.t_ms, cap.i, color="tab:red", lw=1)
             axi.set_ylabel("A", color="tab:red")
+        # 0 V / 0 A on the centre line, however one-sided the waveform is
+        for a, x in ((ax, cap.v), (axi, cap.i)):
+            if x is not None and len(x):
+                lim = float(np.nanmax(np.abs(x))) * 1.08 or 1.0
+                a.set_ylim(-lim, lim)
         if cap.trig_idx >= 0:
             ax.axvline(0, color="k", ls="--", lw=.8)
         t0 = max(cap.trig_idx, 0)
@@ -815,9 +853,9 @@ class App(tk.Tk):
                 s += (f" → HIGH (overload) at {(cap.rng_idx - max(cap.trig_idx, 0)) * cap.dt_us / 1000:.2f} ms;"
                       f" the next {cap.settle_us / 1000:g} ms is the relay moving")
         if "vrms" in st:
-            lines.append(f"V  {st['vrms']:8.3f} Vrms  pk {st['vpk']:7.2f}  crest {st['vcrest']:.3f}  THD {st['vthd'] * 100:5.2f} %")
+            lines.append(f"V  {st['vrms']:8.3f} Vrms  dc {st['vdc']:+8.3f} V  pk {st['vpk']:7.2f}  crest {st['vcrest']:.3f}  THD {st['vthd'] * 100:5.2f} %")
         if "irms" in st:
-            lines.append(f"I  {st['irms']:8.4f} Arms  pk {st['ipk']:7.3f}  crest {st['icrest']:.3f}  THD {st['ithd'] * 100:5.2f} %")
+            lines.append(f"I  {st['irms']:8.4f} Arms  dc {st['idc']:+8.4f} A  pk {st['ipk']:7.3f}  crest {st['icrest']:.3f}  THD {st['ithd'] * 100:5.2f} %")
         if "p" in st:
             lines.append(f"P  {st['p']:8.3f} W     PF {st['pf']:.4f}")
         if cap.open_idx >= 0:
@@ -1070,7 +1108,7 @@ class App(tk.Tk):
         for key, row in cfg.items():
             v = row["value"]
             txt = f"{v:.6g}" if abs(v - round(v)) > 1e-9 or abs(v) > 1e5 else f"{int(round(v))}"
-            vals = (txt, f"{row['lo']:g} … {row['hi']:g}", row["help"])
+            vals = (GROUP_OF.get(key, ""), txt, f"{row['lo']:g} … {row['hi']:g}", row["help"])
             if key in existing:
                 self.tree.item(key, values=vals)
             else:
@@ -1095,6 +1133,187 @@ class App(tk.Tk):
         e.bind("<Return>", lambda _e: done(True))
         e.bind("<Escape>", lambda _e: done(False))
         e.bind("<FocusOut>", lambda _e: done(False))
+
+    # ── snapshots ───────────────────────────────────────────────────────────
+    def _log_config(self, why):
+        """Log the stored config to config_log/, unless it matches the newest
+        snapshot of the same board."""
+        link = self.link
+        if not link:
+            return
+
+        def work():
+            try:
+                path = log_snapshot(link.dump(saved=True), CFG_LOG_DIR)
+                msg = f"saved {os.path.basename(path)}" if path else "unchanged since the last snapshot"
+            except (LinkError, OSError) as e:
+                msg = str(e)
+            self.ui(self._con_add, f"# config log ({why}): {msg}")
+        threading.Thread(target=work, daemon=True).start()
+
+    def _cfg_export(self):
+        if not self.link:
+            return
+        saved = True
+        if self.link.status.get("dirty") == "1":
+            ans = messagebox.askyesnocancel("Export snapshot", "There are unsaved changes. Export the "
+                                            "running values (Yes) or the saved ones (No)?")
+            if ans is None:
+                return
+            saved = not ans
+        os.makedirs(CFG_LOG_DIR, exist_ok=True)
+        path = filedialog.asksaveasfilename(
+            defaultextension=".csv", initialdir=CFG_LOG_DIR, filetypes=[("Config snapshot", "*.csv")],
+            initialfile=f"{self.link.status.get('board', 'RA4M1')}_{time.strftime('%Y%m%d_%H%M%S')}.csv")
+        if not path:
+            return
+        link = self.link
+
+        def work():
+            try:
+                link.dump(saved=saved).save(path)
+                self.ui(self.status_lbl.configure, text=f"snapshot written: {os.path.basename(path)}")
+            except (LinkError, OSError) as e:
+                self.ui(messagebox.showerror, "Export snapshot", str(e))
+        threading.Thread(target=work, daemon=True).start()
+
+    def _cfg_apply(self):
+        if not self.link:
+            return
+        path = filedialog.askopenfilename(initialdir=CFG_LOG_DIR if os.path.isdir(CFG_LOG_DIR) else HERE,
+                                          filetypes=[("Config snapshot", "*.csv"), ("All files", "*.*")])
+        if not path:
+            return
+        try:
+            snap = Snapshot.load(path)
+        except (OSError, ValueError) as e:
+            messagebox.showerror("Apply snapshot", str(e))
+            return
+        link = self.link
+
+        def work():
+            try:
+                here = link.dump()
+            except LinkError as e:
+                self.ui(messagebox.showerror, "Apply snapshot", str(e))
+                return
+            self.ui(ApplyDialog, self, snap, here, os.path.basename(path))
+        threading.Thread(target=work, daemon=True).start()
+
+
+class ApplyDialog(tk.Toplevel):
+    """Copy chosen groups of a snapshot onto the connected board (RAM, then
+    optionally saved). Only keys whose values differ are sent."""
+
+    def __init__(self, app, snap, here, name):
+        super().__init__(app)
+        self.app = app
+        self.title(f"Apply {name}")
+        cur = here.values()
+        self.diffs = [d for d in snap.diff(cur) if d[1] in cur]
+        missing = sorted(k for _, k, _v in snap.rows if k not in cur)
+        sm, hm = snap.meta, here.meta
+        other = sm.get("board", "?") != hm.get("board", "?")
+        same_unit = bool(sm.get("uid")) and sm.get("uid") == hm.get("uid")
+        ttk.Label(self, justify="left", font=("Consolas", 9), text=(
+            f"File : {sm.get('board', '?'):6s} uid {sm.get('uid') or '?'}  fw {sm.get('fw', '?')}  "
+            f"{sm.get('src', '?')} values, taken {sm.get('taken', '?')}\n"
+            f"Board: {hm.get('board', '?'):6s} uid {hm.get('uid') or '?'}  fw {hm.get('fw', '?')}"
+            + ("   (same unit)" if same_unit else ""))).pack(anchor="w", padx=8, pady=6)
+        if other:
+            ttk.Label(self, foreground="#c60", wraplength=640, justify="left", text=(
+                "Different board type. The CAL gains carry over if the isolation-amp front end moved "
+                "with them, but zero the offsets again on this board and check PHASEUS. WIRING pin "
+                "numbers do not carry over.")).pack(anchor="w", padx=8)
+        if missing:
+            ttk.Label(self, foreground="#888", text="Not on this firmware, skipped: " + ", ".join(missing)
+                      ).pack(anchor="w", padx=8)
+
+        box = ttk.LabelFrame(self, text="Copy these groups", padding=6)
+        box.pack(fill="x", padx=8, pady=6)
+        counts = {}
+        for g, *_ in self.diffs:
+            counts[g] = counts.get(g, 0) + 1
+        self.on = {}
+        for g in list(CFG_GROUPS) + sorted({r[0] for r in snap.rows} - set(CFG_GROUPS)):
+            n = counts.get(g, 0)
+            self.on[g] = tk.BooleanVar(value=g == "CAL" and n > 0)
+            cb = ttk.Checkbutton(box, variable=self.on[g], command=self._refresh, text=(
+                f"{g} — {GROUP_INFO.get(g, '')}: {n} differ"
+                + ("   (pins from another board type!)" if g == "WIRING" and other and n else "")))
+            cb.pack(anchor="w")
+            if not n:
+                cb.state(["disabled"])
+
+        self.tree = ttk.Treeview(self, columns=("group", "board", "file"), show="tree headings", height=12)
+        for col, txt, w in (("#0", "Key", 100), ("group", "Group", 70), ("board", "This board", 130),
+                            ("file", "Snapshot", 130)):
+            self.tree.heading(col, text=txt)
+            self.tree.column(col, width=w)
+        self.tree.tag_configure("off", foreground="#999")
+        for g, k, c, v in self.diffs:
+            self.tree.insert("", "end", iid=k, text=k, values=(g, f"{c:.7g}", f"{v:.7g}"))
+        self.tree.pack(fill="both", expand=True, padx=8)
+
+        row = ttk.Frame(self, padding=8)
+        row.pack(fill="x")
+        self.btns = [ttk.Button(row, text="Apply to RAM", command=lambda: self._apply(False)),
+                     ttk.Button(row, text="Apply and save", command=lambda: self._apply(True))]
+        for b in self.btns:
+            b.pack(side="left", padx=3)
+        ttk.Button(row, text="Close", command=self.destroy).pack(side="right")
+        self.msg = ttk.Label(self, text="" if self.diffs else "This board already matches the snapshot.",
+                             wraplength=640, justify="left")
+        self.msg.pack(anchor="w", padx=8, pady=(0, 8))
+        self._refresh()
+
+    def _todo(self):
+        return [(k, v) for g, k, _c, v in self.diffs if self.on[g].get()]
+
+    def _refresh(self):
+        for g, k, *_ in self.diffs:
+            self.tree.item(k, tags=() if self.on[g].get() else ("off",))
+        n = len(self._todo())
+        for b in self.btns:
+            b.state(["!disabled"] if n else ["disabled"])
+
+    def _apply(self, save):
+        todo = self._todo()
+        for b in self.btns:
+            b.state(["disabled"])
+        self.msg.configure(text=f"sending {len(todo)} keys…")
+        link = self.app.link
+
+        def work():
+            for k, v in todo:
+                try:
+                    link.set(k, v)
+                except LinkError:
+                    pass                          # a refused pin etc.; the read-back below reports it
+            try:
+                link.read_cfg()
+                bad = [k for k, v in todo if not same_value(link.cfg.get(k, {}).get("value", float("nan")), v)]
+                msg = f"{len(todo) - len(bad)} of {len(todo)} keys set in RAM."
+                if bad:
+                    msg += " Not taken (refused or clamped): " + ", ".join(bad) + "."
+                if save and not bad:
+                    link.save()
+                    msg += " Saved."
+                elif save:
+                    msg += " Not saved — fix those first or save from the Config tab."
+                else:
+                    msg += " Save from the Config tab to keep them."
+            except LinkError as e:
+                msg = f"Error: {e}"
+            self.app.ui(self._done, msg)
+        threading.Thread(target=work, daemon=True).start()
+
+    def _done(self, msg):
+        if not self.winfo_exists():
+            return
+        self.msg.configure(text=msg)
+        self.app._fill_cfg()
+        self.app._cmd("!STATUS")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,9 @@
 # 120V Monitor
 
-Bench mains monitor: RA4M1 (XIAO; UNO R4 builds too), isolation-amp front end,
-SSD1306 OLED, load relay, Python GUI, bench-supply calibration.
+Bench mains monitor: RA4M1 (XIAO; UNO R4 builds too) or Adafruit Feather
+STM32F405, isolation-amp front end, SSD1306 OLED, load relay, Python GUI,
+bench-supply calibration. The sketch picks the board automatically; the
+Feather's differences are in [Feather STM32F405](#feather-stm32f405).
 
 | File | |
 |---|---|
@@ -26,6 +28,51 @@ SSD1306 OLED, load relay, Python GUI, bench-supply calibration.
 
 The relay is driven open in `setup()` before anything else runs, and the GUI
 opens it on disconnect.
+
+## Feather STM32F405
+
+Build with **Generic STM32F4 series → Adafruit Feather STM32F405**, USB support
+**CDC (generic 'Serial' supersede U(S)ART)**, upload method **STM32CubeProgrammer
+(DFU)**. Firmware 1.4 and later.
+
+| Signal | Feather pin |
+|---|---|
+| Current, isolation amp OUTP / OUTN | **A4 (+) / A5 (−)** |
+| Voltage, isolation amp OUTP / OUTN | A2 (+) / A3 (−) |
+| OLED | SDA / SCL |
+| Load (output on/off) relay driver | **D6** (`RLYPIN 6`, default) |
+| IR receiver | **D9** (`IRPIN 9`, default); any pin can take the edge interrupt |
+| Status NeoPixel | the Feather's own (D8, PC0) |
+| Current-range relay driver | **D5** (`RNGPIN 5`, default on the Feather; there is no D7) |
+
+These are the Feather's factory defaults (`!DEFAULTS`, or a blank flash).
+Pins for `RLYPIN` / `RNGPIN` / `IRPIN` must be D1, D5, D6 or D9–D13.
+A0 and A1 are left free because they are the two DAC outputs.
+
+**Sampling.** ADC1 and ADC2 run in dual injected-simultaneous mode: each scan
+converts V+ and V− at the same instant, then I+ and I− at the next (~1.9 µs
+later, 0.04° at 60 Hz, which `PHASEUS` covers). Each pair's halves are
+simultaneous, so common-mode noise cancels at any frequency, not just below a
+few kHz as on the XIAO. The ADC is 12-bit (the XIAO's is 14), which averaging
+makes up for.
+
+**Capture buffer.** The F405's 64 KB core-coupled RAM: **32768 values** (16384
+V+I pairs) against 7168 on the XIAO. The GUI reads the size from `$STATUS
+capmax`.
+
+**Config storage.** The chip has no EEPROM, so the config lives in the last
+flash sector. Erasing it stalls the board for 1–2 s, including every trip
+check, so **`!SAVE` is refused while the load relay is closed**. A new board
+starts uncalibrated: run the calibration on it.
+
+**Loopback self-test.** `!DACTEST,<hz>,<deg>[,<amp>]` puts a "voltage" sine on
+A0 and a "current" sine lagging it by `<deg>` on A1, `<amp>` V peak about
+mid-rail (default 1.0). With the isolation amps disconnected, jumper A0 → A2
+and A1 → A4, and hold A3 and A5 at mid-rail with a divider (two equal
+resistors, 3.3 V to GND). With `VGAIN` and `IGAIN` set to 1 and `VOFF` /
+`IOFF` at 0 (`!SET` only, don't save), the board should read `amp/√2` on both
+channels with PF = cos(deg). `!DACTEST,0` stops it. This checks
+the sampling and power maths end to end before mains is involved.
 
 ## How it samples
 
@@ -53,10 +100,23 @@ When the buffer can't hold the requested duration at the chosen rate, the
 sample count is capped and the note beside the field says how long you
 actually get.
 
-Triggers: immediate · |I| ≥ level · V rising zero crossing · **close the
-relay** (inrush, optionally *n* µs after a V zero crossing, e.g. 4167 µs for
-the 60 Hz peak, though the relay's own mechanical delay adds to that) ·
-|V| ≥ level. Pretrigger is a percentage of the buffer.
+Triggers: immediate · |I| ≥ level · V rising zero crossing · |V| ≥ level ·
+two inrush triggers that close the relay themselves:
+
+- **Close relay - rising zero** closes *n* µs after a V rising zero crossing
+  (0 = at the crossing, 4167 µs = the 60 Hz peak). The relay's own
+  mechanical delay adds to that. The trigger is the close command.
+- **Close relay - level trigger** closes as soon as the pretrigger is full,
+  then triggers when |I| reaches the Level (A). The close is marked on the
+  plot if it is still in the buffer. On a timeout the relay stays closed,
+  unless "Open relay when capture completes" is ticked.
+
+If the relay is already closed when you start either inrush trigger, the GUI
+opens it and waits 1 s first. Pretrigger is a percentage of the buffer.
+
+The capture plot always puts 0 V and 0 A on its centre line. The readout
+gives each channel's DC mean beside its rms, and the Meter tab shows both
+V dc and I dc.
 
 **Averaging** (`Average N scans/sample`, default 7). This is oversampling,
 done on the board: every stored sample is the mean of N consecutive ADC
@@ -128,6 +188,7 @@ starts as `IGAIN`/10.
 | 0 auto (default) | Overloads go HIGH. After `RNGHOLD` (3 s) of window peaks below `RNGDNA` (1.5 A), it drops back to LOW. Closing the load relay goes HIGH first, so inrush never hits the 0.1 Ω shunt |
 | 1 | HIGH only |
 | 2 | LOW. An overload still goes HIGH, and it stays HIGH until you select the range again |
+| 3 auto-delayed | Starts LOW and rides through short overloads. It goes HIGH only when the overload lasts more than `RNGCYC` (2) mains cycles in a row, then drops back like auto. Closing the load relay stays LOW, so a short inrush is recorded clipped at about 2.5 A. **While LOW, `TRIPPK` and safe start can't see current above ~2.5 A**, so a fault takes up to `RNGCYC` + 1 cycles to show |
 
 **Overload** is any single scan above `RNGUPA` (2.2 A), or a clipped reading,
 while in LOW. It's checked in every hot loop, in the same place as `TRIPPK`,
@@ -140,7 +201,7 @@ moves, so for `RNGSETMS` (20 ms) after a switch:
   the settling time.
 
 **In the GUI:**
-- **Top bar:** range mode (Auto / HIGH only / LOW) and the range in use.
+- **Top bar:** range mode (Auto / HIGH only / LOW / Auto-delayed) and the range in use.
 - **Capture tab:** *Current range* is Follow mode, HIGH or LOW for that one
   capture. V-only captures always run HIGH, because there's no current
   reading to catch an overload.
@@ -202,6 +263,41 @@ CRC over `offsetof(Config, crc)`. Captures come back as `$CAP` header,
 `$CD,<hex int16 ×32>` lines, then `$CEND`. Range changes arrive as
 `$RNG,<0 HIGH|1 LOW>,<BOOT|CMD|AUTO|OVER|CLOSE|CAP>,<mode>[,<amps>]`, and
 `!RANGE,<0|1|2>` sets the mode.
+
+## Config snapshots
+
+Every key belongs to one group, so a snapshot can be copied a kind at a time:
+
+| Group  | Keys | Copy to a new board? |
+|--------|------|----------------------|
+| CAL    | VGAIN VOFF IGAIN IOFF IGAINLO IOFFLO PHASEUS ADCVREF | Gains yes, if the isolation-amp front end moves with them; zero the offsets again and check PHASEUS |
+| FUSE   | TRIPA TRIPPK | Yes |
+| RANGE  | RNGMODE RNGUPA RNGDNA RNGHOLD RNGSETMS RNGCYC | Yes |
+| METER  | MAINS SPC CYCLES | Yes |
+| WIRING | RLYPIN RLYINV RNGPIN RNGINV IRPIN | Only between boards of the same type |
+| UI     | OLED OLEDADDR OLEDROT IRADDR IROK IRCONF IRARMMS PIXEL LIVEVAC | Usually |
+
+`!DUMP` prints the running values and `!DUMP,SAVED` the flash/EEPROM block:
+`$DUMPHDR,fw=,board=,uid=,cfgver=,src=,dirty=`, then
+`$DUMP,<group>,<key>,<value>` per key, then `$DUMPEND`. `uid` is the chip's
+factory ID, so a file always names the unit it came from.
+
+The GUI logs the saved block to `config_log/<board>_<uid>_<time>.csv` on every
+connect and every save. It skips the write when nothing has changed since that
+board's last file. The Config tab also has **Export snapshot…** and
+**Apply snapshot…**. Apply lists the keys that differ, with one checkbox per
+group; only CAL is ticked by default. It then sends `!SET` for the chosen keys,
+reads them back, and saves if you ask it to. Firmware older than 1.4 has no
+`!DUMP`; the GUI falls back to `!CFG` there, which gives the running values
+without a uid.
+
+To move a calibration from the XIAO to the Feather:
+
+1. Connect the XIAO; its snapshot lands in `config_log/`.
+2. Connect the Feather and choose **Apply snapshot…** with that file.
+3. Keep CAL ticked, plus FUSE, RANGE and METER if you want them. Leave WIRING
+   unticked.
+4. Run **Zero offsets** with no mains and no load, then save.
 
 ## Safety
 

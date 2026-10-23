@@ -7,6 +7,7 @@ helpers (dc(), cfg(), capture() ...) register a one-shot waiter for the reply
 prefix they expect, so they can be called from any worker thread.
 """
 
+import os
 import queue
 import threading
 import time
@@ -24,10 +25,12 @@ SAFE_WHY = {0: "", 1: "instant limit", 2: "over-current (time delay)", 3: "auto-
             4: "capture complete", 5: "TRIPPK"}
 
 RANGE_NAMES = {0: "HIGH", 1: "LOW"}          # 0.01 ohm / 0.1 ohm shunt
-RANGE_MODES = {0: "Auto", 1: "HIGH only", 2: "LOW"}
+RANGE_MODES = {0: "Auto", 1: "HIGH only", 2: "LOW", 3: "Auto-delayed"}
 
 TRIG_MODES = {0: "Immediate", 1: "|I| above level", 2: "V rising zero-cross",
-              3: "Close relay (inrush)", 4: "|V| above level"}
+              4: "|V| above level", 3: "Close relay - rising zero",
+              5: "Close relay - level trigger"}
+CLOSE_TRIGS = (3, 5)                         # the capture closes the load relay itself
 
 
 def flag_text(flags):
@@ -86,6 +89,99 @@ class Capture:
         return self
 
 
+# ── config snapshots ────────────────────────────────────────────────────────
+# What each key is for, so a snapshot can be copied one kind at a time. The
+# firmware tags its own keys in !DUMP (fw 1.4+); this table only stands in for
+# older firmware, which has !CFG alone.
+CFG_GROUPS = {
+    "CAL": "VGAIN VOFF IGAIN IOFF IGAINLO IOFFLO PHASEUS ADCVREF",
+    "FUSE": "TRIPA TRIPPK",
+    "RANGE": "RNGMODE RNGUPA RNGDNA RNGHOLD RNGSETMS RNGCYC",
+    "METER": "MAINS SPC CYCLES",
+    "WIRING": "RLYPIN RLYINV RNGPIN RNGINV IRPIN",
+    "UI": "OLED OLEDADDR OLEDROT IRADDR IROK IRCONF IRARMMS PIXEL LIVEVAC",
+}
+GROUP_OF = {k: g for g, keys in CFG_GROUPS.items() for k in keys.split()}
+GROUP_INFO = {"CAL": "analog calibration: gains, offsets, phase, ADC reference",
+              "FUSE": "virtual fuses: TRIPA / TRIPPK",
+              "RANGE": "current range switching thresholds and mode",
+              "METER": "mains Hz, samples per cycle, window length",
+              "WIRING": "relay, range relay and IR pins and their polarity",
+              "UI": "OLED, IR remote codes, NeoPixel"}
+
+
+def same_value(a, b):
+    return abs(a - b) <= 1e-6 * max(1.0, abs(a), abs(b))
+
+
+@dataclass
+class Snapshot:
+    """Every config key of one board, with its group and where it came from.
+    meta: fw, board, uid, cfgver, src (RAM / SAVED / RAM-CFG), dirty, taken."""
+    meta: dict
+    rows: list = field(default_factory=list)      # (group, key, value)
+
+    def values(self):
+        return {k: v for _, k, v in self.rows}
+
+    def same_values(self, other):
+        a, b = self.values(), other.values()
+        return a.keys() == b.keys() and all(same_value(a[k], b[k]) for k in a)
+
+    def diff(self, current):
+        """(group, key, current value or None, snapshot value) for every key
+        whose value differs from `current` (key -> value)."""
+        return [(g, k, current.get(k), v) for g, k, v in self.rows
+                if k not in current or not same_value(current[k], v)]
+
+    def save(self, path):
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            f.write("# 120VMonitor config snapshot\n")
+            for k, v in self.meta.items():
+                f.write(f"#{k},{v}\n")
+            f.write("group,key,value\n")
+            for g, k, v in self.rows:
+                f.write(f"{g},{k},{v:.9g}\n")
+
+    @classmethod
+    def load(cls, path):
+        snap = cls(meta={})
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("#"):
+                    k, sep, v = line[1:].partition(",")
+                    if sep:
+                        snap.meta[k.strip()] = v.strip()
+                    continue
+                p = line.split(",")
+                if len(p) >= 3 and p[0] != "group":
+                    try:
+                        snap.rows.append((p[0].upper(), p[1].upper(), float(p[2])))
+                    except ValueError:
+                        pass
+        if not snap.rows:
+            raise ValueError(f"{os.path.basename(path)} holds no config rows")
+        return snap
+
+
+def log_snapshot(snap, folder):
+    """Write snap to folder/<board>_<uid>_<time>.csv unless the newest file for
+    that board already holds the same values. Returns the path, or None."""
+    os.makedirs(folder, exist_ok=True)
+    stem = f"{snap.meta.get('board', 'board')}_{snap.meta.get('uid', '')[-8:] or 'nouid'}"
+    older = sorted(n for n in os.listdir(folder) if n.startswith(stem + "_") and n.endswith(".csv"))
+    if older:
+        try:
+            if Snapshot.load(os.path.join(folder, older[-1])).same_values(snap):
+                return None
+        except (OSError, ValueError):
+            pass
+    path = os.path.join(folder, f"{stem}_{time.strftime('%Y%m%d_%H%M%S')}.csv")
+    snap.save(path)
+    return path
+
+
 class MonitorLink:
     def __init__(self, port, baud=115200):
         if port.upper() == "SIM":
@@ -103,6 +199,7 @@ class MonitorLink:
         self._alive = True
         self.cfg = {}                 # key -> dict(value, lo, hi, help)
         self.status = {}
+        self._dump = None             # Snapshot being assembled from $DUMP lines
         self._rx = threading.Thread(target=self._reader, daemon=True, name="monitor-rx")
         self._rx.start()
 
@@ -180,6 +277,15 @@ class MonitorLink:
                                       "help": p[4] if len(p) > 4 else ""}
                 except ValueError:
                     pass
+        elif line.startswith("$DUMPHDR,"):
+            self._dump = Snapshot(meta=dict(kv.split("=", 1) for kv in line[9:].split(",") if "=" in kv))
+        elif line.startswith("$DUMP,"):
+            p = line[6:].split(",")
+            if self._dump is not None and len(p) >= 3:
+                try:
+                    self._dump.rows.append((p[0], p[1], float(p[2])))
+                except ValueError:
+                    pass
         elif line.startswith("$STATUS,"):
             for kv in line[8:].split(","):
                 if "=" in kv:
@@ -234,6 +340,27 @@ class MonitorLink:
     def read_cfg(self):
         self.request("!CFG", ("$CFGEND", "$ERR"), 3.0)
         return self.cfg
+
+    def dump(self, saved=False):
+        """Snapshot of every key and its group: the running values, or with
+        saved=True the flash/EEPROM block (LinkError if none is stored).
+        Firmware before 1.4 has no !DUMP; then it is !CFG (RAM only), the
+        group table above and no uid."""
+        try:
+            self.request("!DUMP,SAVED" if saved else "!DUMP", ("$DUMPEND", "$ERR"), 3.0)
+        except LinkError as e:
+            if "unknown command" not in str(e):
+                raise
+            self.read_cfg()
+            st = self.get_status()
+            snap = Snapshot(meta={"fw": st.get("fw", "?"), "board": st.get("board", "RA4M1"),
+                                  "uid": "", "cfgver": "?", "src": "RAM-CFG",
+                                  "dirty": st.get("dirty", "?")})
+            snap.rows = [(GROUP_OF.get(k, "OTHER"), k, r["value"]) for k, r in self.cfg.items()]
+        else:
+            snap, self._dump = self._dump, None
+        snap.meta["taken"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        return snap
 
     def get_status(self):
         self.request("!STATUS", ("$STATUS",), 2.0)
@@ -373,6 +500,7 @@ def capture_stats(cap, f_guess=60.0):
         if x is None:
             continue
         xs = x[:m]
+        out[name + "dc"] = float(xs.mean())
         out[name + "rms"] = float(np.sqrt(np.mean((xs - xs.mean()) ** 2)))
         out[name + "pk"] = float(np.max(np.abs(x)))
         out[name + "crest"] = out[name + "pk"] / out[name + "rms"] if out[name + "rms"] > 0 else float("nan")
