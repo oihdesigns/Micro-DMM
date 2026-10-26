@@ -7,7 +7,12 @@
  *   Isolation-amp front end, each output pair read pseudo-differentially:
  *     A0 (+) / A1 (−)   load current      (Feather: A4 / A5)
  *     A2 (+) / A3 (−)   mains voltage
- *   SSD1306 128x64 OLED on I2C (D4 SDA / D5 SCL; Feather SDA / SCL), 0x3C
+ *   OLED on I2C (D4 SDA / D5 SCL; Feather SDA / SCL), 0x3C. OLED picks the
+ *     screen: 1 SSD1306 128x64 (XIAO default), 2 Adafruit OLED FeatherWing
+ *     128x32 (SSD1306, Feather default), 3 Adafruit FeatherWing 128x64
+ *     (SH1107). Needs the Adafruit SH110X library. The FeatherWings' A/B/C
+ *     buttons are on D9/D6/D5 — the IR, load relay and range relay pins — so
+ *     they are not read, and must not be pressed: they short those lines to GND.
  *   Relay driver on RLYPIN (config key, default D6), driven OPEN at boot
  *   IR receiver (TSOP-style, active low) on IRPIN, default D9 — the pin needs
  *     an edge interrupt, which D10 (P109) does not have on the XIAO RA4M1
@@ -114,10 +119,15 @@
  *        trig      0 now · 1 |I| >= level A · 2 V rising zero crossing ·
  *                  3 close the relay (inrush) · 4 |V| >= level V ·
  *                  5 close the relay once the pretrigger is full, then
- *                    trigger on |I| >= level A (needs ch 1/2)
+ *                    trigger on |I| >= level A (needs ch 1/2) ·
+ *                  6 dropout: a mains cycle's Irms falls below level A after
+ *                    a cycle at or above it (needs ch 1/2); trig_idx is the
+ *                    start of the first low cycle, so a high pre_pct keeps
+ *                    what led up to an over-current trip
  *        pre_pct   share of the buffer kept from before the trigger
- *        timeout   ms to wait for the trigger (also aborted by any serial byte);
- *                  trig 5 leaves the relay closed on a timeout unless open_after
+ *        timeout   ms to wait for the trigger, 0 = until aborted (any serial
+ *                  byte aborts too); trig 5 leaves the relay closed on a
+ *                  timeout unless open_after
  *        relay_us  trig 3 only: -1 = close as soon as armed, otherwise close
  *                  this many us after a rising V zero crossing (needs ch 0/2)
  *      ,<ipk_a>,<ov_a>,<ov_cyc>,<auto_ms>,<open_after>   safe start, 0 = off:
@@ -136,8 +146,15 @@
  *        the averages; TRIPPK and the instant trip see every single scan.
  *      ,<rng>  -1 follow RNGMODE (V-only captures and auto-mode inrush
  *                captures go HIGH), 0 HIGH, 1 LOW
+ *      ,<mon>  0 suspend: nothing but sampling until the capture ends (best
+ *                timing). 1 readings while armed: the capture's own samples
+ *                also make a $PWR line every CYCLES mains cycles (needs ch 2
+ *                for power), so the meter and its log keep going. Each line
+ *                goes out a field per sample; lower the rate or avg if the
+ *                capture comes back LATE. TRIPA is only checked by normal
+ *                metering, so use TRIPPK or the safe-start limits here.
  *   !RANGE,<0|1|2|3>          RNGMODE (RAM): auto / HIGH / LOW / auto-delayed
- *   !ABORT                    stop waiting for a trigger
+ *   !ABORT                    stop waiting for a trigger ($CAPTMO,ABORT)
  *   !DACTEST,<hz>,<deg>[,<amp>]  Feather only: loopback test sines, A0 "voltage"
  *                             and A1 "current" lagging it by <deg>, <amp> V peak
  *                             about mid-rail (default 1.0); !DACTEST,0 stops
@@ -161,7 +178,7 @@
  *   $IR,<addr>,<cmd>   $REMOTE,<PRIMED|CANCEL|TIMEOUT|CLOSE|OPEN>
  *   $DAC,<hz>,<deg>,<amp>   the test generator's actual settings (hz 0 = off)
  *   $CD,<hex>   4 hex digits per int16 sample, V,I interleaved when ch = 2
- *   $CEND,<n>   $CAPTMO   $RLY,<0|1>   $TRIP,<RMS|PK>,<value>,<limit>
+ *   $CEND,<n>   $CAPTMO,<TIMEOUT|ABORT>   $RLY,<0|1>   $TRIP,<RMS|PK>,<value>,<limit>
  *   $STATUS,…   $OK,<what>   $ERR,<message>
  */
 
@@ -169,6 +186,7 @@
 #include <EEPROM.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <Adafruit_SH110X.h>
 #include <Adafruit_NeoPixel.h>
 #include "monitor_types.h"
 
@@ -316,7 +334,12 @@ static uint32_t g_blankEnd = 0;
 static int8_t   g_rngReport = -1;          // RngWhy to report from loop()
 static float    g_overVal = 0;
 
-Adafruit_SSD1306 display(128, 64, &Wire, -1);
+// one object per screen type; the frame buffer is only allocated by begin()
+static Adafruit_SSD1306 g_ssd64(128, 64, &Wire, -1), g_ssd32(128, 32, &Wire, -1);
+static Adafruit_SH1107  g_sh64(64, 128, &Wire);
+static Adafruit_GFX*    g_gfx = &g_ssd64;      // the screen in use
+static uint8_t  g_oledType = 0;                // cfg.oled it was started as
+static int16_t  g_oledH = 64;
 static bool     g_oledOk = false;
 static uint32_t g_lastDispMs = 0;
 
@@ -339,7 +362,7 @@ static const CfgField CFG_FIELDS[] = {
   {"TRIPPK",  FT_FLOAT, CF(tripPk),  0,     1000,  "relay trip |i| peak, 0=off", CG_FUSE},
   {"RLYPIN",  FT_U8,    CF(relayPin),0,     21,    "relay driver pin", CG_WIRING},
   {"RLYINV",  FT_U8,    CF(relayInv),0,     1,     "relay active-low", CG_WIRING},
-  {"OLED",    FT_U8,    CF(oled),    0,     1,     "drive the OLED", CG_UI},
+  {"OLED",    FT_U8,    CF(oled),    0,     3,     "0 off, 1 SSD1306 128x64, 2 FeatherWing 128x32, 3 FeatherWing 128x64 (SH1107)", CG_UI},
   {"OLEDADDR",FT_U8,    CF(oledAddr),0x3C,  0x3D,  "OLED I2C address", CG_UI},
   {"OLEDROT", FT_U8,    CF(oledRot), 0,     1,     "OLED 0 = right side up, 1 = upside down", CG_UI},
   {"IRPIN",   FT_U8,    CF(irPin),   0,     21,    "IR receiver pin, 0=off", CG_WIRING},
@@ -389,7 +412,11 @@ void configDefaults() {
   cfg.tripPk   = 0.0f;
   cfg.relayPin = 6;
   cfg.relayInv = 0;
+#if BOARD_F405
+  cfg.oled     = 2;                // Adafruit OLED FeatherWing 128x32
+#else
   cfg.oled     = 1;
+#endif
   cfg.oledAddr = 0x3C;
   cfg.oledRot  = 0;
   cfg.irPin     = 9;
@@ -1290,6 +1317,7 @@ struct CapReq {
   uint8_t open_after;     // open when the capture completes
   uint8_t avg;            // scans averaged into each stored sample
   int8_t  rng;            // -1 follow RNGMODE, 0 HIGH, 1 LOW
+  uint8_t mon;            // 1 = $PWR readings from the capture's samples while it runs
 };
 static CapReq g_cap_req;
 static bool g_cap_pending = false;
@@ -1315,6 +1343,20 @@ static void hex4(char* p, int16_t v) {
 
 static void drawCaptureNotice(const char* what);
 
+// readings while armed: a finished window's $PWR line goes out one field per
+// sample, so formatting never holds the sampling up for long
+static float   g_monF[18];
+static int8_t  g_monPos = -1;
+static const uint8_t MON_DP[18] = { 4, 5, 4, 4, 4, 4, 3, 3, 5, 6, 2, 0, 0, 0, 0, 4, 5, 0 };
+
+static void monPrintStep() {
+  if (g_monPos < 0) return;
+  if (g_monPos == 0) Serial.print(F("$PWR,"));
+  Serial.print(g_monF[g_monPos], MON_DP[g_monPos]);
+  if (++g_monPos >= 18) { Serial.println(); g_monPos = -1; }
+  else Serial.print(',');
+}
+
 void runCapture() {
   g_cap_pending = false;
   CapReq q = g_cap_req;
@@ -1329,7 +1371,7 @@ void runCapture() {
     Serial.println(F("$ERR,that trigger needs the voltage channel (ch 0 or 2)"));
     return;
   }
-  if ((q.trig == 1 || q.trig == 5) && q.ch == 0) {
+  if ((q.trig == 1 || q.trig == 5 || q.trig == 6) && q.ch == 0) {
     Serial.println(F("$ERR,current trigger needs the current channel (ch 1 or 2)"));
     return;
   }
@@ -1384,7 +1426,7 @@ void runCapture() {
   int32_t relayDeadline = 0; bool relayWait = false;   // trig 3 with sync
   uint32_t t_first = 0, t_last = 0;
   uint32_t ms0 = millis();
-  bool timedOut = false;
+  bool timedOut = false, aborted = false;
 
   // safe start, in raw counts / CPU cycles
   float ipkC = (q.ipk_a > 0 && g_ig != 0) ? fabsf(q.ipk_a / g_ig / l) : 0;
@@ -1402,6 +1444,48 @@ void runCapture() {
   bool wasClosed = g_relay;
   int32_t rngAt = -1;                   // sample where an overload went HIGH
 
+  // trig 6: per-cycle Irms, armed by a cycle at or above the level
+  float lvlSq = (float)lvlI * (float)lvlI;
+  uint64_t dqSum = 0; uint32_t dqN = 0, dqStart = cyc(); bool dqArmed = false;
+
+  // readings while armed: one window = CYCLES mains cycles, sums relative to v0 / i0
+  const bool hasV = q.ch != 1, hasI = q.ch != 0;
+  const uint32_t monLen = cycLen * (cfg.cycles ? cfg.cycles : 1);
+  uint32_t mwN = 0, mwStart = cyc(), mwZx = 0, mwZxFirst = 0, mwZxLast = 0;
+  int64_t mwSv = 0, mwSi = 0, mwSvv = 0, mwSii = 0, mwSvi = 0;
+  int32_t mwVpk = 0, mwIpk = 0;
+  uint8_t mwFlags = 0;
+  bool mwVLow = false;
+  auto monReset = [&](uint32_t ts) {
+    mwN = 0; mwStart = ts; mwZx = 0; mwSv = mwSi = mwSvv = mwSii = mwSvi = 0;
+    mwVpk = mwIpk = 0; mwFlags = 0;
+  };
+  auto monFinish = [&](uint32_t ts) {
+    float kv = l * cfg.vGain, ki = l * g_ig;
+    double n = (double)mwN;
+    double mv = mwSv / n, mi = mwSi / n;
+    float vrms = hasV ? (float)sqrt(fmax(mwSvv / n - mv * mv, 0.0)) * fabsf(kv) : 0.0f;
+    float irms = hasI ? (float)sqrt(fmax(mwSii / n - mi * mi, 0.0)) * fabsf(ki) : 0.0f;
+    float p = (hasV && hasI) ? (float)(mwSvi / n - mv * mi) * kv * ki : 0.0f;
+    float s = vrms * irms;
+    float span = (float)(uint32_t)(ts - mwStart) / (float)SystemCoreClock;
+    g_wh += (double)p * span / 3600.0;
+    uint8_t fl = mwFlags | (flags & FLG_LATE) | (g_tripLatch ? FLG_TRIP : 0);
+    if (hasV && mwZx < 2) fl |= FLG_NOCROSS;
+    float* f = g_monF;
+    f[0] = vrms; f[1] = irms; f[2] = p; f[3] = s;
+    f[4] = sqrtf(fmaxf(s * s - p * p, 0.0f)); f[5] = s > 0 ? p / s : 0.0f;
+    f[6] = mwZx >= 2 ? (float)(mwZx - 1) * (float)SystemCoreClock / (float)(uint32_t)(mwZxLast - mwZxFirst) : 0.0f;
+    f[7] = mwVpk * fabsf(kv); f[8] = mwIpk * fabsf(ki); f[9] = (float)g_wh;
+    f[10] = millis() / 1000.0f; f[11] = (float)mwN; f[12] = q.avg; f[13] = g_relay ? 1 : 0;
+    f[14] = fl;
+    f[15] = hasV ? (float)(mv + v0 - vOffC) * kv : 0.0f;
+    f[16] = hasI ? (float)(mi + i0 - iOffC) * ki : 0.0f;
+    f[17] = g_rng;
+    if (g_streaming && Serial) g_monPos = 0;
+  };
+  g_monPos = -1;
+
   uint32_t next = cyc();
   for (;;) {
     if (per) {
@@ -1412,18 +1496,22 @@ void runCapture() {
     uint32_t ts = cyc();
     // oversampling: average q.avg scans; the instant trip keeps the worst single one
     int32_t sv = 0, si = 0, iDev = 0;
+    uint8_t sf = 0;                      // this sample's clip flags
     for (uint8_t a = 0; a < q.avg; a++) {
       if (a && sub) { uint32_t due = ts + a * sub; while ((int32_t)(cyc() - due) < 0) {} }
       adcScan();
-      if (q.ch != 1) sv += pairV(flags);
+      uint8_t f1 = 0;
+      if (q.ch != 1) sv += pairV(f1);
       if (q.ch != 0) {
-        int32_t r = pairI(flags);
+        int32_t r = pairI(f1);
         checkPeak(r);
-        if (g_upArmed && (flags & FLG_ICLIP)) rangeClip(r);
+        if (g_upArmed && (f1 & FLG_ICLIP)) rangeClip(r);
         si += r;
         if (labs(r - i0) > labs(iDev)) iDev = r - i0;
       }
+      sf |= f1;
     }
+    flags |= sf;
     int32_t v = sv, i = si;
     if (q.avg > 1) {
       int32_t h = q.avg / 2;
@@ -1448,6 +1536,9 @@ void runCapture() {
       ovC  = (q.ov_a  > 0 && g_ig != 0) ? fabsf(q.ov_a  / g_ig / l) : 0;
       ovSq = ovC * ovC;
       ovSum = 0; ovN = 0; ovStart = ts;
+      lvlSq = (float)lvlI * (float)lvlI;
+      dqSum = 0; dqN = 0; dqStart = ts;
+      monReset(ts);
     }
 
     if (trigAt < 0) {
@@ -1462,6 +1553,19 @@ void runCapture() {
         switch (q.trig) {
           case 0: fire = true; break;
           case 1: case 5: fire = labs(i - i0) >= lvlI; break;
+          case 6: {
+            int32_t d = i - i0;
+            uint32_t el = ts - dqStart;
+            if (el >= 2 * cycLen) { dqSum = 0; dqN = 0; dqStart = ts; }   // not sampling yet: start afresh
+            else if (el >= cycLen) {
+              float ms = dqN ? (float)dqSum / (float)dqN : 0.0f;
+              if (ms >= lvlSq) dqArmed = true;
+              else if (dqArmed) fire = true;            // dqN samples ago it was still on
+              if (!fire) { dqSum = 0; dqN = 0; dqStart += cycLen; }
+            }
+            if (!fire) { dqSum += (uint64_t)((int64_t)d * d); dqN++; }
+            break;
+          }
           case 4: fire = labs(v - v0) >= lvlV; break;
           case 2:
             if (v < v0 - hystV) vLow = true;
@@ -1482,6 +1586,12 @@ void runCapture() {
         if (fire) {
           trigAt = (int32_t)(count - 1);
           remaining = post_n;
+          if (q.trig == 6) {                // mark the start of the first low cycle
+            trigAt -= (int32_t)dqN;
+            if (trigAt < 0) trigAt = 0;
+            uint32_t since = count - 1 - (uint32_t)trigAt;
+            remaining = post_n > since ? post_n - since : 1;
+          }
           if (q.trig == 3) {
             g_tripLatch = false;
             relayDrive(true);
@@ -1491,7 +1601,8 @@ void runCapture() {
         }
       }
       if ((count & 255) == 0) {
-        if (Serial.available() || (millis() - ms0) > q.timeout_ms) { timedOut = true; break; }
+        if (Serial.available()) { timedOut = aborted = true; break; }
+        if (q.timeout_ms && (millis() - ms0) > q.timeout_ms) { timedOut = true; break; }
       }
     }
     // ── safe start ──
@@ -1531,11 +1642,34 @@ void runCapture() {
       openAt = (int32_t)(count - 1); openWhy = SAFE_TRIPPK;   // the global TRIPPK got there first
     }
 
+    if (q.mon) {
+      int32_t dv = v - v0, di = i - i0;
+      mwN++;
+      if (hasV) {
+        mwSv += dv; mwSvv += (int64_t)dv * dv;
+        if (labs(dv) > mwVpk) mwVpk = labs(dv);
+        if (dv < -hystV) mwVLow = true;
+        else if (mwVLow && dv >= 0) { mwVLow = false; if (!mwZx++) mwZxFirst = ts; mwZxLast = ts; }
+      }
+      if (hasI) {
+        mwSi += di; mwSii += (int64_t)di * di;
+        if (labs(di) > mwIpk) mwIpk = labs(di);
+        if (hasV) mwSvi += (int64_t)dv * di;
+      }
+      mwFlags |= sf;
+      if ((uint32_t)(ts - mwStart) >= monLen) {
+        if (g_monPos < 0) monFinish(ts);  // the last line is still going out: skip this one
+        monReset(ts);
+      }
+      monPrintStep();
+    }
+
     if (trigAt >= 0) {
       if (remaining <= 1) break;
       remaining--;
     }
   }
+  while (g_monPos >= 0) monPrintStep();  // finish a half-sent $PWR line
   reportPeakTrip();
   if (relayAt >= 0) Serial.println(F("$RLY,1"));
   // trig 5 has closed the relay before its trigger, so open_after covers a timeout too
@@ -1557,7 +1691,7 @@ void runCapture() {
 
   adcMask(MASK_ALL);
   if (timedOut) {
-    Serial.println(F("$CAPTMO"));
+    Serial.println(aborted ? F("$CAPTMO,ABORT") : F("$CAPTMO,TIMEOUT"));
     return;
   }
 
@@ -1714,28 +1848,61 @@ static void serviceRemote() {
 
 // ═══ OLED ═════════════════════════════════════════════════════════════════════
 
+// the drivers share Adafruit_GFX for drawing, but not clear / push
+static void oledClear() {
+  switch (g_oledType) {
+    case 1: g_ssd64.clearDisplay(); break;
+    case 2: g_ssd32.clearDisplay(); break;
+    case 3: g_sh64.clearDisplay(); break;
+  }
+}
+
+static void oledShow() {
+  switch (g_oledType) {
+    case 1: g_ssd64.display(); break;
+    case 2: g_ssd32.display(); break;
+    case 3: g_sh64.display(); break;
+  }
+}
+
+// blank the screen in use (before switching it off or to another type)
+static void oledBlank() {
+  if (!g_oledOk) return;
+  oledClear();
+  oledShow();
+}
+
 static void oledInit() {
   g_oledOk = false;
-  if (!cfg.oled) return;
-  if (!display.begin(SSD1306_SWITCHCAPVCC, cfg.oledAddr)) return;
+  g_oledType = 0;
+  bool ok = false;
+  uint8_t rot = cfg.oledRot ? 2 : 0;
+  switch (cfg.oled) {
+    case 1: ok = g_ssd64.begin(SSD1306_SWITCHCAPVCC, cfg.oledAddr); g_gfx = &g_ssd64; g_oledH = 64; break;
+    case 2: ok = g_ssd32.begin(SSD1306_SWITCHCAPVCC, cfg.oledAddr); g_gfx = &g_ssd32; g_oledH = 32; break;
+    case 3: ok = g_sh64.begin(cfg.oledAddr, true); g_gfx = &g_sh64; g_oledH = 64;
+            rot += 1; break;               // the panel is 64x128: turn it landscape
+  }
+  if (!ok) return;
+  g_oledType = cfg.oled;
   g_oledOk = true;
-  display.setRotation(cfg.oledRot ? 2 : 0);
-  display.clearDisplay();
-  display.setTextColor(SSD1306_WHITE);
-  display.setTextSize(1);
-  display.setCursor(0, 0);
-  display.println(F("120V MONITOR"));
-  display.print(F("fw ")); display.println(F(FW_VERSION));
-  display.display();
+  g_gfx->setRotation(rot);
+  oledClear();
+  g_gfx->setTextColor(1);                  // SSD1306_WHITE == SH110X_WHITE
+  g_gfx->setTextSize(1);
+  g_gfx->setCursor(0, 0);
+  g_gfx->println(F("120V MONITOR"));
+  g_gfx->print(F("fw ")); g_gfx->println(F(FW_VERSION));
+  oledShow();
 }
 
 static void drawCaptureNotice(const char* what) {
   if (!g_oledOk) return;
-  display.fillRect(0, 56, 128, 8, SSD1306_BLACK);
-  display.setTextSize(1);
-  display.setCursor(0, 56);
-  display.print(what);
-  display.display();
+  g_gfx->fillRect(0, g_oledH - 8, 128, 8, 0);
+  g_gfx->setTextSize(1);
+  g_gfx->setCursor(0, g_oledH - 8);
+  g_gfx->print(what);
+  oledShow();
 }
 
 static void printFit(float v, uint8_t width, uint8_t maxdp) {
@@ -1745,7 +1912,17 @@ static void printFit(float v, uint8_t width, uint8_t maxdp) {
   uint8_t dp = maxdp;
   while (dp > 0 && (a >= powf(10.0f, (float)(width - dp - 2 - (v < 0))))) dp--;
   dtostrf(v, width, dp, buf);
-  display.print(buf);
+  g_gfx->print(buf);
+}
+
+// the bottom line: prompt / trip / clip, else `idle`
+static bool drawAlert(const PowerResult& r) {
+  Adafruit_GFX& d = *g_gfx;
+  if (g_primed)                  d.print(F("PRESS * TO CLOSE"));
+  else if (g_tripLatch)          d.print(F("TRIPPED"));
+  else if (r.flags & (FLG_VCLIP | FLG_ICLIP)) d.print(F("CLIP"));
+  else return false;
+  return true;
 }
 
 static void drawMeter() {
@@ -1754,34 +1931,50 @@ static void drawMeter() {
   if (now - g_lastDispMs < 250) return;
   g_lastDispMs = now;
   const PowerResult& r = g_last;
+  Adafruit_GFX& d = *g_gfx;
 
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setCursor(0, 0);
-  display.print(g_relay ? F("LOAD ON ") : F("LOAD OFF"));
-  if (cfg.rngPin) { display.setCursor(54, 0); display.print(g_rng == RNG_LO ? F("LO") : F("HI")); }
-  display.setCursor(74, 0);
-  if (r.hz > 0) { printFit(r.hz, 5, 2); display.print(F("Hz")); }
-  else display.print(F(" --.-Hz"));
+  oledClear();
+  d.setTextSize(1);
+  d.setCursor(0, 0);
+  d.print(g_relay ? F("LOAD ON ") : F("LOAD OFF"));
+  if (cfg.rngPin) { d.setCursor(54, 0); d.print(g_rng == RNG_LO ? F("LO") : F("HI")); }
+  d.setCursor(74, 0);
+  if (r.hz > 0) { printFit(r.hz, 5, 2); d.print(F("Hz")); }
+  else d.print(F(" --.-Hz"));
 
-  display.setTextSize(2);
-  display.setCursor(0, 11);
-  printFit(r.vrms, 7, 2); display.print('V');
-  display.setCursor(0, 29);
-  printFit(r.irms, 7, 3); display.print('A');
+  if (g_oledH < 64) {
+    // 128x32: big V on the left, A and W stacked beside it, PF and Wh below
+    d.setTextSize(2);
+    d.setCursor(0, 8);
+    printFit(r.vrms, 6, 1); d.print('V');
+    d.setTextSize(1);
+    d.setCursor(86, 8);
+    printFit(r.irms, 6, 3); d.print('A');
+    d.setCursor(86, 16);
+    printFit(r.p, 6, 1); d.print('W');
+    d.setCursor(0, 24);
+    if (!drawAlert(r)) {
+      d.print(F("PF")); printFit(r.pf, 5, 2);
+      d.setCursor(48, 24);
+      printFit((float)g_wh, 7, 3); d.print(F("Wh"));
+    }
+  } else {
+    d.setTextSize(2);
+    d.setCursor(0, 11);
+    printFit(r.vrms, 7, 2); d.print('V');
+    d.setCursor(0, 29);
+    printFit(r.irms, 7, 3); d.print('A');
 
-  display.setTextSize(1);
-  display.setCursor(0, 47);
-  printFit(r.p, 7, 1); display.print(F("W PF"));
-  printFit(r.pf, 6, 3);
+    d.setTextSize(1);
+    d.setCursor(0, 47);
+    printFit(r.p, 7, 1); d.print(F("W PF"));
+    printFit(r.pf, 6, 3);
 
-  display.setCursor(0, 56);
-  if (g_primed)                  display.print(F("PRESS * TO CLOSE"));
-  else if (g_tripLatch)          display.print(F("TRIPPED"));
-  else if (r.flags & (FLG_VCLIP | FLG_ICLIP)) display.print(F("CLIP"));
-  else { printFit((float)g_wh, 8, 3); display.print(F("Wh")); }
-  if (g_streaming && !g_primed) { display.setCursor(110, 56); display.print(F("PC")); }
-  display.display();
+    d.setCursor(0, 56);
+    if (!drawAlert(r)) { printFit((float)g_wh, 8, 3); d.print(F("Wh")); }
+  }
+  if (g_streaming && !g_primed) { d.setCursor(110, g_oledH - 8); d.print(F("PC")); }
+  oledShow();
 }
 
 // ═══ DAC loopback test (Feather) ══════════════════════════════════════════════
@@ -2017,7 +2210,7 @@ void handleCommand(char* cmd) {
       else if (g_haveLast) pixelUpdate(g_last.vrms);
     }
     if (cfg.oled != oldOled || cfg.oledAddr != oldAddr || f->offset == offsetof(Config, oledRot)) {
-      if (g_oledOk && !cfg.oled) { display.clearDisplay(); display.display(); }
+      oledBlank();                        // off, or a different screen type
       oledInit();
     }
     g_dirty = true;
@@ -2083,7 +2276,8 @@ void handleCommand(char* cmd) {
     g_cap_req.open_after = (uint8_t)argF(cmd, 12, 0);
     g_cap_req.avg        = (uint8_t)constrain(argF(cmd, 13, 1), 1, 64);
     g_cap_req.rng        = (int8_t)constrain(argF(cmd, 14, -1), -1, 1);
-    if (g_cap_req.ch > 2 || g_cap_req.trig > 5) { Serial.println(F("$ERR,bad CAP args")); return; }
+    g_cap_req.mon        = argF(cmd, 15, 0) != 0;
+    if (g_cap_req.ch > 2 || g_cap_req.trig > 6) { Serial.println(F("$ERR,bad CAP args")); return; }
     if (g_cap_req.rate > 500000UL) g_cap_req.rate = 500000UL;
     g_cap_pending = true;
   }
@@ -2151,9 +2345,9 @@ void setup() {
   if (!loaded) Serial.println(F("$ERR,no valid config in EEPROM - defaults loaded (uncalibrated)"));
   if (g_migrated) {
     bool ok = configSave();
-    if (!ok) Serial.println(F("$ERR,config migrated to v4 but the save failed"));
-    else if (g_migratedLo) Serial.println(F("$OK,config migrated to v4, calibration kept (IGAINLO = IGAIN/10 until calibrated)"));
-    else Serial.println(F("$OK,config migrated to v4, calibration kept"));
+    if (!ok) Serial.println(F("$ERR,config migrated to v5 but the save failed"));
+    else if (g_migratedLo) Serial.println(F("$OK,config migrated to v5, calibration kept (IGAINLO = IGAIN/10 until calibrated)"));
+    else Serial.println(F("$OK,config migrated to v5, calibration kept"));
   }
   rangeRefresh(RW_BOOT);                // RNGMODE 2 starts LOW
   rangeReport();

@@ -28,8 +28,9 @@ RANGE_NAMES = {0: "HIGH", 1: "LOW"}          # 0.01 ohm / 0.1 ohm shunt
 RANGE_MODES = {0: "Auto", 1: "HIGH only", 2: "LOW", 3: "Auto-delayed"}
 
 TRIG_MODES = {0: "Immediate", 1: "|I| above level", 2: "V rising zero-cross",
-              4: "|V| above level", 3: "Close relay - rising zero",
-              5: "Close relay - level trigger"}
+              4: "|V| above level", 6: "Irms drops below level",
+              3: "Close relay - rising zero", 5: "Close relay - level trigger"}
+CURRENT_TRIGS = (1, 5, 6)                    # need the current channel
 CLOSE_TRIGS = (3, 5)                         # the capture closes the load relay itself
 
 
@@ -196,6 +197,8 @@ class MonitorLink:
         self._wlock = threading.Lock()
         self._txlock = threading.Lock()
         self._cap = None
+        self._cap_want = 0            # int16 values the $CAP header promised
+        self._cap_bad = 0             # $CD lines that didn't parse
         self._alive = True
         self.cfg = {}                 # key -> dict(value, lo, hi, help)
         self.status = {}
@@ -235,16 +238,29 @@ class MonitorLink:
             buf += chunk
             while b"\n" in buf:
                 line, buf = buf.split(b"\n", 1)
-                self._line(line.decode("ascii", "replace").strip())
+                # every line starts with '$': one mid-line means bytes (and a newline) were
+                # lost, so the damaged part ends there and the next line is kept
+                parts = line.split(b"$")
+                for k, part in enumerate(parts):
+                    text = ("$" if k else "") + part.decode("ascii", "replace").strip()
+                    try:
+                        self._line(text)
+                    except Exception as e:                 # noqa: BLE001 - never kill the reader
+                        self.events.put(("line", f"!! unreadable line ({e}): {text[:80]}"))
 
     def _line(self, line):
-        if not line:
+        if not line or line == "$":
             return
         if line.startswith("$CD,"):
             if self._cap is not None:
                 h = line[4:]
-                self._cap.raw.extend(int(h[k:k + 4], 16) - (0x10000 if h[k] in "89ABCDEF" else 0)
-                                     for k in range(0, len(h) - 3, 4))
+                try:
+                    if len(h) % 4:
+                        raise ValueError("odd length")
+                    self._cap.raw.extend(int(h[k:k + 4], 16) - (0x10000 if h[k] in "89ABCDEFabcdef" else 0)
+                                         for k in range(0, len(h), 4))
+                except ValueError:
+                    self._cap_bad += 1                     # the count check at $CEND reports it
             return
         if line.startswith("$CAP,"):
             p = line[5:].split(",")
@@ -260,14 +276,24 @@ class MonitorLink:
                     c.i_per_hi, c.i_off_hi, c.settle_us = float(p[15]), float(p[16]), float(p[17])
             except (ValueError, IndexError):
                 self._cap = None
+            try:
+                self._cap_want = int(p[0]) * (2 if self._cap is not None and self._cap.ch == 2 else 1)
+            except ValueError:
+                self._cap_want = -1
+            self._cap_bad = 0
             self.events.put(("line", line))
             return
         if line.startswith("$CEND"):
             cap, self._cap = self._cap, None
-            if cap is not None:
-                cap.finish()
-                self._deliver("$CEND", cap)
-                self.events.put(("capture", cap))
+            got = len(cap.raw) if cap is not None else 0
+            if cap is None or self._cap_bad or got != self._cap_want:
+                why = "its header was lost" if cap is None else f"{got} of {self._cap_want} values arrived"
+                self._deliver("$CEND", f"$ERR,data damaged in transfer ({why}) - capture again")
+                self.events.put(("line", f"!! capture damaged in transfer: {why}"))
+                return
+            cap.finish()
+            self._deliver("$CEND", cap)
+            self.events.put(("capture", cap))
             return
         if line.startswith("$CFG,"):
             p = line[5:].split(",", 4)
@@ -400,19 +426,27 @@ class MonitorLink:
 
     def capture(self, rate=20000, n=3000, ch=2, trig=0, level=0.5, pre=10.0,
                 timeout_ms=5000, relay_us=-1, ipk_a=0.0, ov_a=0.0, ov_cyc=3, auto_ms=0,
-                open_after=False, avg=1, rng=-1):
+                open_after=False, avg=1, rng=-1, mon=False):
         """Safe start (0 = off): ipk_a instant trip; ov_a for ov_cyc cycles of per-cycle
         Irms; auto_ms opens that long after the trigger; open_after at the end.
         avg: each stored sample is the mean of this many consecutive ADC scans.
-        rng: -1 follow RNGMODE, 0 HIGH, 1 LOW."""
+        rng: -1 follow RNGMODE, 0 HIGH, 1 LOW. timeout_ms 0 waits until abort().
+        mon: keep $PWR readings coming while armed (made from the capture's samples)."""
         cmd = (f"!CAP,{int(rate)},{int(n)},{int(ch)},{int(trig)},{level:g},{pre:g},{int(timeout_ms)},"
-               f"{int(relay_us)},{ipk_a:g},{ov_a:g},{int(ov_cyc)},{int(auto_ms)},{1 if open_after else 0},{int(avg)},{int(rng)}")
-        obj = self.request(cmd, ("$CEND", "$CAPTMO", "$ERR"), timeout_ms / 1000.0 + 15.0)
+               f"{int(relay_us)},{ipk_a:g},{ov_a:g},{int(ov_cyc)},{int(auto_ms)},{1 if open_after else 0},"
+               f"{int(avg)},{int(rng)},{1 if mon else 0}")
+        obj = self.request(cmd, ("$CEND", "$CAPTMO", "$ERR"),
+                           timeout_ms / 1000.0 + 15.0 if timeout_ms else None)
         if isinstance(obj, str):
             if obj.startswith("$CAPTMO"):
-                raise LinkError("capture timed out waiting for the trigger")
+                raise LinkError("aborted" if "ABORT" in obj
+                                else "timed out waiting for the trigger")
             raise LinkError(obj)
         return obj
+
+    def abort(self):
+        """Stop a capture that is waiting for its trigger; capture() then raises."""
+        self.send("!ABORT")
 
 
 # ── analysis helpers shared by the GUI and calibration ───────────────────────

@@ -39,7 +39,7 @@ struct Config {
   // hardware
   uint8_t relayPin;
   uint8_t relayInv;      /*!< 1 = driver is active-low */
-  uint8_t oled;          /*!< 1 = drive the SSD1306 */
+  uint8_t oled;          /*!< 0 off, 1 SSD1306 128x64, 2 FeatherWing 128x32, 3 FeatherWing 128x64 (SH1107) */
   uint8_t oledAddr;      /*!< 0x3C or 0x3D */
 
   // v2: IR remote + status pixel

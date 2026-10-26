@@ -38,6 +38,7 @@ class World:
         self.short = 0.05           # ohms, used while the supply drives a closed relay
         self.relay = False
         self.relay_t = 0.0
+        self.trip_t = None          # !SIMTRIP: the load's own breaker opens at this time
         self.lock = threading.RLock()
 
     def psu_out(self):
@@ -65,6 +66,8 @@ class World:
         if self.inrush:
             age = np.clip(t - self.relay_t, 0, None)
             i = i * (1 + 6 * np.exp(-age / 0.04))
+        if self.trip_t is not None:
+            i = np.where(t >= self.trip_t, 0.0, i)
         return v, i
 
 
@@ -92,16 +95,23 @@ class SimSerial:
         self.up_run = 0             # auto-delayed: overloaded cycles in a row
         self.rng_at = time.time()
         self.latched = False
+        self.cap_busy = False       # a capture is waiting for its trigger
+        self.abort = False
+        self.suspend = False        # mon 0: no $PWR while armed
 
     # ── pyserial surface ────────────────────────────────────────────────────
     def write(self, data):
         for line in data.decode().splitlines():
             if line.strip():
+                if self.cap_busy and not line.strip().upper().startswith("!SIM"):
+                    self.abort = True       # like the firmware: any byte aborts a waiting capture
+                    if line.strip().upper().startswith("!CAP"):
+                        continue
                 self._cmd(line.strip())
         return len(data)
 
     def read(self, n=1):
-        if self.streaming and time.time() - self.last_win >= 0.2:
+        if self.streaming and not self.suspend and time.time() - self.last_win >= 0.2:
             self._window()
         with self.lock:
             if not self.out:
@@ -307,11 +317,18 @@ class SimSerial:
             self._capture(p[1:])
         elif c == "!ABORT":
             pass
+        elif c == "!SIMTRIP":       # sim only: the load trips its own breaker in <s> seconds (0 = reset)
+            s = float(p[1]) if len(p) > 1 else 0
+            WORLD.trip_t = time.time() + s if s > 0 else None
+            self._emit(f"$OK,simtrip,{s:g}")
         else:
             self._emit(f"$ERR,unknown command: {cmd}")
 
-    def _capture(self, a):
-        f = [float(x) for x in a] + [None] * 14
+    def _capture(self, a, t_trig=None):
+        f = [float(x) for x in a] + [None] * 16
+        if int(f[3] or 0) == 6 and t_trig is None:
+            threading.Thread(target=self._wait_dropout, args=(a, f), daemon=True).start()
+            return
         rate = f[0] or 200000.0
         n, ch, trig = int(f[1] or 4000), int(f[2] if f[2] is not None else 2), int(f[3] or 0)
         level, pre = f[4] if f[4] is not None else 0.5, f[5] if f[5] is not None else 10
@@ -347,6 +364,8 @@ class SimSerial:
             ic = np.where(np.arange(n) < pre_n, np.round((TRUE_I_OFF_LO if rng0 else TRUE_I_OFF) / LSB), ic)
         else:
             t = start + np.arange(n) * dt
+            if t_trig is not None:          # dropout: the trip lands on the trigger index
+                t = t_trig + (np.arange(n) - pre_n) * dt
             if trig == 2:
                 t = t + (math.ceil(t[pre_n] * 60) / 60 - t[pre_n])
             vc, ic = self._adc(t, avg)
@@ -415,6 +434,34 @@ class SimSerial:
             self._emit("$RLY,0")
             self._emit(f"$SAFE,{['NONE','INST','OVERCURRENT','TIMER','END'][why]},0")
         self._emit(f"$CEND,{n}")
+
+    def _wait_dropout(self, a, f):
+        """trig 6: wait (in the background, so a byte can abort it) for a mains
+        cycle's Irms to fall below the level after one at or above it."""
+        level = f[4] if f[4] is not None else 0.5
+        timeout_ms = f[6] if f[6] is not None else 5000
+        self.cap_busy, self.abort, self.suspend = True, False, not f[15]
+        t0, armed, t_fire = time.time(), False, None
+        try:
+            while True:
+                time.sleep(0.02)
+                if self.abort:
+                    self._emit("$CAPTMO,ABORT")
+                    return
+                if timeout_ms and (time.time() - t0) * 1000 > timeout_ms:
+                    self._emit("$CAPTMO,TIMEOUT")
+                    return
+                now = time.time()
+                _, i = WORLD.vi(now - np.arange(0, 1 / 60, 1e-4))
+                irms = float(np.sqrt(np.mean(i ** 2)))
+                if irms >= level:
+                    armed = True
+                elif armed:
+                    t_fire = WORLD.trip_t if WORLD.trip_t is not None and WORLD.trip_t <= now else now
+                    break
+        finally:
+            self.cap_busy, self.suspend = False, False
+        self._capture(a, t_trig=t_fire)
 
 
 class SimPSU:

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Feather STM32F405 (STM32duino USB CDC) VID=0x0483=1155, PID=0x5740=22336 -->
+    <usb-device vendor-id="1155" product-id="22336" />
+
+    <!-- Seeed XIAO RA4M1 VID=0x2886=10374, PID=0x0049=73 / 0x8049=32841 -->
+    <usb-device vendor-id="10374" product-id="73" />
+    <usb-device vendor-id="10374" product-id="32841" />
+
+    <!-- Arduino UNO R4 (also builds the firmware) VID=0x2341=9025 -->
+    <usb-device vendor-id="9025" />
+</resources>

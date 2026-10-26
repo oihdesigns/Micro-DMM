@@ -20,7 +20,7 @@ Feather's differences are in [Feather STM32F405](#feather-stm32f405).
 |---|---|
 | Current, isolation amp OUTP / OUTN | A0 (+) / A1 (−) |
 | Voltage, isolation amp OUTP / OUTN | A2 (+) / A3 (−) |
-| OLED SSD1306 128x64 | D4 SDA / D5 SCL, 0x3C (`OLEDADDR`). `OLEDROT 1` flips it upside down |
+| OLED SSD1306 128x64 | D4 SDA / D5 SCL, 0x3C (`OLEDADDR`). `OLED` picks the screen (below); `OLEDROT 1` flips it upside down |
 | Relay driver | **D6 by default**, `RLYPIN` key; `RLYINV 1` if active-low |
 | IR receiver (TSOP-style, active-low out) | **D9** by default, `IRPIN` key, 0 = off. It needs a pin with an edge interrupt; **D10 (P109) has none on the XIAO RA4M1**. D7, D8 and D9 all work |
 | Status NeoPixel | the XIAO's built-in RGB (P112, enabled by P500) |
@@ -39,13 +39,22 @@ Build with **Generic STM32F4 series → Adafruit Feather STM32F405**, USB suppor
 |---|---|
 | Current, isolation amp OUTP / OUTN | **A4 (+) / A5 (−)** |
 | Voltage, isolation amp OUTP / OUTN | A2 (+) / A3 (−) |
-| OLED | SDA / SCL |
+| OLED | SDA / SCL. Default `OLED 2`: the Adafruit OLED FeatherWing 128x32 at 0x3C |
 | Load (output on/off) relay driver | **D6** (`RLYPIN 6`, default) |
 | IR receiver | **D9** (`IRPIN 9`, default); any pin can take the edge interrupt |
 | Status NeoPixel | the Feather's own (D8, PC0) |
 | Current-range relay driver | **D5** (`RNGPIN 5`, default on the Feather; there is no D7) |
 
 These are the Feather's factory defaults (`!DEFAULTS`, or a blank flash).
+
+**Screen (`OLED` key).** 0 off, 1 SSD1306 128x64 (the XIAO's default), 2 Adafruit
+OLED FeatherWing 128x32 (SSD1306, the Feather's default), 3 Adafruit FeatherWing
+128x64 (SH1107). The sketch needs the **Adafruit SH110X** library for type 3.
+The 128x32 layout puts V large on the left, with A and W stacked beside it and
+PF and Wh on the bottom line. Prompts, trips and clipping replace the bottom line.
+**Don't press the FeatherWing's A/B/C buttons.** They are wired to D9/D6/D5, which
+are the IR, load-relay and range-relay pins, and pressing one shorts that line to
+GND. The firmware does not read them.
 Pins for `RLYPIN` / `RNGPIN` / `IRPIN` must be D1, D5, D6 or D9–D13.
 A0 and A1 are left free because they are the two DAC outputs.
 
@@ -113,6 +122,26 @@ two inrush triggers that close the relay themselves:
 
 If the relay is already closed when you start either inrush trigger, the GUI
 opens it and waits 1 s first. Pretrigger is a percentage of the buffer.
+
+**Irms drops below level** is for catching a device's own over-current
+protection tripping. The board works out the RMS current of each mains cycle.
+A cycle at or above the Level (A rms) arms the trigger, and the first cycle
+below it fires. The trigger mark is the start of that low cycle, so the
+dropout is at most one cycle after the mark. Use a high pretrigger (80–95 %)
+to keep what led up to the trip, and set the level well below the running
+current but above what is left after the trip.
+
+**Timeout 0** waits until the trigger fires or you abort. **Abort** (next to
+Capture) stops a capture that is still waiting. Any command from the PC does
+the same, including the relay button.
+
+**Readings while armed.** By default a capture does nothing but sample until
+it ends, which gives the best timing. Tick this to keep `$PWR` readings coming
+from the capture's own samples, one per `CYCLES` mains cycles, so the Meter
+tab, its trends and the CSV log keep running during a long wait. Each
+reading costs a little time per sample. If a capture comes back flagged LATE,
+lower the rate or Average N. Power and PF need V + I. TRIPA is only checked by
+normal metering, so while armed rely on TRIPPK or the safe-start limits.
 
 The capture plot always puts 0 V and 0 A on its centre line. The readout
 gives each channel's DC mean beside its rms, and the Meter tab shows both
@@ -298,6 +327,34 @@ To move a calibration from the XIAO to the Feather:
 3. Keep CAL ticked, plus FUSE, RANGE and METER if you want them. Leave WIRING
    unticked.
 4. Run **Zero offsets** with no mains and no load, then save.
+
+## Android app
+
+`android_app/` is a phone version of the GUI (Kotlin + Jetpack Compose, the
+same build setup as the other Micro-DMM apps). Open the folder in Android
+Studio and run it, or build `app-debug.apk` with `gradle assembleDebug`. Plug
+the board into the phone with a USB-OTG adapter. The app offers to open when the
+board is attached (Feather, XIAO or UNO R4), and **Connect** finds it otherwise.
+
+| Tab | What it does |
+|---|---|
+| Meter | live readings, V/I and W/PF trends, Reset Wh, CSV log to a file you choose |
+| Capture | every trigger, timing mode, average-N and safe-start option of the desktop GUI. Includes the same inrush confirmation and the 1 s open before a close-relay trigger. Plot is zero-centred: pinch to zoom, double-tap to reset. Harmonics, CSV export |
+| Config | every key, tap to edit; Save / Reload / Defaults / Zero offsets; Export snapshot, Apply from log or from a file |
+| Console | the raw protocol and a command line |
+
+The top bar has the load relay, Stream, and the range mode. Disconnecting
+opens the relay, as the desktop GUI does. Snapshots use the same CSV format as
+`config_log/`, so files move both ways. The app logs its own to
+`Android/data/com.microdmm.monitor120v/files/config_log/` on every connect
+and save. To apply a PC snapshot on the phone, copy the file over and use
+**Apply from file…**.
+
+Calibration is desktop-only: it drives the bench supply over the LAN.
+
+**Network…** connects over TCP instead of USB. `py -3 sim_server.py` serves
+the simulator on port 8120, so the app can be tried in the Android emulator
+with no board attached (connect to `10.0.2.2:8120`).
 
 ## Safety
 

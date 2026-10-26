@@ -32,7 +32,7 @@ from matplotlib.figure import Figure
 
 import bench_psu
 import calibrate as cal
-from monitor_link import (CLOSE_TRIGS, CFG_GROUPS, GROUP_INFO, GROUP_OF, RANGE_MODES, RANGE_NAMES, SAFE_WHY,
+from monitor_link import (CLOSE_TRIGS, CURRENT_TRIGS, CFG_GROUPS, GROUP_INFO, GROUP_OF, RANGE_MODES, RANGE_NAMES, SAFE_WHY,
                           TRIG_MODES, LinkError, MonitorLink, Snapshot, capture_stats, flag_text,
                           log_snapshot, same_value)
 
@@ -182,9 +182,9 @@ class App(tk.Tk):
                             "n": field(0, 2, "Samples", "n", 3000)}
         field(0, 4, "Channels", "ch", "V + I", values=["V + I", "V only", "I only"])
         field(0, 6, "Trigger", "trig", TRIG_MODES[2], values=list(TRIG_MODES.values()))
-        field(1, 0, "Level (A or V)", "level", 0.5)
+        field(1, 0, "Level (A, V; dropout A rms)", "level", 0.5)
         field(1, 2, "Pretrigger %", "pre", 10)
-        field(1, 4, "Timeout (s)", "timeout", 5)
+        field(1, 4, "Timeout (s, 0 = none)", "timeout", 5)
         field(1, 6, "Close delay after V rising zero (µs)", "relay_us", 0)
         field(0, 8, "Average N scans/sample", "avg", 7, width=4)
         field(1, 8, "Current range", "rng", CAP_RANGES[0], width=4, values=CAP_RANGES)
@@ -228,6 +228,11 @@ class App(tk.Tk):
         btns.pack(fill="x")
         self.cap_btn = ttk.Button(btns, text="Capture", command=self._capture)
         self.cap_btn.pack(side="left")
+        self.abort_btn = ttk.Button(btns, text="Abort", command=self._abort, state="disabled")
+        self.abort_btn.pack(side="left", padx=(4, 0))
+        self.mon_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(btns, text="Readings while armed (meter + log keep going; lower max rate)",
+                        variable=self.mon_var).pack(side="left", padx=6)
         self.repeat_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(btns, text="Repeat", variable=self.repeat_var).pack(side="left", padx=6)
         ttk.Button(btns, text="Save CSV…", command=self._save_capture).pack(side="left", padx=6)
@@ -748,9 +753,12 @@ class App(tk.Tk):
                     auto_ms=int(float(sf["auto_ms"].get())) if sf["auto_on"].get() else 0,
                     open_after=sf["open_after"].get(),
                     avg=int(float(v["avg"].get())),
-                    rng=CAP_RANGES.index(v["rng"].get()) - 1)
-        if trig in (1, 5) and ch == 0:
-            raise ValueError("a current level trigger needs the current channel (V + I or I only)")
+                    rng=CAP_RANGES.index(v["rng"].get()) - 1,
+                    mon=self.mon_var.get())
+        if trig in CURRENT_TRIGS and ch == 0:
+            raise ValueError("a current trigger needs the current channel (V + I or I only)")
+        if args["timeout_ms"] < 0:
+            raise ValueError("timeout must be 0 (none) or more")
         if (args["ipk_a"] or args["ov_a"]) and ch == 0:
             raise ValueError("the current limits need the current channel (V + I or I only)")
         if not 1 <= args["avg"] <= 64:
@@ -780,6 +788,10 @@ class App(tk.Tk):
         self.busy = True
         self.safe_msg = ""
         self.cap_btn.configure(state="disabled")
+        self.abort_btn.configure(state="normal")
+        if args["trig"]:
+            self.cap_stats.set("armed — waiting for the trigger" + ("" if args["timeout_ms"] else " (no timeout)")
+                               + (", readings continue" if args["mon"] else "") + "…")
 
         def work():
             try:
@@ -794,9 +806,15 @@ class App(tk.Tk):
                 self.ui(self._capture_done, None, str(e))
         threading.Thread(target=work, daemon=True).start()
 
+    def _abort(self):
+        self.repeat_var.set(False)
+        if self.link:
+            self.link.abort()
+
     def _capture_done(self, cap, err):
         self.busy = False
         self.cap_btn.configure(state="normal")
+        self.abort_btn.configure(state="disabled")
         if err:
             self.cap_stats.set("capture: " + err)
             if not self.repeat_var.get():
