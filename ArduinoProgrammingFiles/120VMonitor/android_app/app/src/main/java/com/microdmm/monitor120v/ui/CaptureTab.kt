@@ -27,6 +27,9 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -56,6 +59,8 @@ import com.microdmm.monitor120v.SAFE_WHY
 import com.microdmm.monitor120v.TIMING_MODES
 import com.microdmm.monitor120v.TRIG_MODES
 import com.microdmm.monitor120v.UiState
+import com.microdmm.monitor120v.cyclePhase
+import com.microdmm.monitor120v.slipMask
 import com.microdmm.monitor120v.flagText
 import com.microdmm.monitor120v.nowStamp
 import java.util.Locale
@@ -122,7 +127,7 @@ fun CaptureTab(state: UiState, onAction: (Action) -> Unit) {
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { onAction(Action.Capture) }, enabled = state.conn == Conn.Connected && !state.capBusy) {
+            Button(onClick = { onAction(Action.Capture) }, enabled = state.conn == Conn.Connected && !state.capBusy && !state.liveOn) {
                 Text(if (state.capBusy) "Capturing…" else "Capture")
             }
             OutlinedButton(onClick = { onAction(Action.AbortCapture) }, enabled = state.capBusy) { Text("Abort") }
@@ -136,6 +141,19 @@ fun CaptureTab(state: UiState, onAction: (Action) -> Unit) {
             ) { Text("Save CSV") }
             TextButton(onClick = { showSettings = !showSettings }) { Text(if (showSettings) "Hide settings ▴" else "Settings ▾") }
             Check("Harmonics", c.showHarm) { v -> up { it.copy(showHarm = v) } }
+        }
+        // the same capture as a time series, or folded onto one mains cycle
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("View", style = MaterialTheme.typography.labelMedium, color = MOnSurfaceDim,
+                modifier = Modifier.padding(end = 8.dp))
+            SingleChoiceSegmentedButtonRow {
+                listOf("Time", "Heat map").forEachIndexed { k, label ->
+                    SegmentedButton(
+                        selected = c.heatMap == (k == 1), onClick = { up { it.copy(heatMap = k == 1) } },
+                        shape = SegmentedButtonDefaults.itemShape(k, 2),
+                    ) { Text(label, fontSize = 12.sp, maxLines = 1, softWrap = false) }
+                }
+            }
         }
 
         if (showSettings) {
@@ -209,8 +227,24 @@ fun CaptureTab(state: UiState, onAction: (Action) -> Unit) {
                 statsText(cap, st, state.twoRanges), fontFamily = FontFamily.Monospace, fontSize = 10.sp,
                 modifier = Modifier.padding(vertical = 6.dp),
             )
-            WaveChart(cap, Modifier.fillMaxWidth().height(300.dp))
-            Text("two fingers: pinch to zoom, drag to pan · double-tap to reset", color = MOnSurfaceDim, fontSize = 10.sp)
+            if (c.heatMap) {
+                val ref = cap.v ?: cap.i!!
+                val (phase, cycles0) = remember(cap) { cyclePhase(ref, cap.dtUs * 1e-6, st.hz) }
+                val (keep, dropped) = remember(cap) { slipMask(ref, cap.flags) }
+                val cycles = if (keep != null) keep.count { it } * cap.dtUs * 1e-6 * st.hz else cycles0
+                val refName = if (cap.v != null) "V" else "I"
+                val chans = listOfNotNull(cap.v?.let { Triple(it, "V", VColor) }, cap.i?.let { Triple(it, "A", IColor) })
+                for ((data, unit, color) in chans) {
+                    HeatChart(data, phase, cycles, st.hz, unit, refName, color,
+                        Modifier.fillMaxWidth().height(if (chans.size == 2) 220.dp else 300.dp), keep)
+                }
+                if (dropped > 0) Text("$dropped cycles left out: LATE timing slip", color = MAmber, fontSize = 10.sp)
+                Text("every cycle overlaid: bright = where the waveform usually is, dim = the odd cycle out",
+                    color = MOnSurfaceDim, fontSize = 10.sp)
+            } else {
+                WaveChart(cap, Modifier.fillMaxWidth().height(300.dp))
+                Text("two fingers: pinch to zoom, drag to pan · double-tap to reset", color = MOnSurfaceDim, fontSize = 10.sp)
+            }
             if (c.showHarm) {
                 Spacer(Modifier.height(8.dp))
                 HarmonicsChart(st, Modifier.fillMaxWidth().height(180.dp))

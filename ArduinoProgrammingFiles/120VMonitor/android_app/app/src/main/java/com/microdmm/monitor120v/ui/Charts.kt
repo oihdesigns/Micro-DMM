@@ -16,6 +16,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -25,6 +28,8 @@ import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
 import com.microdmm.monitor120v.CapStats
 import com.microdmm.monitor120v.Capture
@@ -34,6 +39,7 @@ import com.microdmm.monitor120v.fmtG
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.ln
 import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.min
@@ -274,6 +280,86 @@ fun WaveChart(cap: Capture, modifier: Modifier = Modifier) {
         if (cap.openIdx >= 0) items += "open: ${SAFE_WHY[cap.openWhy] ?: "?"}" to MPurple
         if (cap.rngIdx >= 0 && cap.i != null) items += "range moving" to MAmber.copy(alpha = 0.7f)
         legend(tm, f, items)
+    }
+}
+
+private const val HEAT_NX = 240
+private const val HEAT_NY = 160
+
+// inferno-like: black -> purple -> red -> orange -> pale yellow
+private val HEAT_STOPS = intArrayOf(0x000004, 0x420A68, 0x932667, 0xDD513A, 0xFCA50A, 0xFCFFA4)
+
+private fun heatColor(t: Double): Int {
+    val x = t.coerceIn(0.0, 1.0) * (HEAT_STOPS.size - 1)
+    val k = x.toInt().coerceAtMost(HEAT_STOPS.size - 2)
+    val f = x - k
+    val a = HEAT_STOPS[k]
+    val b = HEAT_STOPS[k + 1]
+    fun ch(sh: Int) = (((a shr sh) and 0xFF) + (((b shr sh) and 0xFF) - ((a shr sh) and 0xFF)) * f).toInt()
+    return (0xFF shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
+}
+
+/** Counts -> image, log brightness so a single stray cycle still shows; 0 stays black.
+ *  Counts may be fractional (a fading live map): the floor is 1e-4 of the peak. */
+private fun heatImage(h: DoubleArray): ImageBitmap {
+    var max = 0.0
+    var minPos = Double.MAX_VALUE
+    for (v in h) if (v > 0) { if (v > max) max = v; if (v < minPos) minPos = v }
+    val lo = if (max > 0) maxOf(minPos, max * 1e-4) else 1.0
+    val span = ln(maxOf(max / lo, 2.0))
+    val px = IntArray(h.size)
+    for (r in 0 until HEAT_NY) for (c in 0 until HEAT_NX) {
+        val v = h[r * HEAT_NX + c]
+        // bitmap row 0 is the top: +lim
+        px[(HEAT_NY - 1 - r) * HEAT_NX + c] =
+            if (v <= 0) 0xFF000000.toInt() else heatColor(0.12 + 0.88 * ln(maxOf(v, lo) / lo) / span)
+    }
+    val bmp = android.graphics.Bitmap.createBitmap(HEAT_NX, HEAT_NY, android.graphics.Bitmap.Config.ARGB_8888)
+    bmp.setPixels(px, 0, HEAT_NX, 0, 0, HEAT_NX, HEAT_NY)
+    return bmp.asImageBitmap()
+}
+
+/** One channel of a capture with every cycle overlaid on one (scope persistence):
+ *  bright where the waveform usually is, dim where a few cycles went elsewhere. */
+@Composable
+fun HeatChart(
+    data: DoubleArray, phase: DoubleArray, cycles: Double, hz: Double,
+    unit: String, refName: String, color: Color, modifier: Modifier = Modifier, keep: BooleanArray? = null,
+) {
+    val lim = remember(data) { (data.maxOf { abs(it) } * 1.08).takeIf { it > 0 } ?: 1.0 }
+    val h = remember(data, phase) {
+        com.microdmm.monitor120v.cycleHeatmap(data, phase, lim, HEAT_NX, HEAT_NY, keep).let { c -> DoubleArray(c.size) { c[it].toDouble() } }
+    }
+    HeatPanel(h, lim, hz, String.format(java.util.Locale.US, "%s · %.0f cycles overlaid", unit, cycles), refName, color, modifier)
+}
+
+/** A persistence map already binned: counts h (HEAT_NX x HEAT_NY, row 0 at -lim). */
+@Composable
+fun HeatPanel(
+    h: DoubleArray, lim: Double, hz: Double, label: String, refName: String, color: Color,
+    modifier: Modifier = Modifier,
+) {
+    val tm = rememberTextMeasurer()
+    val img = remember(h) { heatImage(h) }
+    Canvas(modifier) {
+        val f = frame(dual = false)
+        drawImage(
+            img, srcOffset = IntOffset.Zero, srcSize = IntSize(HEAT_NX, HEAT_NY),
+            dstOffset = IntOffset(f.left.toInt(), f.top.toInt()), dstSize = IntSize(f.w.toInt(), f.h.toInt()),
+            filterQuality = FilterQuality.None,
+        )
+        drawRect(MBorder, Offset(f.left, f.top), Size(f.w, f.h), style = Stroke(1f))
+        yAxis(tm, f, -lim, lim, color, rightSide = false, grid = false)
+        drawLine(Color(0x66FFFFFF), Offset(f.left, f.top + f.h / 2), Offset(f.right, f.top + f.h / 2), 1f)
+        for (deg in 0..360 step 90) {
+            val x = f.left + deg / 360f * f.w
+            drawLine(Color(0x44FFFFFF), Offset(x, f.top), Offset(x, f.bottom), 1f)
+            val t = tm.measure("$deg°", AxisText)
+            drawText(t, topLeft = Offset((x - t.size.width / 2f).coerceIn(0f, size.width - t.size.width), f.bottom + 2 * density))
+        }
+        val u = tm.measure(String.format(java.util.Locale.US, "° of the %s cycle (360° = %.2f ms)", refName, 1000 / hz), AxisText)
+        drawText(u, topLeft = Offset(f.left + (f.w - u.size.width) / 2f, f.bottom + 15 * density))
+        legend(tm, f, listOf(label to color))
     }
 }
 

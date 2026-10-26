@@ -20,7 +20,7 @@ val FLAG_NAMES = linkedMapOf(
 
 val SAFE_WHY = mapOf(
     0 to "", 1 to "instant limit", 2 to "over-current (time delay)", 3 to "auto-open timer",
-    4 to "capture complete", 5 to "TRIPPK",
+    4 to "capture complete", 5 to "TRIPPK", 6 to "remote", 7 to "TRIPA (rms over-current)",
 )
 
 val RANGE_NAMES = mapOf(0 to "HIGH", 1 to "LOW")             // 0.01 ohm / 0.1 ohm shunt

@@ -31,6 +31,13 @@ const val TAG = "Monitor120V"
 val TIMING_MODES = listOf("Rate + samples", "Rate + duration", "Samples + duration")
 val CH_OPTIONS = linkedMapOf(2 to "V + I", 0 to "V only", 1 to "I only")
 val CAP_RANGES = linkedMapOf(-1 to "Follow mode", 0 to "HIGH", 1 to "LOW")   // !CAP rng
+val FADES = linkedMapOf("Infinite" to 0.0, "Fade 30 s" to 30.0, "Fade 5 s" to 5.0, "Fade 1 s" to 1.0)
+
+/** One live-persistence panel as drawn: counts (row 0 = -lim), range and label. */
+class LiveChan(val h: DoubleArray, val lim: Double, val unit: String)
+
+class LiveView(val chans: List<LiveChan>, val hz: Double, val ref: String)
+
 val SPANS = linkedMapOf("30 s" to 30, "2 min" to 120, "10 min" to 600, "1 h" to 3600, "all" to 0)
 
 /** Capture tab fields, kept as typed text like the desktop GUI's entries. */
@@ -45,6 +52,7 @@ data class CapSettings(
     val openAfter: Boolean = false,
     val mon: Boolean = false,
     val repeat: Boolean = false, val showHarm: Boolean = true,
+    val heatMap: Boolean = false,      // show the capture folded onto one cycle
 )
 
 data class ApplyState(
@@ -85,6 +93,10 @@ data class UiState(
     val spikeText: String = "",
     val rateText: String = "",
     val capBusy: Boolean = false,
+    val liveOn: Boolean = false,          // Meter tab: live persistence capture loop
+    val live: LiveView? = null,
+    val liveMsg: String = "",
+    val fade: String = "Infinite",
     val capMsg: String = "",
     val capture: Capture? = null,
     val capStats: CapStats? = null,
@@ -106,6 +118,9 @@ sealed interface Action {
     data class SetRangeMode(val mode: Int) : Action
     data object ResetWh : Action
     data object ClearTrend : Action
+    data class SetLive(val on: Boolean) : Action
+    data class SetFade(val fade: String) : Action
+    data object ClearLive : Action
     data class SetSpan(val span: String) : Action
     data class StartLog(val uri: Uri, val name: String) : Action
     data object StopLog : Action
@@ -142,6 +157,8 @@ class MonitorViewModel(app: Application) : AndroidViewModel(app) {
     private val hist = ArrayDeque<PwrRecord>()
     private var csv: BufferedWriter? = null
     private var capJob: Job? = null
+    private var liveJob: Job? = null
+    private val persist = Persistence()           // guarded by synchronized(persist)
     private val console = ArrayDeque<String>()
 
     val cfgLogDir: File get() = File(getApplication<Application>().getExternalFilesDir(null), "config_log")
@@ -176,6 +193,15 @@ class MonitorViewModel(app: Application) : AndroidViewModel(app) {
             is Action.SetRangeMode -> cmd("!RANGE,${a.mode}")
             Action.ResetWh -> cmd("!EZERO")
             Action.ClearTrend -> { hist.clear(); _ui.update { it.copy(trend = emptyList()) } }
+            is Action.SetLive -> if (a.on) startLive() else _ui.update { it.copy(liveOn = false) }
+            is Action.SetFade -> {
+                synchronized(persist) { persist.tauS = FADES[a.fade] ?: 0.0 }
+                _ui.update { it.copy(fade = a.fade) }
+            }
+            Action.ClearLive -> {
+                synchronized(persist) { persist.clear() }
+                _ui.update { it.copy(live = null, liveMsg = "") }
+            }
             is Action.SetSpan -> { _ui.update { it.copy(span = a.span) }; updateTrend() }
             is Action.StartLog -> startLog(a.uri, a.name)
             Action.StopLog -> stopLog()
@@ -290,7 +316,8 @@ class MonitorViewModel(app: Application) : AndroidViewModel(app) {
         }
         link = null
         capJob?.cancel()
-        _ui.update { it.copy(conn = Conn.Disconnected, connMsg = "not connected", capBusy = false, rngNote = "", alert = "") }
+        liveJob?.cancel()
+        _ui.update { it.copy(conn = Conn.Disconnected, connMsg = "not connected", capBusy = false, liveOn = false, rngNote = "", alert = "") }
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 l.relay(false)                    // leave the load off when the app lets go
@@ -346,8 +373,9 @@ class MonitorViewModel(app: Application) : AndroidViewModel(app) {
                 if (link != null) {
                     link = null
                     capJob?.cancel()
+                    liveJob?.cancel()
                     io?.disconnect()
-                    _ui.update { it.copy(conn = Conn.Disconnected, connMsg = e.text, capBusy = false) }
+                    _ui.update { it.copy(conn = Conn.Disconnected, connMsg = e.text, capBusy = false, liveOn = false) }
                 }
             }
         }
@@ -376,7 +404,7 @@ class MonitorViewModel(app: Application) : AndroidViewModel(app) {
                 val why = line.substring(6).substringBefore(",")
                 val amps = line.substring(6).substringAfter(",", "").toDoubleOrNull()
                 safe = "SAFE START opened relay: $why" +
-                    if (why in setOf("INST", "OVERCURRENT") && amps != null) String.format(Locale.US, " (%.2f A)", amps) else ""
+                    if (why in setOf("INST", "OVERCURRENT", "TRIPA") && amps != null) String.format(Locale.US, " (%.2f A)", amps) else ""
                 _ui.update { it.copy(alert = safe) }
             }
             line.startsWith("\$CFG,") || line.startsWith("\$OK") || line.startsWith("\$STATUS,") -> {
@@ -547,6 +575,10 @@ class MonitorViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun requestCapture() {
+        if (_ui.value.liveOn) {
+            toast("Live persistence is running on the Meter tab: switch it to Trends to capture")
+            return
+        }
         if (link == null || _ui.value.capBusy) return
         val a = try {
             capArgs()
@@ -598,6 +630,53 @@ class MonitorViewModel(app: Application) : AndroidViewModel(app) {
             if (s.cap.repeat && !closes && link != null) {
                 delay(200)
                 if (_ui.value.cap.repeat) runCapture()
+            }
+        }
+    }
+
+    // ── live persistence (Meter tab) ────────────────────────────────────────
+    /** Back-to-back captures, each folded into the running cycle heat map. Readings
+     *  while armed keep the meter going; switching back to Trends ends the loop
+     *  after its current capture. */
+    private fun startLive() {
+        val s = _ui.value
+        if (s.liveOn) return
+        if (link == null) { toast("Connect first"); return }
+        if (s.capBusy) { toast("A capture is running: try again when it ends"); return }
+        synchronized(persist) { persist.clear(); persist.tauS = FADES[s.fade] ?: 0.0 }
+        _ui.update { it.copy(liveOn = true, live = null, liveMsg = "starting…") }
+        liveJob = viewModelScope.launch {
+            try {
+                while (_ui.value.liveOn) {
+                    val l = link ?: break
+                    val hz = hist.lastOrNull()?.get("hz")?.takeIf { it > 0 } ?: 60.0
+                    val cyc = l.cfg["CYCLES"]?.value?.toInt() ?: 10
+                    val cap = try {
+                        l.capture(liveCaptureArgs(capMax(), hz, cyc))
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {                  // keep going; a gap is fine
+                        _ui.update { it.copy(liveMsg = "capture: ${e.message ?: e}") }
+                        delay(500)
+                        continue
+                    }
+                    val view = withContext(Dispatchers.Default) {
+                        synchronized(persist) {
+                            persist.add(cap, android.os.SystemClock.elapsedRealtime() / 1000.0)
+                            val units = mapOf("v" to "V", "i" to "A")
+                            val msg = String.format(
+                                Locale.US, "%d captures, ≈%,.0f cycles · %.0f %% of the time sampled (the rest is the gap while each capture is sent)",
+                                persist.captures, persist.cycles,
+                                persist.coverage(android.os.SystemClock.elapsedRealtime() / 1000.0) * 100,
+                            ) + if (persist.late > 0) " · ${persist.late} LATE: ${persist.dropped} slipped cycles left out" else ""
+                            LiveView(persist.maps.map { (k, c) -> LiveChan(c.h.copyOf(), c.lim, units[k] ?: k) },
+                                persist.hz, persist.ref) to msg
+                        }
+                    }
+                    _ui.update { it.copy(live = view.first, liveMsg = view.second) }
+                }
+            } finally {
+                _ui.update { it.copy(liveOn = false) }
             }
         }
     }

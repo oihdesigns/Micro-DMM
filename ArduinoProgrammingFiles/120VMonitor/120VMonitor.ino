@@ -151,8 +151,14 @@
  *                also make a $PWR line every CYCLES mains cycles (needs ch 2
  *                for power), so the meter and its log keep going. Each line
  *                goes out a field per sample; lower the rate or avg if the
- *                capture comes back LATE. TRIPA is only checked by normal
- *                metering, so use TRIPPK or the safe-start limits here.
+ *                capture comes back LATE. Each reading also updates the
+ *                screen, status light, Wh and auto-range like a metering
+ *                window, and is checked against TRIPA (opens: $SAFE,TRIPA).
+ *                With trig 0 the screen isn't told CAPTURE, so back-to-back
+ *                captures (live persistence) leave the meter showing, and the
+ *                maths and $PWR lines (up to 8 windows) wait until after the
+ *                last sample, so sampling can't slip; only the TRIPA check
+ *                runs at each window's end.
  *   !RANGE,<0|1|2|3>          RNGMODE (RAM): auto / HIGH / LOW / auto-delayed
  *   !ABORT                    stop waiting for a trigger ($CAPTMO,ABORT)
  *   !DACTEST,<hz>,<deg>[,<amp>]  Feather only: loopback test sines, A0 "voltage"
@@ -173,8 +179,8 @@
  *        on (-1 = never) the range was HIGH, scaled by i_per_hi/i_off_hi, and
  *        the first settle_us after it is the range relay moving
  *   $RNG,<0 HIGH|1 LOW>,<BOOT|CMD|AUTO|OVER|CLOSE|CAP>,<mode>[,<amps>]
- *        open_why: 0 none 1 instant 2 over-current 3 timer 4 end 5 TRIPPK
- *   $SAFE,<INST|OVERCURRENT|TIMER|END|TRIPPK|REMOTE>,<amps>   relay opened by itself
+ *        open_why: 0 none 1 instant 2 over-current 3 timer 4 end 5 TRIPPK 6 remote 7 TRIPA
+ *   $SAFE,<INST|OVERCURRENT|TIMER|END|TRIPPK|REMOTE|TRIPA>,<amps>   relay opened by itself
  *   $IR,<addr>,<cmd>   $REMOTE,<PRIMED|CANCEL|TIMEOUT|CLOSE|OPEN>
  *   $DAC,<hz>,<deg>,<amp>   the test generator's actual settings (hz 0 = off)
  *   $CD,<hex>   4 hex digits per int16 sample, V,I interleaved when ch = 2
@@ -1322,8 +1328,8 @@ struct CapReq {
 static CapReq g_cap_req;
 static bool g_cap_pending = false;
 
-enum SafeWhy : uint8_t { SAFE_NONE, SAFE_INST, SAFE_OVER, SAFE_TIMER, SAFE_END, SAFE_TRIPPK, SAFE_REMOTE };
-static const char* const SAFE_NAMES[] = { "NONE", "INST", "OVERCURRENT", "TIMER", "END", "TRIPPK", "REMOTE" };
+enum SafeWhy : uint8_t { SAFE_NONE, SAFE_INST, SAFE_OVER, SAFE_TIMER, SAFE_END, SAFE_TRIPPK, SAFE_REMOTE, SAFE_TRIPA };
+static const char* const SAFE_NAMES[] = { "NONE", "INST", "OVERCURRENT", "TIMER", "END", "TRIPPK", "REMOTE", "TRIPA" };
 
 static void serviceAutoOff() {
   if (g_autoOffArmed && (int32_t)(millis() - g_autoOffAt) >= 0) {
@@ -1347,6 +1353,18 @@ static void drawCaptureNotice(const char* what);
 // sample, so formatting never holds the sampling up for long
 static float   g_monF[18];
 static int8_t  g_monPos = -1;
+static bool    g_monFresh = false;     // the last capture made a reading (now in g_last)
+
+// A finished window's raw sums. With no trigger to wait for, the maths and the
+// $PWR line wait until after the last sample, so sampling never slips (LATE).
+struct MonSnap {
+  int64_t sv, si, svv, sii, svi;
+  uint32_t n, zx, zxSpan, span;          // span, zxSpan in CPU cycles
+  uint32_t endMs;
+  int32_t vpk, ipk;
+  uint8_t flags;
+};
+static const uint8_t MON_DEFER_MAX = 8;  // more windows than this: worked out as they end
 static const uint8_t MON_DP[18] = { 4, 5, 4, 4, 4, 4, 3, 3, 5, 6, 2, 0, 0, 0, 0, 4, 5, 0 };
 
 static void monPrintStep() {
@@ -1398,7 +1416,8 @@ void runCapture() {
   rangeReport();
   const uint8_t rng0 = g_rng;
 
-  drawCaptureNotice(q.trig ? "ARMED" : "CAPTURE");
+  // live persistence sends these back to back: keep the meter on screen, and the I2C time
+  if (!(q.mon && q.trig == 0)) drawCaptureNotice(q.trig ? "ARMED" : "CAPTURE");
   uint32_t mask = (q.ch == 0) ? MASK_V : (q.ch == 1) ? MASK_I : MASK_ALL;
   adcMask(mask);
   armPeakTrip();
@@ -1460,30 +1479,63 @@ void runCapture() {
     mwN = 0; mwStart = ts; mwZx = 0; mwSv = mwSi = mwSvv = mwSii = mwSvi = 0;
     mwVpk = mwIpk = 0; mwFlags = 0;
   };
-  auto monFinish = [&](uint32_t ts) {
+  // the end of a window, inside the sample loop: copy the sums and check TRIPA
+  // (which normal metering checks every window) in single-precision float
+  auto monTake = [&](uint32_t ts) {
+    MonSnap m;
+    m.sv = mwSv; m.si = mwSi; m.svv = mwSvv; m.sii = mwSii; m.svi = mwSvi;
+    m.n = mwN; m.zx = mwZx; m.zxSpan = mwZxLast - mwZxFirst; m.span = ts - mwStart;
+    m.endMs = millis(); m.vpk = mwVpk; m.ipk = mwIpk; m.flags = mwFlags;
+    if (hasI && cfg.tripA > 0 && g_relay && mwN) {
+      float n = (float)mwN, mi = (float)mwSi / n;
+      float irms = sqrtf(fmaxf((float)mwSii / n - mi * mi, 0.0f)) * fabsf(l * g_ig);
+      if (irms > cfg.tripA) {
+        relayDrive(false); g_relay = false; g_tripLatch = true;
+        if (openAt < 0) { openAt = (int32_t)count - 1; openWhy = SAFE_TRIPA; openVal = irms; }
+      }
+    }
+    return m;
+  };
+  // the maths and the $PWR fields, from a window's sums
+  auto monCompute = [&](const MonSnap& m) {
     float kv = l * cfg.vGain, ki = l * g_ig;
-    double n = (double)mwN;
-    double mv = mwSv / n, mi = mwSi / n;
-    float vrms = hasV ? (float)sqrt(fmax(mwSvv / n - mv * mv, 0.0)) * fabsf(kv) : 0.0f;
-    float irms = hasI ? (float)sqrt(fmax(mwSii / n - mi * mi, 0.0)) * fabsf(ki) : 0.0f;
-    float p = (hasV && hasI) ? (float)(mwSvi / n - mv * mi) * kv * ki : 0.0f;
+    double n = (double)m.n;
+    double mv = m.sv / n, mi = m.si / n;
+    float vrms = hasV ? (float)sqrt(fmax(m.svv / n - mv * mv, 0.0)) * fabsf(kv) : 0.0f;
+    float irms = hasI ? (float)sqrt(fmax(m.sii / n - mi * mi, 0.0)) * fabsf(ki) : 0.0f;
+    float p = (hasV && hasI) ? (float)(m.svi / n - mv * mi) * kv * ki : 0.0f;
     float s = vrms * irms;
-    float span = (float)(uint32_t)(ts - mwStart) / (float)SystemCoreClock;
-    g_wh += (double)p * span / 3600.0;
-    uint8_t fl = mwFlags | (flags & FLG_LATE) | (g_tripLatch ? FLG_TRIP : 0);
-    if (hasV && mwZx < 2) fl |= FLG_NOCROSS;
+    float span = (float)m.span / (float)SystemCoreClock;
+    // Wh over the time since the last reading, as normal metering does, so the gaps
+    // between back-to-back captures still count; a stale mark falls back to the window
+    float since = g_lastWinMs ? (float)(m.endMs - g_lastWinMs) / 1000.0f : -1.0f;
+    g_wh += (double)p * (since >= 0 && since < span + 2.0f ? since : span) / 3600.0;
+    g_lastWinMs = m.endMs;
+    uint8_t fl = m.flags | (flags & FLG_LATE) | (g_tripLatch ? FLG_TRIP : 0);
+    if (hasV && m.zx < 2) fl |= FLG_NOCROSS;
     float* f = g_monF;
     f[0] = vrms; f[1] = irms; f[2] = p; f[3] = s;
     f[4] = sqrtf(fmaxf(s * s - p * p, 0.0f)); f[5] = s > 0 ? p / s : 0.0f;
-    f[6] = mwZx >= 2 ? (float)(mwZx - 1) * (float)SystemCoreClock / (float)(uint32_t)(mwZxLast - mwZxFirst) : 0.0f;
-    f[7] = mwVpk * fabsf(kv); f[8] = mwIpk * fabsf(ki); f[9] = (float)g_wh;
-    f[10] = millis() / 1000.0f; f[11] = (float)mwN; f[12] = q.avg; f[13] = g_relay ? 1 : 0;
+    f[6] = m.zx >= 2 ? (float)(m.zx - 1) * (float)SystemCoreClock / (float)m.zxSpan : 0.0f;
+    f[7] = m.vpk * fabsf(kv); f[8] = m.ipk * fabsf(ki); f[9] = (float)g_wh;
+    f[10] = m.endMs / 1000.0f; f[11] = (float)m.n; f[12] = q.avg; f[13] = g_relay ? 1 : 0;
     f[14] = fl;
     f[15] = hasV ? (float)(mv + v0 - vOffC) * kv : 0.0f;
     f[16] = hasI ? (float)(mi + i0 - iOffC) * ki : 0.0f;
     f[17] = g_rng;
+    // the screen and the status light show this reading too
+    PowerResult& r = g_last;
+    r.vrms = vrms; r.irms = irms; r.p = p; r.s = s; r.q = f[4]; r.pf = f[5]; r.hz = f[6];
+    r.vpk = f[7]; r.ipk = f[8]; r.vdc = f[15]; r.idc = f[16];
+    r.dt_s = per ? (float)per / (float)SystemCoreClock : 0.0f; r.span_s = span;
+    r.n = m.n > 65535 ? 65535 : (uint16_t)m.n; r.depth = q.avg; r.flags = fl;
+    g_haveLast = true; g_monFresh = true;
     if (g_streaming && Serial) g_monPos = 0;
   };
+  // no trigger to wait for (live persistence): everything slow waits for the end
+  const bool monDefer = q.trig == 0;
+  MonSnap monQ[MON_DEFER_MAX];
+  uint8_t monQn = 0;
   g_monPos = -1;
 
   uint32_t next = cyc();
@@ -1658,7 +1710,9 @@ void runCapture() {
       }
       mwFlags |= sf;
       if ((uint32_t)(ts - mwStart) >= monLen) {
-        if (g_monPos < 0) monFinish(ts);  // the last line is still going out: skip this one
+        MonSnap m = monTake(ts);
+        if (monDefer && monQn < MON_DEFER_MAX) monQ[monQn++] = m;
+        else if (g_monPos < 0) monCompute(m);  // the last line is still going out: skip this one
         monReset(ts);
       }
       monPrintStep();
@@ -1670,6 +1724,10 @@ void runCapture() {
     }
   }
   while (g_monPos >= 0) monPrintStep();  // finish a half-sent $PWR line
+  for (uint8_t k = 0; k < monQn; k++) {  // the readings held back until now
+    monCompute(monQ[k]);
+    while (g_monPos >= 0) monPrintStep();
+  }
   reportPeakTrip();
   if (relayAt >= 0) Serial.println(F("$RLY,1"));
   // trig 5 has closed the relay before its trigger, so open_after covers a timeout too
@@ -2359,7 +2417,14 @@ void loop() {
   rangeReport();
   serviceRemote();
   serviceAutoOff();
-  if (g_cap_pending) { runCapture(); g_lastWinMs = 0; return; }
+  if (g_cap_pending) {
+    g_monFresh = false;
+    runCapture();
+    // a reading made during the capture stands in for a metering window
+    if (g_monFresh) { rangeAuto(g_last); pixelUpdate(g_last.vrms); }
+    else g_lastWinMs = 0;
+    return;
+  }
   serviceMeasurement();
   if (g_haveLast) drawMeter();
 }

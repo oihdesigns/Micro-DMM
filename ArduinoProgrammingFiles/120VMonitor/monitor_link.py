@@ -22,7 +22,7 @@ FLAG_NAMES = {1: "NO V ZERO-X", 2: "V CLIP", 4: "I CLIP", 8: "TRIPPED",
               16: "TRUNCATED", 32: "LATE"}
 
 SAFE_WHY = {0: "", 1: "instant limit", 2: "over-current (time delay)", 3: "auto-open timer",
-            4: "capture complete", 5: "TRIPPK"}
+            4: "capture complete", 5: "TRIPPK", 6: "remote", 7: "TRIPA (rms over-current)"}
 
 RANGE_NAMES = {0: "HIGH", 1: "LOW"}          # 0.01 ohm / 0.1 ohm shunt
 RANGE_MODES = {0: "Auto", 1: "HIGH only", 2: "LOW", 3: "Auto-delayed"}
@@ -467,7 +467,8 @@ def fundamental(x, dt_s, f_guess=60.0):
     return ff, float(np.hypot(a, b)), float(np.arctan2(-b, a))
 
 
-def estimate_freq(x, dt_s):
+def rising_crossings(x):
+    """Fractional sample positions of the rising zero crossings of x (mean removed)."""
     x = np.asarray(x, dtype=float) - np.mean(x)
     # hysteresis: a rising crossing counts only once the signal has been below
     # -h and then gets above +h, so noise around zero can't add extra crossings
@@ -490,10 +491,183 @@ def estimate_freq(x, dt_s):
         if j >= len(lo_i):
             break
         k = lo_i[j]
-    if len(fr) < 2:
+    return fr
+
+
+def estimate_freq(x, dt_s):
+    fr = rising_crossings(x)
+    if fr is None or len(fr) < 2:
         return None
     span = (fr[-1] - fr[0]) * dt_s
     return (len(fr) - 1) / span if span > 0 else None
+
+
+def cycle_phase(ref, dt_s, f_guess=60.0):
+    """Each sample's place in its mains cycle, 0..1 from the rising zero crossing of
+    `ref` (or None to use f_guess), plus the number of cycles. Each cycle is
+    stretched between its own crossings, so drift in the mains frequency doesn't
+    smear an overlay; a crossing a dropout hid is filled in at the median period,
+    and the part before the first / after the last crossing is extrapolated."""
+    n = len(ref) if ref is not None else 0
+    idx = np.arange(n, dtype=float)
+    fr = rising_crossings(ref) if n else None
+    per_guess = 1.0 / (f_guess * dt_s)
+    if fr is None or len(fr) < 2:
+        return (idx / per_guess) % 1.0, n / per_guess
+    fr = np.asarray(fr)
+    per = float(np.median(np.diff(fr)))
+    full = [fr[0]]
+    for c in fr[1:]:
+        gap = c - full[-1]
+        k = int(round(gap / per))
+        if k > 1:                                       # missed crossings: fill them in evenly
+            full.extend(full[-1] + gap * j / k for j in range(1, k))
+        full.append(c)
+    full = np.asarray(full)
+    cyc = np.interp(idx, full, np.arange(len(full), dtype=float))
+    cyc[idx < full[0]] = (idx[idx < full[0]] - full[0]) / per
+    cyc[idx > full[-1]] = len(full) - 1 + (idx[idx > full[-1]] - full[-1]) / per
+    return cyc % 1.0, n / per
+
+
+FLG_LATE = 0x20
+SLIP_TOL = 0.5             # samples: a timing slip shortens a cycle by at least one
+
+
+def slip_mask(ref, flags):
+    """(keep, dropped). The board sets LATE when it fell behind and restarted its
+    sample clock, so somewhere the samples aren't evenly spaced and that cycle won't
+    overlay the others. With LATE set, keep only the cycles whose length is within
+    SLIP_TOL samples of the median; the partial cycles at the ends go too, as a slip
+    can't be seen there. Without LATE, keep is None: nothing is dropped, so a real
+    disturbance at a zero crossing is never hidden."""
+    if not flags & FLG_LATE:
+        return None, 0
+    keep = np.zeros(len(ref), dtype=bool)
+    fr = rising_crossings(ref)
+    if fr is None or len(fr) < 2:
+        return keep, 1
+    fr = np.asarray(fr)
+    d = np.diff(fr)
+    med = float(np.median(d))
+    dropped = 0
+    for a, b, dd in zip(fr[:-1], fr[1:], d):
+        if abs(dd - med) <= SLIP_TOL:
+            keep[int(np.ceil(a)):int(np.floor(b)) + 1] = True
+        else:
+            dropped += 1
+    return keep, dropped
+
+
+def cycle_heatmap(x, phase, lim, nx=240, ny=160, keep=None):
+    """Persistence map of x folded onto one cycle: counts[ny, nx] over phase 0..1
+    and value -lim..+lim. Traces are linearly upsampled first so a cycle with few
+    samples still draws a line rather than dots. keep (bool per sample, from
+    slip_mask) leaves out every segment that doesn't have both ends kept."""
+    x = np.asarray(x, dtype=float)
+    spc = len(x) / max(1.0, float(np.sum(np.diff(phase) < -0.5)) + 1.0)   # samples per cycle
+    up = int(min(16, max(1, np.ceil(2.0 * nx / max(spc, 1.0)))))
+    if up > 1 and len(x) > 1:
+        t = np.arange((len(x) - 1) * up + 1) / up
+        xs = np.interp(t, np.arange(len(x)), x)
+        # unwrap phase so it interpolates across the 1 -> 0 wrap, then fold again
+        ph = np.interp(t, np.arange(len(x)), np.unwrap(phase * 2 * np.pi) / (2 * np.pi)) % 1.0
+        if keep is not None:
+            seg = np.minimum(np.floor(t).astype(int), len(x) - 2)
+            ok = keep[seg] & keep[seg + 1]
+            xs, ph = xs[ok], ph[ok]
+    else:
+        xs, ph = (x, phase) if keep is None else (x[keep], phase[keep])
+    h, _, _ = np.histogram2d(np.clip(xs, -lim, lim), ph, bins=[ny, nx], range=[[-lim, lim], [0.0, 1.0]])
+    return h
+
+
+LIVE_RATE = 15000          # S/s for live persistence: 250 samples a 60 Hz cycle
+LIVE_AVG = 4               # scans per sample
+LIVE_MAX_CYCLES = 30       # per capture; fewer if the board's buffer is smaller
+
+
+def live_capture_args(cap_max, hz=60.0, cycles=10):
+    """!CAP arguments for one live-persistence capture: V + I at once, as many
+    cycles as the buffer holds (at least the meter window, so readings while armed
+    still produce a $PWR line per capture)."""
+    spc = LIVE_RATE / (hz or 60.0)
+    ncyc = max(int(cycles), min(LIVE_MAX_CYCLES, int(cap_max // 2 / spc)))
+    rate = LIVE_RATE if ncyc * spc * 2 <= cap_max else int(cap_max // 2 / ncyc * (hz or 60.0))
+    return dict(rate=rate, n=int(ncyc * rate / (hz or 60.0)), ch=2, trig=0, timeout_ms=1000,
+                avg=LIVE_AVG, rng=-1, mon=True)
+
+
+class Persistence:
+    """Cycle heat maps that build up over many captures: a live persistence display.
+    tau_s 0 keeps everything; otherwise older captures fade with that time constant.
+    Each channel's range only grows (by 25 % headroom), re-binning what's there."""
+
+    def __init__(self, nx=240, ny=160, tau_s=0.0):
+        self.nx, self.ny, self.tau_s = nx, ny, tau_s
+        self.clear()
+
+    def clear(self):
+        self.maps = {}                 # "v" / "i" -> [counts (ny, nx), lim]
+        self.cycles = 0.0              # cycles in the map (faded too)
+        self.captures = 0
+        self.late = 0                  # captures the board flagged LATE
+        self.dropped = 0               # cycles left out of those (slip_mask)
+        self.cap_s = 0.0               # seconds of mains actually sampled
+        self.t0 = self.t_last = None
+        self.hz = 60.0
+        self.ref = "V"
+
+    def coverage(self, now=None):
+        """Fraction of the time since the start that was sampled; the rest fell in the
+        gaps while each capture was sent."""
+        if self.t0 is None:
+            return 0.0
+        now = time.monotonic() if now is None else now
+        return min(1.0, self.cap_s / max(now - self.t0, 1e-9))
+
+    def _regrid(self, h, lim0, lim1):
+        r = np.arange(self.ny)
+        v = -lim0 + (r + 0.5) * 2 * lim0 / self.ny
+        r1 = np.clip(((v + lim1) / (2 * lim1) * self.ny).astype(int), 0, self.ny - 1)
+        out = np.zeros_like(h)
+        np.add.at(out, r1, h)
+        return out
+
+    def add(self, cap, now=None):
+        now = time.monotonic() if now is None else now
+        dt = cap.dt_us * 1e-6
+        ref = cap.v if cap.v is not None else cap.i
+        self.ref = "V" if cap.v is not None else "I"
+        self.hz = estimate_freq(ref, dt) or self.hz
+        phase, ncyc = cycle_phase(ref, dt, self.hz)
+        keep, dropped = slip_mask(ref, cap.flags)
+        if keep is not None:
+            self.late += 1
+            self.dropped += dropped
+            ncyc = float(np.sum(keep)) * dt * self.hz
+        span = len(ref) * dt
+        k = 1.0
+        if self.tau_s > 0 and self.t_last is not None:
+            k = float(np.exp(-(now - self.t_last) / self.tau_s))
+        for name, x in (("v", cap.v), ("i", cap.i)):
+            if x is None:
+                continue
+            h, lim = self.maps.get(name, (None, 0.0))
+            pk = float(np.nanmax(np.abs(x))) if len(x) else 0.0
+            if pk > lim or not lim:
+                new = max(pk * 1.25, 1e-6)
+                if h is not None:
+                    h = self._regrid(h, lim, new)
+                lim = new
+            hh = cycle_heatmap(x, phase, lim, self.nx, self.ny, keep)
+            self.maps[name] = [hh if h is None else h * k + hh, lim]
+        self.cycles = self.cycles * k + ncyc
+        self.captures += 1
+        self.cap_s += span
+        if self.t0 is None:
+            self.t0 = now - span
+        self.t_last = now
 
 
 def harmonics(x, dt_s, f0, nmax=40):

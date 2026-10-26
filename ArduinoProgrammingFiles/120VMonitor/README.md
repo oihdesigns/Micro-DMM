@@ -140,12 +140,57 @@ it ends, which gives the best timing. Tick this to keep `$PWR` readings coming
 from the capture's own samples, one per `CYCLES` mains cycles, so the Meter
 tab, its trends and the CSV log keep running during a long wait. Each
 reading costs a little time per sample. If a capture comes back flagged LATE,
-lower the rate or Average N. Power and PF need V + I. TRIPA is only checked by
-normal metering, so while armed rely on TRIPPK or the safe-start limits.
+lower the rate or Average N. Power and PF need V + I. Each of these readings
+also does what a normal metering window does: it updates the board's screen
+and status light, adds to Wh, lets auto-range step back down to LOW, and is
+checked against TRIPA. A TRIPA trip during a capture opens the relay, and the
+board reports it as `$SAFE,TRIPA,<A rms>`.
 
 The capture plot always puts 0 V and 0 A on its centre line. The readout
 gives each channel's DC mean beside its rms, and the Meter tab shows both
 V dc and I dc.
+
+**Cycle heat map.** "Time series / Cycle heat map" (desktop) or "Time / Heat
+map" (app) shows the same capture two ways, and you can switch at any time. The heat map folds every
+mains cycle onto one, like a scope's persistence display: 0–360° of the V
+cycle (I's if only I was captured), with a log-scale count of how often the
+waveform passed through each spot. Normal cycles pile up into one bright
+trace. A sag, a spike, an inrush or a dropout shows as a dim trace beside
+it. Each cycle is stretched between its own rising zero crossings, so drift in
+the mains frequency doesn't smear the trace. A crossing that a dropout hides is
+filled in at the median period. More cycles give a richer map: 1 s at
+20 kS/s is 60 cycles.
+
+**Live persistence** (Meter tab: "Trends / Live persistence"). This view runs
+captures back to back and folds each one into a running cycle heat map, so
+the map keeps building while you watch. Each capture is V + I at 15 kS/s,
+4 scans a sample, with readings while armed on, so the meter numbers and the
+CSV log keep updating. It's as many cycles as the buffer holds: 14 on the
+XIAO, 30 on the Feather. The map is not gap-free. Nothing is sampled while
+each capture is being sent, and the label shows what fraction of the time
+was covered (about 80-90 % on the simulator). A one-off event that falls in a
+gap is missed, so use a trigger capture for that. Fade: Infinite keeps
+everything; 30 s / 5 s / 1 s let old cycles die away, like a scope's variable
+persistence. Clear map starts over. The vertical range only grows (with
+25 % headroom), and Capture is locked out until you switch back to Trends.
+The meter values, the board's screen, the CSV log and the trend history all
+keep going in this view. Switch back to Trends to see the history, including
+the time spent in persistence. Wh also counts the gaps between captures.
+Live captures have no trigger to wait for, so the board holds their meter
+readings until after the last sample and does the maths and sending then. Only
+the TRIPA check runs during sampling, so the readings can't make the sampling
+fall behind (LATE).
+
+**Timing slips.** If the board falls behind its sample clock it restarts the
+clock and flags the capture LATE. The samples around that point aren't evenly
+spaced, so that cycle won't line up with the others. For a LATE capture, both
+heat maps (capture and live) leave out every cycle whose length is off by more
+than half a sample from the median, plus the partial cycles at each end, and
+say how many were left out. Captures without LATE are never trimmed, so a real
+disturbance at a zero crossing always shows. The
+board's screen is redrawn between captures, about 4 times a second. During a
+long armed wait it can't be redrawn, because writing to the screen would stall
+sampling.
 
 **Averaging** (`Average N scans/sample`, default 7). This is oversampling,
 done on the board: every stored sample is the mean of N consecutive ADC
@@ -339,7 +384,7 @@ board is attached (Feather, XIAO or UNO R4), and **Connect** finds it otherwise.
 | Tab | What it does |
 |---|---|
 | Meter | live readings, V/I and W/PF trends, Reset Wh, CSV log to a file you choose |
-| Capture | every trigger, timing mode, average-N and safe-start option of the desktop GUI. Includes the same inrush confirmation and the 1 s open before a close-relay trigger. Plot is zero-centred: pinch to zoom, double-tap to reset. Harmonics, CSV export |
+| Capture | every trigger, timing mode, average-N and safe-start option of the desktop GUI. Includes the same inrush confirmation and the 1 s open before a close-relay trigger. Plot is zero-centred: pinch to zoom, double-tap to reset. Time / Heat map toggle, harmonics, CSV export. The Meter tab also has Live persistence |
 | Config | every key, tap to edit; Save / Reload / Defaults / Zero offsets; Export snapshot, Apply from log or from a file |
 | Console | the raw protocol and a command line |
 

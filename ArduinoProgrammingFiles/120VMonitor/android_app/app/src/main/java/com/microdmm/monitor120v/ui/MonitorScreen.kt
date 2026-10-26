@@ -29,6 +29,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
@@ -55,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.microdmm.monitor120v.Action
 import com.microdmm.monitor120v.Conn
+import com.microdmm.monitor120v.FADES
 import com.microdmm.monitor120v.RANGE_FULL
 import com.microdmm.monitor120v.RANGE_MODES
 import com.microdmm.monitor120v.UiState
@@ -245,16 +249,44 @@ private fun MeterTab(state: UiState, onAction: (Action) -> Unit) {
                 Text(state.logName, color = MOnSurfaceDim, style = MaterialTheme.typography.labelSmall)
             }
         }
+        // trends, or live persistence: back-to-back captures folded onto one cycle
+        Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            SingleChoiceSegmentedButtonRow {
+                listOf("Trends", "Live persistence").forEachIndexed { k, label ->
+                    SegmentedButton(
+                        selected = state.liveOn == (k == 1), onClick = { onAction(Action.SetLive(k == 1)) },
+                        enabled = k == 0 || state.conn == Conn.Connected,
+                        shape = SegmentedButtonDefaults.itemShape(k, 2),
+                    ) { Text(label, fontSize = 12.sp, maxLines = 1, softWrap = false) }
+                }
+            }
+        }
+        if (state.liveOn || state.live != null) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Dropdown(state.fade, FADES.keys.toList(), onPick = { k -> onAction(Action.SetFade(FADES.keys.toList()[k])) })
+                TextButton(onClick = { onAction(Action.ClearLive) }) { Text("Clear map") }
+            }
+            if (state.liveMsg.isNotEmpty()) Text(state.liveMsg, color = MOnSurfaceDim, fontSize = 11.sp)
+        }
         Spacer(Modifier.height(8.dp))
-        TrendChart(
-            state.trend, Triple("vrms", "Vrms", VColor), Triple("irms", "Irms (A)", IColor),
-            Modifier.fillMaxWidth().height(200.dp),
-        )
-        Spacer(Modifier.height(8.dp))
-        TrendChart(
-            state.trend, Triple("p", "W", WColor), Triple("pf", "PF", PFColor),
-            Modifier.fillMaxWidth().height(200.dp), rightFixed = -1.05 to 1.05,
-        )
+        val live = state.live
+        if (state.liveOn && live != null) {
+            for (c in live.chans) {
+                HeatPanel(c.h, c.lim, live.hz, "${c.unit} · live", live.ref, if (c.unit == "V") VColor else IColor,
+                    Modifier.fillMaxWidth().height(240.dp))
+                Spacer(Modifier.height(8.dp))
+            }
+        } else if (!state.liveOn) {
+            TrendChart(
+                state.trend, Triple("vrms", "Vrms", VColor), Triple("irms", "Irms (A)", IColor),
+                Modifier.fillMaxWidth().height(200.dp),
+            )
+            Spacer(Modifier.height(8.dp))
+            TrendChart(
+                state.trend, Triple("p", "W", WColor), Triple("pf", "PF", PFColor),
+                Modifier.fillMaxWidth().height(200.dp), rightFixed = -1.05 to 1.05,
+            )
+        }
     }
 }
 

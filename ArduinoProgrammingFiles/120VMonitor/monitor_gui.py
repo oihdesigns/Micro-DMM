@@ -28,12 +28,13 @@ from tkinter import filedialog, messagebox, ttk
 
 import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from matplotlib.colors import LogNorm
 from matplotlib.figure import Figure
 
 import bench_psu
 import calibrate as cal
 from monitor_link import (CLOSE_TRIGS, CURRENT_TRIGS, CFG_GROUPS, GROUP_INFO, GROUP_OF, RANGE_MODES, RANGE_NAMES, SAFE_WHY,
-                          TRIG_MODES, LinkError, MonitorLink, Snapshot, capture_stats, flag_text,
+                          TRIG_MODES, LinkError, MonitorLink, Snapshot, Persistence, capture_stats, cycle_heatmap, cycle_phase, flag_text, live_capture_args, slip_mask,
                           log_snapshot, same_value)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -55,6 +56,28 @@ def list_ports():
         return ["SIM"]
 
 
+FADES = {"Infinite": 0.0, "Fade 30 s": 30.0, "Fade 5 s": 5.0, "Fade 1 s": 1.0}
+
+
+def heat_axes(fig, rows, cols, idx, h, lim, unit, title, ref_name, hz):
+    """One persistence panel: counts h (ny, nx) over 0..360° and -lim..+lim, log colour."""
+    ax = fig.add_subplot(rows, cols, idx)
+    ax.set_facecolor("black")
+    pos = h[h > 0]
+    vmax = float(h.max()) if pos.size else 1.0
+    vmin = max(float(pos.min()), vmax * 1e-4) if pos.size else 0.5
+    im = ax.imshow(np.ma.masked_less_equal(h, 0), origin="lower", aspect="auto", cmap="inferno",
+                   interpolation="nearest", extent=(0, 360, -lim, lim),
+                   norm=LogNorm(vmin=vmin, vmax=max(vmax, vmin * 2)))
+    ax.set_xticks(range(0, 361, 90))
+    ax.set_xlabel(f"° of the {ref_name} cycle  (360° = {1000.0 / hz:.2f} ms)")
+    ax.set_ylabel(unit)
+    ax.set_title(title, fontsize=9)
+    ax.axhline(0, color="w", lw=.5, alpha=.4)
+    fig.colorbar(im, ax=ax, pad=.01).set_label("hits", fontsize=8)
+    return ax
+
+
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -70,6 +93,9 @@ class App(tk.Tk):
         self.cal_phase = None
         self.stop_evt = threading.Event()
         self.repeat_job = None
+        self.live_on = False                   # live persistence capture loop running
+        self.persist = Persistence()
+        self.persist_lock = threading.Lock()
         self.safe_msg = ""                     # sticky until the next relay action / capture
         self.uiq = queue.Queue()               # callbacks from worker threads
         self._build()
@@ -152,12 +178,31 @@ class App(tk.Tk):
         self.log_lbl = ttk.Label(bar, text="")
         self.log_lbl.pack(side="left")
 
+        # live persistence: back-to-back captures folded onto one cycle, instead of the trends
+        bar2 = ttk.Frame(f, padding=(4, 0))
+        bar2.pack(fill="x")
+        self.meter_view = tk.StringVar(value="trends")
+        for txt, val in (("Trends", "trends"), ("Live persistence", "live")):
+            ttk.Radiobutton(bar2, text=txt, value=val, variable=self.meter_view,
+                            command=self._meter_view_changed).pack(side="left", padx=2)
+        self.fade_var = tk.StringVar(value="Infinite")
+        cb = ttk.Combobox(bar2, textvariable=self.fade_var, values=list(FADES), width=10, state="readonly")
+        cb.pack(side="left", padx=8)
+        cb.bind("<<ComboboxSelected>>", lambda _e: setattr(self.persist, "tau_s", FADES[self.fade_var.get()]))
+        ttk.Button(bar2, text="Clear map", command=self._live_clear).pack(side="left", padx=4)
+        self.live_lbl = ttk.Label(bar2, text="")
+        self.live_lbl.pack(side="left", padx=8)
+
+        self.mplot = ttk.Frame(f)
+        self.mplot.pack(fill="both", expand=True)
         self.tfig = Figure(figsize=(8, 5), dpi=96)
         self.tax = self.tfig.subplots(2, 1, sharex=True)
         self.tax_i = self.tax[0].twinx()
         self.tax_pf = self.tax[1].twinx()
-        self.tcanvas = FigureCanvasTkAgg(self.tfig, master=f)
+        self.tcanvas = FigureCanvasTkAgg(self.tfig, master=self.mplot)
         self.tcanvas.get_tk_widget().pack(fill="both", expand=True)
+        self.pfig = Figure(figsize=(8, 5), dpi=96)
+        self.pcanvas = FigureCanvasTkAgg(self.pfig, master=self.mplot)
 
     # ── Capture ─────────────────────────────────────────────────────────────
     def _build_capture(self):
@@ -239,6 +284,11 @@ class App(tk.Tk):
         self.show_harm = tk.BooleanVar(value=True)
         ttk.Checkbutton(btns, text="Harmonics", variable=self.show_harm,
                         command=lambda: self._plot_capture(self.last_cap)).pack(side="left", padx=6)
+        # the same capture as a time series, or folded onto one mains cycle (scope persistence)
+        self.cap_view = tk.StringVar(value="time")
+        for txt, val in (("Time series", "time"), ("Cycle heat map", "heat")):
+            ttk.Radiobutton(btns, text=txt, value=val, variable=self.cap_view,
+                            command=lambda: self._plot_capture(self.last_cap)).pack(side="left", padx=2)
         self.rate_lbl = ttk.Label(btns, text="")
         self.rate_lbl.pack(side="left", padx=12)
         self.cap_stats = tk.StringVar(value="")
@@ -563,7 +613,7 @@ class App(tk.Tk):
         elif line.startswith("$SAFE,"):
             why, _, amps = line[6:].partition(",")
             self.safe_msg = (f"SAFE START opened relay: {why}"
-                             + (f" ({float(amps):.2f} A)" if why in ("INST", "OVERCURRENT") else ""))
+                             + (f" ({float(amps):.2f} A)" if why in ("INST", "OVERCURRENT", "TRIPA") else ""))
             self.flag_lbl.configure(text=self.safe_msg)
         elif line.startswith("$CFG,") or line.startswith("$OK"):
             self._fill_cfg()
@@ -606,7 +656,7 @@ class App(tk.Tk):
 
     def _redraw_trends(self):
         try:
-            if self.nb.index(self.nb.select()) == 0 and self.hist:
+            if self.nb.index(self.nb.select()) == 0 and self.hist and self.meter_view.get() == "trends":
                 span = {"30 s": 30, "2 min": 120, "10 min": 600, "1 h": 3600}.get(self.span_var.get())
                 now = time.time()
                 rows = [r for r in self.hist if span is None or r["t"] >= now - span]
@@ -766,6 +816,9 @@ class App(tk.Tk):
         return args
 
     def _capture(self):
+        if self.live_on:
+            self.cap_stats.set("live persistence is running on the Meter tab: switch it to Trends to capture")
+            return
         if not self.link or self.busy:
             return
         try:
@@ -825,14 +878,8 @@ class App(tk.Tk):
         if self.repeat_var.get() and self.link:
             self.repeat_job = self.after(200, self._capture)
 
-    def _plot_capture(self, cap):
-        if cap is None:
-            return
-        self.cfig.clear()
-        harm = self.show_harm.get()
-        ax = self.cfig.add_subplot(2 if harm else 1, 1, 1)
-        st = capture_stats(cap)
-        lines = []
+    def _plot_time(self, cap, rows):
+        ax = self.cfig.add_subplot(rows, 1, 1)
         if cap.v is not None:
             ax.plot(cap.t_ms, cap.v, color="tab:blue", lw=1)
             ax.set_ylabel("V", color="tab:blue")
@@ -862,6 +909,112 @@ class App(tk.Tk):
             ax.legend(loc="upper left", fontsize=8)
         ax.set_xlabel("ms from trigger" if cap.trig_idx >= 0 else "ms")
         ax.grid(alpha=.3)
+
+    def _plot_heat(self, cap, st, rows):
+        """Every cycle of the capture overlaid on one, as a persistence map: bright where
+        the waveform usually is, dim traces where a few cycles went somewhere else."""
+        dt = cap.dt_us * 1e-6
+        ref = cap.v if cap.v is not None else cap.i
+        phase, ncyc = cycle_phase(ref, dt, st["hz"])
+        keep, dropped = slip_mask(ref, cap.flags)
+        note = f"  ({dropped} cycles left out: LATE timing slip)" if dropped else ""
+        if keep is not None:
+            ncyc = float(np.sum(keep)) * dt * st["hz"]
+        chans = [(x, u, c) for x, u, c in ((cap.v, "V", "V"), (cap.i, "A", "I")) if x is not None]
+        for k, (x, unit, name) in enumerate(chans):
+            lim = float(np.nanmax(np.abs(x))) * 1.08 or 1.0
+            heat_axes(self.cfig, rows, len(chans), k + 1, cycle_heatmap(x, phase, lim, keep=keep), lim, unit,
+                      f"{name}: {ncyc:.0f} cycles overlaid{note}", "V" if cap.v is not None else "I", st["hz"])
+
+    # ── live persistence (Meter tab) ────────────────────────────────────────
+    def _meter_view_changed(self):
+        live = self.meter_view.get() == "live"
+        (self.tcanvas if live else self.pcanvas).get_tk_widget().pack_forget()
+        (self.pcanvas if live else self.tcanvas).get_tk_widget().pack(fill="both", expand=True)
+        if live:
+            self._live_start()
+        else:
+            self.live_on = False               # the loop ends after its current capture
+
+    def _live_clear(self):
+        with self.persist_lock:
+            self.persist.clear()
+        self._live_draw()
+
+    def _live_start(self):
+        if self.live_on:
+            return
+        why = "connect first" if not self.link else (
+            "busy (a capture or calibration is running): try again when it ends" if self.busy else "")
+        if why:
+            self.live_lbl.configure(text=why)
+            self.meter_view.set("trends")
+            self._meter_view_changed()
+            return
+        self.busy = self.live_on = True
+        self.cap_btn.configure(state="disabled")
+        with self.persist_lock:
+            self.persist.clear()
+            self.persist.tau_s = FADES[self.fade_var.get()]
+        self.live_lbl.configure(text="starting…")
+
+        def work():
+            try:
+                while self.live_on and self.link:
+                    link = self.link
+                    cap_max = int(float(link.status.get("capmax", CAP_MAX)))
+                    hz = self.hist[-1].get("hz") if self.hist else None
+                    cyc = link.cfg.get("CYCLES", {}).get("value") or 10
+                    try:
+                        cap = link.capture(**live_capture_args(cap_max, hz or 60.0, int(float(cyc))))
+                    except Exception as e:                 # noqa: BLE001 - keep going; a gap is fine
+                        self.ui(self.live_lbl.configure, {"text": f"capture: {e}"})
+                        time.sleep(0.5)
+                        continue
+                    with self.persist_lock:
+                        self.persist.add(cap)
+                    self.ui(self._live_draw)
+            finally:
+                self.live_on = False
+                self.ui(self._live_stopped)
+        threading.Thread(target=work, daemon=True).start()
+
+    def _live_stopped(self):
+        self.busy = False
+        self.cap_btn.configure(state="normal")
+        if self.meter_view.get() == "live":                # stopped by a disconnect
+            self.meter_view.set("trends")
+            self._meter_view_changed()
+
+    def _live_draw(self):
+        self.pfig.clear()
+        with self.persist_lock:
+            p = self.persist
+            chans = [(p.maps[k][0].copy(), p.maps[k][1], u, n)
+                     for k, u, n in (("v", "V", "V"), ("i", "A", "I")) if k in p.maps]
+            cycles, caps, cov, hz, ref = p.cycles, p.captures, p.coverage(), p.hz, p.ref
+            late, dropped = p.late, p.dropped
+        for k, (h, lim, unit, name) in enumerate(chans):
+            heat_axes(self.pfig, 1, len(chans), k + 1, h, lim, unit, f"{name}, live", ref, hz)
+        if chans:
+            self.pfig.tight_layout()
+        self.pcanvas.draw_idle()
+        if caps:
+            self.live_lbl.configure(text=f"{caps} captures, ≈{cycles:,.0f} cycles   {cov * 100:.0f} % of the "
+                                         "time sampled (the rest falls in the gaps while each capture is sent)"
+                                    + (f"   {late} LATE: {dropped} slipped cycles left out" if late else ""))
+
+    def _plot_capture(self, cap):
+        if cap is None:
+            return
+        self.cfig.clear()
+        harm = self.show_harm.get()
+        st = capture_stats(cap)
+        lines = []
+        if self.cap_view.get() == "heat":
+            self._plot_heat(cap, st, 2 if harm else 1)
+        else:
+            self._plot_time(cap, 2 if harm else 1)
         s = f"{cap.n} samples @ {st['rate']:,.0f} S/s ({cap.dt_us:.2f} µs)   f {st['hz']:.3f} Hz"
         if cap.avg > 1:
             s += f"   each the mean of {cap.avg} scans"
