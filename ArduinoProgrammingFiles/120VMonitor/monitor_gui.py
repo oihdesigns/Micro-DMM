@@ -27,8 +27,9 @@ from collections import deque
 from tkinter import filedialog, messagebox, ttk
 
 import numpy as np
+from matplotlib import colormaps
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-from matplotlib.colors import LogNorm
+from matplotlib.colors import LinearSegmentedColormap, LogNorm
 from matplotlib.figure import Figure
 
 import bench_psu
@@ -58,6 +59,17 @@ def list_ports():
 
 FADES = {"Infinite": 0.0, "Fade 30 s": 30.0, "Fade 5 s": 5.0, "Fade 1 s": 1.0}
 
+# the CSV log and Save trend CSV share these columns
+CSV_HEADER = ["time", "unix", "vrms", "irms", "w", "va", "var", "pf", "hz", "vpk",
+              "ipk", "wh", "vdc", "idc", "relay", "flags", "range"]
+
+
+def csv_row(r):
+    return ([time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(r["t"])), f"{r['t']:.3f}"]
+            + [r[k] for k in ("vrms", "irms", "p", "s", "q", "pf", "hz", "vpk", "ipk", "wh",
+                              "vdc", "idc", "relay", "flags")]
+            + [RANGE_NAMES.get(int(r.get("rng", 0)), "")])
+
 
 def heat_axes(fig, rows, cols, idx, h, lim, unit, title, ref_name, hz):
     """One persistence panel: counts h (ny, nx) over 0..360° and -lim..+lim, log colour."""
@@ -75,6 +87,43 @@ def heat_axes(fig, rows, cols, idx, h, lim, unit, title, ref_name, hz):
     ax.set_title(title, fontsize=9)
     ax.axhline(0, color="w", lw=.5, alpha=.4)
     fig.colorbar(im, ax=ax, pad=.01).set_label("hits", fontsize=8)
+    return ax
+
+
+# Voltage dropdown -> Persistence map
+V_MODES = {"Actual": "v", "Diff (Nulled)": "vn", "Diff (Perfect)": "vd"}
+V_CMAP = LinearSegmentedColormap.from_list("v_overlay", ["#003a12", "#0a8a3a", "#30c8c0", "#b8ecff"])
+
+
+def _heat_rgb(h, cmap):
+    """h as RGB on black: log colour like heat_axes, black where there are no hits."""
+    pos = h[h > 0]
+    out = np.zeros(h.shape + (3,))
+    if not pos.size:
+        return out
+    vmax = float(pos.max())
+    vmin = min(max(float(pos.min()), vmax * 1e-4), vmax / 2)
+    n = np.clip(np.log(np.maximum(h, vmin) / vmin) / np.log(vmax / vmin), 0, 1)
+    out[h > 0] = cmap(n[h > 0])[:, :3]
+    return out
+
+
+def overlay_axes(fig, hv, limv, hi, limi, ref_name, hz):
+    """V and I persistence maps on one plot so their relative timing shows: V green to
+    light blue on the left scale, I in the usual colours on the right, added together
+    so where both land the colours mix rather than one hiding the other."""
+    ax = fig.add_subplot(1, 1, 1)
+    ax.set_facecolor("black")
+    rgb = np.clip(_heat_rgb(hv, V_CMAP) + _heat_rgb(hi, colormaps["inferno"]), 0, 1)
+    ax.imshow(rgb, origin="lower", aspect="auto", interpolation="nearest", extent=(0, 360, -limv, limv))
+    ax.set_xticks(range(0, 361, 90))
+    ax.set_xlabel(f"° of the {ref_name} cycle  (360° = {1000.0 / hz:.2f} ms)")
+    ax.set_ylabel("V", color="#30c8c0")
+    ax.axhline(0, color="w", lw=.5, alpha=.4)
+    ai = ax.twinx()
+    ai.set_ylim(-limi, limi)
+    ai.set_ylabel("A", color="#f08030")
+    ax.set_title("V (green → blue) and I (inferno), live", fontsize=9)
     return ax
 
 
@@ -172,6 +221,7 @@ class App(tk.Tk):
         ttk.Combobox(bar, textvariable=self.span_var, width=8, state="readonly",
                      values=["30 s", "2 min", "10 min", "1 h", "all"]).pack(side="left", padx=4)
         ttk.Button(bar, text="Clear", command=lambda: self.hist.clear()).pack(side="left", padx=4)
+        ttk.Button(bar, text="Save trend CSV…", command=self._save_trend).pack(side="left", padx=4)
         ttk.Button(bar, text="Reset Wh", command=lambda: self._cmd("!EZERO")).pack(side="left", padx=4)
         self.log_btn = ttk.Button(bar, text="Start CSV log…", command=self._toggle_log)
         self.log_btn.pack(side="left", padx=12)
@@ -190,6 +240,18 @@ class App(tk.Tk):
         cb.pack(side="left", padx=8)
         cb.bind("<<ComboboxSelected>>", lambda _e: setattr(self.persist, "tau_s", FADES[self.fade_var.get()]))
         ttk.Button(bar2, text="Clear map", command=self._live_clear).pack(side="left", padx=4)
+        self.null_time = ""
+        self.live_layout = tk.StringVar(value="separate")
+        for txt, val in (("Separate", "separate"), ("Overlay V + I", "overlay")):
+            ttk.Radiobutton(bar2, text=txt, value=val, variable=self.live_layout,
+                            command=self._live_opts_changed).pack(side="left", padx=2)
+        ttk.Label(bar2, text="Voltage").pack(side="left", padx=(8, 2))
+        self.live_vmode = tk.StringVar(value="Actual")
+        self.vmode_cb = ttk.Combobox(bar2, textvariable=self.live_vmode, values=list(V_MODES),
+                                     width=10, state="readonly")
+        self.vmode_cb.pack(side="left")
+        self.vmode_cb.bind("<<ComboboxSelected>>", lambda _e: self._live_opts_changed())
+        ttk.Button(bar2, text="Take Null", command=self._take_null).pack(side="left", padx=4)
         self.live_lbl = ttk.Label(bar2, text="")
         self.live_lbl.pack(side="left", padx=8)
 
@@ -649,17 +711,33 @@ class App(tk.Tk):
         fl = int(r["flags"])
         self.flag_lbl.configure(text="   ".join(x for x in (self.safe_msg, flag_text(fl)) if x))
         if self.csv_w:
-            self.csv_w.writerow([time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(r["t"])),
-                                 f"{r['t']:.3f}"] + [r[k] for k in
-                                ("vrms", "irms", "p", "s", "q", "pf", "hz", "vpk", "ipk", "wh",
-                                 "vdc", "idc", "relay", "flags")] + [RANGE_NAMES.get(int(r.get("rng", 0)), "")])
+            self.csv_w.writerow(csv_row(r))
+
+    def _trend_rows(self, now):
+        """The $PWR records inside the trend span, as the trend chart shows them."""
+        span = {"30 s": 30, "2 min": 120, "10 min": 600, "1 h": 3600}.get(self.span_var.get())
+        return [r for r in self.hist if span is None or r["t"] >= now - span]
+
+    def _save_trend(self):
+        rows = self._trend_rows(time.time())
+        if not rows:
+            messagebox.showinfo("Save trend CSV", "No trend data to save yet.")
+            return
+        path = filedialog.asksaveasfilename(defaultextension=".csv", initialdir=HERE,
+                                            initialfile=time.strftime("trend_%Y%m%d_%H%M%S.csv"))
+        if not path:
+            return
+        with open(path, "w", newline="") as fh:
+            w = csv.writer(fh)
+            w.writerow(CSV_HEADER)
+            w.writerows(csv_row(r) for r in rows)
+        self.log_lbl.configure(text=f"saved {len(rows)} rows ({self.span_var.get()}) to {os.path.basename(path)}")
 
     def _redraw_trends(self):
         try:
             if self.nb.index(self.nb.select()) == 0 and self.hist and self.meter_view.get() == "trends":
-                span = {"30 s": 30, "2 min": 120, "10 min": 600, "1 h": 3600}.get(self.span_var.get())
                 now = time.time()
-                rows = [r for r in self.hist if span is None or r["t"] >= now - span]
+                rows = self._trend_rows(now)
                 if rows:
                     t = np.array([r["t"] - now for r in rows])
                     get = lambda k: np.array([r[k] for r in rows])   # noqa: E731
@@ -696,8 +774,7 @@ class App(tk.Tk):
             return
         self.csv_fh = open(path, "w", newline="")
         self.csv_w = csv.writer(self.csv_fh)
-        self.csv_w.writerow(["time", "unix", "vrms", "irms", "w", "va", "var", "pf", "hz", "vpk",
-                             "ipk", "wh", "vdc", "idc", "relay", "flags", "range"])
+        self.csv_w.writerow(CSV_HEADER)
         self.log_btn.configure(text="Stop CSV log")
         self.log_lbl.configure(text=os.path.basename(path))
 
@@ -936,6 +1013,21 @@ class App(tk.Tk):
         else:
             self.live_on = False               # the loop ends after its current capture
 
+    def _live_opts_changed(self):
+        # the Diff modes are for the separate voltage panel; the overlay shows actual V
+        self.vmode_cb.configure(state="disabled" if self.live_layout.get() == "overlay" else "readonly")
+        self._live_draw()
+
+    def _take_null(self):
+        with self.persist_lock:
+            ok = self.persist.take_null()
+        if not ok:
+            self.live_lbl.configure(text="Take Null: no voltage captured yet (switch to Live persistence first)")
+            return
+        self.null_time = time.strftime("%H:%M:%S")
+        self.live_vmode.set("Diff (Nulled)")
+        self._live_opts_changed()
+
     def _live_clear(self):
         with self.persist_lock:
             self.persist.clear()
@@ -990,12 +1082,23 @@ class App(tk.Tk):
         self.pfig.clear()
         with self.persist_lock:
             p = self.persist
-            chans = [(p.maps[k][0].copy(), p.maps[k][1], u, n)
-                     for k, u, n in (("v", "V", "V"), ("i", "A", "I")) if k in p.maps]
+            maps = {k: (h.copy(), lim) for k, (h, lim) in p.maps.items()}
             cycles, caps, cov, hz, ref = p.cycles, p.captures, p.coverage(), p.hz, p.ref
             late, dropped = p.late, p.dropped
-        for k, (h, lim, unit, name) in enumerate(chans):
-            heat_axes(self.pfig, 1, len(chans), k + 1, h, lim, unit, f"{name}, live", ref, hz)
+        vkey = V_MODES[self.live_vmode.get()]
+        vtitle = {"v": "V, live", "vd": "V − perfect sine of the same RMS, live",
+                  "vn": f"V − null taken {self.null_time}, live"}[vkey]
+        if vkey == "vn" and "vn" not in maps:        # no null yet, or none since it was taken
+            maps["vn"] = (np.zeros((self.persist.ny, self.persist.nx)), 1.0)
+            vtitle = ("Press Take Null to set the zero" if self.persist.null is None
+                      else "Null taken: waiting for the next capture")
+        chans = [(*maps[k], u, n) for k, u, n in ((vkey, "V", vtitle), ("i", "A", "I, live")) if k in maps]
+        if self.live_layout.get() == "overlay" and "v" in maps and "i" in maps:
+            overlay_axes(self.pfig, *maps["v"], *maps["i"], ref, hz)
+            chans = [None]
+        else:
+            for k, (h, lim, unit, title) in enumerate(chans):
+                heat_axes(self.pfig, 1, len(chans), k + 1, h, lim, unit, title, ref, hz)
         if chans:
             self.pfig.tight_layout()
         self.pcanvas.draw_idle()

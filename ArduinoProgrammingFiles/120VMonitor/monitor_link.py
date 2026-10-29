@@ -598,17 +598,66 @@ def live_capture_args(cap_max, hz=60.0, cycles=10):
                 avg=LIVE_AVG, rng=-1, mon=True)
 
 
+def whole_cycles(x, keep=None):
+    """Bool per sample: the whole cycles of x (the kept samples, from slip_mask, when
+    given), or everything if there aren't enough crossings to tell."""
+    x = np.asarray(x, dtype=float)
+    sel = np.ones(len(x), dtype=bool) if keep is None else np.asarray(keep, dtype=bool).copy()
+    if keep is None:
+        fr = rising_crossings(x)
+        if fr is not None and len(fr) >= 2:
+            sel[:] = False
+            sel[int(np.ceil(fr[0])):int(np.floor(fr[-1])) + 1] = True
+    if sel.sum() < 4:
+        sel[:] = True
+    return sel
+
+
+def sine_residual(x, phase, keep=None):
+    """x minus a perfect sine with the same RMS, on the cycle phase from cycle_phase.
+    The sine's RMS, its phase and the DC removed are worked out over whole cycles
+    (whole_cycles), so a flattened or dented peak stands out as a few volts against
+    a flat line instead of being lost on a 170 V scale."""
+    x = np.asarray(x, dtype=float)
+    sel = whole_cycles(x, keep)
+    th = 2 * np.pi * np.asarray(phase, dtype=float)
+    dc = float(np.mean(x[sel]))
+    xd = x - dc
+    rms = float(np.sqrt(np.mean(xd[sel] ** 2)))
+    s, c = float(np.sum(xd[sel] * np.sin(th[sel]))), float(np.sum(xd[sel] * np.cos(th[sel])))
+    return xd - np.sqrt(2) * rms * np.sin(th + np.arctan2(c, s))
+
+
+NULL_BINS = 256            # points across one cycle in a Take Null reference
+NULL_CAPS = 4              # Take Null averages this many of the latest captures
+
+
+def null_eval(ref, phase):
+    """A Take Null reference, (phases, volts) over one cycle, at each phase, wrapping."""
+    return np.interp(np.asarray(phase, dtype=float), ref[0], ref[1], period=1.0)
+
+
+SHRINK_S = 3.0              # persistence range shrinks once the last this-many seconds...
+SHRINK_BELOW = 0.5         # ...peaked (with headroom) under this fraction of it
+
+
 class Persistence:
     """Cycle heat maps that build up over many captures: a live persistence display.
     tau_s 0 keeps everything; otherwise older captures fade with that time constant.
-    Each channel's range only grows (by 25 % headroom), re-binning what's there."""
+    Each channel's range grows at once (to 25 % headroom) and shrinks once the
+    signal has stayed under half of it for SHRINK_S, re-binning what's there; on a
+    shrink, anything now off the scale is dropped."""
 
     def __init__(self, nx=240, ny=160, tau_s=0.0):
         self.nx, self.ny, self.tau_s = nx, ny, tau_s
+        self.null = None               # Take Null reference (phases, volts) over a cycle; kept by clear()
         self.clear()
 
     def clear(self):
-        self.maps = {}                 # "v" / "i" -> [counts (ny, nx), lim]
+        self.maps = {}                 # "v" / "i" / "vd" / "vn" -> [counts (ny, nx), lim]
+        #                                vd: sine_residual; vn: V minus the Take Null reference
+        self.recent = []               # (volt sums, phase sums, counts) per phase bin, latest NULL_CAPS captures
+        self.peaks = {}                # same keys -> [(time, peak)] over the last SHRINK_S
         self.cycles = 0.0              # cycles in the map (faded too)
         self.captures = 0
         self.late = 0                  # captures the board flagged LATE
@@ -626,12 +675,31 @@ class Persistence:
         now = time.monotonic() if now is None else now
         return min(1.0, self.cap_s / max(now - self.t0, 1e-9))
 
+    def take_null(self):
+        """Make the voltage over the latest captures the zero for "vn". False if there's
+        no voltage yet. The reference isn't rescaled, so a load that sags the whole
+        wave shows as that many volts, and harmonics already there cancel out."""
+        if not self.recent:
+            return False
+        sv, sp, c = (np.sum([r[k] for r in self.recent], axis=0) for k in range(3))
+        ok = c > 0
+        if ok.sum() < 4:
+            return False
+        # each bin's mean phase as well as its mean volts: at a fixed sample rate the
+        # samples don't sit at the bin centres, and on the slope near a zero crossing
+        # (~1000 V per cycle) that offset alone would be a volt or two
+        self.null = (sp[ok] / c[ok], sv[ok] / c[ok])
+        self.maps.pop("vn", None)
+        self.peaks.pop("vn", None)
+        return True
+
     def _regrid(self, h, lim0, lim1):
         r = np.arange(self.ny)
         v = -lim0 + (r + 0.5) * 2 * lim0 / self.ny
-        r1 = np.clip(((v + lim1) / (2 * lim1) * self.ny).astype(int), 0, self.ny - 1)
+        r1 = np.floor((v + lim1) / (2 * lim1) * self.ny).astype(int)
+        ok = (r1 >= 0) & (r1 < self.ny)
         out = np.zeros_like(h)
-        np.add.at(out, r1, h)
+        np.add.at(out, r1[ok], h[ok])
         return out
 
     def add(self, cap, now=None):
@@ -650,13 +718,28 @@ class Persistence:
         k = 1.0
         if self.tau_s > 0 and self.t_last is not None:
             k = float(np.exp(-(now - self.t_last) / self.tau_s))
-        for name, x in (("v", cap.v), ("i", cap.i)):
+        vd = vn = None
+        if cap.v is not None:
+            vd = sine_residual(cap.v, phase, keep)
+            sel = whole_cycles(cap.v, keep)
+            xd = cap.v - float(np.mean(cap.v[sel]))
+            b = np.minimum((phase * NULL_BINS).astype(int), NULL_BINS - 1)
+            self.recent = (self.recent + [(np.bincount(b[sel], xd[sel], NULL_BINS),
+                                           np.bincount(b[sel], phase[sel], NULL_BINS),
+                                           np.bincount(b[sel], minlength=NULL_BINS))])[-NULL_CAPS:]
+            if self.null is not None:
+                vn = xd - null_eval(self.null, phase)
+        for name, x in (("v", cap.v), ("i", cap.i), ("vd", vd), ("vn", vn)):
             if x is None:
                 continue
             h, lim = self.maps.get(name, (None, 0.0))
             pk = float(np.nanmax(np.abs(x))) if len(x) else 0.0
-            if pk > lim or not lim:
-                new = max(pk * 1.25, 1e-6)
+            pks = [(t, p) for t, p in self.peaks.get(name, []) if t >= now - SHRINK_S] + [(now, pk)]
+            self.peaks[name] = pks
+            recent = max(p for _, p in pks) * 1.25
+            settled = now - pks[0][0] >= SHRINK_S * 0.8      # a full window of history
+            if pk > lim or not lim or (settled and recent < lim * SHRINK_BELOW):
+                new = max(pk * 1.25 if pk > lim or not lim else recent, 1e-6)
                 if h is not None:
                     h = self._regrid(h, lim, new)
                 lim = new

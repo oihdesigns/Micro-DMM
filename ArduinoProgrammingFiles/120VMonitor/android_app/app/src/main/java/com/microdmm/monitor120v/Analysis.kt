@@ -238,14 +238,20 @@ fun liveCaptureArgs(capMax: Int, hz: Double = 60.0, cycles: Int = 10): CapArgs {
     )
 }
 
+const val SHRINK_S = 3.0            // persistence range shrinks once the last this-many seconds...
+const val SHRINK_BELOW = 0.5        // ...peaked (with headroom) under this fraction of it
+
 /** Cycle heat maps that build up over many captures: a live persistence display.
  *  tauS 0 keeps everything; otherwise older captures fade with that time constant.
- *  Each channel's range only grows (25 % headroom), re-binning what's there.
+ *  Each channel's range grows at once (25 % headroom) and shrinks once the signal
+ *  has stayed under half of it for SHRINK_S, re-binning what's there; on a shrink,
+ *  anything now off the scale is dropped.
  *  Port of Persistence in monitor_link.py; times in seconds from any fixed origin. */
 class Persistence(val nx: Int = 240, val ny: Int = 160, var tauS: Double = 0.0) {
     class Chan(val h: DoubleArray, val lim: Double)
 
     val maps = LinkedHashMap<String, Chan>()      // "v" / "i"
+    private val peaks = HashMap<String, ArrayDeque<Pair<Double, Double>>>()  // (time, peak) over SHRINK_S
     var cycles = 0.0; private set                 // cycles in the map (faded too)
     var captures = 0; private set
     var late = 0; private set                     // captures the board flagged LATE
@@ -257,7 +263,7 @@ class Persistence(val nx: Int = 240, val ny: Int = 160, var tauS: Double = 0.0) 
     private var tLast: Double? = null
 
     fun clear() {
-        maps.clear(); cycles = 0.0; captures = 0; late = 0; dropped = 0; capS = 0.0; t0 = null; tLast = null; hz = 60.0; ref = "V"
+        maps.clear(); peaks.clear(); cycles = 0.0; captures = 0; late = 0; dropped = 0; capS = 0.0; t0 = null; tLast = null; hz = 60.0; ref = "V"
     }
 
     /** Fraction of the time since the start that was sampled; the rest fell in the
@@ -271,7 +277,8 @@ class Persistence(val nx: Int = 240, val ny: Int = 160, var tauS: Double = 0.0) 
         val out = DoubleArray(h.size)
         for (r in 0 until ny) {
             val v = -lim0 + (r + 0.5) * 2 * lim0 / ny
-            val r1 = ((v + lim1) / (2 * lim1) * ny).toInt().coerceIn(0, ny - 1)
+            val r1 = floor((v + lim1) / (2 * lim1) * ny).toInt()
+            if (r1 < 0 || r1 >= ny) continue
             for (c in 0 until nx) out[r1 * nx + c] += h[r * nx + c]
         }
         return out
@@ -299,8 +306,14 @@ class Persistence(val nx: Int = 240, val ny: Int = 160, var tauS: Double = 0.0) 
             var lim = old?.lim ?: 0.0
             var h = old?.h
             val pk = x.maxOf { abs(it) }
-            if (pk > lim || lim <= 0) {
-                val nl = maxOf(pk * 1.25, 1e-6)
+            val pks = peaks.getOrPut(name) { ArrayDeque() }
+            while (pks.isNotEmpty() && pks.first().first < now - SHRINK_S) pks.removeFirst()
+            pks.addLast(now to pk)
+            val recent = pks.maxOf { it.second } * 1.25
+            val settled = now - pks.first().first >= SHRINK_S * 0.8      // a full window of history
+            val grow = pk > lim || lim <= 0
+            if (grow || (settled && recent < lim * SHRINK_BELOW)) {
+                val nl = maxOf(if (grow) pk * 1.25 else recent, 1e-6)
                 if (h != null) h = regrid(h, lim, nl)
                 lim = nl
             }

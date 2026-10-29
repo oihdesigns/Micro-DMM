@@ -171,8 +171,31 @@ each capture is being sent, and the label shows what fraction of the time
 was covered (about 80-90 % on the simulator). A one-off event that falls in a
 gap is missed, so use a trigger capture for that. Fade: Infinite keeps
 everything; 30 s / 5 s / 1 s let old cycles die away, like a scope's variable
-persistence. Clear map starts over. The vertical range only grows (with
-25 % headroom), and Capture is locked out until you switch back to Trends.
+persistence. Clear map starts over. The vertical range grows at once
+(with 25 % headroom) when the signal gets bigger, and shrinks back once the
+signal has stayed under half the range for 3 s; anything left off the new
+scale is dropped. Capture is locked out until you switch back to Trends.
+
+**Overlay V + I** draws both maps on one plot (V green to light blue on the
+left scale, I in the usual colours on the right) so you can see where in the
+voltage cycle the current flows. The **Voltage** dropdown (separate panels
+only) picks what the voltage panel shows:
+
+- **Actual**: the measured voltage.
+- **Diff (Perfect)**: the measured voltage minus a perfect sine with the same
+  RMS, lined up to the fundamental's phase. Harmonics already on the line
+  show up here (the simulator's 3 V 3rd harmonic, for example).
+- **Diff (Nulled)**: the measured voltage minus a reference you set with
+  **Take Null**. That button averages the last 4 captures' voltage at each
+  point in the cycle. Take it with the load off: the line's own harmonics
+  cancel, and turning the load on shows only what the load does. A peak that
+  sags 0.5 V shows as a 0.5 V dent on a scale of a few volts, instead of
+  being lost on a ±200 V scale. The reference isn't rescaled, so a sag across
+  the whole wave shows in real volts too. Clear map keeps the null; press
+  Take Null again to replace it.
+
+All the maps keep building the whole time, so switching views keeps the
+history. The nulled map starts when the null is taken.
 The meter values, the board's screen, the CSV log and the trend history all
 keep going in this view. Switch back to Trends to see the history, including
 the time spent in persistence. Wh also counts the gaps between captures.
