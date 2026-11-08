@@ -1,0 +1,4 @@
+arduino_secrets.h
+__pycache__/
+ac_power_profile_wifi.json
+runs/
