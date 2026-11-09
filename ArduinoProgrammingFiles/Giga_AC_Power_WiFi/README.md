@@ -177,6 +177,14 @@ steady 0.5 A reads 0.496–0.531 A across the switch with no spike.
 - **The trapezoid rule leaks into harmonics** (0.1 % fake THD with fractional
   cycle ends): piecewise-cubic weights, harmonics after removing the
   fundamental.
+- **`micros()` is not the DMA timestamps' clock.** AdvancedADC stamps
+  buffers with `us_ticker_read()`; `micros()` is a Timer started at boot, so
+  the two differ by however long the bootloader ran (0.5 ms after a USB
+  upload, more than the 20 ms settle window after a reset-button boot).
+  Compared with each other, the range-settle window landed in the past and
+  the relay's switching pulse went through: auto range hunted every ~3.5 s.
+  Everything compared with a buffer time now uses `us_ticker_read()`;
+  `$STATUS tickoff_us` shows the offset.
 - **mbed `FlashIAP` erases with interrupts off** (~1 s stall). Calling the HAL
   erase from a thread instead hung the board.
 

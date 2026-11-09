@@ -120,6 +120,7 @@
 #include "WhdSTAInterface.h"          // the Giga's Wi-Fi driver, for power-save
 #include "whd_wifi_api.h"
 #include "FlashIAP.h"
+#include "hal/us_ticker_api.h"
 #include "SDRAM.h"
 #include "ac_types.h"
 #include "adc_access.h"
@@ -749,7 +750,7 @@ static uint64_t g_w80 = 0;         // scans written, ever
 static uint64_t g_gapScan = 0;     // first scan after the latest gap ...
 static uint64_t g_gapDec = 0;      // ... which starts metering sample g_gapDec
 static uint64_t g_mapScan = 0;     // the last scan of the latest buffer ...
-static uint32_t g_mapTs = 0;       // ... was taken at this micros()
+static uint32_t g_mapTs = 0;       // ... was taken at this tickUs()
 static int64_t  g_accV = 0;
 static double   g_accIA = 0.0;     // current, already in amps
 static uint16_t g_accN = 0;
@@ -777,7 +778,16 @@ static inline uint64_t scanOfDec(uint64_t j) {
 static inline uint64_t decOfScan(uint64_t s) {
   return s >= g_gapScan ? g_gapDec + (s - g_gapScan) / g_decim : g_gapDec;
 }
-// scan <-> micros(), from the latest buffer's timestamp
+// The DMA buffers are stamped with us_ticker_read() (AdvancedADC's ISR), and
+// on this core micros() is a Timer started at boot: the two run at the same
+// rate but differ by however long the bootloader took. After a reset-button
+// boot that was more than the 20 ms range-settle window, so every buffer
+// looked like it came after the window and the relay's switching pulse went
+// through as an overload: auto range hunted (2026-11-08). Everything that is
+// compared with a buffer's timestamp uses tickUs().
+static inline uint32_t tickUs() { return us_ticker_read(); }
+
+// scan <-> tickUs(), from the latest buffer's timestamp
 static inline uint64_t scanAt(uint32_t t) {
   int64_t s = (int64_t)g_mapScan + (int64_t)llround((double)(int32_t)(t - g_mapTs) / g_scanUs);
   return s < 0 ? 0 : (uint64_t)s;
@@ -1427,7 +1437,7 @@ static inline bool capSafeLive() { return g_cs >= 2 && g_cs <= 3; }
 
 // the relay opened while a capture runs: remember where and why
 static void capNoteOpen(uint8_t why, float amps) {
-  if (g_cs >= 1 && g_cs <= 3 && g_cOpenScan < 0) { g_cOpenScan = (int64_t)scanAt(micros()); g_cOpenWhy = why; }
+  if (g_cs >= 1 && g_cs <= 3 && g_cOpenScan < 0) { g_cOpenScan = (int64_t)scanAt(tickUs()); g_cOpenWhy = why; }
   if (g_cs >= 1 && g_cs <= 3 && why == 7) { g_ln.reset(); g_ln.print("$SAFE,TRIPA,"); g_ln.println(amps, 3); emit(); }
 }
 
@@ -1439,7 +1449,7 @@ static void safeOpen(uint8_t why, float amps) {
   g_relay = false;
   if (why == 1 || why == 2) g_trip_latch = true;
   // where the relay really opened: now, not the (older) scan that set it off
-  if (g_cs >= 1 && g_cs <= 4 && g_cOpenScan < 0) { g_cOpenScan = (int64_t)scanAt(micros()); g_cOpenWhy = why; }
+  if (g_cs >= 1 && g_cs <= 4 && g_cOpenScan < 0) { g_cOpenScan = (int64_t)scanAt(tickUs()); g_cOpenWhy = why; }
   cancelAutoOpen();
   g_ln.reset(); g_ln.print("$SAFE,"); g_ln.print(SAFE_NAMES[why]); g_ln.print(',');
   g_ln.println(amps, 3); emit();
@@ -1492,13 +1502,13 @@ static void capAbort(const char* why) {
 static void closeIsr() {
   relayPinWrite(true);
   g_relay = true;
-  g_closeFiredUs = micros();
+  g_closeFiredUs = tickUs();
   g_closeFired = true;
 }
 
 static void closeForCapture() {
   relayNow(true);
-  g_cRelayScan = (int64_t)scanAt(micros());
+  g_cRelayScan = (int64_t)scanAt(tickUs());
 }
 
 static void capTriggered(uint64_t t) {
@@ -1547,7 +1557,7 @@ static double refineCrossing(double p) {
 }
 
 static void serviceCapture() {
-  if (g_autoOpenOn && (int32_t)(micros() - g_autoOpenUs) >= 0) { g_autoOpenOn = 0; safeOpen(3, 0.0f); }
+  if (g_autoOpenOn && (int32_t)(tickUs() - g_autoOpenUs) >= 0) { g_autoOpenOn = 0; safeOpen(3, 0.0f); }
   if (!g_cs) return;
 
   if (g_cs == 1) {                         // wait for the range relay
@@ -1556,7 +1566,7 @@ static void serviceCapture() {
     g_cArmMs = millis();
     g_cPos = (double)g_w80;
     g_cZArm = false; g_c6Arm = false; g_cWaitClose = false; g_closeFired = false;
-    g_cSafeFrom = scanAt(micros());
+    g_cSafeFrom = scanAt(tickUs());
     if (g_cTrig == 0) { capTriggered(g_w80); return; }
     if (g_cTrig == 5 || (g_cTrig == 3 && g_cRelayUs < 0)) {
       closeForCapture();
@@ -1604,7 +1614,7 @@ static void serviceCapture() {
       const double c = refineCrossing(p);
       const double hz = g_hHz > 1.0f ? (double)g_hHz : (double)g_mains_hz;
       const double perUs = 1.0e6 / hz;
-      const uint32_t now = micros();
+      const uint32_t now = tickUs();
       double tc = (double)(int32_t)(timeAt(c) - now);          // us, relative to now (negative)
       double k = ceil((500.0 - (double)g_cRelayUs - tc) / perUs);
       if (k < 0) k = 0;
@@ -1903,7 +1913,7 @@ static void rangeOverload(float amps) {
 static void startRangeSwitch(uint8_t r) {
   g_irReq = r;
   setIrangePin(r);
-  g_irSwUs = micros();
+  g_irSwUs = tickUs();
   g_irPending = true; g_irHistDone = false;
   g_irLastSwMs = millis();
   g_irSwitches++;
@@ -2106,6 +2116,7 @@ static void printStatus() {
   g_ln.print(",gaps="); g_ln.print(g_gaps); g_ln.print(",lostms="); g_ln.print((uint32_t)(g_lostUs / 1000ULL));
   g_ln.print(",loopms="); g_ln.print(g_loopMaxMs, 2);
   g_ln.print(",ip="); g_ln.print(g_ipStr); g_ln.print(",rssi="); g_ln.print(g_wifiOk ? (int)WiFi.RSSI() : 0);
+  g_ln.print(",tickoff_us="); g_ln.print((int32_t)(tickUs() - micros()));
   g_ln.print(",uptime="); g_ln.println(millis() / 1000UL);
   emit();
 }
