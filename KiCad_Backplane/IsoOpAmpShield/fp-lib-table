@@ -1,0 +1,4 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "IsoOpAmpShield")(type "KiCad")(uri "${KIPRJMOD}/IsoOpAmpShield.pretty")(options "")(descr "Project footprints: TDK CCG3 dual"))
+)

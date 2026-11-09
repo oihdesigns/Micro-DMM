@@ -1,4 +1,6 @@
 #include <Arduino_AdvancedAnalog.h>
+#include "adc_access.h"
+#include "tcp_stream.h"
 #include <Arduino_GigaDisplay_GFX.h>
 #include <Arduino_GigaDisplayTouch.h>
 #include <Arduino_USBHostMbed5.h>
@@ -6,10 +8,17 @@
 #include <WiFi.h>            // Giga R1 WiFi onboard Murata module
 
 // ── WiFi configuration ─────────────────────────────────────────────────────────
-// Fill in your network. The board joins your Wi-Fi and listens for the same
-// line-based command protocol used over USB serial, but on a TCP socket.
-#define WIFI_SSID   "MTBs & Science"
-#define WIFI_PASS   "x"
+// The board joins your Wi-Fi and listens for the same line-based command
+// protocol used over USB serial, but on a TCP socket. The network name and
+// password live in arduino_secrets.h (git-ignored): copy
+// arduino_secrets.example.h to arduino_secrets.h and fill it in.
+#if __has_include("arduino_secrets.h")
+#include "arduino_secrets.h"
+#else
+#error "Copy arduino_secrets.example.h to arduino_secrets.h and put your Wi-Fi name/password in it"
+#endif
+#define WIFI_SSID   SECRET_SSID
+#define WIFI_PASS   SECRET_PASS
 static const uint16_t CMD_PORT = 8080;   // TCP port the GUI connects to
 
 WiFiServer cmdServer(CMD_PORT);
@@ -22,7 +31,30 @@ static const int MAX_LOG       = 10000;
 static const int N_SAMPLES_MAX = 512;
 static const int QUEUE_DEPTH   = 8;
 
-AdvancedADC adc(A0, A1, A2, A3, A4, A5, A6, A7);
+// Two ADCs in dual regular-simultaneous mode (Nov 2026). Rank r of adcA (ADC1)
+// and rank r of adcB (ADC2) are sampled at the SAME instant, and every
+// differential pair the presets use sits on one rank: A2/A3, A4/A5, A0/A1 and
+// A7/A6 (A7 is wired to ADC1 only, so it takes the ADC1 side).
+//
+// Before this, one ADC scanned all 8 pins in turn, 469 ns apart:
+//  - A pair's two halves were never sampled together. Common-mode ripple, such
+//    as the 12 V board's ~632 kHz isolated DC-DC ripple, came out of the
+//    subtraction as differential noise. Measured on OpAmpBuffer_12vboard:
+//    A2-A3 was 10.8 counts rms, about 1.5x either pin alone.
+//  - A scan took 3.75 us, so the real ceiling was 250 kS/s, and 500k/1M
+//    silently ran at 250k with a time axis 2x/4x short.
+// Now each ADC converts 4 pins, which halves the scan time, and usableRate()
+// clamps the rate to what the converters can actually do.
+static const int ADC_RANKS = 4;
+AdvancedADC     adcA(A2, A4, A0, A7);          // ADC1
+AdvancedADC     adcB(A3, A5, A1, A6);          // ADC2 (slave, starts with ADC1)
+AdvancedADCDual adcDual(adcA, adcB);
+static const uint8_t CH_ADC[8]  = {0,1,0,1,0,1,1,0};   // A0..A7: 0 = adcA, 1 = adcB
+static const uint8_t CH_RANK[8] = {2,2,0,0,1,1,3,3};   // A0..A7: rank within its ADC
+
+// One matched pair of DMA buffers (defined before any function: Arduino's
+// generated prototypes land above the first function and use this type).
+struct ScanBuf { DMABuffer<Sample>* a; DMABuffer<Sample>* b; int ns; };
 static const char* CH_NAMES[N_CHANNELS] = {"A0","A1","A2","A3","A4","A5","A6","A7"};
 static int  logData[N_CHANNELS][MAX_LOG];
 static bool adcRunning = false;
@@ -35,10 +67,218 @@ static uint32_t toResolution(int bits) {
     return AN_RESOLUTION_16;
 }
 
+// The fastest rate a 4-rank scan keeps up with. AdvancedADC clocks the ADCs
+// from per_ck (HSI 64 MHz) /1, and rev-V silicon halves it: 32 MHz. Measured
+// 2026-11-04: 469 ns per 12-bit conversion = 15 cycles. Each conversion is
+// 8.5 cycles of sampling (the library default) plus (bits/2 + 0.5) cycles to
+// convert. Rates are kept to round values the timer divides exactly, with 3 %
+// headroom.
+static const float ADC_CLK_HZ = 32.0e6f;
+static uint32_t maxScanRate(int bits) {
+    float cyc = ADC_RANKS * (8.5f + (bits <= 8 ? 4.5f : bits <= 10 ? 5.5f : bits <= 12 ? 6.5f : bits <= 14 ? 7.5f : 8.5f));
+    return (uint32_t)(ADC_CLK_HZ / cyc);
+}
+static uint32_t usableRate(uint32_t req, int bits) {
+    static const uint32_t STEPS[] = {1000000UL, 500000UL, 400000UL, 250000UL, 200000UL, 100000UL};
+    uint32_t lim = (uint32_t)(maxScanRate(bits) * 0.97f);
+    if (req <= lim) return req;
+    for (uint32_t s : STEPS) if (s <= lim) return s;
+    return 100000UL;
+}
+
+// ── dual-ADC buffer access ────────────────────────────────────────────────────
+// Each ADC fills its own DMA buffers on the same triggers, so a matching pair
+// completes microseconds apart. If the reader falls behind, the library reuses
+// a full buffer instead of queuing a new one, and that decision is made per
+// ADC. adcRead() therefore checks the completion timestamps and re-pairs if the
+// two sides are more than half a buffer apart. Otherwise A2 from one moment
+// would be subtracted from A3 of another.
+static uint32_t g_bufSamples = 0, g_bufUs = 0;
+static uint32_t g_resyncs = 0, g_drops = 0, g_capBufs = 0, g_capFirstTs = 0, g_capLastTs = 0;
+
+static void adcNoteStopState();
+static void adcStop() {
+    if (adcRunning) { adcDual.stop(); adcNoteStopState(); }
+    adcRunning = false;
+}
+// Largest block malloc() can hand out right now (binary search). Reported when
+// the ADC fails to start, since a fragmented heap is the usual reason.
+static size_t largestFreeBlock() {
+    size_t lo = 0, hi = 512 * 1024;
+    while (hi - lo > 256) {
+        size_t mid = (lo + hi) / 2; void* p = malloc(mid);
+        if (p) { free(p); lo = mid; } else hi = mid;
+    }
+    return lo;
+}
+// The library never resets its HAL handles. On 2026-11-05 a stop left ADC2's
+// handle with HAL_ADC_STATE_ERROR_DMA, and every later begin() failed until reset
+// (after anywhere from 17 to ~250 captures). That flag is what HAL_ADC_Stop_DMA
+// sets when its DMA abort fails. adcSanitize() returns a stopped ADC and its DMA
+// stream to the state begin() expects: the ADC disabled, the DMA stream disabled
+// with its flags cleared, and both handles in RESET so begin() re-inits them. It
+// is a no-op when everything is clean. It writes only after adcDescrValid() has
+// confirmed the mirrored struct layout.
+static uint32_t g_adcFixes = 0, g_stopErrs = 0, g_dmaResets = 0;
+static uint32_t g_tcpRetries = 0, g_tcpLost = 0;   // Wi-Fi reply sends retried / bytes abandoned (all replies so far)
+static char     g_adcDiag[112] = "", g_stopDiag[112] = "", g_failA[112] = "", g_failB[112] = "";
+static const uint32_t ADC_ERR_STATE = HAL_ADC_STATE_ERROR_INTERNAL | HAL_ADC_STATE_ERROR_CONFIG | HAL_ADC_STATE_ERROR_DMA;
+
+static void adcDescribe(AdvancedADC& a, char* buf, size_t n) {
+    AdcDescrMirror* d = adcDescr(a);
+    if (!adcDescrValid(d)) { snprintf(buf, n, "no-descr"); return; }
+    DMA_Stream_TypeDef* st = (DMA_Stream_TypeDef*)d->dma.Instance;
+    snprintf(buf, n, "ADC%d st=%lX err=%lX cr=%lX dma st=%X err=%lX scr=%lX pool=%d",
+             d->adc.Instance == ADC1 ? 1 : d->adc.Instance == ADC2 ? 2 : 3,
+             (unsigned long)d->adc.State, (unsigned long)d->adc.ErrorCode, (unsigned long)d->adc.Instance->CR,
+             (unsigned)d->dma.State, (unsigned long)d->dma.ErrorCode, (unsigned long)st->CR, d->pool ? 1 : 0);
+}
+static bool adcNeedsFix(AdvancedADC& a) {
+    AdcDescrMirror* d = adcDescr(a);
+    if (!adcDescrValid(d)) return false;
+    DMA_Stream_TypeDef* st = (DMA_Stream_TypeDef*)d->dma.Instance;
+    return (d->adc.State & ADC_ERR_STATE) || (d->adc.State & (HAL_ADC_STATE_REG_BUSY | HAL_ADC_STATE_INJ_BUSY)) ||
+           d->adc.Lock != HAL_UNLOCKED || (d->adc.Instance->CR & (ADC_CR_ADEN | ADC_CR_ADSTART | ADC_CR_JADSTART)) ||
+           (st->CR & DMA_SxCR_EN) || d->dma.State == HAL_DMA_STATE_BUSY || d->dma.State == HAL_DMA_STATE_ERROR ||
+           d->dma.State == HAL_DMA_STATE_ABORT || d->dma.Lock != HAL_UNLOCKED;
+}
+static void adcSanitize(AdvancedADC& a) {
+    if (!adcNeedsFix(a)) return;
+    adcDescribe(a, g_adcDiag, sizeof(g_adcDiag));
+    AdcDescrMirror* d = adcDescr(a);
+    ADC_TypeDef* r = d->adc.Instance;
+    DMA_Stream_TypeDef* st = (DMA_Stream_TypeDef*)d->dma.Instance;
+    const uint32_t RS = ADC_CR_ADCAL | ADC_CR_JADSTP | ADC_CR_ADSTP | ADC_CR_JADSTART |
+                        ADC_CR_ADSTART | ADC_CR_ADDIS | ADC_CR_ADEN;   // write-1 bits: mask on RMW
+    uint32_t t0 = micros();
+    if (r->CR & (ADC_CR_ADSTART | ADC_CR_JADSTART)) {
+        r->CR = (r->CR & ~RS) | ADC_CR_ADSTP | ADC_CR_JADSTP;
+        while ((r->CR & (ADC_CR_ADSTART | ADC_CR_JADSTART)) && micros() - t0 < 2000) {}
+    }
+    if (r->CR & ADC_CR_ADEN) {
+        r->CR = (r->CR & ~RS) | ADC_CR_ADDIS;
+        while ((r->CR & ADC_CR_ADEN) && micros() - t0 < 4000) {}
+    }
+    st->CR &= ~(DMA_SxCR_EN | DMA_SxCR_TCIE | DMA_SxCR_HTIE | DMA_SxCR_TEIE | DMA_SxCR_DMEIE);
+    st->FCR &= ~DMA_SxFCR_FEIE;
+    t0 = micros();
+    while ((st->CR & DMA_SxCR_EN) && micros() - t0 < 5000) {}
+    if (st->CR & DMA_SxCR_EN) {
+        // Seen 2026-11-05: after HAL_ADC_Stop_DMA timed out, ADC2's stream kept EN=1
+        // forever, so HAL_DMA_Init (inside begin) timed out every time. Only a DMA1
+        // controller reset clears it. Only the ADCs use DMA1 in this sketch, but the
+        // reset happens only if every other DMA1 stream is idle.
+        DMA_Stream_TypeDef* const S[8] = {DMA1_Stream0, DMA1_Stream1, DMA1_Stream2, DMA1_Stream3,
+                                          DMA1_Stream4, DMA1_Stream5, DMA1_Stream6, DMA1_Stream7};
+        bool others = false;
+        for (DMA_Stream_TypeDef* o : S)
+            if (o != st && o != DMA1_Stream1 && o != DMA1_Stream2 && (o->CR & DMA_SxCR_EN)) others = true;
+        if (!others) {
+            RCC->AHB1RSTR |= RCC_AHB1RSTR_DMA1RST; __DSB();
+            RCC->AHB1RSTR &= ~RCC_AHB1RSTR_DMA1RST; __DSB();
+            NVIC_ClearPendingIRQ(DMA1_Stream1_IRQn); NVIC_ClearPendingIRQ(DMA1_Stream2_IRQn);
+            g_dmaResets++;
+            // the reset also cleared the other ADC's stream: put both handles back to RESET
+            AdcDescrMirror* o1 = adcDescr(adcA); AdcDescrMirror* o2 = adcDescr(adcB);
+            if (adcDescrValid(o1)) { o1->dma.State = HAL_DMA_STATE_RESET; o1->dma.ErrorCode = 0; o1->dma.Lock = HAL_UNLOCKED; }
+            if (adcDescrValid(o2)) { o2->dma.State = HAL_DMA_STATE_RESET; o2->dma.ErrorCode = 0; o2->dma.Lock = HAL_UNLOCKED; }
+        }
+    }
+    // clear this stream's flags: streams 1/2/3 sit at bit offsets 6/16/22 of LIFCR
+    const uint32_t off = (st == DMA1_Stream1) ? 6 : (st == DMA1_Stream2) ? 16 : 22;
+    DMA1->LIFCR = 0x3DUL << off;
+    d->adc.State = HAL_ADC_STATE_RESET; d->adc.ErrorCode = HAL_ADC_ERROR_NONE; d->adc.Lock = HAL_UNLOCKED;
+    d->dma.State = HAL_DMA_STATE_RESET; d->dma.ErrorCode = HAL_DMA_ERROR_NONE; d->dma.Lock = HAL_UNLOCKED;
+    g_adcFixes++;
+}
+
+// Diagnostic: did a normal stop leave anything in an error state?
+static void adcNoteStopState() {
+    if (adcNeedsFix(adcB)) { g_stopErrs++; adcDescribe(adcB, g_stopDiag, sizeof(g_stopDiag)); }
+    else if (adcNeedsFix(adcA)) { g_stopErrs++; adcDescribe(adcA, g_stopDiag, sizeof(g_stopDiag)); }
+}
+
+static bool adcStart(int bits, uint32_t rate, int nSamples) {
+    adcStop();
+    g_bufSamples = nSamples;
+    g_bufUs = (uint32_t)((uint64_t)nSamples * 1000000ULL / rate);
+    g_resyncs = 0; g_drops = 0; g_capBufs = 0;
+    // A begin() that fails part-way (e.g. the DMA pool malloc fails) leaves that
+    // ADC's pool allocated, and the library then rejects every later begin()
+    // until reset. Seen 2026-11-05 after ~250 captures. So stop() always runs,
+    // even though adcRunning says nothing is running, and a failed begin() is
+    // torn down and tried once more.
+    for (int attempt = 0; attempt < 2 && !adcRunning; attempt++) {
+        adcDual.stop();
+        adcSanitize(adcA); adcSanitize(adcB);
+        adcRunning = adcDual.begin(toResolution(bits), rate, nSamples, QUEUE_DEPTH) != 0;
+    }
+    if (!adcRunning) {   // keep the failed state for the ERR line, then clean up
+        adcDescribe(adcA, g_failA, sizeof(g_failA)); adcDescribe(adcB, g_failB, sizeof(g_failB));
+        adcDual.stop();
+    }
+    return adcRunning;
+}
+static inline bool adcAvailable() {
+    return adcRunning && adcA.available() && adcB.available();
+}
+static ScanBuf adcRead() {
+    DMABuffer<Sample>* a = &adcA.read();
+    DMABuffer<Sample>* b = &adcB.read();
+    for (int k = 0; k < 4; k++) {
+        int32_t d = (int32_t)(a->timestamp() - b->timestamp());
+        if ((uint32_t)abs(d) <= g_bufUs / 2) break;
+        g_resyncs++;
+        if (d < 0) { a->release(); a = &adcA.read(); }      // a is older: next a
+        else       { b->release(); b = &adcB.read(); }
+    }
+    // DISCONT: the pool was full, so data before this buffer was overwritten.
+    // Both ADCs drop together; the dual-mode tests saw every drop on both sides.
+    if (a->get_flags(DMA_BUFFER_DISCONT)) g_drops++;
+    if (g_capBufs++ == 0) g_capFirstTs = a->timestamp();
+    g_capLastTs = a->timestamp();
+    ScanBuf s = { a, b, (int)(min(a->size(), b->size()) / ADC_RANKS) };
+    return s;
+}
+static inline int scanVal(const ScanBuf& s, int i, int ch) {
+    return (CH_ADC[ch] ? *s.b : *s.a)[(size_t)i * ADC_RANKS + CH_RANK[ch]];
+}
+static inline void adcRelease(ScanBuf& s) { s.a->release(); s.b->release(); }
+
+// Scan rate measured from the buffer timestamps, which catches dropped
+// triggers or buffers. Returns 0 when there are too few buffers to tell.
+static uint32_t measuredRate() {
+    if (g_capBufs < 3 || g_capLastTs == g_capFirstTs) return 0;
+    return (uint32_t)((uint64_t)(g_capBufs - 1) * g_bufSamples * 1000000ULL / (uint32_t)(g_capLastTs - g_capFirstTs));
+}
+static void printRateInfo(Stream& io, uint32_t req, uint32_t used) {
+    io.print("INFO:RATE|REQ:"); io.print(req); io.print("|USED:"); io.print(used);
+    io.print("|MEASURED:"); io.print(measuredRate()); io.print("|RESYNC:"); io.print(g_resyncs);
+    io.print("|DROP:"); io.print(g_drops);
+    io.print("|HEAPMAX:"); io.print(largestFreeBlock());
+    io.print("|ADCFIX:"); io.print(g_adcFixes);
+    if (g_adcDiag[0]) { io.print("|LASTFIX:"); io.print(g_adcDiag); }
+    io.print("|STOPERR:"); io.print(g_stopErrs); io.print("|DMARESET:"); io.print(g_dmaResets);
+    io.print("|TCPRETRY:"); io.print(g_tcpRetries); io.print("|TCPLOST:"); io.print(g_tcpLost);
+    if (g_stopDiag[0]) { io.print("|LASTSTOP:"); io.print(g_stopDiag); }
+    io.println();
+}
+
 // ── Display / touch / USB ─────────────────────────────────────────────────────
 GigaDisplay_GFX          gfx;
 Arduino_GigaDisplayTouch touch;
 bool displayPresent = false;
+
+// GigaDisplay_GFX pushes each finished drawing to the panel from an
+// osPriorityHigh thread. The thread copies the full 800x480 framebuffer
+// (768 KB) and holds the CPU for about 14 ms, then sleeps 10 ms and goes again
+// if more was drawn. Measured 2026-11-04: a capture started right after
+// drawCaptureScreen() lost a 14 ms stretch about 6 ms in, about 1.5 buffers at
+// 250 kS/s and about 10 at 500 kS/s. Wait for the panel to go quiet before
+// starting the ADC.
+static void waitDisplayIdle() {
+    if (displayPresent) delay(45);
+}
 
 USBHostMSD          msd;
 mbed::FATFileSystem usbFs("usb");
@@ -253,7 +493,7 @@ static void applyPreset(int idx) {
 // ── Settings screen ───────────────────────────────────────────────────────────
 static void getParamStr(int r, char* buf, int sz) {
     switch(r) {
-        case 0: snprintf(buf,sz,"%lu",(unsigned long)RATE_OPTIONS[dRateIdx]); break;
+        case 0: snprintf(buf,sz,"%lu",(unsigned long)usableRate(RATE_OPTIONS[dRateIdx],dBits)); break;
         case 1: snprintf(buf,sz,"%d",dBits);   break;
         case 2: snprintf(buf,sz,"%d",dTime);   break;
         case 3: snprintf(buf,sz,"%d",dSmooth); break;
@@ -847,7 +1087,7 @@ static void drawLoggingScreen() {
     gfx.setTextColor(C_TEXT); gfx.setTextSize(1);
     char sbuf[64];
     snprintf(sbuf,sizeof(sbuf),"%lu Hz  %d-bit  smooth:%d",
-             (unsigned long)RATE_OPTIONS[dRateIdx],dBits,max(1,dSmooth));
+             (unsigned long)usableRate(RATE_OPTIONS[dRateIdx],dBits),dBits,max(1,dSmooth));
     gfx.setCursor(rx,HDR_H+130); gfx.print(sbuf);
     gfx.setTextColor(C_BORDER); gfx.setTextSize(1);
     snprintf(sbuf,sizeof(sbuf),"Interval fallback: %d ms",logIntervalMs);
@@ -898,34 +1138,33 @@ static void startLogger() {
     for(int ch=0;ch<N_CHANNELS;ch++){logLastCh[ch]=1e30f;logCurCh[ch]=0;}
     for(int d=0;d<2;d++){logLastDiff[d]=1e30f;logCurDiff[d]=0;}
     logLastDispMs=0;
-    uint32_t sr=RATE_OPTIONS[dRateIdx];
+    uint32_t sr=usableRate(RATE_OPTIONS[dRateIdx],dBits);
     int ns=(int)((sr/1000UL)*(uint32_t)max(dTime/4,1));
     if(ns<16) ns=16; if(ns>N_SAMPLES_MAX) ns=N_SAMPLES_MAX;
-    if(adcRunning) adc.stop();
-    if(!adc.begin(toResolution(dBits),sr,ns,QUEUE_DEPTH)){
+    if(!adcStart(dBits,sr,ns)){
         fclose(logFile); logFile=nullptr;
         showOverlay(C_RED,"ADC start failed!"); delay(2000);
         drawLoggerScreen(); return;
     }
-    adcRunning=true; logRunning=true;
+    logRunning=true;
     currentScreen=SCR_LOGGING; drawLoggingScreen();
 }
 
 static void stopLogger() {
     logRunning=false;
-    if(adcRunning){ adc.stop(); adcRunning=false; }
+    adcStop();
     if(logFile){ fflush(logFile); fclose(logFile); logFile=nullptr; }
     usbFs.unmount(); usbMounted=false;
     currentScreen=SCR_SETTINGS; drawSettingsScreen();
 }
 
 static void loggerStep() {
-    if(!logRunning||!adcRunning||!adc.available()) return;
-    SampleBuffer buf=adc.read();
-    int ns=buf.size()/N_CHANNELS;
+    if(!logRunning||!adcAvailable()) return;
+    ScanBuf buf=adcRead();
+    int ns=buf.ns;
     int sc=max(1,dSmooth);
     for(int s=0;s<ns;s++){
-        for(int ch=0;ch<N_CHANNELS;ch++) logSmoothBuf[ch]+=buf[s*N_CHANNELS+ch];
+        for(int ch=0;ch<N_CHANNELS;ch++) logSmoothBuf[ch]+=scanVal(buf,s,ch);
         if(++logSmoothTick>=sc){
             logSmoothTick=0;
             int sv[N_CHANNELS];
@@ -971,7 +1210,7 @@ static void loggerStep() {
             }
         }
     }
-    buf.release();
+    adcRelease(buf);
     uint32_t now2=millis();
     if(now2-logLastDispMs>=500){logLastDispMs=now2;updateLoggingDisplay();}
 }
@@ -1037,9 +1276,10 @@ static void exportToUSB() {
 // ── Display-mode capture ──────────────────────────────────────────────────────
 static void runDisplayCapture() {
     if(!contMode) drawCaptureScreen();
+    waitDisplayIdle();          // also covers the previous plot's refresh in continuous mode
 
-    uint32_t sampleRate = RATE_OPTIONS[dRateIdx];
     int bitRes=dBits, duration=dTime, smoothCount=max(1,dSmooth);
+    uint32_t sampleRate = usableRate(RATE_OPTIONS[dRateIdx], bitRes);
     int logTarget=min(dPoints,MAX_LOG), trigThr=dTrigThr;
 
     // Build capture mask — standalone active + diff source pins
@@ -1068,22 +1308,23 @@ static void runDisplayCapture() {
     if(nSamples<16)            nSamples=16;
     if(nSamples>N_SAMPLES_MAX) nSamples=N_SAMPLES_MAX;
 
-    if(adcRunning) adc.stop();
-    if(!adc.begin(toResolution(bitRes),sampleRate,nSamples,QUEUE_DEPTH)) {
+    if(!adcStart(bitRes,sampleRate,nSamples)) {
         showOverlay(C_RED,"ADC start failed!"); delay(2000);
         currentScreen=SCR_SETTINGS; drawSettingsScreen(); return;
     }
-    adcRunning=true;
 
+    // Each progress redraw costs a ~14 ms panel refresh (see waitDisplayIdle),
+    // so only animate the bar when the DMA pool can ride that out.
+    const bool progressOk = (uint32_t)(QUEUE_DEPTH - 2) * g_bufUs >= 25000UL;
     uint32_t startMs=millis(), lastDisp=0;
     while(millis()-startMs<(uint32_t)duration) {
         uint32_t now=millis();
-        if(!contMode && now-lastDisp>80){ lastDisp=now; updateProgress(now-startMs,duration); }
-        if(!adc.available()) continue;
-        SampleBuffer buf=adc.read();
-        int ns=buf.size()/N_CHANNELS;
+        if(!contMode && progressOk && now-lastDisp>80){ lastDisp=now; updateProgress(now-startMs,duration); }
+        if(!adcAvailable()) continue;
+        ScanBuf buf=adcRead();
+        int ns=buf.ns;
         for(int s=0;s<ns;s++) {
-            for(int ch=0;ch<N_CHANNELS;ch++) smoothBuf[ch]+=buf[s*N_CHANNELS+ch];
+            for(int ch=0;ch<N_CHANNELS;ch++) smoothBuf[ch]+=scanVal(buf,s,ch);
             if(++smoothTick>=smoothCount) {
                 smoothTick=0;
                 int sv[N_CHANNELS];
@@ -1112,13 +1353,13 @@ static void runDisplayCapture() {
                         if(dChanType[ch]) lastLoggedVal[ch]=sv[ch];
                         anyStored=true;
                     }
-                    if(anyStored) lastLogMs=millis()-startMs;
+                    if(anyStored&&trigThr>0) lastLogMs=millis()-startMs;   // trigger mode only: millis() per sample overran 500 kS/s
                 }
             }
         }
-        buf.release();
+        adcRelease(buf);
     }
-    adc.stop(); adcRunning=false;
+    adcStop();
 
     // Save post-capture state
     for(int i=0;i<N_CHANNELS;i++) {
@@ -1408,7 +1649,14 @@ void loop() {
             // Wait briefly for the full command line to arrive.
             uint32_t t0 = millis();
             while(c.connected() && !c.available() && millis()-t0 < 1500) delay(1);
-            if(c.available()) processCommand(c);
+            if(c.available()){
+                // Replies go through ReliableTcpStream (tcp_stream.h): raw
+                // per-character writes to the client silently dropped bytes.
+                ReliableTcpStream rs(c);
+                processCommand(rs);
+                rs.flush();
+                g_tcpRetries += rs.retries(); g_tcpLost += rs.lost();
+            }
             // Let the GUI finish reading the whole reply (incl. large DATA dumps)
             // and close first, so stop() can't truncate the response. Capped so a
             // stalled client can never wedge the board.
@@ -1437,7 +1685,7 @@ static void processCommand(Stream& io) {
         if(logFile){ fflush(logFile); fclose(logFile); logFile=nullptr; }
         usbFs.unmount(); usbMounted=false;
     }
-    if(displayPresent){ currentScreen=SCR_CAPTURING; drawCaptureScreen(); }
+    if(displayPresent){ currentScreen=SCR_CAPTURING; drawCaptureScreen(); waitDisplayIdle(); }
 
     int bitRes      =cmd.substring(cmd.indexOf("BITS:")+5,cmd.indexOf("|TIME:")).toInt();
     int duration    =cmd.substring(cmd.indexOf("TIME:")+5,cmd.indexOf("|SMOOTH:")).toInt();
@@ -1465,6 +1713,8 @@ static void processCommand(Stream& io) {
     if(logTarget<1)      logTarget=1;
     if(logTarget>MAX_LOG)logTarget=MAX_LOG;
     if(sampleRate<1000)  sampleRate=500000;
+    const uint32_t reqRate=sampleRate;
+    sampleRate=usableRate(sampleRate,bitRes);   // the time maths below must use the real rate
 
     bool pinReq[N_CHANNELS]={};
     String pinsStr=cmd.substring(5,cmd.indexOf("|BITS:"));
@@ -1502,11 +1752,11 @@ static void processCommand(Stream& io) {
     if(nSamples<16)            nSamples=16;
     if(nSamples>N_SAMPLES_MAX) nSamples=N_SAMPLES_MAX;
 
-    if(adcRunning) adc.stop();
-    if(!adc.begin(toResolution(bitRes),sampleRate,nSamples,QUEUE_DEPTH)){
-        io.println("ERR:ADC_BEGIN_FAILED"); return;
+    if(!adcStart(bitRes,sampleRate,nSamples)){
+        io.print("ERR:ADC_BEGIN_FAILED|HEAPMAX:"); io.print(largestFreeBlock());
+        io.print("|ADCFIX:"); io.print(g_adcFixes); io.print("|LASTFIX:"); io.print(g_adcDiag);
+        io.print("|FAIL_A:"); io.print(g_failA); io.print("|FAIL_B:"); io.println(g_failB); return;
     }
-    adcRunning=true;
 
     uint32_t startMs=millis();
     while(!midDone&&(midpointMode||millis()-startMs<(uint32_t)duration)){
@@ -1514,11 +1764,11 @@ static void processCommand(Stream& io) {
             String inc=io.readStringUntil('\n'); inc.trim();
             if(inc==F("!ABORT")){midDone=true;break;}
         }
-        if(!adc.available()) continue;
-        SampleBuffer buf=adc.read();
-        int ns=buf.size()/N_CHANNELS;
+        if(!adcAvailable()) continue;
+        ScanBuf buf=adcRead();
+        int ns=buf.ns;
         for(int s=0;s<ns;s++){
-            for(int ch=0;ch<N_CHANNELS;ch++) smoothBuf[ch]+=buf[s*N_CHANNELS+ch];
+            for(int ch=0;ch<N_CHANNELS;ch++) smoothBuf[ch]+=scanVal(buf,s,ch);
             if(++smoothTick>=smoothCount){
                 smoothTick=0;
                 int sv[N_CHANNELS];
@@ -1556,15 +1806,17 @@ static void processCommand(Stream& io) {
                             if(!pinReq[ch]||logCnt[ch]>=logTarget) continue;
                             logData[ch][logCnt[ch]++]=sv[ch]; lastLoggedVal[ch]=sv[ch]; anyStored=true;
                         }
-                        if(anyStored) lastLogMs=millis()-startMs;
+                        if(anyStored&&usingTrig) lastLogMs=millis()-startMs;   // trigger mode only: millis() per sample overran 500 kS/s
                     }
                 }
             }
         }
-        buf.release();
+        adcRelease(buf);
     }
-    adc.stop(); adcRunning=false;
+    adcStop();
     if(midpointMode) for(int i=0;i<N_CHANNELS;i++) if(pinReq[i]) logCnt[i]=midRingFill+midPostCount;
+    // Informational: the GUI ignores lines that aren't PIN:/DATA:/DONE/ERR:.
+    printRateInfo(io, reqRate, sampleRate);
 
     for(int i=0;i<N_CHANNELS;i++){
         if(!pinReq[i]||cnt[i]==0) continue;

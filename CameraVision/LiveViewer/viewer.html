@@ -18,8 +18,19 @@
   .stat.bad b { color: var(--red); }
   main { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; padding: 12px; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
-  #stage { position: relative; background: #000; line-height: 0; cursor: crosshair; align-self: start; }
+  #stage { width: 100%; position: relative; overflow: hidden; aspect-ratio: 3 / 2; background: #000; line-height: 0; cursor: crosshair; align-self: start; user-select: none; }
+  /* Turned images keep their landscape size, so a quarter turn swaps the box's width and height. */
+  .turn { position: absolute; left: 50%; top: 50%; width: 100%; height: 100%; transform: translate(-50%, -50%); }
+  body[data-rot="90"] .turn { width: 150%; height: 66.6667%; transform: translate(-50%, -50%) rotate(90deg); }
+  body[data-rot="180"] .turn { transform: translate(-50%, -50%) rotate(180deg); }
+  body[data-rot="270"] .turn { width: 150%; height: 66.6667%; transform: translate(-50%, -50%) rotate(270deg); }
+  body[data-rot="90"] #stage, body[data-rot="270"] #stage { aspect-ratio: 2 / 3; width: min(100%, calc((100vh - 80px) * 2 / 3)); justify-self: center; }
+  body[data-rot="90"] #lastlink, body[data-rot="270"] #lastlink { aspect-ratio: 2 / 3; }
+  #stage.photo { cursor: zoom-in; }
+  #stage.photo.zoomed { cursor: grab; }
   #feed { width: 100%; height: auto; display: block; }
+  #still { width: 100%; height: auto; display: none; transform-origin: 0 0; }
+  #stillnote { position: absolute; left: 10px; bottom: 10px; padding: 4px 8px; background: #000c; color: var(--amber); line-height: 1.3; display: none; z-index: 1; }
   #afbox { position: absolute; border: 2px solid var(--green); pointer-events: none; display: none; }
   #banner { position: absolute; left: 10px; top: 10px; padding: 4px 8px; background: #000c; color: var(--amber); line-height: 1.3; display: none; }
   #nofeed { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; padding: 16px; background: #000b; color: var(--amber); font-size: 18px; line-height: 1.3; text-align: center; }
@@ -27,17 +38,20 @@
   section { background: var(--panel); border: 1px solid var(--line); padding: 10px; }
   section h2 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: .05em; }
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-  button, select { width: 100%; min-height: 34px; background: #333; color: var(--text); border: 1px solid #4a4a4a; padding: 4px 8px; font: inherit; }
-  button:hover, select:hover { border-color: var(--green); }
-  button:focus-visible, select:focus-visible { outline: 2px solid var(--green); outline-offset: 1px; }
+  button, select, input[type=number] { width: 100%; min-height: 34px; background: #333; color: var(--text); border: 1px solid #4a4a4a; padding: 4px 8px; font: inherit; }
+  button:hover, select:hover, input[type=number]:hover { border-color: var(--green); }
+  button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--green); outline-offset: 1px; }
   button.primary { background: #0c4a1b; border-color: var(--green); }
   button.on { border-color: var(--green); color: var(--green); }
   button:disabled { opacity: .5; }
   label { display: grid; grid-template-columns: 84px 1fr; align-items: center; gap: 6px; margin-bottom: 6px; color: var(--dim); }
+  label.check { display: flex; }
+  .note { color: var(--dim); font-size: 12px; margin-top: 6px; overflow-wrap: anywhere; }
   #log { height: 180px; overflow-y: auto; font: 12px/1.45 ui-monospace, Consolas, monospace; }
   #log div { overflow-wrap: anywhere; }
-  .who-you { color: var(--green); } .who-claude { color: var(--claude); } .who-viewer, .who-script { color: var(--dim); }
-  #last { display: block; width: 100%; margin-top: 8px; }
+  .who-you { color: var(--green); } .who-claude { color: var(--claude); } .who-viewer, .who-script, .who-interval { color: var(--dim); }
+  #lastlink { display: block; position: relative; overflow: hidden; aspect-ratio: 3 / 2; margin-top: 8px; }
+  #lastlink:not([href]) { display: none; }
   #lastname { color: var(--dim); font-size: 12px; overflow-wrap: anywhere; }
 </style>
 </head>
@@ -51,9 +65,13 @@
 </header>
 <main>
   <div id="stage" title="Click to move the AF point">
-    <img id="feed" src="/stream" alt="Live view from the camera">
-    <div id="afbox"></div>
+    <div id="view" class="turn">
+      <img id="feed" src="/stream" alt="Live view from the camera">
+      <img id="still" alt="" draggable="false">
+      <div id="afbox"></div>
+    </div>
     <div id="banner"></div>
+    <div id="stillnote"></div>
     <div id="nofeed" role="status"></div>
   </div>
   <aside>
@@ -73,7 +91,21 @@
       <div class="row" style="grid-template-columns:1fr;margin-top:6px">
         <button id="b-dof" aria-pressed="false">Aperture: open</button>
         <button id="b-lv" class="on" aria-pressed="true">Live view: on</button>
+        <button id="b-still" class="on" aria-pressed="true">When off: show last photo</button>
+        <button id="b-rot">Rotate: 0°</button>
       </div>
+    </section>
+    <section>
+      <h2>Intervalometer</h2>
+      <label>Every
+        <span class="row"><input id="i-every" type="number" min="1" step="any" value="20"><select id="i-unit" aria-label="Interval unit">
+          <option value="1">seconds</option><option value="60" selected>minutes</option><option value="3600">hours</option>
+        </select></span>
+      </label>
+      <label>Photos <input id="i-count" type="number" min="0" step="1" value="0"></label>
+      <label class="check"><input id="i-af" type="checkbox"> Autofocus before each photo</label>
+      <button id="b-int" class="primary">Start</button>
+      <div class="note" id="i-status" role="status">0 photos means keep going until stopped.</div>
     </section>
     <section>
       <h2>Settings</h2>
@@ -86,7 +118,7 @@
     <section>
       <h2>Last photo</h2>
       <div id="lastname">None yet</div>
-      <a id="lastlink" target="_blank" rel="noopener"><img id="last" alt="" hidden></a>
+      <a id="lastlink" target="_blank" rel="noopener"><img id="last" class="turn" alt=""></a>
     </section>
     <button id="b-quit">Close viewer, release camera</button>
   </aside>
@@ -97,7 +129,10 @@ const settings = [
   ['mode', 'Mode'], ['shutter', 'Shutter'], ['aperture', 'Aperture'], ['iso', 'ISO'],
   ['ec', 'Exp. comp'], ['wb', 'White bal.'], ['metering', 'Metering'], ['afmode', 'AF mode'],
 ];
-let clickAf = true, state = {}, shownLast = '', serverDown = false, lastSeq = -1, staleSince = Date.now();
+let clickAf = true, showLast = true, stillOn = false, state = {}, shownLast = '', serverDown = false, lastSeq = -1, staleSince = Date.now();
+// Photo zoom, with the offset as fractions of the stage so it survives a window resize.
+let photoZ = 1, photoX = 0, photoY = 0, dragFrom = null;
+let rotation = 0;
 
 for (const [key, name] of settings) {
   const row = document.createElement('label');
@@ -108,6 +143,18 @@ for (const [key, name] of settings) {
   row.appendChild(sel);
   $('settings').appendChild(row);
 }
+
+function setRotation(degrees) {
+  rotation = degrees;
+  document.body.dataset.rot = degrees;
+  $('b-rot').textContent = `Rotate: ${degrees}°`;
+  try { localStorage.setItem('rotation', degrees); } catch (e) {}
+}
+
+try {
+  const saved = +localStorage.getItem('rotation');
+  if ([90, 180, 270].includes(saved)) setRotation(saved);
+} catch (e) {}
 
 async function send(url) {
   const sep = url.includes('?') ? '&' : '?';
@@ -138,18 +185,123 @@ $('b-click').onclick = e => {
   e.target.classList.toggle('on', clickAf);
   e.target.setAttribute('aria-pressed', clickAf);
 };
-document.querySelectorAll('[data-zoom]').forEach(b => { b.onclick = () => send('/api/zoom?value=' + b.dataset.zoom); });
+document.querySelectorAll('[data-zoom]').forEach(b => {
+  b.onclick = () => { if (stillOn) zoomPhoto(+b.dataset.zoom); else send('/api/zoom?value=' + b.dataset.zoom); };
+});
 $('b-dof').onclick = () => send('/api/set?key=dof&value=' + encodeURIComponent(state.dof === 'Stopped down' ? 'Open' : 'Stopped down'));
 $('b-lv').onclick = () => send('/api/liveview?value=' + (state.liveViewWanted === false ? 'on' : 'off'));
+$('b-still').onclick = e => {
+  showLast = !showLast;
+  e.target.textContent = showLast ? 'When off: show last photo' : 'When off: show nothing';
+  e.target.classList.toggle('on', showLast);
+  e.target.setAttribute('aria-pressed', showLast);
+  render(state);
+};
+$('b-rot').onclick = () => setRotation((rotation + 90) % 360);
+$('b-int').onclick = () => {
+  if (state.interval && state.interval.running) { send('/api/interval?stop=1'); return; }
+  const every = Math.round(+$('i-every').value * +$('i-unit').value);
+  send(`/api/interval?every=${every}&count=${+$('i-count').value}&af=${$('i-af').checked ? 1 : 0}`);
+};
 $('b-quit').onclick = () => send('/api/quit').then(() => banner('Viewer closed. The camera is free.'));
 
+function placePhoto() {
+  photoX = Math.min(0, Math.max(1 - photoZ, photoX));
+  photoY = Math.min(0, Math.max(1 - photoZ, photoY));
+  $('still').style.transform = `translate(${photoX * 100}%, ${photoY * 100}%) scale(${photoZ})`;
+}
+
+// fx, fy is the point of the frame that stays put.
+function zoomPhoto(z, fx = 0.5, fy = 0.5) {
+  z = Math.min(20, Math.max(1, z));
+  photoX = fx - (fx - photoX) * z / photoZ;
+  photoY = fy - (fy - photoY) * z / photoZ;
+  photoZ = z;
+  placePhoto();
+  render(state);
+}
+
+// The pointer's place on the camera's own frame, whichever way the view is turned.
+function framePoint(e) {
+  const r = $('stage').getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+  return { 0: [x, y], 90: [y, 1 - x], 180: [1 - x, 1 - y], 270: [1 - y, x] }[rotation];
+}
+
+$('stage').addEventListener('wheel', e => {
+  if (!stillOn) return;
+  e.preventDefault();
+  zoomPhoto(photoZ * Math.exp(-e.deltaY / 400), ...framePoint(e));
+}, { passive: false });
+$('stage').addEventListener('dblclick', e => {
+  if (!stillOn) return;
+  const actualSize = $('still').naturalWidth / $('view').clientWidth;
+  zoomPhoto(photoZ > 1 ? 1 : actualSize, ...framePoint(e));
+});
+$('stage').addEventListener('pointerdown', e => {
+  if (!stillOn || photoZ === 1) return;
+  dragFrom = framePoint(e);
+  $('stage').setPointerCapture(e.pointerId);
+});
+$('stage').addEventListener('pointermove', e => {
+  if (!dragFrom) return;
+  const [fx, fy] = framePoint(e);
+  photoX += fx - dragFrom[0];
+  photoY += fy - dragFrom[1];
+  dragFrom = [fx, fy];
+  placePhoto();
+});
+const endDrag = () => { dragFrom = null; };
+$('stage').addEventListener('pointerup', endDrag);
+$('stage').addEventListener('pointercancel', endDrag);
+
 $('stage').addEventListener('click', e => {
+  if (stillOn) return;
+  if (state.liveViewWanted === false) { banner('Turn live view on to move the AF point'); return; }
   if (state.zoom && state.zoom !== 1) { banner('Return to 1x to move the AF point'); return; }
-  const r = $('feed').getBoundingClientRect();
-  const x = ((e.clientX - r.left) / r.width).toFixed(3);
-  const y = ((e.clientY - r.top) / r.height).toFixed(3);
+  const [x, y] = framePoint(e).map(v => v.toFixed(3));
   send(`/api/afpoint?x=${x}&y=${y}&af=${clickAf ? 1 : 0}`);
 });
+
+function showStill(s) {
+  stillOn = showLast && s.liveViewWanted === false && !!s.lastCapture;
+  const still = $('still'), note = $('stillnote');
+  if (stillOn) {
+    const url = '/captures/' + encodeURIComponent(s.lastCapture);
+    if (still.dataset.url !== url) {
+      still.src = url;
+      still.dataset.url = url;
+      still.alt = 'Latest photo, ' + s.lastCapture;
+    }
+    note.textContent = `Not live: photo from ${s.lastCaptureAt}` + (photoZ > 1 ? `, ${photoZ.toFixed(1)}x` : '');
+  }
+  still.style.display = note.style.display = stillOn ? 'block' : 'none';
+  $('feed').style.display = stillOn ? 'none' : 'block';
+  $('stage').classList.toggle('photo', stillOn);
+  $('stage').classList.toggle('zoomed', photoZ > 1);
+  $('stage').title = stillOn ? 'Scroll to zoom, drag to move, double-click for actual size' : 'Click to move the AF point';
+}
+
+function clock(sec) {
+  const pad = n => String(n).padStart(2, '0');
+  const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), rest = pad(sec % 60);
+  return h ? `${h}:${pad(m)}:${rest}` : `${m}:${rest}`;
+}
+
+function renderInterval(s) {
+  const r = s.interval;
+  if (!r) return;
+  for (const id of ['i-every', 'i-unit', 'i-count', 'i-af']) $(id).disabled = r.running;
+  $('b-int').textContent = r.running ? 'Stop' : 'Start';
+  $('b-int').classList.toggle('primary', !r.running);
+  if (!r.running && !r.ended) return;
+  const done = r.count ? `${r.taken} of ${r.count} taken` : `${r.taken} taken`;
+  let text = r.running ? `${done}, next in ${clock(r.nextIn)}.` : `Run ${r.ended}: ${done}.`;
+  if (r.skipped) text += ` ${r.skipped} skipped.`;
+  if (r.failed) text += ` ${r.failed} failed, last: ${r.lastError}.`;
+  if (r.running) text += s.liveViewWanted === false ? ' Live view stays off between photos.' : ' Live view stays on, which uses more battery.';
+  $('i-status').textContent = text;
+}
 
 function showFeedState(s) {
   if (s.frameSeq !== lastSeq) { lastSeq = s.frameSeq; staleSince = Date.now(); }
@@ -157,7 +309,7 @@ function showFeedState(s) {
   let text = '';
   if (serverDown) text = 'Viewer is not running';
   else if (!s.connected) text = 'Camera is off or disconnected. Waiting for it...';
-  else if (s.liveViewWanted === false) text = 'Live view is off. Photos still work.';
+  else if (s.liveViewWanted === false) text = stillOn ? '' : 'Live view is off. Photos still work.';
   else if (!s.liveView) text = 'Camera connected. Starting live view...';
   else if (stale) text = 'Live view has stalled';
   $('nofeed').textContent = text;
@@ -166,7 +318,9 @@ function showFeedState(s) {
 
 function render(s) {
   state = s;
+  showStill(s);
   showFeedState(s);
+  renderInterval(s);
   const ok = s.connected;
   $('s-conn').className = ok ? 'stat' : 'stat bad';
   $('s-conn').innerHTML = '<b>' + (ok ? 'connected' : 'no camera') + '</b>';
@@ -187,7 +341,7 @@ function render(s) {
     sel.disabled = values.length < 2;
   }
 
-  document.querySelectorAll('[data-zoom]').forEach(b => b.classList.toggle('on', +b.dataset.zoom === s.zoom));
+  document.querySelectorAll('[data-zoom]').forEach(b => b.classList.toggle('on', +b.dataset.zoom === (stillOn ? photoZ : s.zoom)));
 
   const dof = s.dof === 'Stopped down';
   $('b-dof').textContent = dof ? `Aperture: stopped down (f/${s.aperture ?? '-'})` : 'Aperture: open';
@@ -200,7 +354,7 @@ function render(s) {
   $('b-lv').setAttribute('aria-pressed', live);
 
   const box = $('afbox');
-  if (ok && s.afBox && s.sensor && s.zoom === 1) {
+  if (ok && !stillOn && s.afBox && s.sensor && s.zoom === 1) {
     const [x, y, w, h] = s.afBox, [sw, sh] = s.sensor;
     box.style.cssText = `display:block;left:${x / sw * 100}%;top:${y / sh * 100}%;width:${w / sw * 100}%;height:${h / sh * 100}%`;
   } else {
@@ -224,7 +378,6 @@ function render(s) {
     $('lastlink').href = url;
     $('last').src = url;
     $('last').alt = 'Latest photo, ' + shownLast;
-    $('last').hidden = false;
   }
 }
 

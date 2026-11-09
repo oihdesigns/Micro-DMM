@@ -2,11 +2,11 @@
 
 Current printable parts (millimeters):
 
-1. `base_platform.stl`: existing 3 mm base with eight 4 mm M2 board standoffs.
+1. `base_platform.stl`: 3 mm base with twelve 4 mm M2 standoffs, including four Mega/GIGA mounts on its extension.
 2. `wall_frame.stl`: separate 25.4 mm tall wall frame, 2 mm walls, with screw posts at both ends.
 3. `top_plate.stl`: separate 2 mm top, with four 3.2 mm M3 clearance holes.
 
-All three share a 134.9 x 108 mm outside footprint and 1 mm rounded vertical corners. Straight top and bottom perimeter edges are square. Assembled height is 30.4 mm, excluding screw heads. Interior height above the base is 25.4 mm, including the board standoffs.
+The wall frame and plain top retain the 134.9 x 108 mm footprint and 1 mm rounded vertical corners. The base has a coplanar trapezoid extension, giving it a 134.9 x 169.34 mm overall footprint. Straight top and bottom perimeter edges are square. Assembled height is 30.4 mm, excluding screw heads. Interior height above the base is 25.4 mm, including the board standoffs.
 
 ## Assembly and screws
 
@@ -28,7 +28,7 @@ Coordinates above use the assembled base layout, with origin at the lower-left c
 
 Sensor hole centers: 31.5 mm horizontally x 61 mm vertically. Relay hole centers: 66.7 mm horizontally x 45 mm vertically. Standoffs are 5.5 mm diameter, 4 mm tall, with 1.7 mm M2 pilot holes, 5 mm deep. A 2 mm solid floor remains under them.
 
-Actual PCB outside dimensions were not supplied. The model assumes edges 3 mm beyond mounting-hole centers: sensor 37.5 x 67 mm; relay 72.7 x 51 mm. Both lower edges align, with a 12.7 mm gap between assumed outlines, 45 mm free area above the relay and 6 mm outer layout margin. Confirm actual PCB outlines and component heights for final fit.
+Actual PCB outside dimensions were not supplied. The model assumes edges 3 mm beyond mounting-hole centers: sensor 37.5 x 67 mm; relay 72.7 x 51 mm. In the original layout both lower edges align; the latest layout rotates both boards together by 180 degrees, so their upper edges align, with a 12.7 mm gap between assumed outlines, 45 mm free area above the relay and 6 mm outer layout margin. Confirm actual PCB outlines and component heights for final fit.
 
 ## Sources and validation
 
@@ -45,15 +45,26 @@ Wall and top pass closed-manifold, positive-volume and single-connected-solid ch
 
 This remains a mechanical fit draft, not a verified mains-voltage enclosure. Material, electrical clearances and wire retention need to be addressed in the completed enclosure.
 
-## Feather Doubler lid extension
+## Current revision: Arduino Mega / GIGA on the base
 
-The current top_plate.stl includes a flat trapezoid extension, centered on the long edge at assembled Y=108 mm. It is coplanar with the lid: 2 mm thick, projects 56 mm, is 100 mm wide at its root and 62 mm wide at its flat outer end. Overall lid footprint is 134.9 x 164 mm. Print flat with the eight standoffs upward.
+All three boards now mount on the same base surface. All twelve standoffs point in +Z, with their mounting faces 4 mm above the 3 mm base. There are no board mounts or extensions on the lid. The three-piece construction, screw pattern and rectangular wire notches are retained.
 
-The Adafruit FeatherWing Doubler (#2890) mounts parallel to the lid, entirely beyond the enclosure edge. PCB origin is X=42.05, Y=112 mm, giving a 4 mm board-to-enclosure edge gap. Eight 5.5 mm diameter standoffs are 4 mm above the lid, with 1.7 mm diameter M2 blind pilots, 4 mm deep; the 2 mm lid floor remains intact. M2 x 5 mm screws give about 3.4 mm engagement through the 1.6 mm PCB. Tap or use appropriate plastic screws and verify printed pilot fit.
+The flat base extension projects 61.34 mm from the long edge at Y=108 mm, with a 130 mm root and 114 mm flat end. It is 3 mm thick and supports a standard 101.6 x 53.34 mm Arduino Mega 2560 Rev3 or GIGA R1 WiFi, long axis parallel to the enclosure edge. Board envelope remains X=16.65..118.25, Y=112..165.34 mm, with a 4 mm gap outside the wall frame. The board is rotated 180 degrees in that envelope, placing USB/power toward the right as in the latest photo. The Arduino remains exposed outside the wall frame, as with the previous Feather extension.
 
-Mounting centers follow Adafruit's Eagle CAD, not photo scaling: PCB-relative X=2.54 and 48.26 mm, Y=2.54, 20.32, 26.67 and 44.45 mm. Outer pattern is 45.72 x 41.91 mm, with intermediate rows for both Feather footprints. CAD outline is 50.8 x 46.99 mm. The board's long dimension runs along the lid edge, as in the supplied photos.
+Four common outer mounting centers are used (board-relative X,Y in mm): (13.97,2.54), (15.24,50.8), (90.17,50.8), (96.52,2.54). These mounts use the same 5.5 mm diameter, 4 mm tall standoffs and 1.7 mm M2 pilot bores as the other boards. Pilot depth is 5 mm, leaving 2 mm of solid base below. Use M2 screws with suitable engagement, e.g. M2 x 6 through a nominal 1.6 mm PCB (4.4 mm engagement); tune pilot fit to your printer. The internal mounting positions of the Arduino are intentionally unused.
 
-Source: https://github.com/adafruit/Adafruit-FeatherWing-Proto-Doubler-Tripler-and-Quad/blob/master/DoubleWing.brd
-Product: https://www.adafruit.com/product/2890
+Mechanical references: Arduino GIGA R1 WiFi datasheet, section 15, and Mega 2560 Rev3 datasheet, section 6.2. Local drawing renders: giga_drawing.png and mega_drawing.png.
+- https://docs.arduino.cc/resources/datasheets/ABX00063-datasheet.pdf
+- https://docs.arduino.cc/resources/datasheets/A000067-datasheet.pdf
 
-The lid's original four M3 attachment holes, base and wall geometry are retained. Lid mesh passes manifold, positive volume, single-connected-solid and 6 mm total-height checks. top_plate_before_feather.stl and three_piece_before_feather.scad preserve the preceding lid design.
+Print the base flat with every standoff upward; print the plain top flat. Current source files are base_platform.scad and three_piece_enclosure.scad, with wall_frame.scad and top_plate.scad as entry points. Regenerate the base first with build_base.py, then frame/top/assembly with build_three_piece.py. The preceding Feather revision is backed up in revisions/before_mega_giga.zip.
+
+Verification: revised base is a single connected closed manifold with positive volume; twelve standoffs, all facing +Z; total height 7 mm. Wall and plain top also pass manifold, connected-solid and height checks. Actual board and printed fit still require a physical check.
+
+## Latest layout: GIGA above lower boards
+
+Matches the latest reference photo when viewed from the standoff side: GIGA/MEGA across the top, relay below-left, sensor below-right. Both lower board patterns are rotated together 180 degrees relative to the preceding base, bringing their flush edges next to the GIGA instead of the free-space edge. All twelve 4 mm standoffs still point upward. GIGA connectors face right. Board footprints are shown in base_layout_preview.png; the lower-board outlines retain the earlier assumed edge offsets.
+
+The wall frame is rotated with the lower-board layout, preserving wire-opening alignment. Reprint the revised base; the existing wall can be reused by rotating it 180 degrees in its own plane (not flipping it). The plain lid fits either orientation. The frame STL and editable source have been regenerated in the new orientation. Back-up: revisions/before_giga_above.zip.
+
+Latest assembled wire opening centers: 7 mm opening at X=116.9 on the top wall (Y=108); 32 mm opening at X=26.4 on that wall; two 15 mm side openings centered Y=23. All remain 12.7 mm tall. Earlier photo-oriented coordinates above describe the historical layout.

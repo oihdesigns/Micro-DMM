@@ -50,6 +50,7 @@ static class Eds
 {
     const string D = "EDSDK.dll";
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] public static extern bool SetDllDirectory(string p);
+    [DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint flags);
     [DllImport(D)] public static extern uint EdsInitializeSDK();
     [DllImport(D)] public static extern uint EdsTerminateSDK();
     [DllImport(D)] public static extern uint EdsGetCameraList(out IntPtr l);
@@ -81,8 +82,9 @@ static class Eds
     public const uint PropEvfZoom = 0x507, PropEvfZoomPos = 0x508, PropEvfCoord = 0x540, PropEvfZoomRect = 0x541;
     public const uint CmdKeepAlive = 1, CmdShutter = 4, CmdEvfAf = 0x102;
     public const int ShutterOff = 0, ShutterNonAf = 0x10003;
-    public const uint ObjectAll = 0x200, ObjectTransfer = 0x208, StateAll = 0x300, StateShutdown = 0x301;
+    public const uint ObjectAll = 0x200, ObjectTransfer = 0x208, StateAll = 0x300, StateShutdown = 0x301, StateWillShutdown = 0x303;
     public const uint ErrBusy = 0x81, ErrNotReady = 0xA102;
+    public const uint EsContinuous = 0x80000000, EsSystemRequired = 1;
 
     public static string Hex(uint e) { return e == 0 ? "OK" : "0x" + e.ToString("X"); }
 }
@@ -129,7 +131,7 @@ static class Tables
     {
         new Prop("mode", Eds.PropAeSelect, true, "0=P,1=Tv,2=Av,3=M,4=Bulb,5=A-DEP"),
         new Prop("iso", Eds.PropIso, true, "0=Auto,48=100,4B=125,4D=160,50=200,53=250,55=320,58=400,5B=500,5D=640,60=800,63=1000,65=1250,68=1600,6B=2000,6D=2500,70=3200,73=4000,75=5000,78=6400,7B=8000,7D=10000,80=12800,83=16000,85=20000,88=25600,8B=32000,8D=40000,90=51200,98=102400,A0=204800,A8=409600"),
-        new Prop("aperture", Eds.PropAv, true, "10=1.4,13=1.6,14=1.8,15=1.8,18=2.0,1B=2.2,1C=2.5,1D=2.5,20=2.8,23=3.2,24=3.5,25=3.5,28=4.0,2B=4.5,2C=4.5,2D=5.0,30=5.6,33=6.3,34=6.7,35=7.1,38=8.0,3B=9.0,3C=9.5,3D=10,40=11,43=13,44=13,45=14,48=16,4B=18,4C=19,4D=20,50=22"),
+        new Prop("aperture", Eds.PropAv, true, "8=1.0,B=1.1,D=1.2,C=1.2,10=1.4,13=1.6,14=1.8,15=1.8,18=2.0,1B=2.2,1C=2.5,1D=2.5,20=2.8,23=3.2,24=3.5,25=3.5,28=4.0,2B=4.5,2C=4.5,2D=5.0,30=5.6,33=6.3,34=6.7,35=7.1,38=8.0,3B=9.0,3C=9.5,3D=10,40=11,43=13,44=13,45=14,48=16,4B=18,4C=19,4D=20,50=22"),
         new Prop("shutter", Eds.PropTv, true, "0=Auto,C=Bulb,10=30,13=25,14=20,15=20,18=15,1B=13,1C=10,1D=10,20=8,23=6,24=6,25=5,28=4,2B=3.2,2C=3,2D=2.5,30=2,33=1.6,34=1.5,35=1.3,38=1,3B=0.8,3C=0.7,3D=0.6,40=0.5,43=0.4,44=0.3,45=0.3,48=1/4,4B=1/5,4C=1/6,4D=1/6,50=1/8,53=1/10,54=1/10,55=1/13,58=1/15,5B=1/20,5C=1/20,5D=1/25,60=1/30,63=1/40,64=1/45,65=1/50,68=1/60,6B=1/80,6C=1/90,6D=1/100,70=1/125,73=1/160,74=1/180,75=1/200,78=1/250,7B=1/320,7C=1/350,7D=1/400,80=1/500,83=1/640,84=1/750,85=1/800,88=1/1000,8B=1/1250,8C=1/1500,8D=1/1600,90=1/2000,93=1/2500,94=1/3000,95=1/3200,98=1/4000,9B=1/5000,9C=1/6000,9D=1/6400,A0=1/8000"),
         new Prop("ec", Eds.PropEc, true, "18=+3,15=+2 2/3,14=+2 1/2,13=+2 1/3,10=+2,D=+1 2/3,C=+1 1/2,B=+1 1/3,8=+1,5=+2/3,4=+1/2,3=+1/3,0=0,FD=-1/3,FC=-1/2,FB=-2/3,F8=-1,F5=-1 1/3,F4=-1 1/2,F3=-1 2/3,F0=-2,ED=-2 1/3,EC=-2 1/2,EB=-2 2/3,E8=-3"),
         new Prop("wb", Eds.PropWb, true, "0=Auto,1=Daylight,2=Cloudy,3=Tungsten,4=Fluorescent,5=Flash,6=Manual,8=Shade,9=Color temp"),
@@ -175,7 +177,7 @@ class Camera
     long frameSeq;
     int fpsCount;
     double fps;
-    string lastCapture = "";
+    string lastCapture = "", lastCaptureAt = "", captureName;
     long captureSeq;
     int coordW = 5472, coordH = 3648, afX, afY, afW = 1096, afH = 730, zoom = 1, frameErrors;
     volatile bool stopping, liveViewWanted = true;
@@ -188,6 +190,19 @@ class Camera
         this.outputDevice = outputDevice;
         onObject = HandleObject;
         onState = HandleState;
+        FindLastCapture();
+    }
+
+    // So the page has a photo to show before the first one of this run.
+    void FindLastCapture()
+    {
+        if (!Directory.Exists(captureDir)) return;
+        var newest = new DirectoryInfo(captureDir).GetFiles()
+            .Where(f => f.Name.StartsWith("capture_") || f.Name.StartsWith("interval_"))
+            .OrderBy(f => f.LastWriteTime).LastOrDefault();
+        if (newest == null) return;
+        lastCapture = newest.Name;
+        lastCaptureAt = newest.LastWriteTime.ToString("d MMM HH:mm:ss");
     }
 
     public void Log(string who, string message)
@@ -218,6 +233,8 @@ class Camera
         s["fps"] = Math.Round(fps, 1);
         s["frameSeq"] = Interlocked.Read(ref frameSeq);
         s["lastCapture"] = lastCapture;
+        s["lastCaptureAt"] = lastCaptureAt;
+        s["liveViewWanted"] = liveViewWanted;
         s["options"] = options;
         lock (logLock) s["log"] = log.Skip(Math.Max(0, log.Count - 40)).ToList();
         return s;
@@ -520,7 +537,7 @@ class Camera
             liveViewResult = "";
             Log("viewer", "camera stopped live view, restarting it");
         }
-        var s = new Dictionary<string, object> { { "connected", true }, { "liveView", liveViewOn }, { "liveViewWanted", liveViewWanted } };
+        var s = new Dictionary<string, object> { { "connected", true }, { "liveView", liveViewOn } };
         foreach (var p in Tables.Props)
         {
             uint v;
@@ -558,6 +575,11 @@ class Camera
             sessionLost = true;
             Log("viewer", "camera shut down or was disconnected");
         }
+        else if (evt == Eds.StateWillShutdown)
+        {
+            Log("viewer", "camera about to sleep, keeping it awake");
+            Eds.EdsSendCommand(cam, Eds.CmdKeepAlive, 0);
+        }
         return 0;
     }
 
@@ -588,10 +610,11 @@ class Camera
             var bytes = new byte[(int)info.Size];
             Marshal.Copy(pointer, bytes, 0, bytes.Length);
             string ext = Path.GetExtension(info.FileName);
-            string name = "capture_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + ext;
+            string name = (captureName ?? "capture_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff")) + ext;
             Directory.CreateDirectory(captureDir);
             File.WriteAllBytes(Path.Combine(captureDir, name), bytes);
             lastCapture = name;
+            lastCaptureAt = DateTime.Now.ToString("d MMM HH:mm:ss");
             Interlocked.Increment(ref captureSeq);
             Log("viewer", "saved " + name + " (" + bytes.Length / 1024 + " KB)");
         }
@@ -618,6 +641,46 @@ class Camera
         }
         else StopLiveView();
         return new Dictionary<string, object> { { "liveView", liveViewOn }, { "wanted", on } };
+    }
+
+    // With no camera there is nothing to run, so the choice waits for it to come back.
+    public object RequestLiveView(bool on)
+    {
+        if (cam != IntPtr.Zero) return Run(() => SetLiveView(on), 8000);
+        liveViewWanted = on;
+        return new Dictionary<string, object> { { "liveView", false }, { "wanted", on } };
+    }
+
+    // Autofocus needs live view, so if it is off it comes on just for the focus.
+    public object IntervalShot(string name, bool af)
+    {
+        if (af)
+        {
+            bool wasOff = !liveViewOn;
+            try
+            {
+                if (wasOff) WaitForLiveView();
+                AutoFocus();
+            }
+            finally
+            {
+                if (wasOff) StopLiveView();
+            }
+        }
+        captureName = name;
+        try { return Capture(); }
+        finally { captureName = null; }
+    }
+
+    void WaitForLiveView()
+    {
+        long seq = Interlocked.Read(ref frameSeq);
+        for (int i = 0; i < 50 && Interlocked.Read(ref frameSeq) == seq; i++)
+        {
+            if (!liveViewOn) StartLiveView();
+            PumpWithFrames(100);
+        }
+        if (Interlocked.Read(ref frameSeq) == seq) throw new InvalidOperationException("live view did not start");
     }
 
     public object AutoFocus()
@@ -698,9 +761,154 @@ class Camera
     }
 }
 
+static class Raw
+{
+    // A CR2 is a TIFF whose first directory points at a full-size JPEG. Returns null for anything else.
+    public static byte[] JpegPreview(byte[] file)
+    {
+        if (file.Length < 16 || file[0] != 'I' || file[1] != 'I' || file[8] != 'C' || file[9] != 'R') return null;
+        int ifd = BitConverter.ToInt32(file, 4), offset = 0, length = 0;
+        if (ifd < 0 || ifd > file.Length - 2) return null;
+        int entries = BitConverter.ToUInt16(file, ifd);
+        if (ifd + 2 + entries * 12 > file.Length) return null;
+        for (int i = 0; i < entries; i++)
+        {
+            int entry = ifd + 2 + i * 12;
+            int tag = BitConverter.ToUInt16(file, entry);
+            if (tag == 0x111) offset = BitConverter.ToInt32(file, entry + 8);
+            if (tag == 0x117) length = BitConverter.ToInt32(file, entry + 8);
+        }
+        if (offset <= 0 || length < 2 || length > file.Length - offset) return null;
+        if (file[offset] != 0xFF || file[offset + 1] != 0xD8) return null;
+        var jpeg = new byte[length];
+        Buffer.BlockCopy(file, offset, jpeg, 0, length);
+        return jpeg;
+    }
+}
+
+// Takes photos on a fixed schedule from its own thread, so a run does not need the page open.
+class Intervalometer
+{
+    readonly Camera camera;
+    readonly object gate = new object();
+    ManualResetEventSlim stop;
+    bool running, af;
+    int everySec, count, taken, failed, skipped;
+    string run = "", lastError = "", ended = "";
+    DateTime next;
+
+    public Intervalometer(Camera camera) { this.camera = camera; }
+
+    public object Start(int every, int photos, bool focus)
+    {
+        if (every < 1) throw new ArgumentException("interval must be at least 1 second");
+        if (photos < 0) throw new ArgumentException("photo count cannot be negative");
+        lock (gate)
+        {
+            if (running) throw new InvalidOperationException("an interval run is already going");
+            running = true;
+            everySec = every;
+            count = photos;
+            af = focus;
+            taken = failed = skipped = 0;
+            lastError = ended = "";
+            run = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            next = DateTime.UtcNow;
+            stop = new ManualResetEventSlim(false);
+        }
+        var thread = new Thread(Loop);
+        thread.IsBackground = true;
+        thread.Start();
+        return Status();
+    }
+
+    public object Stop()
+    {
+        lock (gate)
+        {
+            if (running) stop.Set();
+        }
+        return Status();
+    }
+
+    public Dictionary<string, object> Status()
+    {
+        lock (gate)
+        {
+            int nextIn = running ? Math.Max(0, (int)Math.Ceiling((next - DateTime.UtcNow).TotalSeconds)) : 0;
+            return new Dictionary<string, object>
+            {
+                { "running", running }, { "every", everySec }, { "count", count }, { "af", af },
+                { "taken", taken }, { "failed", failed }, { "skipped", skipped }, { "nextIn", nextIn },
+                { "lastError", lastError }, { "ended", ended },
+            };
+        }
+    }
+
+    TimeSpan UntilNext()
+    {
+        lock (gate)
+        {
+            var wait = next - DateTime.UtcNow;
+            return wait > TimeSpan.Zero ? wait : TimeSpan.Zero;
+        }
+    }
+
+    void Loop()
+    {
+        // A sleeping PC would drop the camera and miss every photo until it woke.
+        Eds.SetThreadExecutionState(Eds.EsContinuous | Eds.EsSystemRequired);
+        camera.Log("interval", "every " + everySec + " s, " + (count > 0 ? count + " photos" : "until stopped") + (af ? ", AF each photo" : ""));
+        string result = "stopped", logged = "";
+        while (!stop.Wait(UntilNext()))
+        {
+            string name = "interval_" + run + "_" + (taken + 1).ToString("D4");
+            try
+            {
+                camera.Run(() => camera.IntervalShot(name, af), 50000);
+                lock (gate) taken++;
+                logged = "";
+            }
+            catch (Exception ex)
+            {
+                lock (gate)
+                {
+                    failed++;
+                    lastError = ex.Message;
+                }
+                if (ex.Message != logged) camera.Log("interval", "photo failed: " + ex.Message);
+                logged = ex.Message;
+            }
+            if (count > 0 && taken >= count)
+            {
+                result = "finished";
+                break;
+            }
+            // The schedule stays fixed: a photo that overruns costs later slots, not drift.
+            lock (gate)
+            {
+                next = next.AddSeconds(everySec);
+                while (next <= DateTime.UtcNow)
+                {
+                    next = next.AddSeconds(everySec);
+                    skipped++;
+                }
+            }
+        }
+        Eds.SetThreadExecutionState(Eds.EsContinuous);
+        lock (gate)
+        {
+            running = false;
+            ended = result;
+        }
+        camera.Log("interval", result + ": " + taken + " taken, " + failed + " failed, " + skipped + " skipped");
+    }
+}
+
 static class Program
 {
     static Camera camera;
+    static Intervalometer interval;
     static HttpListener listener;
     static string htmlPath, captureDir;
     static int port = 8765;
@@ -729,6 +937,7 @@ static class Program
         }
 
         camera = new Camera(captureDir, output);
+        interval = new Intervalometer(camera);
         var thread = new Thread(camera.ThreadMain);
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
@@ -774,9 +983,14 @@ static class Program
             else if (path == "/") SendFile(c, htmlPath, "text/html; charset=utf-8");
             else if (path == "/stream") Stream(c);
             else if (path == "/frame.jpg") SendFrame(c);
-            else if (path == "/status") SendJson(c, 200, camera.Status());
+            else if (path == "/status")
+            {
+                var s = camera.Status();
+                s["interval"] = interval.Status();
+                SendJson(c, 200, s);
+            }
             else if (path.StartsWith("/captures/"))
-                SendFile(c, Path.Combine(captureDir, Path.GetFileName(path)), "image/jpeg");
+                SendCapture(c, Path.Combine(captureDir, Path.GetFileName(path)));
             else SendJson(c, 404, new Dictionary<string, object> { { "error", "not found" } });
         }
         catch (Exception ex)
@@ -830,7 +1044,17 @@ static class Program
                 case "/api/liveview":
                     bool wanted = q["value"] == "on";
                     camera.Log(who, "live view " + (wanted ? "on" : "off"));
-                    result = camera.Run(() => camera.SetLiveView(wanted), 8000);
+                    result = camera.RequestLiveView(wanted);
+                    break;
+                case "/api/interval":
+                    if (q["stop"] == "1")
+                    {
+                        camera.Log(who, "interval stop");
+                        result = interval.Stop();
+                        break;
+                    }
+                    camera.Log(who, "interval start");
+                    result = interval.Start(int.Parse(q["every"]), int.Parse(q["count"] ?? "0"), q["af"] == "1");
                     break;
                 case "/api/quit":
                     camera.Log(who, "viewer closing");
@@ -887,6 +1111,18 @@ static class Program
         }
         c.Response.Headers["X-Frame-Seq"] = seq.ToString();
         Send(c, 200, "image/jpeg", jpeg);
+    }
+
+    // Browsers cannot show a CR2, so a RAW photo is sent as the JPEG stored inside it.
+    static void SendCapture(HttpListenerContext c, string file)
+    {
+        if (!File.Exists(file))
+        {
+            SendJson(c, 404, new Dictionary<string, object> { { "error", "not found" } });
+            return;
+        }
+        byte[] bytes = File.ReadAllBytes(file);
+        Send(c, 200, "image/jpeg", Raw.JpegPreview(bytes) ?? bytes);
     }
 
     static void SendFile(HttpListenerContext c, string file, string type)

@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "IsoOpAmpShield")(type "KiCad")(uri "${KIPRJMOD}/IsoOpAmpShield.kicad_sym")(options "")(descr "Project symbols: CCG3, TPS7A49, TPS7A30"))
+)

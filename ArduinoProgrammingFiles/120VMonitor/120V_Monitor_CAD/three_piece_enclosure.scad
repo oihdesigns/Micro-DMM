@@ -5,18 +5,6 @@ width=134.9; depth=108; wall_height=25.4;
 wall_thickness=2; top_thickness=2; corner_radius=1;
 hole_inset=4; post_diameter=6; m3_pilot=2.5; pilot_depth=10;
 notch_height=wall_height/2;
-// Adafruit #2890 DoubleWing.brd: board X=0..50.8, Y=0..46.99.
-// Eight mounts from FEATHERWING_DIM at Y=0 and Y=24.13.
-feather_origin=[width/2-25.4,depth+4];
-feather_standoff_height=4;
-feather_pilot=1.7; // M2 tapping/plastic screw pilot.
-extension_projection=56;
-extension_root_width=100;
-extension_tip_width=62;
-module feather_points() {
-    for(x=[2.54,48.26], y=[2.54,20.32,26.67,44.45])
-        translate([feather_origin.x+x,feather_origin.y+y,0]) children();
-}
 module outer_profile() {
     translate([corner_radius,corner_radius]) offset(r=corner_radius)
         square([width-2*corner_radius,depth-2*corner_radius]);
@@ -26,7 +14,7 @@ module corners() {
         translate([x,y,0]) children();
 }
 // Print top mating face down; notches open upward toward base mating face.
-module wall_frame() {
+module original_wall_frame() {
     difference() {
         union() {
             difference() {
@@ -50,23 +38,13 @@ module wall_frame() {
                 cube([wall_thickness+2,15,notch_height+1]);
     }
 }
+module wall_frame() {
+    translate([width,depth,0]) rotate([0,0,180]) original_wall_frame();
+}
 module top_plate() {
     difference() {
-        union() {
-            linear_extrude(height=top_thickness) union() {
-                outer_profile();
-                polygon([[width/2-extension_root_width/2,depth-0.5],
-                         [width/2+extension_root_width/2,depth-0.5],
-                         [width/2+extension_tip_width/2,depth+extension_projection],
-                         [width/2-extension_tip_width/2,depth+extension_projection]]);
-            }
-            feather_points() translate([0,0,top_thickness-0.1])
-                cylinder(d=5.5,h=feather_standoff_height+0.1);
-        }
+        linear_extrude(height=top_thickness) outer_profile();
         corners() translate([0,0,-1]) cylinder(d=3.2,h=top_thickness+2);
-        // Blind holes leave the lid's 2 mm thickness intact.
-        feather_points() translate([0,0,top_thickness])
-            cylinder(d=feather_pilot,h=feather_standoff_height+1);
     }
 }
 if(part=="wall") wall_frame();

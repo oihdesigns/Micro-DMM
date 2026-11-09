@@ -25,16 +25,23 @@ module mounting_points() {
         origin = board == 0 ? sensor_origin : relay_origin;
         spacing = board == 0 ? sensor_holes : relay_holes;
         for (x = [0, spacing.x], y = [0, spacing.y])
-            translate([origin.x + pcb_edge_offset + x, origin.y + pcb_edge_offset + y, 0]) children();
+            translate([platform_size.x-origin.x-pcb_edge_offset-x,
+                       platform_size.y-origin.y-pcb_edge_offset-y, 0]) children();
     }
+    // Four common outer mounting positions, Mega 2560 Rev3 / GIGA R1 WiFi.
+    for(p=[[13.97,2.54],[15.24,50.8],[90.17,50.8],[96.52,2.54]])
+        translate([118.25-p.x,165.34-p.y,0]) children();
 }
 difference() {
     union() {
         linear_extrude(height=base_thickness)
+          union() {
             translate([corner_radius, corner_radius])
                 offset(r=corner_radius)
                     square([platform_size.x-2*corner_radius,
                             platform_size.y-2*corner_radius]);
+            polygon([[2.45,107.5],[132.45,107.5],[124.45,169.34],[10.45,169.34]]);
+          }
         mounting_points() translate([0,0,base_thickness-0.1])
             cylinder(d=standoff_diameter, h=standoff_height+0.1);
     }

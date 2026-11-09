@@ -62,25 +62,21 @@ for width,x,y,side in slots:
     size=(4,width,H/2+1) if side else (width,4,H/2+1)
     boolean(frame,box('Rectangular wire notch',(x,y,3*H/4+0.5),size),'DIFFERENCE')
 assert H-20>0
+# Rotate the frame with the lower boards so all wire notches follow them.
+bpy.context.view_layer.objects.active=frame
+bpy.ops.object.select_all(action='DESELECT'); frame.select_set(True)
+bpy.ops.object.transform_apply(location=True,rotation=True,scale=True)
+frame.data.transform(Matrix(((-1,0,0,W),(0,-1,0,D),(0,0,1,0),(0,0,0,1))))
 verify_export(frame,'wall_frame.stl',H)
 top=rounded_box('Top plate',2)
-outline=[(17.45,107.5),(117.45,107.5),(98.45,164),(36.45,164)]
-verts=[(x,y,z) for z in (0,2) for x,y in outline]
-faces=[(3,2,1,0),(4,5,6,7)]+[(i,(i+1)%4,(i+1)%4+4,i+4) for i in range(4)]
-mesh=bpy.data.meshes.new('Trapezoid extension'); mesh.from_pydata(verts,[],faces); mesh.update()
-extension=bpy.data.objects.new('Flat extension',mesh); bpy.context.collection.objects.link(extension)
-boolean(top,extension,'UNION')
-feather_points=[(W/2-25.4+x,D+4+y) for x in (2.54,48.26) for y in (2.54,20.32,26.67,44.45)]
-for x,y in feather_points:
-    boolean(top,cylinder(x,y,3.95,2.75,4.1),'UNION')
-    boolean(top,cylinder(x,y,4.5,0.85,5),'DIFFERENCE')
 for x,y in posts: boolean(top,cylinder(x,y,1,1.6,4),'DIFFERENCE')
-verify_export(top,'top_plate.stl',6)
+verify_export(top,'top_plate.stl',2)
 bpy.ops.import_mesh.stl(filepath=os.path.join(ROOT,'base_platform.stl'))
 base=bpy.context.object; base.name='Base platform'
 bm=bmesh.new(); bm.from_mesh(base.data)
 assert all(e.is_manifold for e in bm.edges); bm.free()
 board_points=[(x,y) for x in (9,40.5) for y in (9,70)]+[(x,y) for x in (59.2,125.9) for y in (9,54)]
+board_points=[(W-x,D-y) for x,y in board_points]
 assert min(((x-bx)**2+(y-by)**2)**0.5-5.75 for x,y in posts for bx,by in board_points)>1
 assert 10-3<10 and 8-2<10
 for obj,color in [(base,(0.075,0.29,0.46,1)),(frame,(0.10,0.38,0.52,1)),(top,(0.19,0.48,0.61,1))]:

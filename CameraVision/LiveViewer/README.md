@@ -11,6 +11,10 @@ opens the page. To run it by hand:
     bin\LiveViewer.exe [--port 8765] [--output 3]
 
 The page is http://localhost:8765/. Click the image to move the AF point and focus.
+With live view off the page can show the last photo instead: scroll to zoom, drag to move,
+double-click for actual size, or use the 1x, 5x and 10x buttons.
+The Rotate button turns live view and photos clockwise on this page only and is remembered by
+the browser. Saved files, `/frame.jpg` and AF point coordinates stay in the camera's own frame.
 Use "Close viewer" or Ctrl+C to release the camera. Only one program can hold it.
 
 `--output` is the live view destination: 3 = PC and rear screen, 2 = PC only.
@@ -25,7 +29,7 @@ Read with GET:
 | `/frame.jpg` | Latest live view frame |
 | `/status` | Settings, valid options, FPS, AF box, recent activity |
 | `/stream` | MJPEG feed |
-| `/captures/<file>` | A saved photo |
+| `/captures/<file>` | A saved photo as JPEG. For a CR2 this is the JPEG stored inside it; the file on disk is the real RAW |
 
 Commands use POST. Add `who=claude` (or any name) to label them in the activity log.
 
@@ -37,7 +41,23 @@ Commands use POST. Add `who=claude` (or any name) to label them in the activity 
 | `/api/set?key=iso&value=800` | Set `mode`, `shutter`, `aperture`, `iso`, `ec`, `wb`, `metering`, `afmode` or `dof` (`Open` or `Stopped down`, the live view aperture) |
 | `/api/zoom?value=5` | Live view zoom: 1, 5 or 10 |
 | `/api/liveview?value=off` | Turn live view `on` or `off`. Off saves battery. Photos still work, but AF, AF point, zoom and `dof` are refused |
+| `/api/interval?every=1200&count=0&af=0` | Start an interval run: seconds between photos (at least 1), photos to take (0 = until stopped), `af=1` to focus before each one |
+| `/api/interval?stop=1` | Stop the run after any photo in progress |
 | `/api/quit` | Close the viewer and release the camera |
+
+## Intervalometer
+
+A run belongs to the viewer, not the page, so it keeps going with the browser closed and stops
+when the viewer closes. The first photo is immediate and the rest stay on a fixed schedule; a
+photo that overruns skips later slots rather than shifting them. Live view stays however the
+button has it, so turn it off first to save battery. With `af=1` and live view off, live view
+comes on for the focus and goes off again. If the camera is off or disconnected, those photos
+count as failed and the run continues. The PC is kept awake during a run. Files are named
+`interval_<run start>_<photo number>` in `../captures/`. Exposures over about 20 s time out,
+as they do for any photo taken through the viewer.
+
+`/status` reports a run under `interval`: `running`, `every`, `count`, `af`, `taken`, `failed`,
+`skipped`, `nextIn` (seconds), `lastError` and `ended`.
 
 ## Notes
 
