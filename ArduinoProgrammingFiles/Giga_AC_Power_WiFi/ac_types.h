@@ -48,4 +48,44 @@ struct PowerResult {
 };
 
 /*! A command line being assembled from one input (USB serial or TCP). */
-struct RxLine { char b[96]; uint8_t n; };
+struct RxLine { char b[160]; uint8_t n; };
+
+/*!
+ * Every setting, as the 120VMonitor protocol names them (!CFG / !SET / !SAVE).
+ * Saved to the last internal flash sector with a CRC over offsetof(crc).
+ * Current range 0 is HIGH (IGAIN/IOFF), range 1 is LOW (IGAINLO/IOFFLO).
+ */
+struct Config {
+  uint32_t magic;
+  uint16_t version;
+  uint16_t size;
+  float    vGain, vOff;          /*!< volts per ADC volt; ADC volts at 0 V */
+  float    iGain, iOff;          /*!< HIGH range: amps per ADC volt; ADC volts at 0 A */
+  float    iGainLo, iOffLo;      /*!< LOW range */
+  float    phaseUs;              /*!< current front end's extra delay vs voltage, us */
+  float    adcVref;
+  float    tripA, tripPk;
+  float    rngUpA, rngDnA;
+  uint16_t rngHoldMs;
+  uint8_t  rngMode, rngSetMs, rngCyc;
+  uint8_t  cycles, harmN, dcRem;
+  float    mainsHz, vMin;
+  uint32_t rate;
+  uint16_t decim;
+  uint8_t  bits, smp, vSe, iSe;
+  uint8_t  relayPin, relayInv, rngPin, rngInv;
+  uint32_t crc;
+};
+
+enum : uint8_t { FT_FLOAT, FT_U8, FT_U16, FT_U32 };
+
+/*! One row of the config table: key, type, where it lives, limits, meaning. */
+struct CfgKey {
+  const char* key;
+  uint8_t     type;
+  uint16_t    off;
+  float       lo, hi;
+  const char* help;
+  uint8_t     group;   /*!< index into CFG_GROUP_NAMES */
+  uint8_t     apply;   /*!< AP_* bits: what has to happen after a change */
+};
