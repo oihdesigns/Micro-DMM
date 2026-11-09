@@ -16,6 +16,13 @@ struct ScanBuf {
   DMABuffer<Sample>* b;   /*!< ADC2: rank 0 = V-, rank 1 = I- */
   int  ns;                /*!< scans in the pair */
   bool gap;               /*!< data before this pair was lost */
+  uint32_t ts;            /*!< micros() when the pair finished filling (its last scan) */
+};
+
+/*! A current-range switch point: samples from idx on were taken on range r. */
+struct IrHist {
+  uint64_t idx;
+  uint8_t  r;
 };
 
 /*!

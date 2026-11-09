@@ -60,9 +60,28 @@
  *     engine only talks to the rest of the sketch through the ring and the
  *     emit*() calls, to keep that move easy.
  *
- * ── Scaling (unchanged) ─────────────────────────────────────────────────────
+ * ── Scaling ─────────────────────────────────────────────────────────────────
  *   "This many ADC volts differential = this much real world": the default
  *   1.5 V = 170 V and 1.5 V = 25 A, set with !VSCALE / !ISCALE.
+ *
+ * ── Current range (D6) ──────────────────────────────────────────────────────
+ *   D6 selects the current front end's range: LOW = range 0, HIGH = range 1
+ *   (!IRINV,1 swaps them). Each range has its own ISCALE, IOFF and PHASECAL.
+ *   Range 0 is selected at boot, and defaults to 1.5 V = 25 A; range 1
+ *   defaults to 1.5 V = 2.5 A. If the switch changes a shunt, make range 0
+ *   the high-current one, so a reboot can never leave a big current on the
+ *   sensitive shunt.
+ *   Every scan is scaled by the range it was taken on. DMA buffers carry the
+ *   time they filled, so the switch lands on the right scan even though the
+ *   buffers in flight still hold the old range. The ring holds amps, so a
+ *   cycle, a window or a capture that spans a switch stays in one unit.
+ *   Within IRSETTLE of the switch (the front end settling; a relay needs
+ *   ~15 ms) each current sample is replaced by the one a mains cycle earlier
+ *   and flagged +128, as is any cycle or window that contains a switch.
+ *   Auto mode (!IRANGE,A) goes up at once on any sample over IRLIM up % of
+ *   the sensitive range's full scale, or on clipping. It comes down after two
+ *   windows whose peak is under IRLIM down %, at most once a second.
+ *   Full scale is taken as VREF/2 of differential input.
  *
  * ── Measurement (shared maths, ported) ──────────────────────────────────────
  *   Cycles run between rising zero crossings of V, found to a fraction of a
@@ -86,16 +105,25 @@
  *   !HGET / !AVGW         one $HARM / one $AVG from the last window
  *   !RELAY,<0|1>          open / close the load relay (D5); close clears a trip
  *   !RLYINV,<0|1>         relay driver is active-low
- *   !VSCALE,<adcV>,<V>    !ISCALE,<adcV>,<A>
- *   !PHASECAL,<us>        current front end's extra delay vs voltage, us (0)
+ *   !VSCALE,<adcV>,<V>    !ISCALE,<adcV>,<A>[,<range>]
+ *   !PHASECAL,<us>[,<range>]  current front end's extra delay vs voltage, us (0)
+ *                         ISCALE, PHASECAL and IOFF set the active current
+ *                         range, or the one named.
+ *   !IRANGE,<0|1|A>       current range: fixed 0, fixed 1, or auto
+ *   !IRINV,<0|1>          1 = D6 HIGH selects range 0
+ *   !IRSETTLE,<ms>        settle time after a switch (default 20): those current
+ *                         samples are replaced by the ones a cycle earlier, flagged
+ *   !IRLIM,<up%>,<down%>  auto thresholds, % of the sensitive range's full
+ *                         scale (default 90, 60)
  *   !CYCLES,<n>           mains cycles per window (default 12 -> 5 Hz at 60 Hz)
  *   !MAINS,<hz>           nominal mains frequency (default 60)
  *   !VMIN,<volts>         smallest V peak that counts as mains (default 5 % of VSCALE)
  *   !TRIP,<amps>          open the relay when a cycle's Irms exceeds this; 0 off
  *   !TRIPPK,<amps>        open the relay on any |i| sample above this; 0 off
  *   !DCREM,<0|1>          remove DC from each cycle / window (default 1)
- *   !ZERO                 average 0.2 s and keep it as the channel offsets
- *   !VOFF,<uV> !IOFF,<uV> set those offsets directly (ADC volts, as before)
+ *   !ZERO                 average 0.2 s and keep it as the channel offsets:
+ *                         V, then each current range in turn (~0.5 s)
+ *   !VOFF,<uV> !IOFF,<uV>[,<range>]  set those offsets directly (ADC volts)
  *   !EZERO                reset the energy accumulator
  *   !VREF,<volts>         ADC reference (default 3.3)
  *   !HARMN,<n>            harmonics computed, 1..63 (default 40)
@@ -118,11 +146,12 @@
  *
  * ── Output ──────────────────────────────────────────────────────────────────
  *   $PWR,vrms,irms,w,va,var,pf,hz,vpk,ipk,wh,t_s,n,fs,relay,flags,
- *        vthd,ithd,dpf,cycles,seq
+ *        vthd,ithd,dpf,cycles,seq,irange
  *        t_s is sample-clock time (the Giga lesson: time from sample counts,
  *        never from millis()).
  *        flags: +1 no V crossings  +2 V clipped  +4 I clipped  +8 tripped
  *               +16 samples lost (gap)  +32 ADC error  +64 synthetic data
+ *               +128 current range switched (settling, or a switch inside)
  *   $CYC,seq,vrms,irms,w,hz,ipk,flags
  *   $HARM,seq,H,hz,vthd,ithd,dpf,p1, then H x (vrms_h,vdeg_h,irms_h,ideg_h)
  *        magnitudes are RMS in V and A, corrected for the boxcar's droop.
@@ -134,12 +163,20 @@
  *   $WAVE,n,dt_us,kv,bv,ki,bi,alpha,pre,reason,flags,seq
  *        then n x $WD,<v_raw>,<i_raw>, then $WEND.
  *        v = v_raw*kv + bv volts, i = i_raw*ki + bi amps. Current sample k
- *        was taken alpha samples after voltage sample k.
+ *        was taken alpha samples after voltage sample k. i_raw is in units of
+ *        the sensitive range's LSB on either range (bi = 0), so a capture that
+ *        spans a range switch is still in one unit.
  *   $CFG,2,relay,smask
- *   $ADC,2,rate_req,rate_used,decim,fs,bits,smp,v_se,i_se,lag_us,rate_max,synth
+ *   $ADC,2,rate_req,rate_used,decim,fs,bits,smp,v_se,i_se,lag_us,rate_max,synth,lincal
+ *        lincal 1 = both ADCs took their linearity calibration at the last start
  *   $ACFG,v_adc_fs,v_fs,i_adc_fs,i_fs,phasecal_us,cycles,mains,trip,dcrem,
  *         v_off_uv,i_off_uv,rly_inv,wave_len,2,vref,trippk,wpre,harmn,vmin,
  *         ev_di,ev_dv,rlycap
+ *   $IRNG,range,auto,inv,settle_ms,up_pct,down_pct,switches,fs0_a,fs1_a,
+ *         adc0,fs0,ioff0_uv,phasecal0_us,adc1,fs1,ioff1_uv,phasecal1_us
+ *        sent on !CFG, on any range setting, and after every switch.
+ *        fsN_a = range N's full scale in amps peak. $ACFG's current fields
+ *        are the active range's.
  *   $NET,ip,port,rssi,wifi_status,ps,ssid  ip = "joining" while the join runs;
  *        ps = the radio's power-save mode after the join (0 = off, which
  *        this sketch sets; -1 = unknown)
@@ -169,12 +206,13 @@
 #error "Copy arduino_secrets.example.h to arduino_secrets.h and put your Wi-Fi name/password in it"
 #endif
 
-#define FW_VERSION   "1.0"
+#define FW_VERSION   "1.1"
 #define BACKEND_GIGA 2
 static const uint16_t CMD_PORT = 8080;
 
 // ── board wiring ──────────────────────────────────────────────────────────────
 #define RELAY_PIN 5
+#define IRANGE_PIN 6      // current range select: LOW = range 0 (see !IRINV)
 // A0..A6 can sit on ADC1 or ADC2 (A7 is ADC1 only), so any pins from A0..A6
 // work here. Keep each pair's + on adcA and - on adcB, so the pair converts
 // at one instant.
@@ -191,6 +229,7 @@ static const int ADC_RANKS = 2;
 #define FLG_GAP      0x10
 #define FLG_ADCERR   0x20
 #define FLG_SYNTH    0x40
+#define FLG_IRANGE   0x80
 
 // ── stream mask ───────────────────────────────────────────────────────────────
 #define SM_PWR   0x01
@@ -211,7 +250,7 @@ static const int ADC_RANKS = 2;
 #define POOL_BYTES (64UL * 1024UL)           // DMA pool per ADC
 
 static float*   g_rv = nullptr;   // decimated V, raw differential counts
-static float*   g_ri = nullptr;   // decimated I
+static float*   g_ri = nullptr;   // decimated I, in amps (each scan scaled by its own range)
 static uint8_t* g_rf = nullptr;   // FLG_* per sample (clip, gap, synth)
 static float*   g_wv = nullptr;   // capture copy, so the ring can keep moving
 static float*   g_wi = nullptr;
@@ -243,23 +282,45 @@ static int32_t  g_mid = 32768, g_clipLo = 0, g_clipHi = 65535;
 
 // ── scaling / calibration ─────────────────────────────────────────────────────
 static float g_v_adc_fs = 1.5f, g_v_fs = 170.0f;
-static float g_i_adc_fs = 1.5f, g_i_fs = 25.0f;
-static float g_v_off = 0.0f, g_i_off = 0.0f;     // ADC volts
-static float g_phasecal_us = 0.0f;
+static float g_v_off = 0.0f;                     // ADC volts
+// current: one calibration per range (IRANGE_PIN picks the front end's range)
+static float g_ir_adc[2] = {1.5f, 1.5f};         // "this many ADC volts differential
+static float g_ir_fs[2]  = {25.0f, 2.5f};        //  = this many amps"
+static float g_ir_off[2] = {0.0f, 0.0f};         // ADC volts
+static float g_ir_pc[2]  = {0.0f, 0.0f};         // PHASECAL, us
 static bool  g_dcrem = true;
 static uint8_t g_cycles = 12;
 static float g_mains_hz = 60.0f;
 static float g_vmin = 8.5f;                      // volts peak
 static uint8_t g_harmN = 40;
 
-// derived: real = raw*K + B, alpha = I-sample lag in samples, Lagrange weights
-static double g_KV, g_BV, g_KI, g_BI, g_alpha, g_N0;
+// derived: real = raw*K + B, alpha = I-sample lag in samples, Lagrange weights.
+// Per current range: K, B, alpha, weights, and full scale in amps peak.
+// g_alpha / g_W are the ones in use: processCycle loads the range of its cycle.
+static double g_KV, g_BV, g_alpha, g_N0;
 static double g_W[4];
+static double g_KIr[2], g_BIr[2], g_alphaR[2], g_WR[2][4], g_irFsA[2];
+static double g_kiRef = 1.0;                     // the sensitive range's |K|: $WAVE's unit
 
 // ── relay / protection ────────────────────────────────────────────────────────
 static bool  g_relay = false, g_rly_inv = false;
 static float g_trip_a = 0.0f, g_trippk = 0.0f;
 static bool  g_trip_latch = false;
+
+// ── current range ─────────────────────────────────────────────────────────────
+// g_irWant is what was asked for (a command, auto, a zero). serviceRange()
+// moves the pin to it when no switch is in flight: g_irReq is the pin, g_irCur
+// the range the incoming scans are scaled with. drainAdc() moves g_irCur over
+// at the scan the switch happened on, from the DMA buffers' timestamps.
+static uint8_t  g_irCur = 0, g_irReq = 0, g_irWant = 0;
+static bool     g_irAuto = false, g_irInv = false;
+static bool     g_irPending = false, g_irHistDone = false, g_irReport = false;
+static uint32_t g_irSwUs = 0, g_irLastSwMs = 0, g_irSwitches = 0;
+static float    g_irSettleMs = 20.0f, g_irUp = 0.90f, g_irDn = 0.60f;
+static uint8_t  g_irDnCount = 0;
+static IrHist   g_irHist[8];           // recent switch points, for the analysis's alpha
+static uint8_t  g_irHistN = 0;
+static uint8_t  g_zeroStep = 0;        // !ZERO in progress (auto range waits)
 
 // ── run state ─────────────────────────────────────────────────────────────────
 static uint8_t g_smask = 0;
@@ -478,6 +539,41 @@ static void adcStop() {
 static void markGap();
 static void applyDerived();
 
+// The H7 ADC has a linearity self-calibration (ADCALLIN), and AdvancedADC
+// never runs it: hal_adc_config() asks for ADC_CALIB_OFFSET only. Without it,
+// measured 2026-11-08 on a bench PSU through an isolated front end, every
+// channel read +-1 mV (about 20 LSB at 16 bits) off a straight line in a
+// repeatable, non-monotonic pattern, with one 6.5 mV spot. It runs here on a
+// handle of our own, with the ADC disabled, just before AdvancedADC starts.
+// Its offset-only calibration then leaves the linearity factors in place, and
+// stop() only disables the ADC (no deep power-down), so they are kept.
+static bool g_linCal = false;
+static bool adcLinearityCal(ADC_TypeDef* inst) {
+  ADC_HandleTypeDef h;
+  memset(&h, 0, sizeof(h));
+  h.Instance = inst;
+  h.Init.Resolution = g_bits >= 16 ? ADC_RESOLUTION_16B : g_bits >= 14 ? ADC_RESOLUTION_14B
+                    : g_bits >= 12 ? ADC_RESOLUTION_12B : g_bits >= 10 ? ADC_RESOLUTION_10B
+                    : ADC_RESOLUTION_8B;
+  h.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV1;          // as AdvancedADC
+  h.Init.ScanConvMode = ADC_SCAN_DISABLE;
+  h.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  h.Init.LowPowerAutoWait = DISABLE;
+  h.Init.ContinuousConvMode = DISABLE;
+  h.Init.NbrOfConversion = 1;
+  h.Init.DiscontinuousConvMode = DISABLE;
+  h.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  h.Init.ConversionDataManagement = ADC_CONVERSIONDATA_DR;
+  h.Init.Overrun = ADC_OVR_DATA_OVERWRITTEN;
+  h.Init.LeftBitShift = ADC_LEFTBITSHIFT_NONE;
+  h.Init.OversamplingMode = DISABLE;
+  __HAL_RCC_ADC_CONFIG(RCC_ADCCLKSOURCE_CLKP);
+  __HAL_RCC_ADC12_CLK_ENABLE();
+  if (inst->CR & ADC_CR_ADEN) return false;               // must be disabled to calibrate
+  if (HAL_ADC_Init(&h) != HAL_OK) return false;
+  return HAL_ADCEx_Calibration_Start(&h, ADC_CALIB_OFFSET_LINEARITY, ADC_SINGLE_ENDED) == HAL_OK;
+}
+
 static bool adcStart() {
   adcStop();
   uint32_t lim = maxRate();
@@ -498,6 +594,7 @@ static bool adcStart() {
   for (int attempt = 0; attempt < 2 && !g_adcOn; attempt++) {
     adcDual.stop();
     adcSanitize(adcA); adcSanitize(adcB);
+    g_linCal = adcLinearityCal(ADC1) && adcLinearityCal(ADC2);
     g_adcOn = adcDual.begin(toResolution(g_bits), g_rate_req, ns, depth, SMP_T[g_smp]) != 0;
   }
   if (!g_adcOn) {
@@ -546,7 +643,7 @@ static ScanBuf adcRead() {
   g_prevTsA = ts;
   if (g_capBufs++ == 0) g_capFirstTs = ts;
   g_capLastTs = ts;
-  ScanBuf s = { a, b, (int)(min(a->size(), b->size()) / ADC_RANKS), gap };
+  ScanBuf s = { a, b, (int)(min(a->size(), b->size()) / ADC_RANKS), gap, ts };
   return s;
 }
 static inline void adcRelease(ScanBuf& s) { s.a->release(); s.b->release(); }
@@ -598,16 +695,23 @@ static void applyDerived() {
   g_clipHi = (int32_t)(full - full / 256);
 
   double sv = (double)g_v_fs / (double)g_v_adc_fs;
-  double si = (double)g_i_fs / (double)g_i_adc_fs;
   g_KV = (double)lsb() * sv;  g_BV = -(double)g_v_off * sv;
-  g_KI = (double)lsb() * si;  g_BI = -(double)g_i_off * si;
-
-  g_alpha = (g_lag_s - (double)g_phasecal_us * 1.0e-6) / g_dt;
-  // +-1 sample keeps every read inside processCycle's index budget (and is
-  // +-125 us, +-2.7 deg at 60 Hz, at the defaults: far more than a CT needs)
-  if (g_alpha < -1.0) g_alpha = -1.0;
-  if (g_alpha >  1.0) g_alpha =  1.0;
-  lagrange4(g_alpha, g_W);
+  for (int r = 0; r < 2; r++) {
+    double si = (double)g_ir_fs[r] / (double)g_ir_adc[r];
+    g_KIr[r] = (double)lsb() * si;  g_BIr[r] = -(double)g_ir_off[r] * si;
+    g_irFsA[r] = 0.5 * (double)g_vref * fabs(si);
+    double al = (g_lag_s - (double)g_ir_pc[r] * 1.0e-6) / g_dt;
+    // +-1 sample keeps every read inside processCycle's index budget (and is
+    // +-125 us, +-2.7 deg at 60 Hz, at the defaults: far more than a CT needs)
+    if (al < -1.0) al = -1.0;
+    if (al >  1.0) al =  1.0;
+    g_alphaR[r] = al;
+    lagrange4(al, g_WR[r]);
+  }
+  g_kiRef = min(fabs(g_KIr[0]), fabs(g_KIr[1]));
+  if (!(g_kiRef > 0.0)) g_kiRef = 1.0;
+  g_alpha = g_alphaR[g_irCur];
+  memcpy(g_W, g_WR[g_irCur], sizeof(g_W));
 
   g_N0 = g_fs / (double)g_mains_hz;
   int hmax = (int)(g_N0 / 2.0) - 1;
@@ -621,7 +725,8 @@ static void applyDerived() {
 
 static uint64_t g_wr = 0;          // decimated samples written, ever
 static uint64_t g_validFrom = 0;   // first sample after the latest gap
-static int64_t  g_accV = 0, g_accI = 0;
+static int64_t  g_accV = 0;
+static double   g_accIA = 0.0;     // current, already in amps
 static uint16_t g_accN = 0;
 static uint8_t  g_accF = 0, g_pendF = 0;
 static double   g_imean = 0.0;     // last cycle's mean current, for the peak trip
@@ -631,49 +736,107 @@ static void tripRelay(const char* why, float value, float limit);
 // A break in the sample stream. Deliberate ones (a restart, a source change)
 // just restart the analyser. A loss is also counted in $INFO gaps.
 static void markGap() {
-  g_accV = g_accI = 0; g_accN = 0; g_accF = 0;
+  g_accV = 0; g_accIA = 0.0; g_accN = 0; g_accF = 0;
   g_pendF |= FLG_GAP;
   g_validFrom = g_wr;
   resetAnalyzer();
 }
 
+static inline uint8_t irSensitive() { return g_irFsA[0] <= g_irFsA[1] ? 0 : 1; }
+static inline bool irTwoRanges() {
+  return fabs(g_irFsA[0] - g_irFsA[1]) > 1.0e-6 * max(g_irFsA[0], g_irFsA[1]);
+}
+// auto may act: on, idle, and the two ranges really differ
+static inline bool irAutoIdle() {
+  return g_irAuto && !g_irPending && g_irWant == g_irReq && !g_zeroStep && irTwoRanges();
+}
+
 static inline void pushSample() {
   uint32_t idx = (uint32_t)g_wr & RING_MASK;
   float v = (float)g_accV / (float)g_decim;
-  float i = (float)g_accI / (float)g_decim;
+  float i = (float)(g_accIA / (double)g_decim);
+  uint8_t f = g_accF | g_pendF | (g_synth ? FLG_SYNTH : 0);
+  // Still settling after a range switch: the front end reads garbage here
+  // (measured 2026-11-08 with a relay range switch: 3-5 ms of the old path on
+  // the new scale, then up to 8 ms of contact bounce saturating the amplifier
+  // at ~60x the real current). The sample is replaced by the one a nominal
+  // mains cycle earlier: exact for DC, close for steady AC, and the RMS, the
+  // energy, the trips and auto range never see the spike. It stays flagged.
+  const uint32_t back = (uint32_t)lround(g_N0);
+  if ((f & FLG_IRANGE) && back > 0 && g_wr >= g_validFrom + back) {
+    i = g_ri[(uint32_t)(g_wr - back) & RING_MASK];
+    f &= (uint8_t)~FLG_ICLIP;
+  }
   g_rv[idx] = v;
   g_ri[idx] = i;
-  g_rf[idx] = g_accF | g_pendF | (g_synth ? FLG_SYNTH : 0);
+  g_rf[idx] = f;
   g_pendF = 0;
   g_wr++;
-  g_accV = g_accI = 0; g_accN = 0; g_accF = 0;
+  g_accV = 0; g_accIA = 0.0; g_accN = 0; g_accF = 0;
 
   if (g_trippk > 0.0f && !g_trip_latch) {
-    float ia = (float)fabs((double)i * g_KI + g_BI - g_imean);
+    float ia = fabsf(i - (float)g_imean);
     if (ia > g_trippk) tripRelay("PEAK", ia, g_trippk);
   }
+  // auto range up: at once, on the first sample near the top of the
+  // sensitive range (or clipped)
+  if (g_irReq == irSensitive() && irAutoIdle() &&
+      ((f & FLG_ICLIP) || fabsf(i) > g_irUp * (float)g_irFsA[g_irReq]))
+    g_irWant = 1 - g_irReq;
+}
+
+static void irHistPush(uint64_t idx, uint8_t r) {
+  if (g_irHistN == 8) { memmove(g_irHist, g_irHist + 1, 7 * sizeof(IrHist)); g_irHistN = 7; }
+  g_irHist[g_irHistN].idx = idx; g_irHist[g_irHistN].r = r; g_irHistN++;
+}
+// the range sample k was taken on (for its phase delay; the scale is already applied)
+static uint8_t rangeAt(uint64_t k) {
+  for (int j = (int)g_irHistN - 1; j >= 0; j--) if (g_irHist[j].idx <= k) return g_irHist[j].r;
+  return g_irHistN ? g_irHist[0].r : g_irCur;
+}
+// In an ns-scan buffer whose last scan was d us after an event, scan k was at
+// d - (ns-1-k)*scanUs: the first scan at or after the event.
+static int scanIndexAfter(int ns, double d, double scanUs) {
+  double k = ceil((double)(ns - 1) - d / scanUs);
+  if (k < 0.0) return 0;
+  if (k > (double)ns) return ns;
+  return (int)k;
 }
 
 static void drainAdc() {
   uint32_t t0 = micros();
-  // amplitudes of the synthetic source in raw counts: counts = (real/scale + off)/lsb
-  double syAv = 0, syAi = 0, syVo = 0, syIo = 0, syStep = 0, syLag = 0, syPhi = 0;
+  // the synthetic source: V in raw counts, counts = (real/scale + off)/lsb.
+  // I straight in amps: an ideal front end, the same on either range.
+  double syAv = 0, syAi = 0, syVo = 0, syStep = 0, syLag = 0, syPhi = 0;
   if (g_synth) {
-    double sv = (double)g_v_fs / g_v_adc_fs, si = (double)g_i_fs / g_i_adc_fs;
+    double sv = (double)g_v_fs / g_v_adc_fs;
     syAv = g_syn_vrms * M_SQRT2 / sv / lsb();
-    syAi = g_syn_irms * M_SQRT2 / si / lsb() / sqrt(1.0 + (double)g_syn_h3 * g_syn_h3 * 1.0e-4);
-    syVo = g_v_off / lsb();  syIo = g_i_off / lsb();
+    syAi = g_syn_irms * M_SQRT2 / sqrt(1.0 + (double)g_syn_h3 * g_syn_h3 * 1.0e-4);
+    syVo = g_v_off / lsb();
     syStep = 2.0 * M_PI * g_syn_hz / g_rate;
     syLag  = 2.0 * M_PI * g_syn_hz * g_lag_s;     // I+ really is converted later
     syPhi  = g_syn_deg * M_PI / 180.0;
   }
 
+  const double scanUs = 1.0e6 / g_rate;
   int guard = 0;
   while (adcAvailable() && guard++ < 48) {
     ScanBuf s = adcRead();
     if (s.gap && g_wr) { g_gaps++; markGap(); }
     const Sample* pa = s.a->data();
     const Sample* pb = s.b->data();
+    // A range switch in flight: scans from kSw on were taken on the new range,
+    // and up to kSet the front end was still settling. Buffers filled before
+    // the switch are still coming out of the pool, so this goes by each
+    // buffer's own timestamp, not by when it is read.
+    int kSw = s.ns, kSet = s.ns;
+    if (g_irPending) {
+      double d = (double)(int32_t)(s.ts - g_irSwUs);   // switch -> this buffer's last scan, us
+      kSw  = scanIndexAfter(s.ns, d, scanUs);
+      kSet = scanIndexAfter(s.ns, d - (double)g_irSettleMs * 1000.0, scanUs);
+    }
+    const double Ka = g_KIr[g_irCur], Ba = g_BIr[g_irCur];
+    const double Kb = g_KIr[g_irReq], Bb = g_BIr[g_irReq];
     for (int k = 0; k < s.ns; k++) {
       int32_t vp = pa[2 * k], ip = pa[2 * k + 1];
       int32_t vn = pb[2 * k], in = pb[2 * k + 1];
@@ -682,18 +845,25 @@ static void drainAdc() {
       if (ip <= g_clipLo || ip >= g_clipHi || (!g_i_se && (in <= g_clipLo || in >= g_clipHi))) f |= FLG_ICLIP;
       int32_t v = vp - (g_v_se ? g_mid : vn);
       int32_t i = ip - (g_i_se ? g_mid : in);
+      double ia = (k < kSw) ? (double)i * Ka + Ba : (double)i * Kb + Bb;
       if (g_synth) {
         float ph = (float)g_synPh;
         g_synPh += syStep;
         if (g_synPh >= 2.0 * M_PI) g_synPh -= 2.0 * M_PI;
         float pi_ = ph + (float)(syLag - syPhi);
         v = (int32_t)lrintf((float)syAv * sinf(ph) + (float)syVo);
-        i = (int32_t)lrintf((float)syAi * (sinf(pi_) + g_syn_h3 * 0.01f * sinf(3.0f * pi_)) + (float)syIo);
+        ia = syAi * (double)(sinf(pi_) + g_syn_h3 * 0.01f * sinf(3.0f * pi_));
         f = 0;
       }
-      g_accV += v; g_accI += i; g_accF |= f;
+      if (k >= kSw) {
+        if (k < kSet) f |= FLG_IRANGE;
+        if (!g_irHistDone) { irHistPush(g_wr, g_irReq); g_irHistDone = true; }
+      }
+      g_accV += v; g_accIA += ia; g_accF |= f;
       if (++g_accN >= g_decim) pushSample();
     }
+    // settled inside this buffer: the switch is done
+    if (g_irPending && kSet < s.ns) { g_irCur = g_irReq; g_irPending = false; g_irReport = true; }
     adcRelease(s);
   }
   g_busyUs += micros() - t0;
@@ -704,7 +874,7 @@ static void drainAdc() {
 // ═════════════════════════════════════════════════════════════════════════════
 
 static inline double vAt(uint64_t k) { return (double)g_rv[(uint32_t)k & RING_MASK] * g_KV + g_BV; }
-static inline double iAt(uint64_t k) { return (double)g_ri[(uint32_t)k & RING_MASK] * g_KI + g_BI; }
+static inline double iAt(uint64_t k) { return (double)g_ri[(uint32_t)k & RING_MASK]; }   // amps
 // cubic (4-point Lagrange) interpolation at a fractional index, for the
 // averaged cycle; reads floor(x)-1 .. floor(x)+2
 static inline float vCub(double x) {
@@ -847,6 +1017,12 @@ static void processCycle(double a, double b, uint8_t flags) {
   if (L < 2.0) return;
   const int64_t ka = (int64_t)floor(a), kb = (int64_t)floor(b);
   const bool real = !(flags & FLG_NOCROSS);
+  // the current front end's phase delay is that of the range the cycle was
+  // measured on; a cycle with a switch inside is flagged
+  const uint8_t rr = rangeAt((uint64_t)ka);
+  g_alpha = g_alphaR[rr];
+  memcpy(g_W, g_WR[rr], sizeof(g_W));
+  if (rangeAt((uint64_t)kb) != rr) flags |= FLG_IRANGE;
 
   SpanSums s;
   memset(&s, 0, sizeof(s));
@@ -1139,6 +1315,18 @@ static void finishWindow() {
 
   uint8_t flags = g_win.flags | (g_trip_latch ? FLG_TRIP : 0);
   if (g_winReal < g_winCycles) flags |= FLG_NOCROSS;
+  const uint8_t wr = rangeAt((uint64_t)g_winEnd);
+
+  // auto range down: two quiet windows in a row, and not within a second of
+  // the last switch, so a load near the threshold doesn't make it hunt
+  if (g_irReq != irSensitive() && irAutoIdle() && millis() - g_irLastSwMs > 1000) {
+    float pk = max(fabsf(g_win.imax), fabsf(g_win.imin));
+    if (!(flags & (FLG_ICLIP | FLG_IRANGE)) && pk < g_irDn * (float)g_irFsA[irSensitive()]) {
+      if (++g_irDnCount >= 2) { g_irWant = irSensitive(); g_irDnCount = 0; }
+    } else {
+      g_irDnCount = 0;
+    }
+  }
 
   if (g_smask & SM_PWR) {
     g_ln.reset();
@@ -1154,7 +1342,7 @@ static void finishWindow() {
     g_ln.print(flags);      g_ln.print(',');
     g_ln.print(g_hVthd, 3); g_ln.print(','); g_ln.print(g_hIthd, 3); g_ln.print(',');
     g_ln.print(g_hDpf, 4);  g_ln.print(','); g_ln.print(g_winCycles); g_ln.print(',');
-    g_ln.println(g_seq);
+    g_ln.print(g_seq);      g_ln.print(','); g_ln.println(wr);
     emit();
   }
   if (g_smask & SM_HARM) emitHarm(true);
@@ -1173,6 +1361,7 @@ static uint8_t  g_capState = 0;        // 0 idle, 1 waiting for post-trigger dat
 static uint64_t g_capStart = 0, g_capEnd = 0;
 static uint32_t g_capN = 0, g_capSent = 0, g_capPre = 0, g_capSeq = 0;
 static uint8_t  g_capFlags = 0;
+static double   g_capKi = 1.0;         // amps per $WD current unit, fixed per capture
 static char     g_capReason[12] = "";
 
 static void triggerCapture(const char* reason, uint64_t at, float value) {
@@ -1205,12 +1394,13 @@ static void serviceCapture() {
       g_wv[j] = g_rv[idx]; g_wi[j] = g_ri[idx]; g_capFlags |= g_rf[idx];
     }
     g_capSeq++;
+    g_capKi = g_kiRef;
     g_ln.reset();
     g_ln.print("$WAVE,"); g_ln.print(g_capN); g_ln.print(',');
     g_ln.print(g_dt * 1.0e6, 4); g_ln.print(',');
     g_ln.print(g_KV, 9); g_ln.print(','); g_ln.print(g_BV, 6); g_ln.print(',');
-    g_ln.print(g_KI, 9); g_ln.print(','); g_ln.print(g_BI, 6); g_ln.print(',');
-    g_ln.print(g_alpha, 6); g_ln.print(','); g_ln.print(g_capPre); g_ln.print(',');
+    g_ln.print(g_capKi, 9); g_ln.print(",0,");
+    g_ln.print(g_alphaR[rangeAt(g_capStart)], 6); g_ln.print(','); g_ln.print(g_capPre); g_ln.print(',');
     g_ln.print(g_capReason); g_ln.print(','); g_ln.print(g_capFlags); g_ln.print(',');
     g_ln.println(g_capSeq);
     emit();
@@ -1226,7 +1416,7 @@ static void serviceCapture() {
     int burst = 300;
     while (g_capSent < g_capN && burst-- > 0 && sinkBacklog() < CAP_BACKLOG) {
       g_ln.reset(); g_ln.print("$WD,"); g_ln.print(g_wv[g_capSent], 2); g_ln.print(',');
-      g_ln.println(g_wi[g_capSent], 2); emit();
+      g_ln.println((float)(g_wi[g_capSent] / g_capKi), 2); emit();
       g_capSent++;
     }
     if (g_capSent >= g_capN && sinkBacklog() < CAP_BACKLOG) { emitStr("$WEND"); g_capState = 0; }
@@ -1237,26 +1427,74 @@ static void serviceCapture() {
 //  zeroing
 // ═════════════════════════════════════════════════════════════════════════════
 
-static bool     g_zeroPending = false;
+// !ZERO: V and the active current range, then the other range, then back.
+// Each range is averaged only once its switch has settled.
 static uint64_t g_zeroFrom = 0;
+static bool     g_zeroArmed = false;
+static uint8_t  g_zeroBack = 0;        // range to return to
 
 static void printAcConfig();
+static void printIrange();
+
+static void startZero() {
+  g_zeroStep = 1; g_zeroArmed = false; g_zeroBack = g_irWant;
+}
 
 static void serviceZero() {
-  if (!g_zeroPending) return;
+  if (!g_zeroStep) return;
+  if (g_irPending || g_irWant != g_irReq) { g_zeroArmed = false; return; }
+  if (!g_zeroArmed) { g_zeroArmed = true; g_zeroFrom = g_wr; return; }
   uint32_t n = (uint32_t)(0.2 * g_fs);
   if (g_wr < g_zeroFrom + n) return;
-  g_zeroPending = false;
-  if (g_zeroFrom < g_validFrom) { emitErr("Zero interrupted by a gap"); return; }
+  if (g_zeroFrom < g_validFrom) {
+    g_zeroStep = 0; g_irWant = g_zeroBack;
+    emitErr("Zero interrupted by a gap"); return;
+  }
   double sv = 0, si = 0;
   for (uint32_t j = 0; j < n; j++) {
     uint32_t idx = (uint32_t)(g_zeroFrom + j) & RING_MASK;
     sv += g_rv[idx]; si += g_ri[idx];
   }
-  g_v_off = (float)(sv / n * lsb());
-  g_i_off = (float)(si / n * lsb());
+  // the ring's current is in amps with the old offset in it, so the new
+  // offset is the old one plus that mean, back in ADC volts
+  const uint8_t r = g_irCur;
+  g_ir_off[r] += (float)((si / n) * (double)g_ir_adc[r] / (double)g_ir_fs[r]);
+  if (g_zeroStep == 1) g_v_off = (float)(sv / n * lsb());
   applyDerived();
-  printAcConfig();
+  if (g_zeroStep == 1) { g_zeroStep = 2; g_zeroArmed = false; g_irWant = 1 - r; return; }
+  g_zeroStep = 0;
+  g_irWant = g_zeroBack;
+  printAcConfig(); printIrange();
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  current range switching
+// ═════════════════════════════════════════════════════════════════════════════
+
+static void setIrangePin(uint8_t r) { digitalWrite(IRANGE_PIN, ((r == 1) != g_irInv) ? HIGH : LOW); }
+
+static void startRangeSwitch(uint8_t r) {
+  g_irReq = r;
+  setIrangePin(r);
+  g_irSwUs = micros();
+  g_irPending = true; g_irHistDone = false;
+  g_irLastSwMs = millis();
+  g_irSwitches++;
+  g_irDnCount = 0;
+}
+
+static void serviceRange() {
+  if (g_irPending && (!g_adcOn || millis() - g_irLastSwMs > 500)) {
+    // no ADC data is coming to place the switch on: apply it from here on
+    if (!g_irHistDone) irHistPush(g_wr, g_irReq);
+    g_irCur = g_irReq; g_irPending = false; g_irReport = true;
+  }
+  if (g_irReport) {
+    g_irReport = false;
+    g_alpha = g_alphaR[g_irCur]; memcpy(g_W, g_WR[g_irCur], sizeof(g_W));
+    printIrange(); printAcConfig();
+  }
+  if (!g_irPending && g_irWant != g_irReq) startRangeSwitch(g_irWant);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1273,24 +1511,38 @@ static void printConfig() {
   g_ln.print(g_bits); g_ln.print(','); g_ln.print(g_smp); g_ln.print(',');
   g_ln.print(g_v_se ? 1 : 0); g_ln.print(','); g_ln.print(g_i_se ? 1 : 0); g_ln.print(',');
   g_ln.print(g_lag_s * 1.0e6, 4); g_ln.print(','); g_ln.print(maxRate()); g_ln.print(',');
-  g_ln.println(g_synth ? 1 : 0); emit();
+  g_ln.print(g_synth ? 1 : 0); g_ln.print(','); g_ln.println(g_linCal ? 1 : 0); emit();
 }
 
 static void printAcConfig() {
   g_ln.reset();
   g_ln.print("$ACFG,");
   g_ln.print(g_v_adc_fs, 6);  g_ln.print(','); g_ln.print(g_v_fs, 4);  g_ln.print(',');
-  g_ln.print(g_i_adc_fs, 6);  g_ln.print(','); g_ln.print(g_i_fs, 4);  g_ln.print(',');
-  g_ln.print(g_phasecal_us, 3); g_ln.print(','); g_ln.print(g_cycles); g_ln.print(',');
+  g_ln.print(g_ir_adc[g_irCur], 6); g_ln.print(','); g_ln.print(g_ir_fs[g_irCur], 4); g_ln.print(',');
+  g_ln.print(g_ir_pc[g_irCur], 3); g_ln.print(','); g_ln.print(g_cycles); g_ln.print(',');
   g_ln.print(g_mains_hz, 2);  g_ln.print(','); g_ln.print(g_trip_a, 3); g_ln.print(',');
   g_ln.print(g_dcrem ? 1 : 0); g_ln.print(',');
-  g_ln.print(g_v_off * 1.0e6f, 2); g_ln.print(','); g_ln.print(g_i_off * 1.0e6f, 2); g_ln.print(',');
+  g_ln.print(g_v_off * 1.0e6f, 2); g_ln.print(','); g_ln.print(g_ir_off[g_irCur] * 1.0e6f, 2); g_ln.print(',');
   g_ln.print(g_rly_inv ? 1 : 0); g_ln.print(','); g_ln.print(g_wave_len_s, 4); g_ln.print(",2,");
   g_ln.print(g_vref, 6); g_ln.print(','); g_ln.print(g_trippk, 3); g_ln.print(',');
   g_ln.print(g_wpre, 3); g_ln.print(','); g_ln.print(g_harmN); g_ln.print(',');
   g_ln.print(g_vmin, 3); g_ln.print(','); g_ln.print(g_ev_di, 4); g_ln.print(',');
   g_ln.print(g_ev_dv, 3); g_ln.print(','); g_ln.println(g_rlycap ? 1 : 0);
   emit();
+}
+
+static void printIrange() {
+  g_ln.reset();
+  g_ln.print("$IRNG,"); g_ln.print(g_irCur); g_ln.print(','); g_ln.print(g_irAuto ? 1 : 0); g_ln.print(',');
+  g_ln.print(g_irInv ? 1 : 0); g_ln.print(','); g_ln.print(g_irSettleMs, 2); g_ln.print(',');
+  g_ln.print(g_irUp * 100.0f, 1); g_ln.print(','); g_ln.print(g_irDn * 100.0f, 1); g_ln.print(',');
+  g_ln.print(g_irSwitches); g_ln.print(','); g_ln.print(g_irFsA[0], 5); g_ln.print(',');
+  g_ln.print(g_irFsA[1], 5);
+  for (int r = 0; r < 2; r++) {
+    g_ln.print(','); g_ln.print(g_ir_adc[r], 6); g_ln.print(','); g_ln.print(g_ir_fs[r], 5);
+    g_ln.print(','); g_ln.print(g_ir_off[r] * 1.0e6f, 2); g_ln.print(','); g_ln.print(g_ir_pc[r], 3);
+  }
+  g_ln.println(); emit();
 }
 
 static void printNet() {
@@ -1317,7 +1569,7 @@ static void printInfo() {
 
 static void printBanner() {
   g_ln.reset(); g_ln.print("$READY,GIGA,"); g_ln.println(FW_VERSION); emit();
-  printConfig(); printAcConfig(); printNet();
+  printConfig(); printAcConfig(); printIrange(); printNet();
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1357,7 +1609,7 @@ static void handleCommand(const char* cmd) {
     g_smask = (uint8_t)atoi(cmd + 7); printConfig();
 
   } else if (strcmp(cmd, "!CFG") == 0) {
-    printConfig(); printAcConfig(); printNet();
+    printConfig(); printAcConfig(); printIrange(); printNet();
 
   } else if (strcmp(cmd, "!STAT") == 0) {
     printInfo();
@@ -1403,14 +1655,43 @@ static void handleCommand(const char* cmd) {
     else emitErr("VSCALE needs <adcVolts>,<realVolts>");
 
   } else if (strncmp(cmd, "!ISCALE,", 8) == 0) {
-    float adc = atof(cmd + 8), real = secondArg(cmd + 8);
-    if (adc > 0.0f && !isnan(real) && real != 0.0f) { g_i_adc_fs = adc; g_i_fs = real; applyDerived(); printAcConfig(); }
-    else emitErr("ISCALE needs <adcVolts>,<realAmps>");
+    float a[3];
+    int n = parseFloats(cmd + 8, a, 3);
+    int r = n >= 3 ? (int)a[2] : g_irCur;
+    if (n >= 2 && a[0] > 0.0f && a[1] != 0.0f && (r == 0 || r == 1)) {
+      g_ir_adc[r] = a[0]; g_ir_fs[r] = a[1]; applyDerived(); printAcConfig(); printIrange();
+    } else emitErr("ISCALE needs <adcVolts>,<realAmps>[,<range 0|1>]");
 
   } else if (strncmp(cmd, "!PHASECAL,", 10) == 0) {
+    float a[2];
+    int n = parseFloats(cmd + 10, a, 2);
+    int r = n >= 2 ? (int)a[1] : g_irCur;
+    if (n >= 1 && a[0] >= -500.0f && a[0] <= 500.0f && (r == 0 || r == 1)) {
+      g_ir_pc[r] = a[0]; applyDerived(); printAcConfig(); printIrange();
+    } else emitErr("PHASECAL must be -500..500 us [,<range 0|1>]");
+
+  } else if (strncmp(cmd, "!IRANGE,", 8) == 0) {
+    char c = cmd[8];
+    if (c == 'A' || c == 'a') { g_irAuto = true; g_irDnCount = 0; printIrange(); }
+    else if (c == '0' || c == '1') { g_irAuto = false; g_irWant = (uint8_t)(c - '0'); printIrange(); }
+    else emitErr("IRANGE must be 0, 1 or A");
+
+  } else if (strncmp(cmd, "!IRINV,", 7) == 0) {
+    g_irInv = (atoi(cmd + 7) != 0);
+    startRangeSwitch(g_irReq);     // the pin flips, so the front end does too
+    printIrange();
+
+  } else if (strncmp(cmd, "!IRSETTLE,", 10) == 0) {
     float v = atof(cmd + 10);
-    if (v >= -500.0f && v <= 500.0f) { g_phasecal_us = v; applyDerived(); printAcConfig(); }
-    else emitErr("PHASECAL must be -500..500 us");
+    if (v >= 0.0f && v <= 200.0f) { g_irSettleMs = v; printIrange(); }
+    else emitErr("IRSETTLE must be 0-200 ms");
+
+  } else if (strncmp(cmd, "!IRLIM,", 7) == 0) {
+    float a[2];
+    int n = parseFloats(cmd + 7, a, 2);
+    if (n == 2 && a[0] >= 50.0f && a[0] <= 100.0f && a[1] >= 1.0f && a[1] <= a[0] - 5.0f) {
+      g_irUp = a[0] / 100.0f; g_irDn = a[1] / 100.0f; printIrange();
+    } else emitErr("IRLIM needs <up 50-100 %>,<down 1 % .. up-5 %>");
 
   } else if (strncmp(cmd, "!CYCLES,", 8) == 0) {
     int v = atoi(cmd + 8);
@@ -1440,13 +1721,18 @@ static void handleCommand(const char* cmd) {
     g_dcrem = (atoi(cmd + 7) != 0); printAcConfig();
 
   } else if (strcmp(cmd, "!ZERO") == 0) {
-    g_zeroPending = true; g_zeroFrom = g_wr;
+    startZero();
 
   } else if (strncmp(cmd, "!VOFF,", 6) == 0) {
     g_v_off = atof(cmd + 6) * 1.0e-6f; applyDerived(); printAcConfig();
 
   } else if (strncmp(cmd, "!IOFF,", 6) == 0) {
-    g_i_off = atof(cmd + 6) * 1.0e-6f; applyDerived(); printAcConfig();
+    float a[2];
+    int n = parseFloats(cmd + 6, a, 2);
+    int r = n >= 2 ? (int)a[1] : g_irCur;
+    if (n >= 1 && (r == 0 || r == 1)) {
+      g_ir_off[r] = a[0] * 1.0e-6f; applyDerived(); printAcConfig(); printIrange();
+    } else emitErr("IOFF needs <uV>[,<range 0|1>]");
 
   } else if (strcmp(cmd, "!EZERO") == 0) {
     g_wh = 0.0;
@@ -1677,6 +1963,9 @@ void setup() {
   // the relay is driven open before anything else can go wrong
   pinMode(RELAY_PIN, OUTPUT);
   digitalWrite(RELAY_PIN, g_rly_inv ? HIGH : LOW);
+  pinMode(IRANGE_PIN, OUTPUT);
+  setIrangePin(0);                    // range 0 at boot
+  irHistPush(0, 0);
   pinMode(LEDR, OUTPUT); pinMode(LEDG, OUTPUT); pinMode(LEDB, OUTPUT);
   digitalWrite(LEDR, HIGH); digitalWrite(LEDG, HIGH); digitalWrite(LEDB, LOW);
 
@@ -1718,6 +2007,7 @@ void loop() {
   drainAdc();
   serviceCapture();
   serviceZero();
+  serviceRange();
 
   while (Serial.available()) feed(g_rxSer, Serial.read());
   serviceNet();

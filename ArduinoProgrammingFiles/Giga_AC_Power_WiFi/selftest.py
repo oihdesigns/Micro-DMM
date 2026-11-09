@@ -6,6 +6,7 @@ and checks what comes back over the link against the values it asked for.
 
   py -3 selftest.py 192.168.40.225        # Wi-Fi (TCP port 8080)
   py -3 selftest.py COM36                 # USB serial
+  py -3 selftest.py 192.168.40.225 20 --jumper   # also the range-switch timing test
 
 What it checks:
   1. accuracy: Vrms, Irms, P, PF, Hz, THD at several phase angles and with a
@@ -14,6 +15,10 @@ What it checks:
      $AVG sequence numbers must not skip, and $INFO must report no lost samples
   3. capture: a !WAVE capture must arrive complete while the streams keep
      running, and P recomputed from its samples must match
+  4. current range: auto mode must come down to the sensitive range on a
+     small current and go back up at once on a big one, reading right on both
+  5. (--jumper, needs a wire from D6 to A2) the range switch must land on the
+     scan where D6 actually changed, not before and not after
 It returns the board to the ADC (!SYNTH,0) at the end.
 """
 import math
@@ -73,7 +78,7 @@ class Link:
 def pwr_fields(line):
     f = line.split(",")[1:]
     keys = ["vrms", "irms", "p", "s", "q", "pf", "hz", "vpk", "ipk", "wh", "t", "n", "fs",
-            "relay", "flags", "vthd", "ithd", "dpf", "cycles", "seq"]
+            "relay", "flags", "vthd", "ithd", "dpf", "cycles", "seq", "irange"]
     return {k: float(v) for k, v in zip(keys, f)}
 
 
@@ -147,7 +152,7 @@ def link_test(link, seconds=20):
             link.send("!WAVE"); asked = True
         head = l.split(",", 1)[0]
         if head in ("$PWR",):
-            seqs[head].append(int(l.rsplit(",", 1)[1]))
+            seqs[head].append(int(l.split(",")[20]))
         elif head == "$CYC":
             seqs[head].append(int(l.split(",")[1]))
         elif head in ("$HARM", "$AVG"):
@@ -196,18 +201,98 @@ def link_test(link, seconds=20):
     return ok
 
 
+def range_test(link):
+    print("4. current range, auto mode (range 0 = 25 A, range 1 = 2.5 A per 1.5 V)")
+    link.send("!ISCALE,1.5,25,0"); link.send("!ISCALE,1.5,2.5,1")
+    link.send("!IRANGE,0"); link.send("!SMASK,1")
+    link.send("!SYNTH,1,120,1,30,0,60")
+    link.drain(1.0)
+    ok = True
+    link.send("!IRANGE,A")
+    rows = [pwr_fields(l) for l in link.lines(4.0) if l.startswith("$PWR")]
+    ranges = [int(r["irange"]) for r in rows]
+    print(f"   1 A rms (1.41 A pk): ranges seen {sorted(set(ranges))}, last {ranges[-1] if ranges else '-'}")
+    ok &= bool(ranges) and ranges[-1] == 1
+    for r in rows[-3:]:
+        ok &= check("irms", r["irms"], 1.0, tol_rel=2e-4)
+    t0 = time.time()
+    link.send("!SYNTH,1,120,3,30,0,60")
+    rows, t_up = [], None
+    for l in link.lines(2.5):
+        if l.startswith("$IRNG") and l.split(",")[1] == "0" and t_up is None:
+            t_up = time.time() - t0
+        if l.startswith("$PWR"):
+            rows.append(pwr_fields(l))
+    ranges = [int(r["irange"]) for r in rows]
+    print(f"   3 A rms (4.24 A pk): back on range 0 after {t_up if t_up is None else round(t_up, 2)} s, "
+          f"last {ranges[-1] if ranges else '-'}")
+    ok &= t_up is not None and t_up < 0.5 and bool(ranges) and ranges[-1] == 0
+    for r in rows[-3:]:
+        ok &= check("irms", r["irms"], 3.0, tol_rel=2e-4)
+    link.send("!IRANGE,0")
+    link.drain(0.5)
+    return ok
+
+
+def jumper_test(link):
+    """D6 drives A2 directly. On range 0 the pin is LOW, so A2 reads 0 V; on
+    range 1 it is HIGH, 3.3 V. With the current channel single-ended, each
+    scan is then one of four values, and two of them can only come from a
+    scan scaled with the wrong range: switched too early or too late."""
+    print("5. range switch timing (jumper D6 -> A2)")
+    for c in ("!SYNTH,0", "!SMASK,0", "!SE,0,1", "!ISCALE,1.5,25,0", "!ISCALE,1.5,2.5,1",
+              "!IOFF,0,0", "!IOFF,0,1", "!IRSETTLE,0", "!IRANGE,0", "!WLEN,0.02", "!WPRE,0.5",
+              "!DECIM,1"):
+        link.send(c)
+    link.drain(1.5)
+    ok = True
+    for target in ("1", "0"):
+        link.send("!WAVE"); link.send(f"!IRANGE,{target}")
+        head, d = None, []
+        for l in link.lines(6.0):
+            if l.startswith("$WAVE"):
+                head = l.split(",")[1:]
+            elif l.startswith("$WD") and head:
+                d.append(float(l.split(",")[2]))
+            elif l.startswith("$WEND") and head:
+                break
+        if not head or len(d) != int(head[0]):
+            print("   FAIL: capture incomplete"); ok = False; continue
+        ki = float(head[4])
+        amps = [x * ki for x in d]
+        # LOW on range 0: -27.5 A; HIGH on range 1: +2.75 A. HIGH scaled as
+        # range 0 reads +27.5 A, LOW scaled as range 1 reads -2.75 A.
+        lo0 = sum(a < -10 for a in amps); hi1 = sum(0 < a < 10 for a in amps)
+        hi0 = sum(a > 10 for a in amps); lo1 = sum(-10 < a <= 0 for a in amps)
+        if target == "1":
+            right, early, late = (lo0, hi1), lo1, hi0
+        else:
+            right, early, late = (hi1, lo0), hi0, lo1
+        print(f"   to range {target}: {right[0]} + {right[1]} scans scaled right, "
+              f"{early} too early, {late} too late (one scan = 12.5 us)")
+        ok &= right[0] > 100 and right[1] > 100 and early <= 1 and late <= 1
+    for c in ("!DECIM,10", "!SE,0,0", "!IRSETTLE,20", "!IRANGE,0", "!WLEN,0.5", "!WPRE,0.25"):
+        link.send(c)
+    link.drain(1.5)
+    return ok
+
+
 def main():
     target = sys.argv[1] if len(sys.argv) > 1 else "192.168.40.225"
     link = Link(target)
     link.send("!CFG")
     print(link.wait_for("$ADC") or "no $ADC")
     a = accuracy(link)
-    b = link_test(link, float(sys.argv[2]) if len(sys.argv) > 2 else 20)
+    args = [x for x in sys.argv[2:] if not x.startswith("--")]
+    b = link_test(link, float(args[0]) if args else 20)
+    c = range_test(link)
+    d = jumper_test(link) if "--jumper" in sys.argv else True
     link.send("!SYNTH,0")
     link.send("!SMASK,0")
     link.drain(0.5)
-    print("PASS" if (a and b) else "FAIL")
-    return 0 if (a and b) else 1
+    ok = a and b and c and d
+    print("PASS" if ok else "FAIL")
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

@@ -45,7 +45,9 @@ PROFILE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 
 # $PWR / $CYC flag bits, in the sketch's order
 FLAG_NAMES = [(0x01, "NO V CROSSING"), (0x02, "V CLIP"), (0x04, "I CLIP"),
-              (0x08, "TRIPPED"), (0x10, "GAP"), (0x20, "ADC ERR"), (0x40, "SYNTH")]
+              (0x08, "TRIPPED"), (0x10, "GAP"), (0x20, "ADC ERR"), (0x40, "SYNTH"),
+              (0x80, "I RANGE SWITCH")]
+INFO_FLAGS = 0x40 | 0x80          # shown, but not as a fault
 SMP_LABELS = ["1.5", "2.5", "8.5", "16.5", "32.5", "64.5", "387.5", "810.5"]
 BITS_LABELS = ["8", "10", "12", "14", "16"]
 
@@ -290,6 +292,32 @@ class App(tk.Tk):
                       "bulk streams; the board sheds them first anyway.")
 
         self._sep(f)
+        self._lbl(f, "Current range  (pin D6)", AMBER)
+        self._irmode_var = tk.StringVar(value="0")
+        row = tk.Frame(f, bg=BG)
+        row.pack(fill="x")
+        for val, txt in (("0", "Range 0"), ("1", "Range 1"), ("A", "Auto")):
+            tk.Radiobutton(row, text=txt, value=val, variable=self._irmode_var, bg=BG, fg=WHITE,
+                           selectcolor=PANEL, activebackground=BG, activeforeground=WHITE,
+                           command=lambda: self._send(f"!IRANGE,{self._irmode_var.get()}")
+                           ).pack(side="left")
+        self._irng_lbl = tk.Label(f, text="active: —", bg=BG, fg=AMBER, anchor="w",
+                                  font=("Courier New", 8))
+        self._irng_lbl.pack(fill="x")
+        self._irup_var, self._irdn_var = tk.StringVar(value="90"), tk.StringVar(value="60")
+        self._irsettle_var = tk.StringVar(value="20")
+        self._entry(f, "Auto up at:", self._irup_var, "% of FS", on_enter=self._send_irlim)
+        self._entry(f, "Auto down at:", self._irdn_var, "% of FS", on_enter=self._send_irlim)
+        self._entry(f, "Settle:", self._irsettle_var, "ms",
+                    on_enter=lambda: self._send_num("!IRSETTLE", self._irsettle_var))
+        self._irinv_var = tk.BooleanVar(value=False)
+        self._check(f, "D6 HIGH selects range 0 (inverted)", self._irinv_var,
+                    lambda: self._send(f"!IRINV,{int(self._irinv_var.get())}"))
+        self._note(f, "Auto goes up at once on a sample over 'up' % of the sensitive "
+                      "range's full scale (or clipping), and down after two windows "
+                      "under 'down' %. Range 0 is selected at boot.")
+
+        self._sep(f)
         self._hist_var = tk.StringVar(value="120")
         self._entry(f, "Trend history:", self._hist_var, "s")
         self._button(f, "Clear plots", self._clear_plots, fg=DIM)
@@ -319,26 +347,41 @@ class App(tk.Tk):
         self._v_adc_var, self._v_fs_var = tk.StringVar(value="1.5"), tk.StringVar(value="170")
         self._entry(f, "ADC diff:", self._v_adc_var, "V", on_enter=self._send_vscale)
         self._entry(f, "equals:", self._v_fs_var, "V", on_enter=self._send_vscale)
-        self._lbl(f, "Current  A2 − A3", AMBER)
-        self._i_adc_var, self._i_fs_var = tk.StringVar(value="1.5"), tk.StringVar(value="25")
-        self._entry(f, "ADC diff:", self._i_adc_var, "V", on_enter=self._send_iscale)
-        self._entry(f, "equals:", self._i_fs_var, "A", on_enter=self._send_iscale)
+        self._lbl(f, "Current  A2 − A3, per range", AMBER)
+        self._i_adc_vars = [tk.StringVar(value="1.5"), tk.StringVar(value="1.5")]
+        self._i_fs_vars = [tk.StringVar(value="25"), tk.StringVar(value="2.5")]
+        self._pc_vars = [tk.StringVar(value="0"), tk.StringVar(value="0")]
+        grid = tk.Frame(f, bg=BG)
+        grid.pack(fill="x")
+        for c, txt in enumerate(("", "Range 0", "Range 1", "")):
+            tk.Label(grid, text=txt, bg=BG, fg=DIM).grid(row=0, column=c, sticky="w")
+        for rI, (txt, vars_, unit, send) in enumerate((
+                ("ADC diff:", self._i_adc_vars, "V", self._send_iscale),
+                ("equals:", self._i_fs_vars, "A", self._send_iscale),
+                ("PHASECAL:", self._pc_vars, "µs", self._send_phasecal)), start=1):
+            tk.Label(grid, text=txt, bg=BG, fg=WHITE, width=11, anchor="w").grid(row=rI, column=0)
+            for r in (0, 1):
+                e = tk.Entry(grid, textvariable=vars_[r], width=8, bg=PANEL, fg=WHITE,
+                             insertbackground=WHITE, relief="flat", validate="key",
+                             validatecommand=(self._vcmd_float, "%P"))
+                e.grid(row=rI, column=1 + r, padx=2, pady=1)
+                e.bind("<Return>", lambda _, r=r, send=send: send(r))
+            tk.Label(grid, text=unit, bg=BG, fg=DIM).grid(row=rI, column=3, sticky="w")
+        self._irfs_lbl = tk.Label(f, text="full scale: —", bg=BG, fg=DIM, anchor="w",
+                                  font=("Courier New", 8))
+        self._irfs_lbl.pack(fill="x")
         self._note(f, "170 V is the peak of 120 Vrms. A negative 'equals' flips the "
-                      "channel's polarity (e.g. a CT fitted backwards).")
+                      "channel's polarity (e.g. a CT fitted backwards). PHASECAL: how much "
+                      "later that range's front end is than the voltage one; trim on a "
+                      "resistive load until PF = 1.000.")
 
         self._sep(f)
-        self._button(f, "Zero both channels (no mains, no load)", self._zero, fg=AMBER)
+        self._button(f, "Zero V and both I ranges (no mains, no load)", self._zero, fg=AMBER)
         self._off_lbl = tk.Label(f, text="offsets: —", bg=BG, fg=DIM, anchor="w",
                                  font=("Courier New", 8))
         self._off_lbl.pack(fill="x")
 
         self._sep(f)
-        self._phasecal_var = tk.StringVar(value="0")
-        self._entry(f, "PHASECAL:", self._phasecal_var, "µs",
-                    on_enter=lambda: self._send_num("!PHASECAL", self._phasecal_var))
-        self._note(f, "How much later the current front end is than the voltage one. "
-                      "Trim on a resistive load until PF = 1.000. The ADC's own "
-                      "V→I conversion lag is already removed.")
         self._cycles_var = tk.StringVar(value="12")
         self._mains_var = tk.StringVar(value="60")
         self._vmin_var = tk.StringVar(value="8.5")
@@ -600,9 +643,18 @@ class App(tk.Tk):
         if _isfloat(self._v_adc_var.get()) and _isfloat(self._v_fs_var.get()):
             self._send(f"!VSCALE,{self._v_adc_var.get()},{self._v_fs_var.get()}")
 
-    def _send_iscale(self):
-        if _isfloat(self._i_adc_var.get()) and _isfloat(self._i_fs_var.get()):
-            self._send(f"!ISCALE,{self._i_adc_var.get()},{self._i_fs_var.get()}")
+    def _send_iscale(self, r):
+        a, b = self._i_adc_vars[r].get(), self._i_fs_vars[r].get()
+        if _isfloat(a) and _isfloat(b):
+            self._send(f"!ISCALE,{a},{b},{r}")
+
+    def _send_phasecal(self, r):
+        if _isfloat(self._pc_vars[r].get()):
+            self._send(f"!PHASECAL,{self._pc_vars[r].get()},{r}")
+
+    def _send_irlim(self):
+        if _isfloat(self._irup_var.get()) and _isfloat(self._irdn_var.get()):
+            self._send(f"!IRLIM,{self._irup_var.get()},{self._irdn_var.get()}")
 
     def _send_evt(self):
         a, b = self._ev_di_var.get() or "0", self._ev_dv_var.get() or "0"
@@ -634,8 +686,10 @@ class App(tk.Tk):
         self._send(f"!RELAY,{0 if self._relay else 1}")
 
     def _zero(self):
-        if messagebox.askokcancel("Zero", "Zero both channels now?\n\nThe front end should be "
-                                  "powered with no mains and no load connected."):
+        if messagebox.askokcancel("Zero", "Zero voltage and both current ranges now?\n\n"
+                                  "The board switches the range pin to zero each range "
+                                  "(about half a second). The front end should be powered "
+                                  "with no mains and no load connected."):
             self._send("!ZERO")
 
     def _synth_on(self):
@@ -648,8 +702,11 @@ class App(tk.Tk):
 
     def _profile_vars(self):
         return {
-            "v_adc": self._v_adc_var, "v_fs": self._v_fs_var, "i_adc": self._i_adc_var,
-            "i_fs": self._i_fs_var, "phasecal": self._phasecal_var, "cycles": self._cycles_var,
+            "v_adc": self._v_adc_var, "v_fs": self._v_fs_var,
+            "i_adc": self._i_adc_vars[0], "i_fs": self._i_fs_vars[0], "phasecal": self._pc_vars[0],
+            "i_adc1": self._i_adc_vars[1], "i_fs1": self._i_fs_vars[1], "phasecal1": self._pc_vars[1],
+            "irmode": self._irmode_var, "irup": self._irup_var, "irdn": self._irdn_var,
+            "irsettle": self._irsettle_var, "cycles": self._cycles_var,
             "mains": self._mains_var, "vmin": self._vmin_var, "vref": self._vref_var,
             "harmn": self._harmn_var, "trip": self._trip_var, "trippk": self._trippk_var,
             "wlen": self._wlen_var, "wpre": self._wpre_var, "ev_di": self._ev_di_var,
@@ -660,7 +717,8 @@ class App(tk.Tk):
     def _profile_bools(self):
         return {"dcrem": self._dcrem_var, "rlycap": self._rlycap_var, "v_se": self._v_se_var,
                 "i_se": self._i_se_var, "sm_cyc": self._sm_cyc, "sm_harm": self._sm_harm,
-                "sm_avg": self._sm_avg, "sm_info": self._sm_info, "push": self._push_var}
+                "sm_avg": self._sm_avg, "sm_info": self._sm_info, "push": self._push_var,
+                "irinv": self._irinv_var}
 
     def _save_profile(self):
         d = {k: v.get() for k, v in self._profile_vars().items()}
@@ -668,7 +726,8 @@ class App(tk.Tk):
         d["addr"] = self._addr_var.get()
         d["addrs"] = getattr(self, "_saved_addrs", [])
         d["voff_uv"] = self._acfg.get("v_off_uv")
-        d["ioff_uv"] = self._acfg.get("i_off_uv")
+        ir = getattr(self, "_irng", {})
+        d["ioff_uv"], d["ioff1_uv"] = ir.get("off0"), ir.get("off1")
         try:
             with open(PROFILE_FILE, "w") as fh:
                 json.dump(d, fh, indent=2)
@@ -691,13 +750,16 @@ class App(tk.Tk):
         self._saved_addrs = d.get("addrs", [])
         if d.get("addr"):
             self._addr_var.set(d["addr"])
-        self._prof_voff, self._prof_ioff = d.get("voff_uv"), d.get("ioff_uv")
+        self._prof_voff = d.get("voff_uv")
+        self._prof_ioffs = [d.get("ioff_uv"), d.get("ioff1_uv")]
 
     def _push_profile(self):
         """Send every setting. The ADC settings restart acquisition, so only send
         them if they differ from what the board reported."""
-        self._send_vscale(); self._send_iscale()
-        for cmd, var in (("!PHASECAL", self._phasecal_var), ("!MAINS", self._mains_var),
+        self._send_vscale()
+        for r in (0, 1):
+            self._send_iscale(r); self._send_phasecal(r)
+        for cmd, var in (("!MAINS", self._mains_var), ("!IRSETTLE", self._irsettle_var),
                          ("!VMIN", self._vmin_var), ("!VREF", self._vref_var),
                          ("!TRIP", self._trip_var), ("!TRIPPK", self._trippk_var),
                          ("!WLEN", self._wlen_var), ("!WPRE", self._wpre_var)):
@@ -708,9 +770,15 @@ class App(tk.Tk):
         self._send(f"!RLYCAP,{int(self._rlycap_var.get())}")
         self._send_evt()
         self._send_se()
-        vo, io = getattr(self, "_prof_voff", None), getattr(self, "_prof_ioff", None)
-        if vo is not None and io is not None:
-            self._send(f"!VOFF,{vo}"); self._send(f"!IOFF,{io}")
+        vo = getattr(self, "_prof_voff", None)
+        if vo is not None:
+            self._send(f"!VOFF,{vo}")
+        for r, io in enumerate(getattr(self, "_prof_ioffs", [None, None])):
+            if io is not None:
+                self._send(f"!IOFF,{io},{r}")
+        self._send_irlim()
+        self._send(f"!IRINV,{int(self._irinv_var.get())}")
+        self._send(f"!IRANGE,{self._irmode_var.get()}")
         a = self._adc
         if a:
             if str(a.get("rate_req")) != self._rate_var.get():
@@ -725,7 +793,7 @@ class App(tk.Tk):
     # ── CSV log ──────────────────────────────────────────────────────────────
 
     PWR_KEYS = ["vrms", "irms", "p", "s", "q", "pf", "hz", "vpk", "ipk", "wh", "t_s", "n", "fs",
-                "relay", "flags", "vthd", "ithd", "dpf", "cycles", "seq"]
+                "relay", "flags", "vthd", "ithd", "dpf", "cycles", "seq", "irange"]
 
     def _toggle_log(self):
         if self._log_fh:
@@ -790,6 +858,7 @@ class App(tk.Tk):
             self._set_relay_btn(); self._set_stream_btn()
         elif head == "$ADC":  self._on_adc(f)
         elif head == "$ACFG": self._on_acfg(f)
+        elif head == "$IRNG": self._on_irng(f)
         elif head == "$NET":
             rssi = f"{f[2]} dBm" if f[2] not in ("0", "") else ""
             self._net_lbl.config(text=f"board IP {f[0]}:{f[1]}  {rssi}")
@@ -824,9 +893,10 @@ class App(tk.Tk):
         self._t_ipk.master.winfo_children()[2].config(text=f"A (crest {crest:.2f})")
         self._t_wh.config(text=f"{d['wh']:.4f}")
         flags = int(d["flags"])
-        self._flag_lbl.config(text="  ".join(n for b, n in FLAG_NAMES if flags & b and b != 0x40)
-                              + ("  SYNTH" if flags & 0x40 else ""),
-                              fg=CYAN if flags == 0x40 else RED)
+        self._flag_lbl.config(text="  ".join(n for b, n in FLAG_NAMES if flags & b),
+                              fg=CYAN if not (flags & ~INFO_FLAGS) else RED)
+        if "irange" in d:
+            self._t_i.master.winfo_children()[2].config(text=f"A rms  (range {int(d['irange'])})")
         self._relay = d["relay"] > 0.5
         self._set_relay_btn()
         if self._log_fh:
@@ -941,9 +1011,9 @@ class App(tk.Tk):
                 "harmn", "vmin", "ev_di", "ev_dv", "rlycap"]
         a = dict(zip(keys, f))
         self._acfg = a
+        # the current calibration comes per range in $IRNG
         for var, k in ((self._v_adc_var, "v_adc"), (self._v_fs_var, "v_fs"),
-                       (self._i_adc_var, "i_adc"), (self._i_fs_var, "i_fs"),
-                       (self._phasecal_var, "phasecal"), (self._cycles_var, "cycles"),
+                       (self._cycles_var, "cycles"),
                        (self._mains_var, "mains"), (self._trip_var, "trip"),
                        (self._wlen_var, "wlen"), (self._vref_var, "vref"),
                        (self._trippk_var, "trippk"), (self._wpre_var, "wpre"),
@@ -953,8 +1023,36 @@ class App(tk.Tk):
                 var.set(_trim(a[k]))
         self._dcrem_var.set(a.get("dcrem") == "1")
         self._rlycap_var.set(a.get("rlycap") == "1")
-        self._prof_voff, self._prof_ioff = a.get("v_off_uv"), a.get("i_off_uv")
-        self._off_lbl.config(text=f"offsets: V {a.get('v_off_uv')} µV   I {a.get('i_off_uv')} µV")
+        self._prof_voff = a.get("v_off_uv")
+        self._show_offsets()
+
+    def _show_offsets(self):
+        ir = getattr(self, "_irng", {})
+        self._off_lbl.config(text=f"offsets: V {self._acfg.get('v_off_uv', '—')} µV   "
+                                  f"I {ir.get('off0', '—')} / {ir.get('off1', '—')} µV")
+
+    def _on_irng(self, f):
+        keys = ["range", "auto", "inv", "settle", "up", "dn", "switches", "fsa0", "fsa1",
+                "adc0", "fs0", "off0", "pc0", "adc1", "fs1", "off1", "pc1"]
+        a = dict(zip(keys, f))
+        self._irng = a
+        for r in (0, 1):
+            self._i_adc_vars[r].set(_trim(a[f"adc{r}"]))
+            self._i_fs_vars[r].set(_trim(a[f"fs{r}"]))
+            self._pc_vars[r].set(_trim(a[f"pc{r}"]))
+        self._prof_ioffs = [a["off0"], a["off1"]]
+        self._irmode_var.set("A" if a["auto"] == "1" else a["range"])
+        self._irinv_var.set(a["inv"] == "1")
+        self._irsettle_var.set(_trim(a["settle"]))
+        self._irup_var.set(_trim(a["up"])); self._irdn_var.set(_trim(a["dn"]))
+        fs = [float(a["fsa0"]), float(a["fsa1"])]
+        self._irfs_lbl.config(text=f"full scale: ±{fs[0]:.4g} A pk  /  ±{fs[1]:.4g} A pk")
+        rng = int(a["range"])
+        self._irng_lbl.config(text=f"active: range {rng} (±{fs[rng]:.4g} A pk)"
+                                   + ("  AUTO" if a["auto"] == "1" else "")
+                                   + f"   {a['switches']} switches")
+        self._t_i.master.winfo_children()[2].config(text=f"A rms  (range {rng})")
+        self._show_offsets()
 
     def _set_relay_btn(self):
         if self._relay:

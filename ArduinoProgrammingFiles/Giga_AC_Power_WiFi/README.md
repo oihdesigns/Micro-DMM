@@ -36,6 +36,7 @@ of your choosing, still paced by the ADC, so the whole chain is exercised.
 | Mains voltage | A0 (+) / A1 (−) | ADC1 rank 0 / ADC2 rank 0 |
 | Load current | A2 (+) / A3 (−) | ADC1 rank 1 / ADC2 rank 1 |
 | Relay driver | D5 | opened at boot; `!RLYINV,1` if active-low |
+| Current range select | D6 | LOW = range 0 (selected at boot), HIGH = range 1; `!IRINV,1` swaps them |
 
 Inputs are 0–3.3 V. The − pins are the bias reference of each pair, as on the
 RA4M1 build. `!SE,1,0` / `!SE,0,1` makes a channel single-ended (its − pin
@@ -127,13 +128,88 @@ Things found and fixed along the way, worth knowing for any Giga sketch:
   over Wi-Fi at 12 KB/s, on a link that moves a capture at 85 KB/s: one
   window's `$HARM` + `$AVG` is a 3.5 KB burst. The threshold is now 12 KB, and
   a capture keeps the queue under 3 KB so live lines get through beside it.
+- **AdvancedADC never runs the H7's linearity calibration** (it asks for
+  `ADC_CALIB_OFFSET` only). The sketch runs `ADC_CALIB_OFFSET_LINEARITY` on
+  ADC1 and ADC2 before each start; `$ADC` ends with `lincal` = 1 when both
+  took it. It brought the zero offsets from ~2.3 mV down to ~0.2–1.3 mV.
 - **The trapezoid rule leaks into harmonics.** With fractional cycle ends, its
   end error grows with h². A pure sine read 0.1 % THD whenever a cycle was not a
   whole number of samples. It is now a piecewise-cubic rule, plus harmonics
   computed after the fundamental is removed.
 
-Not yet tested: a real signal on the inputs (the Rigol into A0 and A2 would
-check the dual-ADC path and PHASECAL), and anything at mains.
+### On the bench (2026-11-08, isolated front end, DC)
+
+PSU CH2 into the front end's voltage input and through its current shunts
+to the DL3021A load, with the load behind the D5 relay. Calibrated from DC
+sweeps (0–30 V with no current, 0–1.2 A on each range). The values are in
+`ac_power_profile_wifi.json`, which the GUI sends on connect:
+
+| | Scale | Offset | Check |
+|---|---|---|---|
+| Voltage | 1.5 V = 154.116 V (102.74 V/V) | 1267 µV | 20 V reads −0.1 to −0.2 % |
+| Current, range 0 (D6 LOW) | 1.5 V = 17.585 A (±19.3 A pk) | 215 µV | −0.3 to −0.8 %, one point +2.8 % at 0.6 A |
+| Current, range 1 (D6 HIGH) | 1.5 V = 1.609 A (±1.77 A pk) | 282 µV | +0.45 / −0.24 / −0.17 % at 0.3 / 0.6 / 1.0 A |
+
+- D5 is the load relay and D6 the range relay (HIGH = sensitive range,
+  10.8× range 0), as the firmware expects.
+- A range switch at a steady 0.5 A reads 0.496–0.531 A (1 ms means) across
+  it, with no spike. Auto range: range 1 at 0.5 A, up to range 0 at
+  1.7 A, back down to range 1 at 0.5 A.
+- Range 0 is noisy per sample (±0.06 A at 8 kS/s) and drifted 2.4 % between
+  two sweeps. Its path includes the range relay's bypass contact, whose
+  resistance is comparable to the 10 mΩ shunt. If the amplifier's sense
+  taps sit outside that contact, moving them across the shunt alone would
+  fix both.
+- PHASECAL is still unmeasured: it needs AC and a resistive load.
+
+**ADC2 code error.** Both channels read up to ±1 mV (about 20 LSB) off a
+straight line in a repeatable pattern. Near 0.5 A on range 1 the error was
++11 mV. Reading each pin single-ended traced it to the − pin (A3, on ADC2)
+passing 1.2375 V, which is code 0x6000. It is identical at 16 and 14 bits,
+the same at both sample times tried, and it survives the linearity
+calibration, so it is the converter's own code-transition error. An AC
+signal sweeps across thousands of codes, so it mostly averages out there;
+a steady DC reading near such a code shows it. The fix would be a
+per-ADC correction table, measured with the Giga's DAC swept into A1/A3.
+
+Not yet tested: anything at mains, and PHASECAL.
+
+## Current range (D6)
+
+D6 switches the current front end between two ranges (a shunt, a gain, a
+burden resistor: whatever your hardware does with it). Each range has its
+own scale, offset and PHASECAL, set on the Calibrate tab or with
+`!ISCALE,adcV,A,range`, `!IOFF,uV,range` and `!PHASECAL,us,range`.
+Defaults: range 0 = 1.5 V → 25 A, range 1 = 1.5 V → 2.5 A.
+
+- **Manual or auto** (Measure tab, or `!IRANGE,0|1|A`). Auto goes up at
+  once on the first sample over 90 % of the sensitive range's full scale
+  (or any clipping). It comes down after two windows under 60 %, at most
+  once a second, so it doesn't hunt. `!IRLIM,up,down` changes the limits.
+- **No glitch at the switch.** The DMA buffers in flight still hold scans
+  from the old range when the pin changes. Each buffer carries the time it
+  filled, so the board finds the scan where the switch happened and scales
+  every scan by its own range. The ring holds amps, so cycles, windows and
+  captures that span a switch stay in one unit.
+- **Settling.** A relay doesn't switch at once. On the bench (2026-11-08,
+  steady 0.5 A DC) the front end's range relay showed 3–5 ms of the old path
+  on the new scale, then up to 8 ms of contact bounce that saturated the
+  amplifier at about 60× the real current. Within `IRSETTLE` (default 20 ms)
+  of a switch, each current sample is replaced by the one a mains cycle
+  earlier and flagged +128, as is any cycle or window with a switch inside.
+  That is exact for DC and close for steady AC, and the RMS, the energy,
+  the trips and auto range never see the spike. Before this, auto range
+  hunted: each switch's spike looked like an over-range.
+- **Zero** zeroes V and then each current range in turn (~0.5 s).
+- **Safety:** range 0 is selected at boot. If your switch changes a shunt,
+  make range 0 the high-current one, so a reboot never leaves a big current
+  on the sensitive shunt.
+- `$PWR` ends with the range the window was measured on, and `$IRNG`
+  reports both ranges' settings after every change or switch.
+
+To check the switch timing on the bench, run a wire from D6 to A2 and run
+`py -3 selftest.py <ip> 20 --jumper`. It counts any scan scaled with the
+wrong range, before or after the edge.
 
 ## Calibration (same order as before)
 
@@ -141,7 +217,8 @@ check the dual-ADC path and PHASECAL), and anything at mains.
 2. **Voltage**: if it reads `V_shown` and a trusted meter reads `V_true`, set the
    "equals" box to `old × V_true / V_shown`.
 3. **Current**: the same against a clamp meter.
-4. **Phase**: on a purely resistive load, trim **PHASECAL** until PF = 1.000.
+4. **Phase**: on a purely resistive load, trim **PHASECAL** until PF = 1.000,
+   on each current range.
    PHASECAL is now in **µs**, nominal **0**: the extra delay of the current
    front end (a CT, a filter) relative to the voltage one. The ADC's own
    V→I lag is already handled. (On the RA4M1 build it was a sample
