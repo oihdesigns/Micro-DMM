@@ -60,6 +60,35 @@
  *   the one a mains cycle earlier, flagged +128. RMS, energy, trips and auto
  *   range never see the spike.
  *
+ * ── RGB LED ─────────────────────────────────────────────────────────────────
+ *   Solid blue while a !CAP waits for its trigger; otherwise solid red when a
+ *   cycle's absolute voltage peak is above 40 V, green once it is below 35 V
+ *   (35-40 V keeps the last colour). DC counts. Off until the first cycle.
+ *
+ * ── OLED and IR remote (as 120VMonitor) ─────────────────────────────────────
+ *   OLED: SSD1306 on Wire, SDA D20 / SCL D21, 3.3 V. OLED 1 = 128x64 (the
+ *     default), 2 = 128x32, 0 off; OLEDADDR 0x3C. Probed at boot: if nothing
+ *     answers it stays off ($STATUS oled=0). Shows load on/off, range, Hz, V,
+ *     A, W, PF, Wh, and on the bottom line PRESS * TO CLOSE / TRIPPED / CLIP /
+ *     ARMED, or the IP for 10 s after joining Wi-Fi. Readings refresh once a
+ *     second; a relay, remote or Wi-Fi change redraws at once. The frame goes out 64
+ *     bytes per loop pass so it never blocks the loop for more than ~1.6 ms.
+ *   IR receiver (TSOP-style, active low output) on IRPIN, default D9; any pin
+ *     except D4 / D8, whose interrupt line belongs to the Wi-Fi chip.
+ *     Relay open:   IROK primes a close, IRCONF within IRARMMS closes it
+ *                   (in auto range it goes HIGH first, as !RELAY,1);
+ *                   IROK again cancels the prime.
+ *     Relay closed: IROK opens it, within one loop pass.
+ *     Every decoded frame is reported as $IR,<addr>,<cmd> (hex) for learning
+ *     a new remote; repeat frames (button held) are ignored.
+ *
+ * ── Wi-Fi networks ──────────────────────────────────────────────────────────
+ *   arduino_secrets.h lists up to five: SECRET_SSID/SECRET_PASS, then
+ *   optionally SECRET_SSID2/SECRET_PASS2 ... SECRET_SSID5/SECRET_PASS5. Each
+ *   join scans, then tries the listed networks that are in range, in list
+ *   order; a refused password falls through to the next. Lost or never
+ *   joined: the whole list again every 20 s. Hidden SSIDs are not supported.
+ *
  * ── Commands (newline terminated) ───────────────────────────────────────────
  *   120VMonitor protocol (see its README):
  *   !ID                       $READY,GIGA,<fw>
@@ -95,7 +124,9 @@
  *   !HGET / !AVGW             one $HARM / $AVG from the last window
  *   !SYNTH,<on>[,vrms,irms,deg,h3%,hz]  exact synthetic V/I instead of the
  *                             ADC (still paced by it); !SYNTH,0 to stop
- *   !WIFI / !SCAN             rejoin Wi-Fi / module firmware + networks
+ *   !WIFI / !SCAN             rejoin Wi-Fi (from the top of the list) /
+ *                             $SCAN,<module fw>,<n> then $AP,<ssid>,<rssi>,<enc>,
+ *                             <place in arduino_secrets.h, 0 = not listed>
  *
  * ── Output ──────────────────────────────────────────────────────────────────
  *   $PWR,<vrms>,<irms>,<w>,<va>,<var>,<pf>,<hz>,<vpk>,<ipk>,<wh>,<t_s>,<n>,
@@ -110,7 +141,10 @@
  *   $RNG,<0|1>,<BOOT|CMD|AUTO|OVER|CLOSE|CAP>,<mode>[,<amps>]
  *   $SAFE,<INST|OVERCURRENT|TIMER|END|TRIPPK|REMOTE|TRIPA>,<amps>
  *   $TRIP,<RMS|PK>,<value>,<limit>   $RLY,<0|1>   $CAPTMO,<TIMEOUT|ABORT>
- *   $OK,<what>   $ERR,<message>   $NET,ip,port,rssi,status,powersave,ssid
+ *   $IR,<addr>,<cmd>   $REMOTE,<PRIMED|CANCEL|TIMEOUT|CLOSE|OPEN>
+ *   $OK,<what>   $ERR,<message>
+ *   $NET,<ip>,<port>,<rssi>,<status>,<powersave>,<ssid>,<net 1-5, 0 none>,
+ *        <networks listed>,<bit mask of those seen in the last scan>
  *   $CYC $HARM $AVG $INFO (extras, !SMASK): see README.
  */
 
@@ -122,6 +156,9 @@
 #include "FlashIAP.h"
 #include "hal/us_ticker_api.h"
 #include "SDRAM.h"
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 #include "ac_types.h"
 #include "adc_access.h"
 #include "net_sink.h"
@@ -132,8 +169,8 @@
 #error "Copy arduino_secrets.example.h to arduino_secrets.h and put your Wi-Fi name/password in it"
 #endif
 
-#define FW_VERSION   "2.0"
-#define CFG_VERSION  1
+#define FW_VERSION   "2.1"
+#define CFG_VERSION  2
 #define CFG_MAGIC    0x50434147UL   // "GACP"
 static const uint16_t CMD_PORT = 8080;
 
@@ -199,8 +236,8 @@ static bool   g_dirty = false;
 static const char* g_cfgSrc = "DEFAULTS";
 
 #define CF(m) ((uint16_t)offsetof(Config, m))
-enum { CG_CAL, CG_FUSE, CG_RANGE, CG_METER, CG_WIRING, CG_ADC };
-static const char* const CFG_GROUP_NAMES[] = { "CAL", "FUSE", "RANGE", "METER", "WIRING", "ADC" };
+enum { CG_CAL, CG_FUSE, CG_RANGE, CG_METER, CG_WIRING, CG_ADC, CG_UI };
+static const char* const CFG_GROUP_NAMES[] = { "CAL", "FUSE", "RANGE", "METER", "WIRING", "ADC", "UI" };
 #define AP_DERIVED  0x01      // recompute scaling / alpha
 #define AP_RESTART  0x02      // restart the ADC (rate, resolution ...)
 #define AP_PINS     0x04      // relay / range pins
@@ -208,6 +245,9 @@ static const char* const CFG_GROUP_NAMES[] = { "CAL", "FUSE", "RANGE", "METER", 
 #define AP_RANGE    0x10      // re-apply the range mode
 #define AP_WINDOW   0x20      // clear the window accumulators
 #define AP_GAP      0x40      // a discontinuity in the samples
+#define AP_OLED     0x80      // restart the OLED
+#define AP_IR       0x100     // re-attach the IR receiver
+#define AP_ALL      0xFFFF
 
 static const CfgKey KEYS[] = {
   {"VGAIN",   FT_FLOAT, CF(vGain),   -1e6f, 1e6f,  "volts per ADC volt", CG_CAL, AP_DERIVED},
@@ -241,6 +281,14 @@ static const CfgKey KEYS[] = {
   {"RLYINV",  FT_U8,    CF(relayInv),0,     1,     "load relay active-low", CG_WIRING, AP_PINS},
   {"RNGPIN",  FT_U8,    CF(rngPin),  0,     53,    "range relay pin, 0 = one range (HIGH)", CG_WIRING, AP_PINS | AP_RANGE},
   {"RNGINV",  FT_U8,    CF(rngInv),  0,     1,     "0: pin HIGH = LOW range, 1: pin HIGH = HIGH", CG_WIRING, AP_PINS},
+  {"IRPIN",   FT_U8,    CF(irPin),   0,     53,    "IR receiver pin, 0=off (not D4/D8: their interrupt line is the Wi-Fi chip's)", CG_WIRING, AP_IR},
+  {"OLED",    FT_U8,    CF(oled),    0,     2,     "0 off, 1 SSD1306 128x64, 2 SSD1306 128x32 (I2C on SDA D20 / SCL D21)", CG_UI, AP_OLED},
+  {"OLEDADDR",FT_U8,    CF(oledAddr),0x3C,  0x3D,  "OLED I2C address", CG_UI, AP_OLED},
+  {"OLEDROT", FT_U8,    CF(oledRot), 0,     1,     "OLED 0 = right side up, 1 = upside down", CG_UI, AP_OLED},
+  {"IRADDR",  FT_U16,   CF(irAddr),  0,     65535, "remote NEC address", CG_UI, 0},
+  {"IROK",    FT_U8,    CF(irOk),    0,     255,   "NEC cmd: prime close / open", CG_UI, 0},
+  {"IRCONF",  FT_U8,    CF(irConfirm),0,    255,   "NEC cmd: confirm close", CG_UI, 0},
+  {"IRARMMS", FT_U16,   CF(irArmMs), 500,   30000, "prime waits this long, ms", CG_UI, 0},
 };
 static const int N_KEYS = sizeof(KEYS) / sizeof(KEYS[0]);
 
@@ -261,6 +309,26 @@ static void cfgDefaults(Config& c) {
   c.mainsHz = 60.0f;   c.vMin = 8.5f;
   c.rate = 80000;      c.decim = 10;     c.bits = 16; c.smp = 4; c.vSe = 0; c.iSe = 0;
   c.relayPin = 5;      c.relayInv = 0;   c.rngPin = 6; c.rngInv = 0;
+  // 120VMonitor's UI defaults: OK primes / opens, * confirms a close
+  c.oled = 1;          c.oledAddr = 0x3C; c.oledRot = 0;
+  c.irPin = 9;         c.irAddr = 0x00;  c.irOk = 0x1C; c.irConfirm = 0x16; c.irArmMs = 5000;
+}
+
+// A v1 block (fw 2.0) is this layout up to rngInv; the new keys keep their defaults.
+// (v1 pads 2 bytes before its CRC; the CRC covers them, the copy does not)
+static_assert(offsetof(ConfigV1, rngInv) == offsetof(Config, rngInv) && offsetof(Config, oled) == offsetof(Config, rngInv) + 1 &&
+              offsetof(ConfigV1, crc) >= offsetof(Config, oled), "ConfigV1 must prefix Config");
+static bool cfgFromV1(const ConfigV1& o, Config& c) {
+  if (o.magic != CFG_MAGIC || o.version != 1 || o.size != sizeof(ConfigV1)) return false;
+  uint32_t cr = 0xFFFFFFFFUL;
+  for (const uint8_t* p = (const uint8_t*)&o; p < (const uint8_t*)&o.crc; p++) {
+    cr ^= *p; for (int k = 0; k < 8; k++) cr = (cr >> 1) ^ (0xEDB88320UL & (0UL - (cr & 1)));
+  }
+  if (~cr != o.crc) return false;
+  cfgDefaults(c);
+  memcpy(&c, &o, offsetof(Config, oled));
+  c.version = CFG_VERSION; c.size = sizeof(Config);
+  return true;
 }
 
 static float cfgGet(const CfgKey& k) {
@@ -357,6 +425,16 @@ static uint8_t g_smask = 0;
 static double  g_wh = 0.0;
 static bool    g_adcOn = false;
 
+// ── what the OLED shows (filled by finishWindow) ──────────────────────────────
+static PowerResult g_last;
+static uint8_t  g_lastFl = 0;
+static bool     g_haveLast = false;
+#define OLED_REFRESH_MS 1000UL             // readings redraw once a second
+static bool     g_oledDirty = true;       // a state change (relay, remote, Wi-Fi): redraw now
+static uint32_t g_lastDispMs = 0;
+static uint32_t g_ipShowUntil = 0;        // millis: show the IP on the bottom line until then
+static inline void oledPoke() { g_oledDirty = true; g_lastDispMs = 0; }
+
 // ── synthetic source ──────────────────────────────────────────────────────────
 static bool  g_synth = false;
 static float g_syn_vrms = 120.0f, g_syn_irms = 5.0f, g_syn_deg = 30.0f, g_syn_h3 = 0.0f, g_syn_hz = 60.0f;
@@ -386,6 +464,29 @@ static int        g_wifiStatus = 0;     // last WiFi.status(): 3 = connected, 25
 static int        g_wifiPs = -1;        // radio power-save mode after the join
 static volatile bool g_wifiBusy = false, g_wifiDone = false, g_wifiDisc = false;   // join thread, see wifiTask()
 static volatile int  g_wifiResult = 0;
+static volatile int  g_wifiJoined = -1;     // the join thread's pick, WIFI_NETS index
+static volatile uint8_t g_wifiSeen = 0;     // bit j: WIFI_NETS[j] was in the last scan
+static int           g_wifiNet = -1;        // the network in use, -1 none
+
+// The networks to try, in order (arduino_secrets.h: SECRET_SSID/PASS, then
+// optionally SECRET_SSID2/PASS2 ... SECRET_SSID5/PASS5).
+static const WifiNet WIFI_NETS[] = {
+  {SECRET_SSID, SECRET_PASS},
+#if defined(SECRET_SSID2) && defined(SECRET_PASS2)
+  {SECRET_SSID2, SECRET_PASS2},
+#endif
+#if defined(SECRET_SSID3) && defined(SECRET_PASS3)
+  {SECRET_SSID3, SECRET_PASS3},
+#endif
+#if defined(SECRET_SSID4) && defined(SECRET_PASS4)
+  {SECRET_SSID4, SECRET_PASS4},
+#endif
+#if defined(SECRET_SSID5) && defined(SECRET_PASS5)
+  {SECRET_SSID5, SECRET_PASS5},
+#endif
+};
+static const int N_WIFI = sizeof(WIFI_NETS) / sizeof(WIFI_NETS[0]);
+static const char* wifiSsid() { return g_wifiNet >= 0 ? WIFI_NETS[g_wifiNet].ssid : ""; }
 // On this core Serial is a UART wrapper around _SerialUSB (a USBSerial), and
 // `if (Serial)` runs delay(1) before it answers (operator bool in
 // PluggableUSBSerial.h). Asked once per emitted line, that throttled the loop
@@ -935,6 +1036,16 @@ static double   g_cand = -1.0;
 static double   g_base = 0.0;
 static float    g_lastVpk = 0.0f;
 
+// the RGB LED's voltage indication: red once a cycle's absolute peak reaches
+// LED_V_HI, green again once one stays below LED_V_LO (the band between holds
+// the last colour, so a reading near a threshold doesn't flicker).
+#define LED_V_HI 40.0f
+#define LED_V_LO 35.0f
+static bool     g_vHigh = false, g_vSeen = false;
+static float    g_cycAbsPk = 0.0f;   // the last cycle's max |v|, volts (DC counts)
+enum : uint8_t { L_OFF, L_RED, L_GREEN, L_BLUE };
+static uint8_t  g_led = 0xFF;        // the colour showing ($STATUS led=)
+
 // window accumulators
 static SpanSums g_win;
 static uint16_t g_winCycles = 0, g_winReal = 0;
@@ -1149,6 +1260,10 @@ static void processCycle(double a, double b, uint8_t flags) {
   g_base = r.vdc;
   g_imean = r.idc;
   g_lastVpk = r.vpk;
+  g_cycAbsPk = max(fabsf(s.vmax), fabsf(s.vmin));
+  if (g_cycAbsPk > LED_V_HI) g_vHigh = true;
+  else if (g_cycAbsPk < LED_V_LO) g_vHigh = false;
+  g_vSeen = true;
 
   onCycle(r, a, b, s.flags);
   if (g_winCycles >= g_cycles) finishWindow();
@@ -1225,6 +1340,7 @@ static void relayNow(bool on) {
   if (on) g_trip_latch = false;
   g_ln.reset(); g_ln.print("$RLY,"); g_ln.println(on ? 1 : 0); emit();
   setLeds();
+  oledPoke();
 }
 
 // what the capture engine needs from a relay opening it didn't ask for
@@ -1392,6 +1508,7 @@ static void finishWindow() {
   }
   if (g_smask & SM_HARM) emitHarm(true);
   if (g_smask & SM_AVG)  emitAvg(true);
+  g_last = r; g_lastFl = fl; g_haveLast = true;   // shown at the next 1 s refresh
   setLeds();
   clearWindow();
 }
@@ -1878,6 +1995,280 @@ static void serviceZero() {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
+//  IR remote (NEC), as 120VMonitor
+// ═════════════════════════════════════════════════════════════════════════════
+//
+// A TSOP output idles high and goes low for each burst, so falling edge to
+// falling edge gives leader 13.5 ms, repeat 11.25 ms, bit 0 1.125 ms, bit 1
+// 2.25 ms. The ISR only decodes; loop() acts on the frame. 120VMonitor checks
+// for OK inside its sampling loops because those run for seconds without
+// returning; loop() here never blocks for more than a few ms, so the relay
+// opens within one pass of it.
+
+static volatile uint32_t ir_last = 0, ir_bits = 0, ir_frame = 0;
+static volatile int8_t   ir_n = -1;           // -1 = waiting for a leader
+static volatile bool     ir_ready = false;
+static int8_t   g_irAttached = -1;            // pin attached, -1 none
+static bool     g_primed = false;
+static uint32_t g_primedAt = 0;
+
+static void irIsr() {
+  const uint32_t now = us_ticker_read();
+  const uint32_t us = now - ir_last;
+  ir_last = now;
+  if (us > 12500 && us < 14500) { ir_n = 0; ir_bits = 0; return; }
+  if (ir_n < 0) return;
+  if (us > 850 && us < 1450)       { ir_n++; }
+  else if (us > 1850 && us < 2700) { ir_bits |= (1UL << ir_n); ir_n++; }
+  else                             { ir_n = -1; return; }
+  if (ir_n >= 32) { ir_frame = ir_bits; ir_ready = true; ir_n = -1; }
+}
+
+// Splits a frame; false when the command check byte is wrong.
+static bool irDecode(uint32_t f, uint16_t& addr, uint8_t& cmd) {
+  uint8_t a = f & 0xFF, na = (f >> 8) & 0xFF, c = (f >> 16) & 0xFF, nc = (f >> 24) & 0xFF;
+  if ((uint8_t)(c ^ nc) != 0xFF) return false;
+  addr = ((uint8_t)(a ^ na) == 0xFF) ? a : (uint16_t)(f & 0xFFFF);   // extended NEC
+  cmd = c;
+  return true;
+}
+
+// Why a pin can't take the receiver, or nullptr. STM32 edge interrupts are
+// per pin NUMBER (EXTI0..15, shared by all ports), and the Wi-Fi chip's
+// WL_HOST_WAKE (PI8) holds line 8: a second Px8 interrupt stops mbed with
+// "irq channel conflict". On the headers that is D4 (PJ8) and D8 (PB8).
+static const char* irPinProblem(uint8_t pin) {
+  if (!pin) return nullptr;
+  if (pin == cfg.relayPin || pin == cfg.rngPin) return "IRPIN is the load or range relay pin";
+  if (pin == 20 || pin == 21) return "IRPIN: D20/D21 are the OLED's I2C";
+  if (((uint32_t)digitalPinToPinName(pin) & 0x0F) == 8)
+    return "IRPIN: D4/D8 share their interrupt line with the Wi-Fi chip; try D9, D7 or D2";
+  return nullptr;
+}
+
+static void irInit() {
+  if (g_irAttached >= 0) { detachInterrupt(digitalPinToInterrupt(g_irAttached)); g_irAttached = -1; }
+  ir_ready = false; ir_n = -1; g_primed = false;
+  if (!cfg.irPin) return;
+  const char* why = irPinProblem(cfg.irPin);
+  if (why) { emitErr(why); return; }
+  pinMode(cfg.irPin, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(cfg.irPin), irIsr, FALLING);
+  g_irAttached = (int8_t)cfg.irPin;
+}
+
+// Relay open: IROK primes a close, IRCONF within IRARMMS closes it, IROK
+// again cancels. Relay closed (or a close waiting for the range relay): IROK
+// opens it. Every decoded frame is reported as $IR,<addr>,<cmd> in hex, for
+// learning a new remote; repeat frames (button held) are ignored.
+static void serviceRemote() {
+  if (ir_ready) {
+    const uint32_t f = ir_frame;
+    ir_ready = false;
+    uint16_t a; uint8_t c;
+    if (irDecode(f, a, c)) {
+      g_ln.reset(); g_ln.print("$IR,"); g_ln.print(a, HEX); g_ln.print(','); g_ln.println(c, HEX); emit();
+      if (a == cfg.irAddr && c == cfg.irOk) {
+        if (g_relay || g_closePending) {
+          // during a capture safe start's path records where and why ($SAFE,REMOTE)
+          if (g_cs >= 1 && g_cs <= 4) safeOpen(6, 0.0f); else setRelay(false);
+          emitStr("$REMOTE,OPEN");
+        } else if (g_primed) {
+          g_primed = false; emitStr("$REMOTE,CANCEL");
+        } else {
+          g_primed = true; g_primedAt = millis(); emitStr("$REMOTE,PRIMED");
+        }
+        oledPoke();
+      } else if (a == cfg.irAddr && c == cfg.irConfirm && g_primed && !g_relay && !g_closePending) {
+        g_primed = false;
+        if (g_cs) emitStr("$REMOTE,CANCEL");        // a capture owns the relay right now
+        else { setRelay(true); emitStr("$REMOTE,CLOSE"); }   // as !RELAY,1: clears a trip
+        oledPoke();
+      }
+    }
+  }
+  if (g_primed && millis() - g_primedAt > cfg.irArmMs) {
+    g_primed = false;
+    emitStr("$REMOTE,TIMEOUT");
+    oledPoke();
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  OLED (SSD1306 on Wire: SDA D20, SCL D21)
+// ═════════════════════════════════════════════════════════════════════════════
+//
+// Adafruit_SSD1306 draws into its RAM buffer, but its display() sends the
+// whole 1 KB frame in one go: ~25 ms of blocked loop at 400 kHz, which would
+// hold off the trips, safe start and the remote. So the frame goes out from
+// loop() 64 bytes (~1.6 ms) at a time, in the controller's horizontal
+// addressing mode (set by begin()), and the buffer is only redrawn between
+// frames.
+
+static Adafruit_SSD1306 g_ssd64(128, 64, &Wire, -1, 400000UL, 400000UL);
+static Adafruit_SSD1306 g_ssd32(128, 32, &Wire, -1, 400000UL, 400000UL);
+static Adafruit_SSD1306* g_ssd = nullptr;     // the screen in use
+static bool     g_oledOk = false;
+static int16_t  g_oledH = 64;
+static uint16_t g_oledPos = 0, g_oledLen = 0; // frame being sent: next byte, size (pos == len: idle)
+static uint8_t  g_oledFails = 0;
+static const uint16_t OLED_CHUNK = 64;
+
+static void oledFail() {
+  g_oledPos = g_oledLen;
+  if (++g_oledFails >= 3) { g_oledOk = false; emitErr("OLED stopped answering; !SET,OLED,<type> to retry"); }
+}
+
+static void oledPush() {
+  static const uint8_t addrCmds[] = { 0x00, SSD1306_PAGEADDR, 0, 0xFF, SSD1306_COLUMNADDR, 0, 127 };
+  Wire.beginTransmission(cfg.oledAddr);
+  Wire.write(addrCmds, sizeof(addrCmds));
+  if (Wire.endTransmission() != 0) { oledFail(); return; }
+  g_oledLen = (uint16_t)(128 * (g_oledH / 8));
+  g_oledPos = 0;
+}
+
+// fixed point without printf (float printf is not linked on this core)
+static void fmtFixed(char* out, float v, uint8_t dp) {
+  if (isnan(v) || isinf(v)) { strcpy(out, "---"); return; }
+  uint32_t scale = 1;
+  for (uint8_t k = 0; k < dp; k++) scale *= 10;
+  double a = fabs((double)v);
+  if (a * scale > 4.0e9) a = 4.0e9 / scale;
+  uint32_t q = (uint32_t)llround(a * scale);
+  uint32_t ip = q / scale, fp = q % scale;
+  char* p = out;
+  if (v < 0 && q) *p++ = '-';
+  char tmp[12]; int n = 0;
+  do { tmp[n++] = (char)('0' + ip % 10); ip /= 10; } while (ip);
+  while (n) *p++ = tmp[--n];
+  if (dp) {
+    *p++ = '.';
+    for (int k = dp - 1; k >= 0; k--) { p[k] = (char)('0' + fp % 10); fp /= 10; }
+    p += dp;
+  }
+  *p = 0;
+}
+
+// right-aligned in `width` characters, with as many decimals as fit
+static void printFit(float v, uint8_t width, uint8_t maxdp) {
+  char buf[24];
+  const float a = fabsf(v);
+  uint8_t dp = maxdp;
+  while (dp > 0 && a >= powf(10.0f, (float)(width - dp - 2 - (v < 0)))) dp--;
+  fmtFixed(buf, v, dp);
+  for (int k = (int)strlen(buf); k < width; k++) g_ssd->print(' ');
+  g_ssd->print(buf);
+}
+
+// the bottom line: prompt / trip / clip / armed / the IP after a join, else `idle`
+static bool drawAlert() {
+  Adafruit_SSD1306& d = *g_ssd;
+  if (g_primed)                                  d.print("PRESS * TO CLOSE");
+  else if (g_trip_latch)                         d.print("TRIPPED");
+  else if (g_lastFl & (FLG_VCLIP | FLG_ICLIP))   d.print("CLIP");
+  else if (g_cs == 2 && g_cTrig != 0)            d.print("ARMED");
+  else if ((int32_t)(g_ipShowUntil - millis()) > 0) { d.print("IP "); d.print(g_ipStr); }
+  else return false;
+  return true;
+}
+
+static void drawBoot() {
+  Adafruit_SSD1306& d = *g_ssd;
+  d.clearDisplay();
+  d.setTextSize(1);
+  d.setCursor(0, 0);  d.print("GIGA AC POWER");
+  d.setCursor(0, 8);  d.print("fw "); d.print(FW_VERSION);
+  d.setCursor(0, 16); d.print("WiFi "); d.print(g_ipStr);
+}
+
+static void drawMeter() {
+  Adafruit_SSD1306& d = *g_ssd;
+  const PowerResult& r = g_last;
+  d.clearDisplay();
+  d.setTextSize(1);
+  d.setCursor(0, 0);
+  d.print(g_relay ? "LOAD ON " : g_closePending ? "CLOSING " : "LOAD OFF");
+  if (g_rngPin) { d.setCursor(54, 0); d.print(g_irCur == 1 ? "LO" : "HI"); }
+  d.setCursor(74, 0);
+  if (r.hz > 0) { printFit(r.hz, 5, 2); d.print("Hz"); }
+  else d.print(" --.-Hz");
+
+  if (g_oledH < 64) {
+    // 128x32: big V on the left, A and W stacked beside it, PF and Wh below
+    d.setTextSize(2);
+    d.setCursor(0, 8);
+    printFit(r.vrms, 6, 1); d.print('V');
+    d.setTextSize(1);
+    d.setCursor(86, 8);
+    printFit(r.irms, 6, 3); d.print('A');
+    d.setCursor(86, 16);
+    printFit(r.p, 6, 1); d.print('W');
+    d.setCursor(0, 24);
+    if (!drawAlert()) {
+      d.print("PF"); printFit(r.pf, 5, 2);
+      d.setCursor(48, 24);
+      printFit((float)g_wh, 7, 3); d.print("Wh");
+    }
+  } else {
+    d.setTextSize(2);
+    d.setCursor(0, 11);
+    printFit(r.vrms, 7, 2); d.print('V');
+    d.setCursor(0, 29);
+    printFit(r.irms, 7, 3); d.print('A');
+    d.setTextSize(1);
+    d.setCursor(0, 47);
+    printFit(r.p, 7, 1); d.print("W PF");
+    printFit(r.pf, 6, 3);
+    d.setCursor(0, 56);
+    if (!drawAlert()) { printFit((float)g_wh, 8, 3); d.print("Wh"); }
+  }
+  if ((g_smask & SM_PWR) && anySink() && !g_primed) { d.setCursor(110, g_oledH - 8); d.print("PC"); }
+}
+
+static void oledInit() {
+  if (g_oledOk && g_ssd) { g_ssd->clearDisplay(); g_ssd->display(); }   // blank the old screen (one-off, ~25 ms)
+  g_oledOk = false; g_ssd = nullptr; g_oledPos = g_oledLen = 0; g_oledFails = 0;
+  if (!cfg.oled) return;
+  Wire.begin();
+  Wire.setClock(400000);
+  Wire.beginTransmission(cfg.oledAddr);
+  if (Wire.endTransmission() != 0) return;            // nothing at that address
+  g_ssd = cfg.oled == 2 ? &g_ssd32 : &g_ssd64;
+  g_oledH = cfg.oled == 2 ? 32 : 64;
+  if (!g_ssd->begin(SSD1306_SWITCHCAPVCC, cfg.oledAddr, false, false)) { g_ssd = nullptr; return; }
+  g_oledOk = true;
+  g_ssd->setRotation(cfg.oledRot ? 2 : 0);
+  g_ssd->setTextColor(SSD1306_WHITE, SSD1306_BLACK);
+  g_ssd->setTextWrap(false);
+  drawBoot();
+  oledPush();
+  g_lastDispMs = millis();
+}
+
+// one chunk of the frame in flight, or a redraw: on a change at most every
+// 100 ms (each $PWR window), else once a second
+static void serviceOled() {
+  if (!g_oledOk) return;
+  if (g_oledPos < g_oledLen) {
+    const uint16_t n = (uint16_t)min<uint32_t>(OLED_CHUNK, g_oledLen - g_oledPos);
+    Wire.beginTransmission(cfg.oledAddr);
+    Wire.write((uint8_t)0x40);
+    Wire.write(g_ssd->getBuffer() + g_oledPos, n);
+    if (Wire.endTransmission() != 0) { oledFail(); return; }
+    g_oledPos += n;
+    if (g_oledPos >= g_oledLen) g_oledFails = 0;
+    return;
+  }
+  const uint32_t now = millis();
+  if (!g_oledDirty && now - g_lastDispMs < OLED_REFRESH_MS) return;
+  g_lastDispMs = now;
+  g_oledDirty = false;
+  if (g_haveLast) drawMeter(); else drawBoot();
+  oledPush();
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
 //  current range switching
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -1961,7 +2352,7 @@ static bool adcStart();
 static void restartAcq() { if (adcStart()) clearWindow(); }
 
 // copy cfg into the engine; `what` = AP_* bits that changed
-static void applyConfig(uint8_t what) {
+static void applyConfig(uint16_t what) {
   const uint8_t oldRly = g_rlyPin, oldRng = g_rngPin;
   g_rate_req = cfg.rate; g_decim = cfg.decim; g_bits = cfg.bits; g_smp = cfg.smp;
   g_v_se = cfg.vSe; g_i_se = cfg.iSe;
@@ -1983,6 +2374,8 @@ static void applyConfig(uint8_t what) {
   if (what & AP_ANALYZER) resetAnalyzer();
   if (what & AP_WINDOW) clearWindow();
   if (what & AP_RANGE) applyRangeMode(RW_CMD);
+  if (what & AP_OLED) oledInit();
+  if (what & AP_IR) irInit();
 }
 
 // The last 128 KB sector of the internal flash (bank 2). With the default
@@ -1995,12 +2388,20 @@ static volatile uint8_t g_saveState = 0;      // 1 running, 2 done ok, 3 failed
 static char     g_saveErr[48] = "";
 static rtos::Thread* g_saveThread = nullptr;
 
+// The saved block, or a v1 block (fw 2.0) carried over with the new keys at
+// their defaults. g_cfgOld says which (the next !SAVE writes it as v2).
+static bool g_cfgOld = false;
 static bool flashReadCfg(Config& c) {
   mbed::FlashIAP f;
   if (f.init() != 0) return false;
-  int r = f.read(&c, CFG_FLASH_ADDR, sizeof(Config));
+  union { Config v2; ConfigV1 v1; } u;
+  int r = f.read(&u, CFG_FLASH_ADDR, sizeof(u));
   f.deinit();
-  return r == 0 && cfgValid(c);
+  g_cfgOld = false;
+  if (r != 0) return false;
+  if (cfgValid(u.v2)) { c = u.v2; return true; }
+  if (cfgFromV1(u.v1, c)) { g_cfgOld = true; return true; }
+  return false;
 }
 
 static bool flashSectorOurs() {
@@ -2047,7 +2448,7 @@ static void startSave() {
 }
 
 static void serviceSave() {
-  if (g_saveState == 2) { g_saveState = 0; g_dirty = false; g_cfgSrc = "SAVED"; emitOk("save"); }
+  if (g_saveState == 2) { g_saveState = 0; g_dirty = false; g_cfgOld = false; g_cfgSrc = "SAVED"; emitOk("save"); }
   else if (g_saveState == 3) { g_saveState = 0; emitErr(g_saveErr); }
 }
 
@@ -2094,7 +2495,8 @@ static void printNet() {
   g_ln.print("$NET,"); g_ln.print(g_ipStr); g_ln.print(','); g_ln.print(CMD_PORT); g_ln.print(',');
   g_ln.print(g_wifiOk ? (int)WiFi.RSSI() : 0); g_ln.print(',');
   g_ln.print(g_wifiStatus); g_ln.print(','); g_ln.print(g_wifiPs); g_ln.print(',');
-  g_ln.println(SECRET_SSID); emit();
+  g_ln.print(wifiSsid()); g_ln.print(','); g_ln.print(g_wifiNet + 1); g_ln.print(',');
+  g_ln.print(N_WIFI); g_ln.print(','); g_ln.println((int)g_wifiSeen); emit();
 }
 
 static void printStatus() {
@@ -2116,6 +2518,13 @@ static void printStatus() {
   g_ln.print(",gaps="); g_ln.print(g_gaps); g_ln.print(",lostms="); g_ln.print((uint32_t)(g_lostUs / 1000ULL));
   g_ln.print(",loopms="); g_ln.print(g_loopMaxMs, 2);
   g_ln.print(",ip="); g_ln.print(g_ipStr); g_ln.print(",rssi="); g_ln.print(g_wifiOk ? (int)WiFi.RSSI() : 0);
+  g_ln.print(",ssid="); g_ln.print(wifiSsid()); g_ln.print(",net="); g_ln.print(g_wifiNet + 1);
+  g_ln.print(",nets="); g_ln.print(N_WIFI);
+  g_ln.print(",oled="); g_ln.print(g_oledOk ? 1 : 0); g_ln.print(",ir="); g_ln.print(g_irAttached >= 0 ? g_irAttached : 0);
+  g_ln.print(",cfgold="); g_ln.print(g_cfgOld ? 1 : 0);
+  g_ln.print(",led=");
+  g_ln.print(g_led == L_RED ? "red" : g_led == L_GREEN ? "green" : g_led == L_BLUE ? "blue" : "off");
+  g_ln.print(",vabspk="); g_ln.print(g_cycAbsPk, 2);
   g_ln.print(",tickoff_us="); g_ln.print((int32_t)(tickUs() - micros()));
   g_ln.print(",uptime="); g_ln.println(millis() / 1000UL);
   emit();
@@ -2176,6 +2585,10 @@ static void setKey(const char* args) {
     if (b != 8 && b != 10 && b != 12 && b != 14 && b != 16) { emitErr("BITS must be 8, 10, 12, 14 or 16"); return; }
   }
   if ((k.apply & AP_PINS) && g_relay) { emitErr("open the load relay before changing pins"); return; }
+  if (k.off == CF(irPin)) { const char* w = irPinProblem((uint8_t)lroundf(v)); if (w) { emitErr(w); return; } }
+  if ((k.off == CF(relayPin) || k.off == CF(rngPin)) && cfg.irPin && (uint8_t)lroundf(v) == cfg.irPin) {
+    emitErr("that pin is IRPIN"); return;
+  }
   cfgPut(k, v);
   g_dirty = true;
   applyConfig(k.apply);
@@ -2221,13 +2634,13 @@ static void handleCommand(const char* cmd) {
     if (!flashReadCfg(c)) { emitErr("no saved config"); return; }
     if (g_relay && (c.relayPin != cfg.relayPin || c.rngPin != cfg.rngPin)) { emitErr("open the load relay first"); return; }
     cfg = c; g_dirty = false; g_cfgSrc = "SAVED";
-    applyConfig(0xFF);
+    applyConfig(AP_ALL);
     emitOk("load");
 
   } else if (strcmp(cmd, "!DEFAULTS") == 0) {
     if (g_relay) { emitErr("open the load relay first"); return; }
     cfgDefaults(cfg); g_dirty = true; g_cfgSrc = "DEFAULTS";
-    applyConfig(0xFF);
+    applyConfig(AP_ALL);
     emitOk("defaults");
 
   } else if (strcmp(cmd, "!DUMP") == 0) {
@@ -2294,7 +2707,10 @@ static void handleCommand(const char* cmd) {
     g_ln.reset(); g_ln.print("$SCAN,"); g_ln.print(fw); g_ln.print(','); g_ln.println(n); emit();
     for (int k = 0; k < n && k < 30; k++) {
       g_ln.reset(); g_ln.print("$AP,"); g_ln.print(WiFi.SSID(k)); g_ln.print(',');
-      g_ln.print((int)WiFi.RSSI(k)); g_ln.print(','); g_ln.println((int)WiFi.encryptionType(k)); emit();
+      g_ln.print((int)WiFi.RSSI(k)); g_ln.print(','); g_ln.print((int)WiFi.encryptionType(k)); g_ln.print(',');
+      int listed = 0;                        // 1-based place in arduino_secrets.h, 0 = not listed
+      for (int j = 0; j < N_WIFI && !listed; j++) if (strcmp(WiFi.SSID(k), WIFI_NETS[j].ssid) == 0) listed = j + 1;
+      g_ln.println(listed); emit();
     }
     markGap();
 
@@ -2336,13 +2752,17 @@ static void feed(RxLine& rx, int c) {
 static uint32_t g_lastWifiTry = 0, g_lastWifiCheck = 0;
 
 static void setLeds() {
-  // the Giga's RGB LED is active-low. Red = tripped, green = a client is
-  // connected (toggles each window), blue = no Wi-Fi.
-  static bool tog = false;
-  tog = !tog;
-  digitalWrite(LEDR, g_trip_latch ? LOW : HIGH);
-  digitalWrite(LEDG, (g_clientOn && tog) ? LOW : HIGH);
-  digitalWrite(LEDB, g_wifiOk ? HIGH : LOW);
+  // the Giga's RGB LED (active-low), one solid colour: blue while a capture
+  // waits for its trigger, else red with the input above LED_V_HI peak and
+  // green below LED_V_LO; off until the first cycle has been measured.
+  // Called every loop pass, it only touches the pins when the colour changes.
+  uint8_t c = (g_cs == 1 || g_cs == 2) ? L_BLUE
+            : !g_vSeen ? L_OFF : g_vHigh ? L_RED : L_GREEN;
+  if (c == g_led) return;
+  g_led = c;
+  digitalWrite(LEDR, c == L_RED   ? LOW : HIGH);
+  digitalWrite(LEDG, c == L_GREEN ? LOW : HIGH);
+  digitalWrite(LEDB, c == L_BLUE  ? LOW : HIGH);
 }
 
 // Joining the network happens on its own RTOS thread. WiFi.begin() blocks for
@@ -2351,17 +2771,34 @@ static void setLeds() {
 // g_wifiBusy is set; it picks up the result once the thread is done.
 static rtos::Thread*  g_wifiThread = nullptr;
 
+// Each join scans once, then tries the listed networks it can see, in list
+// order (SECRET_SSID first), twice each. WiFi.begin() on this core scans
+// again and is synchronous: it returns connected or failed, never pending.
+// It fails at once for a network the scan didn't see (a hidden SSID would need
+// its security type given), so only a failed scan falls back to trying all.
 static void wifiTask() {
   int st = WiFi.status();
+  int joined = -1;
   if (st != WL_NO_MODULE) {
     if (g_wifiDisc) { WiFi.disconnect(); g_wifiDisc = false; }
-    for (int k = 0; k < 2 && st != WL_CONNECTED; k++) {
-      WiFi.begin(SECRET_SSID, SECRET_PASS);
-      uint32_t t0 = millis();
-      while (WiFi.status() != WL_CONNECTED && millis() - t0 < 15000) delay(200);
-      st = WiFi.status();
+    uint8_t seen = 0;
+    const int n = WiFi.scanNetworks();
+    for (int k = 0; k < n; k++) {
+      const char* s = WiFi.SSID(k);
+      for (int j = 0; j < N_WIFI; j++) if (s && strcmp(s, WIFI_NETS[j].ssid) == 0) seen |= (uint8_t)(1u << j);
+    }
+    if (n < 0) seen = 0xFF;
+    g_wifiSeen = seen;
+    for (int j = 0; j < N_WIFI && st != WL_CONNECTED; j++) {
+      if (!(seen & (1u << j))) continue;
+      for (int t = 0; t < 2 && st != WL_CONNECTED; t++) {
+        WiFi.begin(WIFI_NETS[j].ssid, WIFI_NETS[j].pass);
+        st = WiFi.status();
+      }
+      if (st == WL_CONNECTED) joined = j;
     }
   }
+  g_wifiJoined = joined;
   g_wifiResult = st;
   g_wifiDone = true;
   g_wifiBusy = false;
@@ -2402,11 +2839,15 @@ static void finishWifiConnect() {
     g_server.begin();
     disableWifiPowerSave();
     g_wifiOk = true;
+    g_wifiNet = g_wifiJoined;
+    g_ipShowUntil = millis() + 10000;      // the OLED shows where to connect for 10 s
   } else {
     strcpy(g_ipStr, g_wifiStatus == WL_NO_MODULE ? "no-module" : "none");
     g_wifiOk = false;
+    g_wifiNet = -1;
   }
   setLeds();
+  oledPoke();
   printNet();
 }
 
@@ -2424,7 +2865,7 @@ static void serviceNet() {
   if (g_wifiOk && now - g_lastWifiCheck > 2000) {
     g_lastWifiCheck = now;
     if (WiFi.status() != WL_CONNECTED) {
-      g_wifiOk = false; dropClient(); strcpy(g_ipStr, "none"); setLeds(); printNet();
+      g_wifiOk = false; g_wifiNet = -1; dropClient(); strcpy(g_ipStr, "none"); setLeds(); oledPoke(); printNet();
     }
   }
   if (!g_wifiOk) {
@@ -2470,7 +2911,7 @@ void setup() {
   if (g_rngPin) { pinMode(g_rngPin, OUTPUT); setIrangePin(0); }   // HIGH at boot
   irHistPush(0, 0);
   pinMode(LEDR, OUTPUT); pinMode(LEDG, OUTPUT); pinMode(LEDB, OUTPUT);
-  digitalWrite(LEDR, HIGH); digitalWrite(LEDG, HIGH); digitalWrite(LEDB, LOW);
+  digitalWrite(LEDR, HIGH); digitalWrite(LEDG, HIGH); digitalWrite(LEDB, HIGH);
 
   Serial.begin(115200);   // no wait: this board is meant to run headless
 
@@ -2493,6 +2934,8 @@ void setup() {
   clearWindow();
   g_gaps = 0;          // the start-up "gap" is not one
   applyRangeMode(RW_BOOT);
+  oledInit();            // probes the bus: off if nothing answers at OLEDADDR
+  irInit();
   startWifiConnect(false);
   setLeds();
   g_serOn = _SerialUSB.connected();
@@ -2516,6 +2959,9 @@ void loop() {
   serviceZero();
   serviceRange();
   serviceSave();
+  serviceRemote();
+  serviceOled();
+  setLeds();
 
   while (Serial.available()) feed(g_rxSer, Serial.read());
   serviceNet();

@@ -5,6 +5,158 @@
 	(uuid "d373b0eb-27c0-40a3-934b-9a6c2838ac4f")
 	(paper "A4")
 	(lib_symbols
+		(symbol "Device:Fuse"
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 0)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "F"
+				(at 2.032 0 90)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "Fuse"
+				(at -1.905 0 90)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at -1.778 0 90)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Fuse"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "fuse"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_fp_filters" "*Fuse*"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "Fuse_0_1"
+				(rectangle
+					(start -0.762 -2.54)
+					(end 0.762 2.54)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0 2.54) (xy 0 -2.54)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "Fuse_1_1"
+				(pin passive line
+					(at 0 3.81 270)
+					(length 1.27)
+					(name ""
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 0 -3.81 90)
+					(length 1.27)
+					(name ""
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
 		(symbol "Device:R_US"
 			(pin_numbers
 				(hide yes)
@@ -678,10 +830,10 @@
 		(uuid "7e8ed536-687e-4b3d-986f-8ee01efd2fd5")
 	)
 	(junction
-		(at 97.79 93.98)
+		(at 97.79 96.52)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "bc057213-c11f-447c-aa1b-596fee7b64e1")
+		(uuid "e3da3050-5e38-446a-89e8-d77f5d954a5d")
 	)
 	(junction
 		(at 102.87 113.03)
@@ -701,7 +853,7 @@
 	)
 	(wire
 		(pts
-			(xy 88.9 104.14) (xy 88.9 106.68)
+			(xy 88.9 106.68) (xy 88.9 109.22)
 		)
 		(stroke
 			(width 0)
@@ -781,23 +933,23 @@
 	)
 	(wire
 		(pts
-			(xy 67.31 104.14) (xy 73.66 104.14)
+			(xy 97.79 85.09) (xy 97.79 96.52)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "32225bcb-25f6-4011-a64d-4b9cdc73480b")
+	)
+	(wire
+		(pts
+			(xy 67.31 106.68) (xy 73.66 106.68)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
 		(uuid "464c1687-9dff-4d95-909e-2572a23d118a")
-	)
-	(wire
-		(pts
-			(xy 99.06 96.52) (xy 99.06 93.98)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "57c5e312-b927-4521-9ec4-382bf1562bf1")
 	)
 	(wire
 		(pts
@@ -811,13 +963,23 @@
 	)
 	(wire
 		(pts
-			(xy 88.9 93.98) (xy 97.79 93.98)
+			(xy 88.9 96.52) (xy 97.79 96.52)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
 		(uuid "5c206a49-cffe-489a-b5a2-3b143323652d")
+	)
+	(wire
+		(pts
+			(xy 64.77 93.98) (xy 73.66 93.98)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5f3446a5-3071-4f99-aa8e-dfbfd2ab51f2")
 	)
 	(wire
 		(pts
@@ -831,23 +993,13 @@
 	)
 	(wire
 		(pts
-			(xy 97.79 93.98) (xy 99.06 93.98)
+			(xy 97.79 96.52) (xy 102.87 96.52)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
 		(uuid "9465c8bd-10cc-4de3-8ca0-9d843cfd2cf8")
-	)
-	(wire
-		(pts
-			(xy 66.04 86.36) (xy 66.04 91.44)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "a367cc6a-c124-49ad-93c2-506d1f23241f")
 	)
 	(wire
 		(pts
@@ -891,16 +1043,6 @@
 	)
 	(wire
 		(pts
-			(xy 99.06 96.52) (xy 102.87 96.52)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "bb9703c4-a51f-43bc-b07e-ed0eedf9f548")
-	)
-	(wire
-		(pts
 			(xy 118.11 104.14) (xy 118.11 105.41)
 		)
 		(stroke
@@ -918,16 +1060,6 @@
 			(type default)
 		)
 		(uuid "cd7c7e96-dabd-4c4e-a917-51a44bac1e7a")
-	)
-	(wire
-		(pts
-			(xy 97.79 85.09) (xy 97.79 93.98)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "cfa95c62-2b1f-4687-8cc8-c9ee9af2e0d3")
 	)
 	(wire
 		(pts
@@ -971,7 +1103,7 @@
 	)
 	(wire
 		(pts
-			(xy 66.04 91.44) (xy 73.66 91.44)
+			(xy 49.53 93.98) (xy 57.15 93.98)
 		)
 		(stroke
 			(width 0)
@@ -990,7 +1122,7 @@
 		(uuid "0e26f536-cef1-40ce-85e6-7df9dd95d009")
 	)
 	(label "Output_Ctrl"
-		(at 67.31 104.14 180)
+		(at 67.31 106.68 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -1050,7 +1182,7 @@
 		(uuid "bef60f3b-7eb6-4ec2-8026-dadc3f159842")
 	)
 	(label "Vout_+"
-		(at 66.04 86.36 180)
+		(at 49.53 93.98 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -1583,7 +1715,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 88.9 106.68 0)
+		(at 88.9 109.22 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -1594,7 +1726,7 @@
 		(fields_autoplaced yes)
 		(uuid "a0f7b572-3338-433a-9052-6ebc5cd7ad15")
 		(property "Reference" "#PWR01"
-			(at 88.9 113.03 0)
+			(at 88.9 115.57 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -1605,7 +1737,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 88.9 111.76 0)
+			(at 88.9 114.3 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -1615,7 +1747,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 88.9 106.68 0)
+			(at 88.9 109.22 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -1626,7 +1758,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 88.9 106.68 0)
+			(at 88.9 109.22 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -1637,7 +1769,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-			(at 88.9 106.68 0)
+			(at 88.9 109.22 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -1661,7 +1793,7 @@
 	)
 	(symbol
 		(lib_id "Relay:Fujitsu_FTR-LYCA005x")
-		(at 81.28 99.06 90)
+		(at 81.28 101.6 90)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -1671,7 +1803,7 @@
 		(dnp no)
 		(uuid "e875730d-3f0e-48b8-bd47-d847f8c10a5c")
 		(property "Reference" "K1"
-			(at 82.042 87.122 90)
+			(at 82.042 89.662 90)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -1682,7 +1814,7 @@
 			)
 		)
 		(property "Value" "Fujitsu_FTR-LYCA005x"
-			(at 65.786 106.934 0)
+			(at 65.786 109.474 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -1694,7 +1826,7 @@
 			)
 		)
 		(property "Footprint" "Relay_THT:Relay_SPDT_Fujitsu_FTR-LYCA005x_FormC_Vertical"
-			(at 82.55 87.63 0)
+			(at 82.55 90.17 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -1706,7 +1838,7 @@
 			)
 		)
 		(property "Datasheet" "https://www.fujitsu.com/sg/imagesgig5/ftr-ly.pdf"
-			(at 85.09 82.55 0)
+			(at 85.09 85.09 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -1718,7 +1850,7 @@
 			)
 		)
 		(property "Description" "Relay, SPDT Form C, vertical mount, 5-60V coil, 6A, 250VAC, 28 x 5 x 15mm"
-			(at 81.28 99.06 0)
+			(at 81.28 101.6 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -1747,6 +1879,86 @@
 			(project "PowerMonitor"
 				(path "/d373b0eb-27c0-40a3-934b-9a6c2838ac4f"
 					(reference "K1")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:Fuse")
+		(at 60.96 93.98 90)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "fd6b770e-7a33-477b-8e1e-1eabe6bbd330")
+		(property "Reference" "F1"
+			(at 60.96 87.63 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "Fuse"
+			(at 60.96 90.17 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 60.96 95.758 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 60.96 93.98 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Fuse"
+			(at 60.96 93.98 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "2"
+			(uuid "11a9e246-f4f7-499c-9a4a-1b4932c2d019")
+		)
+		(pin "1"
+			(uuid "2c265e6f-bb91-408f-ae8a-7845a244432b")
+		)
+		(instances
+			(project "PowerMonitor"
+				(path "/d373b0eb-27c0-40a3-934b-9a6c2838ac4f"
+					(reference "F1")
 					(unit 1)
 				)
 			)

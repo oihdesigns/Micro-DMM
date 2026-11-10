@@ -8,7 +8,7 @@ it. The GUI files here are copies of 120VMonitor's, adapted for the Giga.
 | File | |
 |---|---|
 | `Giga_AC_Power_WiFi.ino` + `ac_types.h`, `net_sink.h`, `adc_access.h` | firmware (M7, default "2MB M7 + M4 in SDRAM" split) |
-| `arduino_secrets.example.h` | copy to `arduino_secrets.h` (git-ignored), fill in the Wi-Fi name and password |
+| `arduino_secrets.example.h` | copy to `arduino_secrets.h` (git-ignored), fill in the Wi-Fi name and password (up to five networks, see below) |
 | `monitor_gui.py` | the GUI: `py -3 monitor_gui.py` (pyserial, matplotlib, numpy) |
 | `monitor_link.py` | protocol + capture analysis, usable from scripts; serial, TCP or SIM |
 | `calibrate.py`, `bench_psu.py` | bench-supply calibration (SPD4323X through Virtual Bench or SCPI) |
@@ -36,6 +36,8 @@ nothing connected. `!SYNTH,0` goes back.
 | Current, isolation amp OUTP / OUTN | A2 (+) / A3 (−) | ADC1 / ADC2, one conversion (1.28 µs) after V |
 | Load relay driver | **D5** | `RLYPIN`, `RLYINV`. Driven open at boot |
 | Current-range relay driver | **D6** | `RNGPIN`, `RNGINV` 0: pin HIGH = LOW range (as built: the NC contact shorts the 0.1 Ω shunt, so an unpowered board sits in HIGH) |
+| OLED, SSD1306 128x64 (or 128x32) | **SDA D20, SCL D21**, 3.3 V, GND | `OLED` 1 = 128x64, 2 = 128x32, 0 off; `OLEDADDR` 0x3C; `OLEDROT` |
+| IR receiver output (TSOP-style, active low) | **D9**, 3.3 V, GND | `IRPIN`, 0 = off. Not D4 or D8 (see below) |
 | Wi-Fi antenna | U.FL | |
 
 Note the channel order differs from the XIAO build (there A0/A1 is current).
@@ -87,8 +89,61 @@ is closed, as on the F405 build. A board that has never saved shows `$ERR,no
 saved config` once at connect (the GUI asks for the saved block); Save to
 flash makes it go away.
 
-**Not on the Giga:** OLED, IR remote, NeoPixel (their keys don't exist),
-`!DACTEST`. `SPC` doesn't apply: metering runs at a fixed 8 kS/s.
+**OLED and IR remote** work as on 120VMonitor (fw 2.1), with the same keys
+in the Config tab's UI group (`OLED`, `OLEDADDR`, `OLEDROT`, `IRADDR`, `IROK`,
+`IRCONF`, `IRARMMS`) and `IRPIN` under WIRING:
+
+- The screen shows load on/off, the range, Hz, V, A, W, PF and Wh; the bottom
+  line shows `PRESS * TO CLOSE`, `TRIPPED`, `CLIP` or `ARMED` when they apply,
+  and the board's IP for 10 s after it joins Wi-Fi. The readings refresh
+  once a second; a relay, remote or Wi-Fi change redraws at once. It is probed at boot:
+  with nothing at `OLEDADDR` it stays off (`$STATUS oled=0`). Only the
+  SSD1306 types; the SH1107 FeatherWing (120VMonitor's `OLED` 3) isn't
+  supported here.
+- The frame goes out 64 bytes per loop pass instead of Adafruit's one-shot
+  `display()` (~25 ms at 400 kHz), so the screen never holds off the trips,
+  safe start or the remote by more than ~1.6 ms.
+- Remote: with the relay open, `IROK` (default 0x1C, OK) primes a close and
+  `IRCONF` (0x16, *) within `IRARMMS` closes it; `IROK` again cancels. With
+  the relay closed `IROK` opens it, within one loop pass (a few ms). Every
+  frame is reported as `$IR,<addr>,<cmd>` in the Console, to learn a new
+  remote's codes. A close is refused while a capture is running.
+- `IRPIN` can be any header pin except **D4 and D8**: STM32 edge interrupts
+  are per pin number across all ports, and the Wi-Fi chip's host-wake line
+  is PI8, so a Px8 pin (D4 = PJ8, D8 = PB8) can't have one. `!SET` refuses
+  them.
+
+**Wi-Fi networks.** `arduino_secrets.h` can list up to five, tried in order:
+
+```c
+#define SECRET_SSID  "Lab"          // first choice
+#define SECRET_PASS  "..."
+#define SECRET_SSID2 "Home"         // optional fallbacks, up to SECRET_SSID5
+#define SECRET_PASS2 "..."
+```
+
+Each join scans once, then tries the listed networks that are in range, in
+that order; one out of range costs nothing, one that refuses the password
+falls through to the next. If the link drops (or nothing was found) the whole
+list is tried again every 20 s, and `!WIFI` starts over from the top. It
+doesn't move back to a higher-priority network on its own while connected.
+`$STATUS` reports `ssid=` and `net=` (1-5, 0 none); `!SCAN` marks each
+network it sees with its place in the list. Hidden SSIDs aren't supported:
+this core's `WiFi.begin()` only joins networks the scan saw.
+
+**Board RGB LED:** solid **blue** while a capture is waiting for its trigger;
+otherwise solid **red** when the input's peak voltage (absolute, so DC
+counts) is above 40 V and **green** once it is below 35 V. Between 35 and
+40 V it keeps its last colour. It updates every mains cycle and is off
+until the first cycle is measured. (The fw 2.0 colours - red tripped,
+green client, blue no Wi-Fi - are gone; the OLED and `$STATUS` show those.)
+
+**Not on the Giga:** NeoPixel (its keys don't exist), `!DACTEST`. `SPC`
+doesn't apply: metering runs at a fixed 8 kS/s.
+
+**Settings from fw 2.0** (config v1) carry over on the first boot of fw 2.1,
+with the new keys at their defaults (`$STATUS cfgold=1` until the next
+`!SAVE`).
 
 **Giga extras** (Console tab): `!SYNTH`, `!SMASK` (`$CYC` per cycle, `$HARM`
 harmonics 1..40 with phases, `$AVG` the cycle-averaged waveform, `$INFO`

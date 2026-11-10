@@ -74,8 +74,34 @@ struct Config {
   uint16_t decim;
   uint8_t  bits, smp, vSe, iSe;
   uint8_t  relayPin, relayInv, rngPin, rngInv;
+  // v2: the OLED and the IR remote (120VMonitor's UI keys)
+  uint8_t  oled, oledAddr, oledRot, irPin;
+  uint16_t irAddr, irArmMs;
+  uint8_t  irOk, irConfirm, spare[2];
   uint32_t crc;
 };
+
+/*! The v1 layout (fw 2.0): Config up to rngInv, then the CRC. Read so a saved
+ *  v1 block carries over into v2 with the new keys at their defaults. */
+struct ConfigV1 {
+  uint32_t magic;
+  uint16_t version;
+  uint16_t size;
+  float    vGain, vOff, iGain, iOff, iGainLo, iOffLo, phaseUs, adcVref;
+  float    tripA, tripPk, rngUpA, rngDnA;
+  uint16_t rngHoldMs;
+  uint8_t  rngMode, rngSetMs, rngCyc;
+  uint8_t  cycles, harmN, dcRem;
+  float    mainsHz, vMin;
+  uint32_t rate;
+  uint16_t decim;
+  uint8_t  bits, smp, vSe, iSe;
+  uint8_t  relayPin, relayInv, rngPin, rngInv;
+  uint32_t crc;
+};
+
+/*! One Wi-Fi network from arduino_secrets.h. */
+struct WifiNet { const char* ssid; const char* pass; };
 
 enum : uint8_t { FT_FLOAT, FT_U8, FT_U16, FT_U32 };
 
@@ -87,5 +113,5 @@ struct CfgKey {
   float       lo, hi;
   const char* help;
   uint8_t     group;   /*!< index into CFG_GROUP_NAMES */
-  uint8_t     apply;   /*!< AP_* bits: what has to happen after a change */
+  uint16_t    apply;   /*!< AP_* bits: what has to happen after a change */
 };
