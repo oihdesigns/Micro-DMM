@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "Isolated_ADS1256")(type "KiCad")(uri "${KIPRJMOD}/Isolated_ADS1256.kicad_sym")(options "")(descr "Project symbols: ADS1256, MEJ1S0509SC, TPS7A4901"))
+)

@@ -1,0 +1,246 @@
+{
+    "$schema": "https://schemas.kicad.org/drc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-11-10T20:42:52",
+    "ignored_checks": [
+        {
+            "description": "Footprint has no courtyard defined",
+            "key": "missing_courtyard"
+        },
+        {
+            "description": "Track endpoint not centered on via",
+            "key": "track_not_centered_on_via"
+        },
+        {
+            "description": "Tuning profile track geometries",
+            "key": "tuning_profile_track_geometries"
+        },
+        {
+            "description": "Footprint doesn't match symbol's footprint filters",
+            "key": "footprint_filters_mismatch"
+        },
+        {
+            "description": "Footprint component type doesn't match footprint pads",
+            "key": "footprint_type_mismatch"
+        }
+    ],
+    "included_severities": [
+        "error",
+        "warning",
+        "exclusion"
+    ],
+    "kicad_version": "10.99.0",
+    "schematic_parity": [],
+    "source": "Isolated_ADS1256.kicad_pcb",
+    "unconnected_items": [
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Zone [/ISH_N] on F.Cu and B.Cu, priority 2",
+                    "pos": {
+                        "x": 180.2,
+                        "y": 130.4
+                    },
+                    "uuid": "fd8e24bc-c61d-5184-9c8c-d4b305bd16c0"
+                },
+                {
+                    "description": "Pad 1 [/ISH_N] of R19 on F.Cu",
+                    "pos": {
+                        "x": 177.9125,
+                        "y": 132.5
+                    },
+                    "uuid": "86026109-18dc-5cd7-995b-96b6f36b5747"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [/ISH_N] of JP1 on F.Cu",
+                    "pos": {
+                        "x": 180.85,
+                        "y": 135.5
+                    },
+                    "uuid": "9b3762e5-2e41-51da-9bce-03e164712bd7"
+                },
+                {
+                    "description": "Zone [/ISH_N] on F.Cu and B.Cu, priority 2",
+                    "pos": {
+                        "x": 180.2,
+                        "y": 130.4
+                    },
+                    "uuid": "fd8e24bc-c61d-5184-9c8c-d4b305bd16c0"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 11 [/AIN5] of U6 on F.Cu",
+                    "pos": {
+                        "x": 150.5,
+                        "y": 121.725
+                    },
+                    "uuid": "d6b5b602-442c-5db0-afab-c0bdcb66904d"
+                },
+                {
+                    "description": "Pad 2 [/AIN5] of R21 on F.Cu",
+                    "pos": {
+                        "x": 182.74,
+                        "y": 108.5125
+                    },
+                    "uuid": "3625fd7d-0d71-57d1-82f5-852fb4db9d40"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        },
+        {
+            "description": "Missing connection between items",
+            "items": [
+                {
+                    "description": "Pad 1 [/ISH_P] of R18 on F.Cu",
+                    "pos": {
+                        "x": 177.9125,
+                        "y": 126.5
+                    },
+                    "uuid": "91908b36-6f77-564e-a1c7-ed5a7417a4a9"
+                },
+                {
+                    "description": "Zone [/ISH_P] on F.Cu and B.Cu, priority 2",
+                    "pos": {
+                        "x": 180.2,
+                        "y": 125.1
+                    },
+                    "uuid": "a41d5b06-b8e5-54ba-b8ca-907e7119902e"
+                }
+            ],
+            "severity": "error",
+            "type": "unconnected_items"
+        }
+    ],
+    "violations": [
+        {
+            "description": "Thermal relief connection to zone incomplete (layer F.Cu; zone min spoke count 2; actual 1)",
+            "items": [
+                {
+                    "description": "Zone [/GNDI] on F.Cu, B.Cu and 2 more, priority 0",
+                    "pos": {
+                        "x": 124.8,
+                        "y": 100.35
+                    },
+                    "uuid": "11043f89-aebe-5235-ad0d-5a26e3cd1bad"
+                },
+                {
+                    "description": "Pad 2 [/GNDI] of U5 on F.Cu",
+                    "pos": {
+                        "x": 154.8625,
+                        "y": 142.0
+                    },
+                    "uuid": "5f3adea4-5e8f-5038-8726-dbb4e0cc7ae6"
+                }
+            ],
+            "severity": "error",
+            "type": "starved_thermal"
+        },
+        {
+            "description": "Silkscreen clipped by board edge",
+            "items": [
+                {
+                    "description": "Rectangle on Edge.Cuts",
+                    "pos": {
+                        "x": 100.0,
+                        "y": 100.0
+                    },
+                    "uuid": "6558ae3b-befb-536a-8241-13996b44daf3"
+                },
+                {
+                    "description": "Reference field of PS1",
+                    "pos": {
+                        "x": 123.51,
+                        "y": 99.68
+                    },
+                    "uuid": "2a88b91c-ed2e-4d9c-a054-5befb5f432d6"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_edge_clearance"
+        },
+        {
+            "description": "Silkscreen clipped by board edge",
+            "items": [
+                {
+                    "description": "Rectangle on Edge.Cuts",
+                    "pos": {
+                        "x": 100.0,
+                        "y": 100.0
+                    },
+                    "uuid": "6558ae3b-befb-536a-8241-13996b44daf3"
+                },
+                {
+                    "description": "Reference field of J3",
+                    "pos": {
+                        "x": 195.42,
+                        "y": 129.54
+                    },
+                    "uuid": "97b1c0c7-d77f-5840-84cb-363a72859dec"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_edge_clearance"
+        },
+        {
+            "description": "Silkscreen clipped by board edge",
+            "items": [
+                {
+                    "description": "Rectangle on Edge.Cuts",
+                    "pos": {
+                        "x": 100.0,
+                        "y": 100.0
+                    },
+                    "uuid": "6558ae3b-befb-536a-8241-13996b44daf3"
+                },
+                {
+                    "description": "Reference field of J2",
+                    "pos": {
+                        "x": 195.42,
+                        "y": 148.54
+                    },
+                    "uuid": "6f46c09a-4ba3-5366-b755-a3ab1b7fb954"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_edge_clearance"
+        },
+        {
+            "description": "Silkscreen clearance",
+            "items": [
+                {
+                    "description": "Polygon of J2 on F.Silkscreen",
+                    "pos": {
+                        "x": 185.73,
+                        "y": 146.0
+                    },
+                    "uuid": "13ec00b4-d436-46fe-b753-99380cf6b4d1"
+                },
+                {
+                    "description": "PCB text '+' on F.Silkscreen",
+                    "pos": {
+                        "x": 184.5,
+                        "y": 146.0
+                    },
+                    "uuid": "2ca25a03-d2e3-532c-b329-b2150936537e"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        }
+    ]
+}
