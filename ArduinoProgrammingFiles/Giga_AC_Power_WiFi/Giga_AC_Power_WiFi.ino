@@ -134,7 +134,11 @@
  *
  * ── Output ──────────────────────────────────────────────────────────────────
  *   $PWR,<vrms>,<irms>,<w>,<va>,<var>,<pf>,<hz>,<vpk>,<ipk>,<wh>,<t_s>,<n>,
- *        <samples_per_cycle>,<relay>,<flags>,<vdc>,<idc>,<rng>
+ *        <samples_per_cycle>,<relay>,<flags>,<vdc>,<idc>,<rng>,<dc>
+ *        dc 1 = DC mode: not one voltage zero crossing in the window. Then
+ *        vdc / idc are the readings and vrms / irms the AC ripple on them,
+ *        while W, VA, var, PF and Wh include the DC part (DCREM leaves it
+ *        out otherwise); TRIPA acts on the total RMS and TRIPPK on |i|.
  *        t_s is the sample clock. flags: +1 no V zero crossings  +2 V clipped
  *        +4 I clipped  +8 trip latched  +16 samples lost  +64 synthetic data
  *        +128 a current range switch inside the window
@@ -173,7 +177,7 @@
 #error "Copy arduino_secrets.example.h to arduino_secrets.h and put your Wi-Fi name/password in it"
 #endif
 
-#define FW_VERSION   "2.1"
+#define FW_VERSION   "2.2"
 #define CFG_VERSION  2
 #define CFG_MAGIC    0x50434147UL   // "GACP"
 static const uint16_t CMD_PORT = 8080;
@@ -436,6 +440,7 @@ static bool    g_adcOn = false;
 static PowerResult g_last;
 static uint8_t  g_lastFl = 0;
 static bool     g_haveLast = false;
+static bool     g_lastDc = false;         // that window was DC mode
 #define OLED_REFRESH_MS 1000UL             // readings redraw once a second
 static bool     g_oledDirty = true;       // a state change (relay, remote, Wi-Fi): redraw now
 static uint32_t g_lastDispMs = 0;
@@ -1226,7 +1231,10 @@ static double boxcarGain(double theta) {
 
 // RMS, power etc. from span sums. theta = radians per sample at the measured
 // frequency; 0 (no crossings) corrects at the nominal mains frequency instead.
-static void reduceSums(const SpanSums& s, double theta, PowerResult& r) {
+// dc: a span without voltage zero crossings (DC mode). vrms / irms stay the
+// AC part (the ripple) and vdc / idc the DC part, but W, VA, var and PF are
+// the whole thing, DC included, which DCREM would otherwise take out.
+static void reduceSums(const SpanSums& s, double theta, PowerResult& r, bool dc = false) {
   double L = s.L > 0 ? s.L : 1.0;
   double mv = s.sv / L, mi = s.si / L;
   double vv = s.svv / L, ii = s.sii / L, vi = s.svi / L;
@@ -1244,6 +1252,13 @@ static void reduceSums(const SpanSums& s, double theta, PowerResult& r) {
   r.q  = qq > 0 ? (float)sqrt(qq) : 0.0f;
   r.pf = r.s > 1e-9f ? r.p / r.s : 0.0f;
   r.vdc = (float)mv; r.idc = (float)mi;
+  if (dc && g_dcrem) {
+    r.p += (float)(mv * mi);
+    r.s = sqrtf(r.vrms * r.vrms + (float)(mv * mv)) * sqrtf(r.irms * r.irms + (float)(mi * mi));
+    double q2 = (double)r.s * r.s - (double)r.p * r.p;
+    r.q  = q2 > 0 ? (float)sqrt(q2) : 0.0f;
+    r.pf = r.s > 1e-9f ? r.p / r.s : 0.0f;
+  }
   float c = g_dcrem ? (float)mv : 0.0f, ci = g_dcrem ? (float)mi : 0.0f;
   r.vpk = max(s.vmax - c, c - s.vmin);
   r.ipk = max(s.imax - ci, ci - s.imin);
@@ -1362,7 +1377,7 @@ static void processCycle(double a, double b, uint8_t flags) {
   }
 
   PowerResult r;
-  reduceSums(s, delta, r);
+  reduceSums(s, delta, r, !real);
   r.hz = real ? (float)(g_fs / L) : 0.0f;
 
   g_win.L += s.L; g_win.sv += s.sv; g_win.si += s.si;
@@ -1391,14 +1406,14 @@ static void processCycle(double a, double b, uint8_t flags) {
   // energy: every cycle, end to end, so nothing between windows is missed
   g_wh += (double)r.p * L * g_dt / 3600.0;
   g_base = r.vdc;
-  g_imean = r.idc;
+  g_imean = real ? r.idc : 0.0;      // DC mode: TRIPPK is on |i| itself, not on ripple
   g_lastVpk = r.vpk;
   g_cycAbsPk = max(fabsf(s.vmax), fabsf(s.vmin));
   if (g_cycAbsPk > LED_V_HI) g_vHigh = true;
   else if (g_cycAbsPk < LED_V_LO) g_vHigh = false;
   g_vSeen = true;
 
-  onCycle(r, a, b, s.flags);
+  onCycle(r, a, b, s.flags | (real ? 0 : FLG_NOCROSS));
   if (g_winCycles >= g_cycles) finishWindow();
 }
 
@@ -1509,7 +1524,9 @@ static void capOnCycle(const PowerResult& r, double a, double b);
 
 static void onCycle(const PowerResult& r, double a, double b, uint8_t flags) {
   g_cycSeq++;
-  if (g_trip_a > 0.0f && !g_trip_latch && g_relay && r.irms > g_trip_a) tripRelay("RMS", r.irms, g_trip_a);
+  // TRIPA on the total RMS in DC mode (irms alone is only the ripple there)
+  const float itrip = ((flags & FLG_NOCROSS) && g_dcrem) ? hypotf(r.irms, r.idc) : r.irms;
+  if (g_trip_a > 0.0f && !g_trip_latch && g_relay && itrip > g_trip_a) tripRelay("RMS", itrip, g_trip_a);
   // auto-delayed: HIGH only after more than RNGCYC overloaded cycles in a row
   if (cfg.rngMode == 3) {
     if (g_cycOver) {
@@ -1565,7 +1582,8 @@ static void finishWindow() {
   g_seq++;
   PowerResult r;
   double hz = (g_winReal > 0 && g_winRealL > 0) ? (double)g_winReal * g_fs / g_winRealL : 0.0;
-  reduceSums(g_win, hz > 0 ? 2.0 * M_PI * hz * g_dt : 0.0, r);
+  const bool dcMode = g_winReal == 0;     // not one voltage zero crossing in the window
+  reduceSums(g_win, hz > 0 ? 2.0 * M_PI * hz * g_dt : 0.0, r, dcMode);
   r.hz = (float)hz;
 
   // harmonics: phase from the coherent sum, magnitude from the power average
@@ -1636,12 +1654,12 @@ static void finishWindow() {
     g_ln.print(g_relay ? 1 : 0); g_ln.print(',');
     g_ln.print(out);        g_ln.print(',');
     g_ln.print(r.vdc, 4);   g_ln.print(','); g_ln.print(r.idc, 5);   g_ln.print(',');
-    g_ln.println(wr);
+    g_ln.print(wr);         g_ln.print(','); g_ln.println(dcMode ? 1 : 0);
     emit();
   }
   if (g_smask & SM_HARM) emitHarm(true);
   if (g_smask & SM_AVG)  emitAvg(true);
-  g_last = r; g_lastFl = fl; g_haveLast = true;   // shown at the next 1 s refresh
+  g_last = r; g_lastFl = fl; g_lastDc = dcMode; g_haveLast = true;   // shown at the next 1 s refresh
   setLeds();
   clearWindow();
 }
@@ -2361,17 +2379,21 @@ static void drawMeter() {
   d.print(g_relay ? "LOAD ON " : g_closePending ? "CLOSING " : "LOAD OFF");
   if (g_rngPin) { d.setCursor(54, 0); d.print(g_irCur == 1 ? "LO" : "HI"); }
   d.setCursor(74, 0);
-  if (r.hz > 0) { printFit(r.hz, 5, 2); d.print("Hz"); }
+  const bool dc = g_lastDc;
+  // DC mode: the signed DC volts and amps where the RMS goes, "DC" for the frequency
+  const float vShow = dc ? r.vdc : r.vrms, iShow = dc ? r.idc : r.irms;
+  if (dc) d.print("     DC");
+  else if (r.hz > 0) { printFit(r.hz, 5, 2); d.print("Hz"); }
   else d.print(" --.-Hz");
 
   if (g_oledH < 64) {
     // 128x32: big V on the left, A and W stacked beside it, PF and Wh below
     d.setTextSize(2);
     d.setCursor(0, 8);
-    printFit(r.vrms, 6, 1); d.print('V');
+    printFit(vShow, 6, 1); d.print('V');
     d.setTextSize(1);
     d.setCursor(86, 8);
-    printFit(r.irms, 6, 3); d.print('A');
+    printFit(iShow, 6, 3); d.print('A');
     d.setCursor(86, 16);
     printFit(r.p, 6, 1); d.print('W');
     d.setCursor(0, 24);
@@ -2383,9 +2405,9 @@ static void drawMeter() {
   } else {
     d.setTextSize(2);
     d.setCursor(0, 11);
-    printFit(r.vrms, 7, 2); d.print('V');
+    printFit(vShow, 7, 2); d.print('V');
     d.setCursor(0, 29);
-    printFit(r.irms, 7, 3); d.print('A');
+    printFit(iShow, 7, 3); d.print('A');
     d.setTextSize(1);
     d.setCursor(0, 47);
     printFit(r.p, 7, 1); d.print("W PF");

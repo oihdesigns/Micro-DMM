@@ -131,6 +131,18 @@ doesn't move back to a higher-priority network on its own while connected.
 network it sees with its place in the list. Hidden SSIDs aren't supported:
 this core's `WiFi.begin()` only joins networks the scan saw.
 
+**DC mode** (fw 2.2). A metering window with not one voltage zero crossing
+(no AC above `VMIN` / 20 % of the peak) is reported as DC: `$PWR` gains a last
+field `dc` = 1, `vdc` / `idc` are the readings and `vrms` / `irms` the AC
+ripple on them, and W, VA, var, PF and Wh include the DC part (with `DCREM` on
+they'd otherwise read ~0 on DC). `TRIPA` then acts on the total RMS current
+and `TRIPPK` on |i|, so a DC overload trips too (checked: 2.09 A DC against
+`TRIPA` 1.5 trips in one cycle). The GUI's meter shows V dc / I dc in the big
+cells, the ripple where V dc / I dc normally are, Freq "DC" and a DC MODE
+tag; trends plot the DC values and the CSV gets a `mode` column. The OLED
+shows signed DC volts and amps with "DC" in place of Hz. A `$PWR` without the
+field (older firmware) is treated as AC.
+
 **Board RGB LED:** solid **blue** while a capture is waiting for its trigger;
 otherwise solid **red** when the input's peak voltage (absolute, so DC
 counts) is above 40 V and **green** once it is below 35 V. Between 35 and

@@ -21,8 +21,10 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+# dc (Giga fw 2.2+): 1 = DC mode, no voltage zero crossings in the window. Then
+# vdc / idc are the readings, vrms / irms the AC ripple, and p/s/q/pf/wh include DC.
 PWR_FIELDS = ("vrms", "irms", "p", "s", "q", "pf", "hz", "vpk", "ipk", "wh", "uptime",
-              "n", "depth", "relay", "flags", "vdc", "idc", "rng")
+              "n", "depth", "relay", "flags", "vdc", "idc", "rng", "dc")
 
 FLAG_NAMES = {1: "NO V ZERO-X", 2: "V CLIP", 4: "I CLIP", 8: "TRIPPED",
               16: "SAMPLES LOST / TRUNCATED", 32: "LATE", 64: "SYNTH", 128: "I RANGE SWITCH"}

@@ -208,10 +208,14 @@ class SimSerial:
         irms = float(np.sqrt(np.mean((i - im) ** 2)))
         p = float(np.mean((v - vm) * (i - im)))
         s = vrms * irms
+        flags = 0 if WORLD.mains and not WORLD.psu_on else 1
+        dc = flags & 1                 # DC mode, as the Giga firmware: power includes DC
+        if dc:
+            p += float(vm * im)
+            s = math.hypot(vrms, vm) * math.hypot(irms, im)
         pf = p / s if s > 1e-9 else 0.0
         q = math.sqrt(max(s * s - p * p, 0))
         self.wh += p * dt_win / 3600
-        flags = 0 if WORLD.mains and not WORLD.psu_on else 1
         flags |= 4 if clip else 0
         if self.cfg["TRIPA"] > 0 and irms > self.cfg["TRIPA"] and WORLD.relay:
             self.trip = True
@@ -227,7 +231,7 @@ class SimSerial:
                 self._set_rng(1, "AUTO")
         self._emit(f"$PWR,{vrms:.4f},{irms:.5f},{p:.4f},{s:.4f},{q:.4f},{pf:.4f},{hz:.3f},"
                    f"{np.max(np.abs(v - vm)):.3f},{np.max(np.abs(i - im)):.5f},{self.wh:.6f},"
-                   f"{now - self.t0:.2f},1536,24,{1 if WORLD.relay else 0},{flags},{vm:.4f},{im:.5f},{self.rng}")
+                   f"{now - self.t0:.2f},1536,24,{1 if WORLD.relay else 0},{flags},{vm:.4f},{im:.5f},{self.rng},{dc}")
 
     # ── commands ────────────────────────────────────────────────────────────
     def _cmd(self, cmd):

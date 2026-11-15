@@ -67,14 +67,24 @@ FADES = {"Infinite": 0.0, "Fade 30 s": 30.0, "Fade 5 s": 5.0, "Fade 1 s": 1.0}
 
 # the CSV log and Save trend CSV share these columns
 CSV_HEADER = ["time", "unix", "vrms", "irms", "w", "va", "var", "pf", "hz", "vpk",
-              "ipk", "wh", "vdc", "idc", "relay", "flags", "range"]
+              "ipk", "wh", "vdc", "idc", "relay", "flags", "range", "mode"]
 
 
 def csv_row(r):
     return ([time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(r["t"])), f"{r['t']:.3f}"]
             + [r[k] for k in ("vrms", "irms", "p", "s", "q", "pf", "hz", "vpk", "ipk", "wh",
                               "vdc", "idc", "relay", "flags")]
-            + [RANGE_NAMES.get(int(r.get("rng", 0)), "")])
+            + [RANGE_NAMES.get(int(r.get("rng", 0)), ""), "DC" if is_dc(r) else "AC"])
+
+
+def is_dc(r):
+    """DC mode: the board saw no voltage zero crossing in the window (fw 2.2 dc field)."""
+    return r.get("dc", 0) >= 1
+
+
+# DC mode swaps what some meter cells show: key -> (label, record key, decimals, signed)
+DC_CELLS = {"vrms": ("V dc", "vdc", 3, True), "irms": ("I dc", "idc", 4, True),
+            "vdc": ("V ac (ripple rms)", "vrms", 3, False), "idc": ("I ac (ripple rms)", "irms", 4, False)}
 
 
 def heat_axes(fig, rows, cols, idx, h, lim, unit, title, ref_name, hz):
@@ -206,6 +216,7 @@ class App(tk.Tk):
         panel = tk.Frame(f, bg=BG)
         panel.pack(fill="x")
         self.read_vars = {}
+        self.read_lbls = {}
         items = [("vrms", "V rms", "V", 2), ("irms", "I rms", "A", 4), ("p", "Power", "W", 2),
                  ("pf", "PF", "", 3), ("hz", "Freq", "Hz", 3), ("s", "Apparent", "VA", 2),
                  ("q", "Non-active", "var", 2), ("vpk", "V peak", "V", 1), ("ipk", "I peak", "A", 3),
@@ -215,7 +226,9 @@ class App(tk.Tk):
             r, c = divmod(k, 7)
             cell = tk.Frame(panel, bg=BG, padx=10, pady=4)
             cell.grid(row=r, column=c, sticky="w")
-            tk.Label(cell, text=label, bg=BG, fg="#9a9a9a", font=("Segoe UI", 9)).pack(anchor="w")
+            lvar = tk.StringVar(value=label)
+            self.read_lbls[key] = (lvar, label)
+            tk.Label(cell, textvariable=lvar, bg=BG, fg="#9a9a9a", font=("Segoe UI", 9)).pack(anchor="w")
             var = tk.StringVar(value="---")
             big = 22 if r == 0 and c < 3 else 15
             tk.Label(cell, textvariable=var, bg=BG, fg=FG, font=("Consolas", big, "bold")).pack(anchor="w")
@@ -705,19 +718,32 @@ class App(tk.Tk):
             self.con_cmd.set("")
 
     def _on_pwr(self, r):
-        r["crest"] = r["ipk"] / r["irms"] if r["irms"] > 1e-4 else float("nan")
+        dc = is_dc(r)
+        r["crest"] = r["ipk"] / r["irms"] if r["irms"] > 1e-4 and not dc else float("nan")
+        # the trend's main V / I: the DC value in DC mode, else the RMS
+        r["vmain"] = r["vdc"] if dc else r["vrms"]
+        r["imain"] = r["idc"] if dc else r["irms"]
         self.hist.append(r)
         for key, (var, unit, dp) in self.read_vars.items():
-            v = r.get(key)
-            if v is None or v != v:
+            lvar, label = self.read_lbls[key]
+            src, sign = key, False
+            if dc and key in DC_CELLS:
+                label, src, dp, sign = DC_CELLS[key]
+            lvar.set(label)
+            v = r.get(src)
+            if dc and key == "hz":
+                var.set("DC")
+            elif v is None or v != v:
                 var.set("---")
             else:
-                var.set(f"{v:,.{dp}f} {unit}".strip())
+                var.set(f"{v:{'+' if sign else ''},.{dp}f} {unit}".strip())
         self._set_relay_ui(r["relay"] >= 1)
         if "rng" in r:
             self._range_ui(r["rng"])
         fl = int(r["flags"])
-        self.flag_lbl.configure(text="   ".join(x for x in (self.safe_msg, flag_text(fl)) if x))
+        # in DC mode "no V zero-x" is the point, not a warning
+        ftxt = flag_text(fl & ~1 if dc else fl)
+        self.flag_lbl.configure(text="   ".join(x for x in (self.safe_msg, "DC MODE" if dc else "", ftxt) if x))
         if self.csv_w:
             self.csv_w.writerow(csv_row(r))
 
@@ -752,10 +778,13 @@ class App(tk.Tk):
                     a0, a0b, a1, a1b = self.tax[0], self.tax_i, self.tax[1], self.tax_pf
                     for a in (a0, a0b, a1, a1b):
                         a.cla()
-                    a0.plot(t, get("vrms"), color="tab:blue")
-                    a0.set_ylabel("Vrms", color="tab:blue")
-                    a0b.plot(t, get("irms"), color="tab:red")
-                    a0b.set_ylabel("Irms (A)", color="tab:red")
+                    dcs = [is_dc(r) for r in rows]
+                    vlab = "V dc" if all(dcs) else "Vrms / V dc" if any(dcs) else "Vrms"
+                    ilab = "I dc (A)" if all(dcs) else "Irms / I dc (A)" if any(dcs) else "Irms (A)"
+                    a0.plot(t, get("vmain"), color="tab:blue")
+                    a0.set_ylabel(vlab, color="tab:blue")
+                    a0b.plot(t, get("imain"), color="tab:red")
+                    a0b.set_ylabel(ilab, color="tab:red")
                     a1.plot(t, get("p"), color="tab:green")
                     a1.set_ylabel("W", color="tab:green")
                     a1b.plot(t, get("pf"), color="tab:purple")
