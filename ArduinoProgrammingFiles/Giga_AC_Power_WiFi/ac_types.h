@@ -77,7 +77,9 @@ struct Config {
   // v2: the OLED and the IR remote (120VMonitor's UI keys)
   uint8_t  oled, oledAddr, oledRot, irPin;
   uint16_t irAddr, irArmMs;
-  uint8_t  irOk, irConfirm, spare[2];
+  uint8_t  irOk, irConfirm;
+  uint8_t  adcRaw;                /*!< 1 = no dead-band repair (was spare: 0 in older blocks = repair on) */
+  uint8_t  spare;
   uint32_t crc;
 };
 
@@ -98,6 +100,17 @@ struct ConfigV1 {
   uint8_t  bits, smp, vSe, iSe;
   uint8_t  relayPin, relayInv, rngPin, rngInv;
   uint32_t crc;
+};
+
+/*! One isolation amp's leg pair, for rebuilding a leg that reads the ADCs'
+ *  dead-band code from its partner (see mirrorScan in the .ino). */
+struct Mirror {
+  float    a = 0.0f, b = -1.0f, ib = -1.0f;    // p = a + b n, ib = 1 / b
+  bool     seeded = false, learned = false;
+  double   sw = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;   // forgetting regression of p on n
+  int32_t  bp = 0, bn = 0;                     // the block being summed
+  uint16_t bk = 0, holdP = 0, holdN = 0;
+  uint32_t cnt = 0;                            // scans rebuilt ($STATUS)
 };
 
 /*! One Wi-Fi network from arduino_secrets.h. */

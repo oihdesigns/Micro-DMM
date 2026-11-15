@@ -107,6 +107,10 @@
  *   !ZERO                     V, then each current range in turn, as offsets
  *                             (~0.5 s): $CFG rows for VOFF IOFF IOFFLO, $OK,zero
  *   !EZERO                    energy to 0 ($OK,ezero)
+ *   !LEGS[,ms[,leg,lo,w]]     raw legs (0 V+ ADC1, 1 V- ADC2, 2 I+ ADC1, 3 I- ADC2):
+ *                             $LEGS,<scans>,{<mean V>,<sd mV>,<min>,<max>} x4, and
+ *                             with a leg, $LHIST,<leg>,<lo>,<w>,<64 counts from code lo>
+ *   !ADCREG                   $ADCREG: ADC/RCC clock, boost and calibration registers
  *   !DC[,<ms>]                $DC,<v_adc>,<i_adc>,<v>,<i>,<v_sd_adc>,<i_sd_adc>,
  *                             <scans>,<flags>,<rng>,<rng_changed>
  *   !CAP,<rate>,<n>,<ch>,<trig>,<level>,<pre%>,<timeout_ms>,<relay_us>,
@@ -277,6 +281,7 @@ static const CfgKey KEYS[] = {
   {"SMP",     FT_U8,    CF(smp),     0,     7,     "ADC sample time 1.5/2.5/8.5/16.5/32.5/64.5/387.5/810.5 cycles (restarts)", CG_ADC, AP_RESTART},
   {"VSE",     FT_U8,    CF(vSe),     0,     1,     "voltage single-ended: ignore A1, subtract mid-scale", CG_ADC, AP_GAP},
   {"ISE",     FT_U8,    CF(iSe),     0,     1,     "current single-ended: ignore A3", CG_ADC, AP_GAP},
+  {"ADCRAW",  FT_U8,    CF(adcRaw),  0,     1,     "1 = leave the ADCs' dead band near 0x6000 as read (no repair from the other leg)", CG_ADC, AP_GAP},
   {"RLYPIN",  FT_U8,    CF(relayPin),2,     53,    "load relay driver pin", CG_WIRING, AP_PINS},
   {"RLYINV",  FT_U8,    CF(relayInv),0,     1,     "load relay active-low", CG_WIRING, AP_PINS},
   {"RNGPIN",  FT_U8,    CF(rngPin),  0,     53,    "range relay pin, 0 = one range (HIGH)", CG_WIRING, AP_PINS | AP_RANGE},
@@ -387,6 +392,8 @@ static double   g_fs = 8000, g_dt = 1.0 / 8000;   // metering sample rate
 static double   g_scanUs = 12.5;                   // scan period
 static double   g_lag_s  = 0;                      // I+ converts this long after V+
 static int32_t  g_mid = 32768, g_clipLo = 0, g_clipHi = 65535;
+static int32_t  g_sink = 0x5FFF;       // the converters' dead-band code (see mirrorScan)
+static bool     g_mirReset = true;     // drop the dead-band repair's half-summed blocks
 static uint32_t g_back80 = 1333;                   // scans in a nominal mains cycle
 // real = raw*K + B; alpha = I-sample lag in metering samples; Lagrange weights.
 // Per current range (0 HIGH, 1 LOW): K, B, alpha, weights, full scale in A pk.
@@ -807,6 +814,7 @@ static double interpGain(const double* w, double theta) {
 }
 
 static void resetAnalyzer();
+static void mirrorDerived();
 
 static void applyDerived() {
   g_fs = g_rate / (double)g_decim;
@@ -815,6 +823,8 @@ static void applyDerived() {
   g_lag_s = rankTime();
   uint32_t full = (1UL << g_bits) - 1UL;
   g_mid = (int32_t)(1UL << (g_bits - 1));
+  g_sink = (int32_t)(0x6000UL >> (16 - g_bits)) - 1;   // 0x5FFF at 16 bit
+  mirrorDerived();
   g_clipLo = (int32_t)(full / 256);
   g_clipHi = (int32_t)(full - full / 256);
   g_back80 = (uint32_t)lround(g_rate / (double)g_mains_hz);
@@ -865,6 +875,7 @@ static void capOnScan(float ia);
 // A break in the sample stream. Deliberate ones (a restart, a source change)
 // just restart the analyser. A loss is also counted in $STATUS gaps.
 static void markGap() {
+  g_mirReset = true;
   g_accV = 0; g_accIA = 0.0; g_accN = 0; g_accF = 0;
   g_pendF |= FLG_GAP;
   g_validFrom = g_wr;
@@ -925,6 +936,120 @@ static int scanIndexAfter(int ns, double d, double scanUs) {
   return (int)k;
 }
 
+// The dead band. Neither converter outputs the codes just above 0x6000 at
+// 16 bit (measured 2026-11-15): ADC1 skips 0x6000-0x6137 (~16 mV), ADC2
+// 0x6000-~0x6230 (~28 mV), and every input in that band comes out as 0x5FFF,
+// the code below the 0x6000 carry. On a leg resting at ~1.48 V that is a band
+// starting 0.23 V below rest, which the
+// current legs reach at ~+-5.0-5.5 A on the HIGH range and the voltage legs
+// at ~+-48 V; DC sitting there read up to 0.25 A wrong, and only in one
+// polarity (the other leg goes the other way, up to clean codes).
+//
+// Repair: the two legs of an isolation amp are mirror images, p = a + b n with
+// b ~ -1, so a leg on the sink is rebuilt from its partner. Two things make
+// that unbiased, both learned the hard way on the bench:
+//  - the legs' noise (~6 mV rms) is mostly independent, so the partner can't
+//    rebuild one scan's noise, only its signal. Rebuilding just the scans that
+//    read 0x5FFF and keeping their neighbours, which by then were the scans
+//    whose own noise kept them off the sink, read 110 mA off. So once a leg
+//    hits the sink it is rebuilt for MIR_HOLD scans, hit or not.
+//  - the line a + b n is taught only by MIR_BLOCK-scan block means of scans
+//    nobody rebuilt, and only from blocks well clear of the band (block
+//    means, not single scans, so the gate doesn't select on noise). b comes
+//    from a regression of block p on block n once the signal has spread over
+//    >= 10 mV (AC does that at once; DC needs a few levels), else -1. With b
+//    right, a is the same at any level, so a DC current parked in the band
+//    still gets a current line. ADCRAW 1 turns it all off.
+static Mirror   g_mV, g_mI;
+static uint8_t  g_mirBits = 0;                 // resolution the lines were learned at
+static float    g_bandLo = 0, g_bandHi = 0;    // block means inside this don't teach
+static double   g_mirVarMin = 0;               // codes^2: spread needed to trust b
+static const uint16_t MIR_HOLD = 64, MIR_BLOCK = 64;
+static const double   MIR_LAMBDA = 1.0 - 1.0 / 16384.0;   // ~13 s of clean blocks
+static const float    MIR_AK = 1.0f / 32.0f;              // a follows in ~26 ms
+
+static void mirrorClear(Mirror& m) { m = Mirror(); }
+
+static void mirrorTeach(Mirror& m, float pm, float nm) {
+  const double x = (double)nm - 32768.0, y = (double)pm - 32768.0;
+  m.sw = m.sw * MIR_LAMBDA + 1.0;
+  m.sx = m.sx * MIR_LAMBDA + x;       m.sy = m.sy * MIR_LAMBDA + y;
+  m.sxx = m.sxx * MIR_LAMBDA + x * x; m.sxy = m.sxy * MIR_LAMBDA + x * y;
+  const double mx = m.sx / m.sw, my = m.sy / m.sw;
+  const double vx = m.sxx / m.sw - mx * mx, cxy = m.sxy / m.sw - mx * my;
+  if (m.sw > 64.0 && vx > g_mirVarMin) {
+    double b = cxy / vx;
+    if (b < -1.25) b = -1.25;
+    if (b > -0.8)  b = -0.8;
+    m.b = (float)b; m.ib = (float)(1.0 / b); m.learned = true;
+  }
+  const float a = pm - m.b * nm;
+  if (!m.seeded) { m.a = a; m.seeded = true; }
+  else m.a += (a - m.a) * MIR_AK;
+}
+
+static inline void mirrorScan(Mirror& m, int32_t& p, int32_t& n, bool teach) {
+  const int32_t p0 = p, n0 = n;
+  if (p0 == g_sink) m.holdP = MIR_HOLD;
+  if (n0 == g_sink) m.holdN = MIR_HOLD;
+  if (m.holdP || m.holdN) {
+    if (!(m.holdP && m.holdN) && m.seeded) {   // both near it can't be rebuilt
+      if (m.holdP) p = (int32_t)lrintf(m.a + m.b * (float)n0);
+      else         n = (int32_t)lrintf(((float)p0 - m.a) * m.ib);
+      m.cnt++;
+    }
+    if (m.holdP) m.holdP--;
+    if (m.holdN) m.holdN--;
+    m.bk = 0; m.bp = 0; m.bn = 0;
+    return;
+  }
+  if (!teach || p0 <= g_clipLo || p0 >= g_clipHi || n0 <= g_clipLo || n0 >= g_clipHi) {
+    m.bk = 0; m.bp = 0; m.bn = 0; return;
+  }
+  m.bp += p0; m.bn += n0;
+  if (++m.bk < MIR_BLOCK) return;
+  const float pm = (float)m.bp / (float)MIR_BLOCK, nm = (float)m.bn / (float)MIR_BLOCK;
+  m.bk = 0; m.bp = 0; m.bn = 0;
+  if ((pm > g_bandLo && pm < g_bandHi) || (nm > g_bandLo && nm < g_bandHi)) return;
+  mirrorTeach(m, pm, nm);
+}
+
+// band limits in codes for this resolution; a new resolution starts the lines over
+static void mirrorDerived() {
+  const double l = (double)lsb();
+  g_bandLo = (float)((double)g_sink - 0.030 / l);
+  g_bandHi = (float)((double)g_sink + (0.030 + 0.030) / l);   // ADC2s band is ~28 mV, ADC1s ~16
+  g_mirVarMin = (0.010 / l) * (0.010 / l);
+  if (g_mirBits != g_bits) { mirrorClear(g_mV); mirrorClear(g_mI); g_mirBits = g_bits; }
+  g_mirReset = true;
+}
+
+// !LEGS: the four legs' raw codes (V+ ADC1, V- ADC2, I+ ADC1, I- ADC2) over a
+// span, and a fine histogram of one of them: for mapping the converters' own
+// transfer errors. Fed from drainAdc, before any substitution or synthesis.
+static bool     g_legsOn = false, g_legsDone = false;
+static uint32_t g_legsN = 0, g_legsWant = 0;
+static double   g_legsS[4], g_legsQ[4];
+static int32_t  g_legsMin[4], g_legsMax[4];
+static int8_t   g_legsHLeg = -1;
+static int32_t  g_legsHLo = 0, g_legsHW = 1;
+static const int LEGS_BINS = 64;
+static uint32_t g_legsH[LEGS_BINS];
+
+static inline void legsAdd(int32_t vp, int32_t vn, int32_t ip, int32_t in) {
+  const int32_t c[4] = {vp, vn, ip, in};
+  for (int j = 0; j < 4; j++) {
+    g_legsS[j] += c[j]; g_legsQ[j] += (double)c[j] * c[j];
+    if (c[j] < g_legsMin[j]) g_legsMin[j] = c[j];
+    if (c[j] > g_legsMax[j]) g_legsMax[j] = c[j];
+  }
+  if (g_legsHLeg >= 0) {
+    int32_t b = (c[g_legsHLeg] - g_legsHLo);
+    if (b >= 0) { b /= g_legsHW; if (b < LEGS_BINS) g_legsH[b]++; }
+  }
+  if (++g_legsN >= g_legsWant) { g_legsOn = false; g_legsDone = true; }
+}
+
 static void drainAdc() {
   uint32_t t0 = micros();
   // the synthetic source: V in raw counts, counts = (real/gain + off)/lsb.
@@ -960,6 +1085,14 @@ static void drainAdc() {
     for (int k = 0; k < s.ns; k++) {
       int32_t vp = pa[2 * k], ip = pa[2 * k + 1];
       int32_t vn = pb[2 * k], in = pb[2 * k + 1];
+      if (g_legsOn) legsAdd(vp, vn, ip, in);
+      if (!cfg.adcRaw) {
+        if (g_mirReset) {
+          g_mV.bk = g_mI.bk = 0; g_mV.bp = g_mV.bn = g_mI.bp = g_mI.bn = 0; g_mirReset = false;
+        }
+        if (!g_v_se) mirrorScan(g_mV, vp, vn, !g_synth);
+        if (!g_i_se) mirrorScan(g_mI, ip, in, !g_synth && !g_irPending);
+      }
       uint8_t f = 0;
       if (vp <= g_clipLo || vp >= g_clipHi || (!g_v_se && (vn <= g_clipLo || vn >= g_clipHi))) f |= FLG_VCLIP;
       if (ip <= g_clipLo || ip >= g_clipHi || (!g_i_se && (in <= g_clipLo || in >= g_clipHi))) f |= FLG_ICLIP;
@@ -1907,6 +2040,43 @@ static uint32_t g_dcMs = 500;
 static uint64_t g_dcFrom = 0;
 static uint8_t  g_dcRng = 0;
 
+static void startLegs(const char* a) {
+  // !LEGS[,<ms>[,<leg 0-3>,<lo code>,<bin width>]]
+  uint32_t ms = 500; int leg = -1; long lo = 0, w = 1;
+  if (*a == ',') {
+    ms = (uint32_t)constrain(atol(a + 1), 10L, 10000L);
+    const char* c = strchr(a + 1, ',');
+    if (c) { leg = atoi(c + 1); c = strchr(c + 1, ',');
+      if (c) { lo = atol(c + 1); c = strchr(c + 1, ','); if (c) w = atol(c + 1); } }
+  }
+  if (leg > 3 || w < 1) { emitErr("LEGS: leg 0-3, bin width >= 1"); return; }
+  for (int j = 0; j < 4; j++) { g_legsS[j] = 0; g_legsQ[j] = 0; g_legsMin[j] = INT32_MAX; g_legsMax[j] = INT32_MIN; }
+  memset(g_legsH, 0, sizeof(g_legsH));
+  g_legsHLeg = (int8_t)leg; g_legsHLo = (int32_t)lo; g_legsHW = (int32_t)w;
+  g_legsN = 0; g_legsWant = (uint32_t)max(1.0, ms * 1e-3 * (double)g_rate);
+  g_legsDone = false; g_legsOn = true;
+}
+
+static void serviceLegs() {
+  if (!g_legsDone) return;
+  g_legsDone = false;
+  // $LEGS,<scans>, then per leg: mean V, sd mV, min code, max code (V+ V- I+ I-)
+  const double n = (double)g_legsN, l = lsb();
+  g_ln.reset(); g_ln.print("$LEGS,"); g_ln.print(g_legsN);
+  for (int j = 0; j < 4; j++) {
+    const double m = g_legsS[j] / n, sd = sqrt(max(0.0, g_legsQ[j] / n - m * m));
+    g_ln.print(','); g_ln.print(m * l, 6); g_ln.print(','); g_ln.print(sd * l * 1e3, 4);
+    g_ln.print(','); g_ln.print(g_legsMin[j]); g_ln.print(','); g_ln.print(g_legsMax[j]);
+  }
+  g_ln.println(); emit();
+  if (g_legsHLeg >= 0) {
+    g_ln.reset(); g_ln.print("$LHIST,"); g_ln.print(g_legsHLeg); g_ln.print(','); g_ln.print(g_legsHLo);
+    g_ln.print(','); g_ln.print(g_legsHW);
+    for (int b = 0; b < LEGS_BINS; b++) { g_ln.print(','); g_ln.print(g_legsH[b]); }
+    g_ln.println(); emit();
+  }
+}
+
 static void serviceDc() {
   if (!g_dcState) return;
   if (g_dcState == 1) {
@@ -2513,6 +2683,12 @@ static void printStatus() {
   g_ln.print(",scanus4="); g_ln.print(g_scanUs, 3); g_ln.print(",scanus2="); g_ln.print(g_scanUs, 3);
   g_ln.print(",rate="); g_ln.print(g_rate, 1); g_ln.print(",fs="); g_ln.print(g_fs, 1);
   g_ln.print(",lag_us="); g_ln.print(g_lag_s * 1e6, 4); g_ln.print(",lincal="); g_ln.print(g_linCal ? 1 : 0);
+  g_ln.print(",adcraw="); g_ln.print(cfg.adcRaw);
+  // per pair: scans rebuilt, mirror slope b (* = learned, not the -1 default), offset a in mV
+  g_ln.print(",mirv="); g_ln.print(g_mV.cnt); g_ln.print(':'); g_ln.print(g_mV.b, 5);
+  g_ln.print(g_mV.learned ? "*" : ""); g_ln.print(':'); g_ln.print(g_mV.a * lsb() * 1e3f, 2);
+  g_ln.print(",miri="); g_ln.print(g_mI.cnt); g_ln.print(':'); g_ln.print(g_mI.b, 5);
+  g_ln.print(g_mI.learned ? "*" : ""); g_ln.print(':'); g_ln.print(g_mI.a * lsb() * 1e3f, 2);
   g_ln.print(",fsa0="); g_ln.print(g_irFsA[0], 4); g_ln.print(",fsa1="); g_ln.print(g_irFsA[1], 4);
   g_ln.print(",synth="); g_ln.print(g_synth ? 1 : 0);
   g_ln.print(",gaps="); g_ln.print(g_gaps); g_ln.print(",lostms="); g_ln.print((uint32_t)(g_lostUs / 1000ULL));
@@ -2670,6 +2846,23 @@ static void handleCommand(const char* cmd) {
   } else if (strcmp(cmd, "!DC") == 0 || strncmp(cmd, "!DC,", 4) == 0) {
     g_dcMs = cmd[3] == ',' ? (uint32_t)constrain(atol(cmd + 4), 10L, 4000L) : 500;
     g_dcState = 1;
+
+  } else if (strcmp(cmd, "!ADCREG") == 0) {
+    // the converters' clocking and calibration state, for diagnosing their DNL
+    g_ln.reset(); g_ln.print("$ADCREG");
+    const struct { const char* n; uint32_t v; } r[] = {
+      {"ADC1_CR", ADC1->CR}, {"ADC2_CR", ADC2->CR}, {"ADC1_CFGR", ADC1->CFGR}, {"ADC1_SMPR1", ADC1->SMPR1},
+      {"ADC1_CALFACT", ADC1->CALFACT}, {"ADC2_CALFACT", ADC2->CALFACT}, {"ADC12_CCR", ADC12_COMMON->CCR},
+      {"RCC_D1CCIPR", RCC->D1CCIPR}, {"RCC_D3CCIPR", RCC->D3CCIPR}, {"RCC_PLLCKSELR", RCC->PLLCKSELR},
+      {"RCC_PLLCFGR", RCC->PLLCFGR}, {"RCC_PLL2DIVR", RCC->PLL2DIVR}, {"RCC_PLL3DIVR", RCC->PLL3DIVR},
+      {"RCC_CR", RCC->CR}, {"IDCODE", DBGMCU->IDCODE},
+      {"ADCCLK_HZ", HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_ADC)}, {"SYSCLK_HZ", SystemCoreClock},
+    };
+    for (auto& x : r) { g_ln.print(','); g_ln.print(x.n); g_ln.print('='); g_ln.print(x.v, HEX); }
+    g_ln.println(); emit();
+
+  } else if (strcmp(cmd, "!LEGS") == 0 || strncmp(cmd, "!LEGS,", 6) == 0) {
+    startLegs(cmd + 5);
 
   } else if (strncmp(cmd, "!CAP,", 5) == 0) {
     if (g_cs == 1 || g_cs == 2) capAbort("ABORT");
@@ -2956,6 +3149,7 @@ void loop() {
   drainAdc();
   serviceCapture();
   serviceDc();
+  serviceLegs();
   serviceZero();
   serviceRange();
   serviceSave();

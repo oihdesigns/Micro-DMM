@@ -202,13 +202,35 @@ steady 0.5 A reads 0.496–0.531 A across the switch with no spike.
 
 ## Known limits
 
-- **ADC2 code error.** Both channels read up to ±1 mV (about 20 LSB) off a
-  straight line in a repeatable pattern, and the − pin (A3, ADC2) passing
-  1.2375 V (code 0x6000) adds up to +11 mV. Same at 16 and 14 bits and both
-  sample times, and the linearity calibration doesn't remove it: the
-  converter's own. AC sweeps across thousands of codes and averages it out;
-  a steady DC reading near that code shows it. A fix would be a per-ADC
-  correction table, measured with the Giga's DAC swept into A1/A3.
+- **Dead band above code 0x6000 (repaired in firmware).** Neither ADC ever
+  outputs the codes just above 0x6000 (1.2375 V): ADC1 skips 0x6000-0x6137
+  (~16 mV), ADC2 0x6000-~0x6230 (~28 mV), and every input in that band reads
+  0x5FFF. The linearity calibration doesn't fix it, and the clocking is in
+  spec (rev V, BOOST 11, 32 MHz at the converter), so it's the converters'
+  own. The legs rest at ~1.48 V, so the band is 0.23 V below rest: on the
+  HIGH range the I− leg (ADC2) is in it at about +4.7 to +5.5 A and I+ (ADC1)
+  at about −5.0 to −5.8 A; the voltage legs at about ±48 V. Measured raw
+  against a DM858 in series (2026-11-15): up to **+0.22 A** at +5.1 A and
+  −0.06 A at −5.6 A, which is why calibrating at ±5.18 A gave different
+  answers per polarity. DC parked there showed it; AC mostly averages it.
+  - Repair (default on, `ADCRAW` 0): a leg that reads 0x5FFF is rebuilt from
+    its partner, since an isolation amp's two legs are mirror images
+    (p = a + b·n, b ≈ −1). It keeps rebuilding for 64 scans after the last
+    hit, because the legs' noise (~6 mV rms) is mostly independent: rebuilding
+    only the hit scans kept the ones whose own noise had missed the band, and
+    read 110 mA off. The line is learned only from 64-scan block averages
+    well clear of the band; b comes from a regression once the signal has
+    spread over 10 mV (AC at once, DC after a few levels), else −1.
+  - Result, same sweep: within **±20 mA** through both bands, following the
+    board's normal ±25 mA error curve on either side.
+  - `$STATUS` shows `mirv=` / `miri=` as `<scans rebuilt>:<b>[*]:<a mV>`,
+    where `*` means b was learned. `ADCRAW,1` turns the repair off.
+    `!LEGS` gives the four legs' raw codes and a code histogram, and
+    `!ADCREG` the converters' clock and calibration registers.
+  - Not yet checked on the voltage legs (needs ≥48 V or mains).
+- **Small code errors elsewhere.** Both channels read up to ±1 mV (about 20
+  LSB) off a straight line in a repeatable pattern, including a 64-code
+  ripple. AC and noise average it out.
 - **Range HIGH drifts.** Its path includes the range relay's bypass contact,
   comparable to the 10 mΩ shunt (2.4 % and 1.5 % moves between sweeps,
   noisy per sample). Kelvin taps across the shunt alone would fix it.
