@@ -89,6 +89,16 @@
  *   order; a refused password falls through to the next. Lost or never
  *   joined: the whole list again every 20 s. Hidden SSIDs are not supported.
  *
+ * ── Web page (HTTP on the command port, 8080) ───────────────────────────────
+ *   http://<ip>:8080/ from a phone or a browser on the same network shows the
+ *   readings, a V / I persistence map of the mains cycle (every cycle folded
+ *   on the board, faded on the page) and the load relay. The page is
+ *   read-only except for the relay, and has no login yet. GET /api/live
+ *   [?since=<frame>] is the JSON the page polls. POST /api/relay?on=<0|1>
+ *   with an X-GACP header switches the relay as the IR remote does. The GUI
+ *   and the page share port 8080: a connection whose first byte is '!' is the
+ *   GUI, one that starts with an HTTP method is a browser (see the web section).
+ *
  * ── Commands (newline terminated) ───────────────────────────────────────────
  *   120VMonitor protocol (see its README):
  *   !ID                       $READY,GIGA,<fw>
@@ -150,6 +160,7 @@
  *   $SAFE,<INST|OVERCURRENT|TIMER|END|TRIPPK|REMOTE|TRIPA>,<amps>
  *   $TRIP,<RMS|PK>,<value>,<limit>   $RLY,<0|1>   $CAPTMO,<TIMEOUT|ABORT>
  *   $IR,<addr>,<cmd>   $REMOTE,<PRIMED|CANCEL|TIMEOUT|CLOSE|OPEN>
+ *   $WEB,RELAY,<0|1>,<OK|REFUSED>,<client ip>   the web page switched the relay
  *   $OK,<what>   $ERR,<message>
  *   $NET,<ip>,<port>,<rssi>,<status>,<powersave>,<ssid>,<net 1-5, 0 none>,
  *        <networks listed>,<bit mask of those seen in the last scan>
@@ -177,7 +188,7 @@
 #error "Copy arduino_secrets.example.h to arduino_secrets.h and put your Wi-Fi name/password in it"
 #endif
 
-#define FW_VERSION   "2.2"
+#define FW_VERSION   "2.3"
 #define CFG_VERSION  2
 #define CFG_MAGIC    0x50434147UL   // "GACP"
 static const uint16_t CMD_PORT = 8080;
@@ -441,6 +452,10 @@ static PowerResult g_last;
 static uint8_t  g_lastFl = 0;
 static bool     g_haveLast = false;
 static bool     g_lastDc = false;         // that window was DC mode
+static uint8_t  g_lastOut = 0;            // its $PWR flags (the web page)
+static uint32_t g_lastWinMs = 0;          // millis when it finished
+static const char* g_tripWhy = "";        // the latest trip, for the web page
+static float    g_tripVal = 0.0f, g_tripLim = 0.0f;
 #define OLED_REFRESH_MS 1000UL             // readings redraw once a second
 static bool     g_oledDirty = true;       // a state change (relay, remote, Wi-Fi): redraw now
 static uint32_t g_lastDispMs = 0;
@@ -469,6 +484,7 @@ static char     g_adcDiag[112] = "";
 static TxRing     g_txSer, g_txTcp;
 static LineBuf    g_ln;
 static WiFiServer g_server(CMD_PORT);
+static uint32_t   g_webConns = 0, g_webReqs = 0, g_webRelays = 0, g_webTimeouts = 0, g_webGui = 0;
 static WiFiClient g_client;
 static bool       g_clientOn = false, g_wifiOk = false;
 static char       g_ipStr[20] = "none";
@@ -1297,6 +1313,86 @@ static double nodeWeight(int64_t k, int64_t ka, int64_t kb, double a, double b) 
   return w;
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+//  persistence map (for the web page)
+// ═════════════════════════════════════════════════════════════════════════════
+//
+// Every span processCycle measures (normally one mains cycle, from a rising V
+// crossing to the next) is folded onto PM_X phase columns: the AVG_M points
+// the averaged cycle uses. Each column adds one count to every row between its
+// point and the next, so the steep parts of a wave stay a continuous trace.
+// Counts build up for PM_FRAME_MS, then the frame joins a ring that the page
+// reads. The page does the fading, so the board keeps no per-viewer state.
+// The scale (+-lim, in 1-2-5 steps) follows the signal: it goes up as soon as
+// a frame's peak passes it, and down once PM_DOWN frames in a row stay under 30 %.
+// Metering samples (8 kS/s, each the mean of DECIM scans) are what is folded,
+// so this shows every cycle, but not edges much shorter than 125 us.
+#define PM_X        AVG_M            // 128 phase columns, column 0 = the V rising crossing
+#define PM_Y        96               // amplitude rows, row 0 = -lim
+#define PM_CELLS    (PM_X * PM_Y)    // one map, column-major: cell x * PM_Y + y
+#define PM_FRAMES   8                // the ring: 4 s of frames
+#define PM_FRAME_MS 500UL
+#define PM_DOWN     6
+#define PM_RLE_MAX  (PM_CELLS * 3 / 2 + 8)
+static uint8_t* g_pmCur  = nullptr;  // the frame being filled: V map then I map (SDRAM)
+static uint8_t* g_pmRing = nullptr;  // PM_FRAMES of them; frame n is in slot n % PM_FRAMES
+static uint32_t g_pmSeq = 0;         // frames finished, ever
+static float    g_pmLim[2] = { 200.0f, 10.0f };   // the scale while filling: V, A
+static const float PM_MINLIM[2] = { 5.0f, 0.05f };
+static float    g_pmFLim[PM_FRAMES][2];
+static uint16_t g_pmFCyc[PM_FRAMES], g_pmFDc[PM_FRAMES];
+static uint16_t g_pmCyc = 0, g_pmDc = 0;          // spans in this frame, of them without crossings
+static float    g_pmPk[2] = { 0.0f, 0.0f };       // this frame's peak |v|, |i|
+static float    g_pmPkH[2][PM_DOWN];
+static uint8_t  g_pmPkN = 0;
+static uint32_t g_pmT0 = 0;
+
+static inline int pmRow(float x, float lim) {
+  int r = (int)floorf((x / lim + 1.0f) * (0.5f * PM_Y));
+  return r < 0 ? 0 : r >= PM_Y ? PM_Y - 1 : r;
+}
+static inline void pmSeg(uint8_t* map, int col, float a, float b, float lim) {
+  int ra = pmRow(a, lim), rb = pmRow(b, lim);
+  if (ra > rb) { int t = ra; ra = rb; rb = t; }
+  uint8_t* c = map + col * PM_Y;
+  for (int y = ra; y <= rb; y++) if (c[y] < 255) c[y]++;
+}
+static float nice125(float x) {
+  if (!(x > 0.0f)) return 1.0f;
+  const float e = powf(10.0f, floorf(log10f(x))), m = x / e;
+  return (m <= 1.0001f ? 1.0f : m <= 2.0001f ? 2.0f : m <= 5.0001f ? 5.0f : 10.0f) * e;
+}
+
+// from the loop: close the frame every PM_FRAME_MS and pick the next one's scale
+static void servicePersist() {
+  if (!g_pmCur || !g_pmRing) return;
+  const uint32_t now = millis();
+  if (now - g_pmT0 < PM_FRAME_MS) return;
+  g_pmT0 = now;
+  const uint32_t slot = g_pmSeq % PM_FRAMES;
+  memcpy(g_pmRing + (size_t)slot * 2 * PM_CELLS, g_pmCur, 2 * PM_CELLS);
+  memset(g_pmCur, 0, 2 * PM_CELLS);
+  g_pmFLim[slot][0] = g_pmLim[0]; g_pmFLim[slot][1] = g_pmLim[1];
+  g_pmFCyc[slot] = g_pmCyc; g_pmFDc[slot] = g_pmDc;
+  g_pmSeq++;
+  for (int c = 0; c < 2; c++) {
+    for (int k = PM_DOWN - 1; k > 0; k--) g_pmPkH[c][k] = g_pmPkH[c][k - 1];
+    g_pmPkH[c][0] = g_pmPk[c];
+    float lim = g_pmLim[c];
+    if (g_pmPk[c] > lim) {
+      lim = nice125(g_pmPk[c] * 1.05f);
+    } else if (g_pmPkN + 1 >= PM_DOWN) {
+      float m = 0.0f;
+      for (int k = 0; k < PM_DOWN; k++) m = max(m, g_pmPkH[c][k]);
+      if (m < 0.3f * lim) lim = nice125(m * 1.25f);
+    }
+    g_pmLim[c] = max(lim, PM_MINLIM[c]);
+  }
+  if (g_pmPkN < PM_DOWN) g_pmPkN++;
+  g_pmPk[0] = g_pmPk[1] = 0.0f;
+  g_pmCyc = g_pmDc = 0;
+}
+
 // One span [a, b] of the metering stream, usually one mains cycle between two
 // rising crossings. Reads samples floor(a)-2 .. floor(b)+4.
 static void processCycle(double a, double b, uint8_t flags) {
@@ -1393,13 +1489,25 @@ static void processCycle(double a, double b, uint8_t flags) {
     g_wVp[h] += L * k2 * k2 * ((double)cVr[h] * cVr[h] + (double)cVi[h] * cVi[h]);
     g_wIp[h] += L * k2 * k2 * ((double)cIr[h] * cIr[h] + (double)cIi[h] * cIi[h]);
   }
-  if (real) {
-    for (int m = 0; m < AVG_M; m++) {
-      double x = a + (double)m * L / AVG_M;
-      g_avgAccV[m] += vCub(x);
-      g_avgAccI[m] += iCub(x - g_alpha);
+  // AVG_M points across the span: the averaged cycle ($AVG, real cycles only)
+  // and the web page's persistence map (every span)
+  {
+    uint8_t* mv = g_pmCur;
+    uint8_t* mi = g_pmCur ? g_pmCur + PM_CELLS : nullptr;
+    const float lv = g_pmLim[0], li = g_pmLim[1];
+    float pv = 0.0f, pi = 0.0f, pkv = g_pmPk[0], pki = g_pmPk[1];
+    for (int m = 0; m <= AVG_M; m++) {
+      const double x = a + (double)m * L / AVG_M;
+      const float fv = vCub(x), fi = iCub(x - g_alpha);
+      if (real && m < AVG_M) { g_avgAccV[m] += fv; g_avgAccI[m] += fi; }
+      if (mv && m > 0) { pmSeg(mv, m - 1, pv, fv, lv); pmSeg(mi, m - 1, pi, fi, li); }
+      pv = fv; pi = fi;
+      pkv = max(pkv, fabsf(fv)); pki = max(pki, fabsf(fi));
     }
-    g_avgAccN++;
+    g_pmPk[0] = pkv; g_pmPk[1] = pki;
+    if (real) g_avgAccN++;
+    g_pmCyc++;
+    if (!real) g_pmDc++;
   }
   g_winEnd = b;
 
@@ -1511,6 +1619,7 @@ static void setRelay(bool on) {
 
 static void tripRelay(const char* why, float value, float limit) {
   g_trip_latch = true;
+  g_tripWhy = why; g_tripVal = value; g_tripLim = limit;
   g_closePending = false;
   relayPinWrite(false);
   g_relay = false;
@@ -1637,10 +1746,10 @@ static void finishWindow() {
     g_rngQuietSince = 0;
   }
 
+  // the protocol's flags: 16 = samples lost, the rest as stored
+  const uint8_t out = (fl & (FLG_NOCROSS | FLG_VCLIP | FLG_ICLIP | FLG_SYNTH | FLG_IRANGE)) |
+                      (g_trip_latch ? FLG_TRIP : 0) | ((fl & (FLG_GAP | FLG_ADCERR)) ? 0x10 : 0);
   if (g_smask & SM_PWR) {
-    // the protocol's flags: 16 = samples lost, the rest as stored
-    uint8_t out = (fl & (FLG_NOCROSS | FLG_VCLIP | FLG_ICLIP | FLG_SYNTH | FLG_IRANGE)) |
-                  (g_trip_latch ? FLG_TRIP : 0) | ((fl & (FLG_GAP | FLG_ADCERR)) ? 0x10 : 0);
     g_ln.reset();
     g_ln.print("$PWR,");
     g_ln.print(r.vrms, 4);  g_ln.print(','); g_ln.print(r.irms, 5);  g_ln.print(',');
@@ -1660,6 +1769,7 @@ static void finishWindow() {
   if (g_smask & SM_HARM) emitHarm(true);
   if (g_smask & SM_AVG)  emitAvg(true);
   g_last = r; g_lastFl = fl; g_lastDc = dcMode; g_haveLast = true;   // shown at the next 1 s refresh
+  g_lastOut = out; g_lastWinMs = millis();
   setLeds();
   clearWindow();
 }
@@ -1715,7 +1825,7 @@ static void safeOpen(uint8_t why, float amps) {
   g_closePending = false;
   relayPinWrite(false);
   g_relay = false;
-  if (why == 1 || why == 2) g_trip_latch = true;
+  if (why == 1 || why == 2) { g_trip_latch = true; g_tripWhy = SAFE_NAMES[why]; g_tripVal = amps; g_tripLim = 0.0f; }
   // where the relay really opened: now, not the (older) scan that set it off
   if (g_cs >= 1 && g_cs <= 4 && g_cOpenScan < 0) { g_cOpenScan = (int64_t)scanAt(tickUs()); g_cOpenWhy = why; }
   cancelAutoOpen();
@@ -2724,6 +2834,10 @@ static void printStatus() {
   g_ln.print(g_led == L_RED ? "red" : g_led == L_GREEN ? "green" : g_led == L_BLUE ? "blue" : "off");
   g_ln.print(",vabspk="); g_ln.print(g_cycAbsPk, 2);
   g_ln.print(",tickoff_us="); g_ln.print((int32_t)(tickUs() - micros()));
+  // connections on CMD_PORT: accepted, page requests, relay commands, timeouts, taken as the GUI
+  g_ln.print(",web="); g_ln.print(g_webConns); g_ln.print(':'); g_ln.print(g_webReqs);
+  g_ln.print(':'); g_ln.print(g_webRelays); g_ln.print(':'); g_ln.print(g_webTimeouts);
+  g_ln.print(':'); g_ln.print(g_webGui);
   g_ln.print(",uptime="); g_ln.println(millis() / 1000UL);
   emit();
 }
@@ -3066,6 +3180,406 @@ static void finishWifiConnect() {
   printNet();
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+//  web page (HTTP, on the command port 8080)
+// ═════════════════════════════════════════════════════════════════════════════
+//
+// A phone or browser on the same network opens http://<ip>:8080/ and gets
+// web_page.h. The page polls GET /api/live once a second for the last
+// window's readings and any persistence frames it hasn't seen yet. It can
+// change only the load relay: POST /api/relay?on=0|1 acts as the IR remote
+// does. A close clears a latched trip and is refused while a capture owns
+// the relay. An open during a capture is a safe-start REMOTE open.
+//
+// One port for the GUI and the page. lwIP on this core has 4 sockets AND 4
+// netconns in all (MBED_CONF_LWIP_SOCKET_MAX; MEMP_NUM_NETCONN is the same
+// number, fixed in libmbed.a), and a listener holds one of each. lwIP takes a
+// netconn for every incoming connection as its handshake completes, before
+// the sketch sees it, and resets the connection when none is left. With a
+// second listener on port 80 only two connections could exist at all: a GUI
+// connecting while two page requests ran was reset 10 times in 10 (measured
+// 2026-11-15). With one listener there are three: the GUI plus two web
+// slots. Every new connection goes into a web slot first. Its first byte
+// decides: '!' (the GUI and the Android app send !ID at once) makes it the
+// GUI's connection (newest wins, as before), an upper-case letter an HTTP
+// request. A connection that sends nothing (Chromium opens a spare one) is
+// closed after WEB_REQ_MS and is never taken for the GUI. The sketch also
+// accepts only when socketsFree() says a socket is free: an accept without
+// one resets the connection too. Every reply is Connection: close,
+// so a slot is free again as soon as its reply is queued. Closing right after
+// the last write loses nothing: 40 replies of 36 KB all arrived whole
+// (2026-11-15). A connection that sends no request gets WEB_REQ_MS; with a
+// single slot and 1.5 s, Chromium's spare connection held a real request up
+// for 1.8 s, which is why there are two slots.
+// stop() joins the client's reader thread (up to 100 ms), so a reaper thread
+// does it, not the loop. The reader thread also polls every 100 ms, so a
+// request typically waits up to 100 ms before the loop sees it.
+//
+// The relay POST needs an X-GACP header. A page from another site can't add
+// one without a CORS preflight, and the preflight gets 405 here, so another
+// site can't switch the relay through a phone's browser. webAuthorized() is
+// where a password check would go.
+
+#include <strings.h>
+#include "web_page.h"
+#define WEB_SLOTS 2
+static const uint32_t WEB_REQ_MS = 1000, WEB_STALL_MS = 5000;
+static const size_t   WEB_BUF = 65536;          // the largest JSON reply, per slot
+
+struct WebConn {
+  WiFiClient c;
+  bool       on = false;
+  uint8_t    state = 0;                 // 0 reading the request, 1 sending
+  uint32_t   t = 0;                     // millis: the state began, or the last progress
+  char       req[1024];
+  uint16_t   reqN = 0;
+  char       hdr[256];
+  size_t     hdrN = 0, off = 0;         // off runs over the header, then the body
+  uint8_t    stage[1436];               // the header plus the body's start, sent as one segment
+  const uint8_t* body = nullptr;
+  size_t     bodyN = 0;
+  char*      buf = nullptr;             // this slot's JSON replies (SDRAM)
+};
+static WebConn  g_wcs[WEB_SLOTS];
+static WebConn* g_w = nullptr;          // the slot being served (the helpers below work on it)
+static uint8_t* g_wRle = nullptr;       // one map, run-length coded (SDRAM)
+static BufPrint g_wo;
+
+// the reaper: stop() for closed connections, off the loop thread
+#define REAP_N 4
+static rtos::Thread*    g_reapTh = nullptr;
+static rtos::Semaphore* g_reapSem = nullptr;
+static WiFiClient       g_reap[REAP_N];
+static volatile uint8_t g_reapSt[REAP_N];     // 0 free, 1 handed to the reaper
+
+static void reapTask() {
+  while (true) {
+    g_reapSem->acquire();
+    for (int k = 0; k < REAP_N; k++) {
+      if (g_reapSt[k] != 1) continue;
+      g_reap[k].stop();
+      g_reap[k] = WiFiClient();
+      g_reapSt[k] = 0;
+    }
+  }
+}
+
+static void webClose(int w) {
+  WebConn& s = g_wcs[w];
+  if (!s.on) return;
+  s.on = false;
+  s.state = 0;
+  for (int k = 0; g_reapTh && k < REAP_N; k++) {
+    if (g_reapSt[k] != 0) continue;
+    g_reap[k] = s.c;
+    s.c = WiFiClient();
+    g_reapSt[k] = 1;
+    g_reapSem->release();
+    return;
+  }
+  s.c.stop();                  // the reaper is full: do it here
+  s.c = WiFiClient();
+}
+static void webDrop() { for (int w = 0; w < WEB_SLOTS; w++) webClose(w); }
+
+// extra: more header lines, each ending in CR LF ("" for none)
+static void webReply(int code, const char* type, const void* body, size_t n, const char* extra) {
+  const char* why = code == 200 ? "OK" : code == 400 ? "Bad Request" : code == 403 ? "Forbidden" :
+                    code == 404 ? "Not Found" : code == 405 ? "Method Not Allowed" :
+                    code == 409 ? "Conflict" : code == 431 ? "Request Header Fields Too Large" :
+                    "Service Unavailable";
+  int h = snprintf(g_w->hdr, sizeof(g_w->hdr),
+                   "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length: %u\r\n"
+                   "Cache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n%sConnection: close\r\n\r\n",
+                   code, why, type, (unsigned)n, extra);
+  g_w->hdrN = (h > 0 && h < (int)sizeof(g_w->hdr)) ? (size_t)h : 0;
+  g_w->body = (const uint8_t*)body; g_w->bodyN = n; g_w->off = 0;
+  g_w->state = 1; g_w->t = millis();
+}
+static void webText(int code, const char* s) { webReply(code, "text/plain; charset=utf-8", s, strlen(s), ""); }
+
+static void jkey(const char* k) { g_wo.print(",\""); g_wo.print(k); g_wo.print("\":"); }
+static void jnum(const char* k, double v, int dp) { jkey(k); if (isfinite(v)) g_wo.print(v, dp); else g_wo.print("null"); }
+static void jint(const char* k, long v) { jkey(k); g_wo.print(v); }
+static void jstr(const char* k, const char* v) { jkey(k); g_wo.print('"'); g_wo.print(v); g_wo.print('"'); }
+
+// a map as bytes: a count 1-255 as itself, a run of n empty cells as 0, n
+static size_t pmRle(const uint8_t* m, uint8_t* out) {
+  size_t n = 0;
+  int i = 0;
+  while (i < PM_CELLS) {
+    if (m[i]) { out[n++] = m[i++]; continue; }
+    int r = 0;
+    while (i < PM_CELLS && !m[i] && r < 255) { i++; r++; }
+    out[n++] = 0; out[n++] = (uint8_t)r;
+  }
+  return n;
+}
+static void jb64(const uint8_t* p, size_t n) {
+  static const char T[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  char q[4];
+  for (size_t i = 0; i < n; i += 3) {
+    const uint32_t v = ((uint32_t)p[i] << 16) | (i + 1 < n ? (uint32_t)p[i + 1] << 8 : 0) | (i + 2 < n ? p[i + 2] : 0);
+    q[0] = T[(v >> 18) & 63]; q[1] = T[(v >> 12) & 63];
+    q[2] = i + 1 < n ? T[(v >> 6) & 63] : '=';
+    q[3] = i + 2 < n ? T[v & 63] : '=';
+    g_wo.write((const uint8_t*)q, 4);
+  }
+}
+
+// GET /api/live[?since=<frame>]: the readings, and the frames from `since` on
+// that the ring still holds (all of it without since), oldest first. A reply
+// that would not fit stops early with "more":1 and the page asks again.
+static void webLive(const char* query) {
+  if (!g_w->buf || !g_wRle || !g_pmRing) { webText(503, "no memory for the web page\n"); return; }
+  long since = -1;
+  const char* q = query ? strstr(query, "since=") : nullptr;
+  if (q) since = atol(q + 6);
+  const PowerResult& r = g_last;
+  g_wo.begin(g_w->buf, WEB_BUF);
+  g_wo.print("{\"fw\":\"" FW_VERSION "\"");
+  jstr("ip", g_ipStr);
+  jnum("up", millis() / 1000.0, 1);
+  jint("have", g_haveLast ? 1 : 0);
+  jint("seq", (long)g_seq);
+  jint("age", g_haveLast ? (long)(millis() - g_lastWinMs) : -1L);
+  jnum("v", r.vrms, 4);   jnum("i", r.irms, 5);   jnum("p", r.p, 4);
+  jnum("s", r.s, 4);      jnum("q", r.q, 4);      jnum("pf", r.pf, 4);
+  jnum("hz", r.hz, 3);    jnum("vpk", r.vpk, 4);  jnum("ipk", r.ipk, 5);
+  jnum("vdc", r.vdc, 4);  jnum("idc", r.idc, 5);  jnum("wh", g_wh, 6);
+  jnum("thv", g_hVthd, 2); jnum("thi", g_hIthd, 2);
+  jint("dc", g_lastDc ? 1 : 0); jint("fl", g_lastOut);
+  jint("rng", g_irCur);
+  jint("rly", g_relay ? 1 : 0); jint("pend", g_closePending ? 1 : 0);
+  jint("trip", g_trip_latch ? 1 : 0);
+  jstr("tw", g_tripWhy); jnum("tv", g_tripVal, 4); jnum("tl", g_tripLim, 4);
+  jint("cap", g_cs ? 1 : 0); jint("gui", g_clientOn ? 1 : 0);
+  jint("pmx", PM_X); jint("pmy", PM_Y); jint("pmn", (long)g_pmSeq);
+  uint32_t from = g_pmSeq > PM_FRAMES ? g_pmSeq - PM_FRAMES : 0;
+  if (since >= 0 && (uint32_t)since > from && (uint32_t)since <= g_pmSeq) from = (uint32_t)since;
+  g_wo.print(",\"fr\":[");
+  bool first = true, more = false;
+  for (uint32_t n = from; n < g_pmSeq; n++) {
+    const size_t mark = g_wo.size();
+    const uint32_t slot = n % PM_FRAMES;
+    const uint8_t* m = g_pmRing + (size_t)slot * 2 * PM_CELLS;
+    if (!first) g_wo.print(',');
+    g_wo.print("{\"n\":"); g_wo.print((unsigned long)n);
+    g_wo.print(",\"vl\":"); g_wo.print(g_pmFLim[slot][0], 4);
+    g_wo.print(",\"il\":"); g_wo.print(g_pmFLim[slot][1], 4);
+    g_wo.print(",\"c\":"); g_wo.print(g_pmFCyc[slot]);
+    g_wo.print(",\"d\":"); g_wo.print(g_pmFDc[slot]);
+    g_wo.print(",\"v\":\""); jb64(g_wRle, pmRle(m, g_wRle));
+    g_wo.print("\",\"i\":\""); jb64(g_wRle, pmRle(m + PM_CELLS, g_wRle));
+    g_wo.print("\"}");
+    if (g_wo.overflowed() || g_wo.room() < 1024) { g_wo.setSize(mark); more = true; break; }
+    first = false;
+  }
+  g_wo.print(']');
+  jint("more", more ? 1 : 0);
+  g_wo.print('}');
+  webReply(200, "application/json", g_w->buf, g_wo.size(), "");
+}
+
+// a request header's value, or nullptr; name in lower case
+static const char* webHeader(const char* head, const char* name) {
+  const size_t nl = strlen(name);
+  for (const char* p = strstr(head, "\r\n"); p; p = strstr(p + 2, "\r\n")) {
+    const char* h = p + 2;
+    if (strncasecmp(h, name, nl) == 0 && h[nl] == ':') {
+      h += nl + 1;
+      while (*h == ' ') h++;
+      return h;
+    }
+  }
+  return nullptr;
+}
+
+// Where a credential check goes (a password header, a token in the query ...).
+static bool webAuthorized(const char* head) {
+  (void)head;
+  return true;     // none yet: anyone on the network may switch the relay
+}
+
+static void webRelayReply(int code, bool ok, const char* msg) {
+  g_wo.begin(g_w->buf, WEB_BUF);
+  g_wo.print("{\"ok\":"); g_wo.print(ok ? "true" : "false");
+  jstr("msg", msg);
+  jint("rly", g_relay ? 1 : 0); jint("pend", g_closePending ? 1 : 0); jint("trip", g_trip_latch ? 1 : 0);
+  g_wo.print('}');
+  webReply(code, "application/json", g_w->buf, g_wo.size(), "");
+}
+
+// POST /api/relay?on=0|1, as the IR remote: an open always goes through (during
+// a capture as safe start's REMOTE open); a close clears a latched trip, goes
+// HIGH range first in auto range, and is refused while a capture runs.
+static void webRelay(const char* query, const char* head) {
+  if (!g_w->buf) { webText(503, "no memory for the web page\n"); return; }
+  const char* q = query ? strstr(query, "on=") : nullptr;
+  const int on = (q && (q[3] == '0' || q[3] == '1')) ? q[3] - '0' : -1;
+  if (on < 0) { webRelayReply(400, false, "Use on=0 or on=1"); return; }
+  if (!webHeader(head, "x-gacp")) { webRelayReply(403, false, "Missing the X-GACP header"); return; }
+  if (!webAuthorized(head)) { webRelayReply(403, false, "Not authorized"); return; }
+  g_webRelays++;
+  bool ok = true;
+  const char* msg;
+  g_primed = false;                       // a web switch overrides a half-done remote close
+  if (on == 0) {
+    if (!g_relay && !g_closePending) msg = "Already open";
+    else {
+      if (g_cs >= 1 && g_cs <= 4) safeOpen(6, 0.0f); else setRelay(false);
+      msg = "Opened";
+    }
+  } else if (g_cs) {
+    ok = false; msg = "Refused: a capture owns the relay right now";
+  } else if (g_relay || g_closePending) {
+    msg = "Already closed";
+  } else {
+    const bool wasTrip = g_trip_latch;
+    setRelay(true);
+    msg = g_closePending ? "Closing: the current range goes to HIGH first"
+        : wasTrip ? "Trip cleared, closed" : "Closed";
+  }
+  g_ln.reset(); g_ln.print("$WEB,RELAY,"); g_ln.print(on); g_ln.print(',');
+  g_ln.print(ok ? "OK" : "REFUSED"); g_ln.print(','); g_ln.println(g_w->c.remoteIP()); emit();
+  oledPoke();
+  webRelayReply(ok ? 200 : 409, ok, msg);
+}
+
+static void webHandle() {
+  g_webReqs++;
+  char* req = g_w->req;
+  req[g_w->reqN] = 0;
+  char* sp1 = strchr(req, ' ');
+  char* sp2 = sp1 ? strchr(sp1 + 1, ' ') : nullptr;
+  if (!sp1 || !sp2) { webText(400, "bad request\n"); return; }
+  *sp1 = 0; *sp2 = 0;
+  const char* method = req;
+  char* path = sp1 + 1;
+  char* query = strchr(path, '?');
+  if (query) *query++ = 0;
+  const char* head = sp2 + 1;             // "HTTP/1.1\r\n<headers>"
+  const bool get = strcmp(method, "GET") == 0, post = strcmp(method, "POST") == 0;
+  if (strcmp(path, "/") == 0 || strcmp(path, "/index.html") == 0) {
+    if (!get) { webText(405, "GET only\n"); return; }
+    // gzipped to every browser: fewer bytes, so fewer of this core's ~1 KB round trips
+    const char* ae = webHeader(head, "accept-encoding");
+    if (ae && strstr(ae, "gzip"))
+      webReply(200, "text/html; charset=utf-8", WEB_PAGE_GZ, sizeof(WEB_PAGE_GZ),
+               "Content-Encoding: gzip\r\nVary: Accept-Encoding\r\n");
+    else
+      webReply(200, "text/html; charset=utf-8", WEB_PAGE, sizeof(WEB_PAGE) - 1, "Vary: Accept-Encoding\r\n");
+  } else if (strcmp(path, "/api/live") == 0) {
+    if (!get) { webText(405, "GET only\n"); return; }
+    webLive(query);
+  } else if (strcmp(path, "/api/relay") == 0) {
+    if (!post) { webText(405, "POST only\n"); return; }
+    webRelay(query, head);
+  } else {
+    webText(404, "not found\n");
+  }
+}
+
+// A new connection whose first byte isn't an HTTP method: the GUI (or the
+// Android app). It becomes the command connection, replacing any old one.
+static void webToGui(int w) {
+  WebConn& s = g_wcs[w];
+  dropClient();                   // newest connection wins: a half-open old socket must not hold one
+  g_client = s.c;
+  s.c = WiFiClient();
+  s.on = false; s.state = 0;
+  g_client.setSocketTimeout(0);   // non-blocking send; net_sink.h keeps the rest
+  g_clientOn = true;
+  g_webGui++;
+  printBanner();
+  setLeds();
+  for (uint16_t i = 0; i < s.reqN; i++) feed(g_rxTcp, s.req[i]);   // what was read so far
+}
+
+// one slot: read the request, send the reply, close
+static void serviceWebSlot(int w, uint32_t now) {
+  g_w = &g_wcs[w];
+  WebConn& s = *g_w;
+  if (s.state == 0) {                     // the request line and headers
+    int guard = 512;
+    while (guard-- > 0 && s.c.available()) {
+      const int ch = s.c.read();
+      if (ch < 0) break;
+      if (s.reqN == 0 && !(ch >= 'A' && ch <= 'Z')) { s.req[s.reqN++] = (char)ch; webToGui(w); return; }
+      if (s.reqN >= sizeof(s.req) - 1) { webText(431, "request too large\n"); break; }
+      s.req[s.reqN++] = (char)ch;
+      if (s.reqN >= 4 && memcmp(s.req + s.reqN - 4, "\r\n\r\n", 4) == 0) { webHandle(); break; }
+    }
+    if (s.state == 0) {
+      if (now - s.t > WEB_REQ_MS) { g_webTimeouts++; webClose(w); }
+      return;
+    }
+  }
+  // The reply, as fast as lwIP takes it. The header goes out together with
+  // the start of the body: sent alone it was a short segment, lwIP's Nagle
+  // held the next one until it was acknowledged, and Windows delays that
+  // acknowledgement up to 200 ms (a 600 B reply took ~400 ms).
+  for (int k = 0; k < 4; k++) {
+    const uint8_t* p;
+    size_t n;
+    if (s.off < s.hdrN) {
+      const size_t h = s.hdrN - s.off;
+      const size_t b = min(s.bodyN, sizeof(s.stage) - h);
+      memcpy(s.stage, s.hdr + s.off, h);
+      memcpy(s.stage + h, s.body, b);
+      p = s.stage; n = h + b;
+    } else {
+      const size_t bo = s.off - s.hdrN;
+      if (bo >= s.bodyN) break;
+      p = s.body + bo; n = s.bodyN - bo;
+    }
+    if (n > 1436) n = 1436;
+    const size_t wr = s.c.write(p, n);
+    if (wr == 0) break;
+    s.off += wr; s.t = now;
+    if (wr < n) break;
+  }
+  if (s.off >= s.hdrN + s.bodyN) {
+    // all queued in lwIP: close now (it still delivers what's queued); read
+    // anything sent after the request first, so the close isn't a reset
+    int guard = 512;
+    while (guard-- > 0 && s.c.available()) s.c.read();
+    webClose(w);
+  } else if (now - s.t > WEB_STALL_MS) {
+    g_webTimeouts++; webClose(w);
+  }
+}
+
+// Sockets free of MBED_CONF_LWIP_SOCKET_MAX: the listener, the GUI's client,
+// the web slots and the closes still with the reaper all hold one.
+static int socketsFree() {
+  int used = 1 + (g_clientOn ? 1 : 0);
+  for (int w = 0; w < WEB_SLOTS; w++) if (g_wcs[w].on) used++;
+  for (int k = 0; k < REAP_N; k++) if (g_reapSt[k]) used++;
+  return MBED_CONF_LWIP_SOCKET_MAX - used;
+}
+
+// from serviceNet, while Wi-Fi is up: every new connection on CMD_PORT starts here
+static void serviceWeb() {
+  const uint32_t now = millis();
+  bool tried = false;                     // one accept per pass
+  for (int w = 0; w < WEB_SLOTS; w++) {
+    WebConn& s = g_wcs[w];
+    if (!s.on) {
+      if (!s.buf || tried) continue;      // no SDRAM: this slot is off
+      tried = true;
+      if (socketsFree() < 1) continue;    // accepting now would reset the connection
+      WiFiClient c = g_server.available();   // nothing waiting: an empty client
+      if (!c) continue;
+      s.c = c;
+      s.c.setSocketTimeout(0);            // non-blocking send, as the GUI's client
+      s.on = true; s.state = 0; s.reqN = 0; s.t = now;
+      g_webConns++;
+    }
+    serviceWebSlot(w, now);
+  }
+}
+
 static void dropClient() {
   if (g_clientOn) g_client.stop();
   g_clientOn = false;
@@ -3080,7 +3594,7 @@ static void serviceNet() {
   if (g_wifiOk && now - g_lastWifiCheck > 2000) {
     g_lastWifiCheck = now;
     if (WiFi.status() != WL_CONNECTED) {
-      g_wifiOk = false; g_wifiNet = -1; dropClient(); strcpy(g_ipStr, "none"); setLeds(); oledPoke(); printNet();
+      g_wifiOk = false; g_wifiNet = -1; dropClient(); webDrop(); strcpy(g_ipStr, "none"); setLeds(); oledPoke(); printNet();
     }
   }
   if (!g_wifiOk) {
@@ -3090,17 +3604,8 @@ static void serviceNet() {
     }
     return;
   }
-  WiFiClient c = g_server.available();
-  if (c) {
-    // newest connection wins: a half-open old socket must not hold the slot,
-    // because the Giga's socket pool is tiny (the Giga_RemoteController lesson)
-    dropClient();
-    g_client = c;
-    g_client.setSocketTimeout(0);   // non-blocking send; net_sink.h keeps the rest
-    g_clientOn = true;
-    printBanner();
-    setLeds();
-  }
+  // new connections are accepted and sorted (GUI or browser) in serviceWeb
+  serviceWeb();
   if (g_clientOn && !g_client.connected()) { dropClient(); setLeds(); }
   if (g_clientOn) {
     int guard = 512;
@@ -3141,6 +3646,21 @@ void setup() {
     while (1) { Serial.println("$ERR,SDRAM allocation failed"); digitalWrite(LEDR, LOW); delay(1000); }
   }
   memset(g_rf, 0, RING_N);
+  // the web page's persistence frames and reply buffers: without them only the page is off
+  g_pmCur  = (uint8_t*)SDRAM.malloc(2 * PM_CELLS);
+  g_pmRing = (uint8_t*)SDRAM.malloc((size_t)PM_FRAMES * 2 * PM_CELLS);
+  g_wRle   = (uint8_t*)SDRAM.malloc(PM_RLE_MAX);
+  for (int w = 0; w < WEB_SLOTS; w++) g_wcs[w].buf = (char*)SDRAM.malloc(WEB_BUF);
+  if (g_pmCur && g_pmRing && g_wRle && g_wcs[0].buf) {
+    memset(g_pmCur, 0, 2 * PM_CELLS);
+    memset(g_pmRing, 0, (size_t)PM_FRAMES * 2 * PM_CELLS);
+  } else {
+    g_pmCur = nullptr; g_pmRing = nullptr;
+    Serial.println("$ERR,no SDRAM for the web page");
+  }
+  g_reapSem = new rtos::Semaphore(0);
+  g_reapTh = new rtos::Thread(osPriorityNormal, 4096, nullptr, "webreap");
+  g_reapTh->start(reapTask);
 
   // measuring starts at once; the network joins in the background
   applyConfig(0);
@@ -3168,6 +3688,7 @@ void loop() {
 
   drainAdc();
   serviceAnalysis();
+  servicePersist();
   drainAdc();
   serviceCapture();
   serviceDc();

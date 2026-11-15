@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111416">
+<link rel="icon" href="data:,">
+<title>Giga AC Power</title>
+<style>
+:root{--bg:#111416;--card:#1a1f23;--line:#2a3238;--tx:#e8edf0;--mut:#8d99a1;--v:#4ade80;--i:#fbbf24;--bad:#f87171;--warn:#fb923c}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+main{max-width:760px;margin:0 auto;padding:12px 16px 28px}
+header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:2px 0 12px}
+h1{font-size:17px;font-weight:600;margin:0}
+.pill{font-size:12px;padding:3px 10px;border-radius:99px;background:var(--line);color:var(--mut);white-space:nowrap}
+.pill.live{background:#14532d;color:#bbf7d0}.pill.stale{background:#713f12;color:#fde68a}.pill.off{background:#7f1d1d;color:#fecaca}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin:0 0 12px}
+.k{font-size:12px;color:var(--mut)}
+.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+.big{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.big .n{font-size:26px;font-weight:600;line-height:1.15}
+.u{font-size:13px;color:var(--mut);margin-left:3px}
+#nv{color:var(--v)}#ni{color:var(--i)}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px 8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+.grid .k{font-size:11px}.grid .n{font-size:15px}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.tags:empty{display:none}
+.tag{font-size:12px;padding:2px 8px;border-radius:6px;background:#26313a;color:#cbd5dc}
+.tag.bad{background:#7f1d1d;color:#fee2e2}.tag.warn{background:#7c2d12;color:#ffedd5}.tag.info{background:#1e3a5f;color:#dbeafe}
+canvas{display:block;width:100%;border-radius:6px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-right:1px solid var(--line);background:transparent;color:var(--mut);padding:7px 12px;font:inherit;font-size:13px}
+.seg button:last-child{border-right:0}
+.seg button.on{background:#2b353d;color:var(--tx)}
+select,.btn{font:inherit;font-size:13px;color:var(--tx);background:#232a30;border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+.sp{flex:1}
+.note{font-size:12px;color:var(--mut);margin-top:8px}
+.rly{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+#rs{font-size:20px;font-weight:600;margin-top:2px}
+#rs.closed{color:var(--warn)}#rs.trip{color:var(--bad)}#rs.open{color:var(--tx)}
+#rwhy{font-size:12.5px;color:var(--mut)}
+.rb{display:flex;gap:8px}
+.rb button{font:600 15px system-ui,sans-serif;padding:12px 16px;border-radius:10px;border:1px solid var(--line);background:#232a30;color:var(--tx);min-width:118px}
+#bclose.arm{background:#9a3412;border-color:#c2410c;color:#fff}
+.rb button:disabled{opacity:.38}
+#rmsg{font-size:12.5px;color:var(--mut);margin-top:8px;min-height:1.2em}
+footer{font-size:12px;color:var(--mut);line-height:1.5}
+@media (max-width:430px){.big .n{font-size:21px}.grid{grid-template-columns:repeat(3,minmax(0,1fr))}.rb{width:100%}.rb button{flex:1}}
+</style>
+</head>
+<body>
+<main>
+<header><h1>Giga AC Power</h1><span id="conn" class="pill">connecting</span></header>
+
+<section class="card">
+ <div class="big">
+  <div><div class="k" id="kv">V rms</div><span class="n mono" id="nv">&mdash;</span><span class="u">V</span></div>
+  <div><div class="k" id="ki">I rms</div><span class="n mono" id="ni">&mdash;</span><span class="u">A</span></div>
+  <div><div class="k">Power</div><span class="n mono" id="np">&mdash;</span><span class="u">W</span></div>
+ </div>
+ <div class="grid" id="g"></div>
+ <div class="tags" id="tags"></div>
+</section>
+
+<section class="card">
+ <canvas id="pm" height="200"></canvas>
+ <div class="row">
+  <div class="seg" id="show"><button data-v="vi">V + I</button><button data-v="v">V</button><button data-v="i">I</button></div>
+  <select id="fade" aria-label="Fade time">
+   <option value="1">Fade 1 s</option><option value="3">Fade 3 s</option><option value="10">Fade 10 s</option>
+   <option value="30">Fade 30 s</option><option value="0">No fade</option>
+  </select>
+  <span class="sp"></span><button class="btn" id="clr">Clear</button>
+ </div>
+ <div class="note" id="pmcap"></div>
+</section>
+
+<section class="card">
+ <div class="rly">
+  <div><div class="k">Load relay</div><div id="rs">&mdash;</div><div id="rwhy"></div></div>
+  <div class="rb"><button id="bopen" disabled>Open</button><button id="bclose" disabled>Close</button></div>
+ </div>
+ <div id="rmsg"></div>
+</section>
+
+<footer><span id="foot"></span><br>Read-only except the load relay. There is no login yet: anyone on this network can open this page and switch the relay.</footer>
+</main>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const store={get(k,d){try{const v=localStorage.getItem(k);return v===null?d:v}catch(e){return d}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+
+// ---- numbers
+function fmt(x,sig,signed){
+  if(x===null||x===undefined||!isFinite(x))return "—";
+  const a=Math.abs(x);let d=a>=1000?0:a>=100?1:a>=10?2:a>=1?3:4;
+  d=Math.max(0,d-(4-(sig||4)));
+  let s=x.toFixed(d);if(signed&&x>=0)s="+"+s;return s;
+}
+function fmtUp(s){s=Math.floor(s);const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);
+  return d?d+"d "+h+"h":h?h+"h "+m+"m":m+"m "+(s%60)+"s";}
+const CELLS=[["s","Apparent","VA"],["q","Reactive","var"],["pf","PF",""],["hz","Frequency","Hz"],
+  ["vpk","V peak","V"],["ipk","I peak","A"],["vdc","V dc","V"],["idc","I dc","A"],
+  ["wh","Energy","Wh"],["thv","THD V","%"],["thi","THD I","%"],["rng","I range",""]];
+const cell={};
+for(const [key,label,unit] of CELLS){
+  const d=document.createElement("div");
+  d.innerHTML='<div class="k"></div><span class="n mono">—</span><span class="u"></span>';
+  d.children[0].textContent=label;d.children[2].textContent=unit;
+  $("g").appendChild(d);cell[key]={k:d.children[0],n:d.children[1],label};
+}
+function setCell(key,val,label){const c=cell[key];c.n.textContent=val;c.k.textContent=label||c.label;}
+
+// ---- persistence map: the board sends 0.5 s frames of counts, this page fades and sums them
+let PX=128,PY=96,acc={v:null,i:null},lim={v:0,i:0},next=-1,lastN=-1,show=store.get("gacp.show","vi"),tau=+store.get("gacp.fade","3"),lastFrame=null;
+function alloc(){acc.v=new Float32Array(PX*PY);acc.i=new Float32Array(PX*PY);}
+alloc();
+function decode(b64){
+  const s=atob(b64),out=new Uint8Array(PX*PY);let o=0;
+  for(let k=0;k<s.length&&o<out.length;){const c=s.charCodeAt(k++);if(c)out[o++]=c;else o+=s.charCodeAt(k++);}
+  return out;
+}
+function addFrame(f){
+  const gap=lastN>=0?Math.max(1,f.n-lastN):1;lastN=f.n;
+  const k=tau>0?Math.exp(-0.5*gap/tau):1;
+  for(const ch of ["v","i"]){
+    const fl=ch==="v"?f.vl:f.il,a=acc[ch];
+    if(fl!==lim[ch]){a.fill(0);lim[ch]=fl;}
+    const m=decode(f[ch]);
+    for(let j=0;j<a.length;j++)a[j]=a[j]*k+m[j];
+  }
+  lastFrame=f;
+}
+const off=document.createElement("canvas"),octx=off.getContext("2d");let img=null;
+function draw(){
+  const c=$("pm"),dpr=window.devicePixelRatio||1,w=c.clientWidth,h=Math.max(150,Math.round(w*0.56));
+  if(c.width!==Math.round(w*dpr)||c.height!==Math.round(h*dpr)){c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);c.style.height=h+"px";}
+  const ctx=c.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);
+  const L=40,R=44,T=8,B=20,pw=w-L-R,ph=h-T-B;
+  ctx.fillStyle="#0b0e10";ctx.fillRect(0,0,w,h);
+  if(off.width!==PX||off.height!==PY){off.width=PX;off.height=PY;img=octx.createImageData(PX,PY);}
+  const sv=show!=="i",si=show!=="v",av=acc.v,ai=acc.i;
+  let mv=0,mi=0;for(let j=0;j<av.length;j++){if(av[j]>mv)mv=av[j];if(ai[j]>mi)mi=ai[j];}
+  const nv=mv>0?1/Math.log1p(mv*0.7):0,ni=mi>0?1/Math.log1p(mi*0.7):0,px=img.data;
+  for(let x=0;x<PX;x++)for(let y=0;y<PY;y++){
+    const j=x*PY+y,p=((PY-1-y)*PX+x)*4;
+    const tv=sv?Math.min(1,Math.log1p(av[j])*nv):0,ti=si?Math.min(1,Math.log1p(ai[j])*ni):0;
+    const gv=Math.pow(tv,0.8),gi=Math.pow(ti,0.8);
+    px[p]=Math.min(255,11+74*gv+251*gi);px[p+1]=Math.min(255,14+222*gv+191*gi);px[p+2]=Math.min(255,16+128*gv+36*gi);px[p+3]=255;
+  }
+  octx.putImageData(img,0,0);
+  ctx.imageSmoothingEnabled=true;ctx.drawImage(off,L,T,pw,ph);
+  ctx.lineWidth=1;
+  for(let k=0;k<=8;k++){const x=Math.round(L+pw*k/8)+.5;ctx.strokeStyle=k%4?"rgba(255,255,255,.06)":"rgba(255,255,255,.14)";ctx.beginPath();ctx.moveTo(x,T);ctx.lineTo(x,T+ph);ctx.stroke();}
+  for(let k=0;k<=4;k++){const y=Math.round(T+ph*k/4)+.5;ctx.strokeStyle=k===2?"rgba(255,255,255,.2)":"rgba(255,255,255,.06)";ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(L+pw,y);ctx.stroke();}
+  ctx.font="10px system-ui,sans-serif";ctx.textBaseline="middle";
+  const lab=(v,u)=>{const s=fmt(v,3,false);return (s.indexOf(".")>=0?s.replace(/\.?0+$/,""):s)+u;};
+  for(let k=0;k<=4;k++){
+    const y=T+ph*k/4,f=1-k/2;
+    if(lim.v){ctx.fillStyle="#4ade80";ctx.textAlign="right";ctx.fillText(lab(lim.v*f,"V"),L-4,y);}
+    if(lim.i){ctx.fillStyle="#fbbf24";ctx.textAlign="left";ctx.fillText(lab(lim.i*f,"A"),L+pw+4,y);}
+  }
+  ctx.fillStyle="#8d99a1";ctx.textBaseline="top";ctx.textAlign="center";
+  for(let k=0;k<=4;k++)ctx.fillText((k*90)+"°",L+pw*k/4,T+ph+5);
+}
+function setShow(v){show=v;store.set("gacp.show",v);for(const b of $("show").children)b.classList.toggle("on",b.dataset.v===v);draw();}
+for(const b of $("show").children)b.onclick=()=>setShow(b.dataset.v);
+$("fade").value=String(tau);$("fade").onchange=e=>{tau=+e.target.value;store.set("gacp.fade",String(tau));};
+$("clr").onclick=()=>{acc.v.fill(0);acc.i.fill(0);draw();};
+window.addEventListener("resize",draw);
+setShow(show);
+
+// ---- live data
+let d=null,okAt=0,fails=0,timer=0,busy=false;
+function render(){
+  if(!d)return;
+  const dc=!!d.dc,have=!!d.have;
+  $("kv").textContent=dc?"V dc":"V rms";$("ki").textContent=dc?"I dc":"I rms";
+  $("nv").textContent=have?(dc?fmt(d.vdc,4,true):fmt(d.v)):"—";
+  $("ni").textContent=have?(dc?fmt(d.idc,4,true):fmt(d.i)):"—";
+  $("np").textContent=have?fmt(d.p,4,dc):"—";
+  const H=(x,s,sg)=>have?fmt(x,s,sg):"—";
+  setCell("s",H(d.s));setCell("q",H(d.q));setCell("pf",have?fmt(d.pf,3,true):"—");
+  setCell("hz",!have?"—":dc?"DC":fmt(d.hz,4));
+  setCell("vpk",H(d.vpk));setCell("ipk",H(d.ipk));
+  if(dc){setCell("vdc",H(d.v),"V ripple");setCell("idc",H(d.i),"I ripple");}
+  else{setCell("vdc",H(d.vdc,4,true));setCell("idc",H(d.idc,4,true));}
+  setCell("wh",fmt(d.wh,4));
+  setCell("thv",dc||!have?"—":fmt(d.thv,3));setCell("thi",dc||!have?"—":fmt(d.thi,3));
+  setCell("rng",d.rng?"LOW":"HIGH");
+  const fl=d.fl|0,t=[];
+  if(dc)t.push(["info","DC mode"]);
+  if(d.trip)t.push(["bad","Tripped"]);
+  if(fl&2)t.push(["bad","V clipping"]);if(fl&4)t.push(["bad","I clipping"]);
+  if(fl&16)t.push(["warn","Samples lost"]);
+  if((fl&1)&&!dc)t.push(["warn","No V crossings in part of the window"]);
+  if(fl&64)t.push(["info","Synthetic data (!SYNTH)"]);
+  if(fl&128)t.push(["info","Range switched"]);
+  if(d.cap)t.push(["info","Capture running"]);
+  if(d.gui)t.push(["","GUI connected"]);
+  $("tags").innerHTML="";
+  for(const [c,s] of t){const e=document.createElement("span");e.className="tag "+c;e.textContent=s;$("tags").appendChild(e);}
+  // relay
+  const rs=$("rs");
+  if(d.trip&&!d.rly){rs.className="trip";rs.textContent="Tripped";$("rwhy").textContent=d.tw?(d.tw+" "+fmt(d.tv)+" A"+(d.tl>0?" > "+fmt(d.tl)+" A":"")):"";}
+  else if(d.rly){rs.className="closed";rs.textContent="Closed";$("rwhy").textContent="load powered";}
+  else if(d.pend){rs.className="closed";rs.textContent="Closing…";$("rwhy").textContent="current range switching first";}
+  else{rs.className="open";rs.textContent="Open";$("rwhy").textContent="load off";}
+  const live=Date.now()-okAt<3500;
+  $("bopen").disabled=!live||!(d.rly||d.pend);
+  $("bclose").disabled=!live||d.rly||d.pend||d.cap;
+  if(!armT)$("bclose").textContent=d.trip?"Reset & close":"Close";
+  $("foot").textContent="fw "+d.fw+" · "+d.ip+" · up "+fmtUp(d.up);
+  const f=lastFrame;
+  $("pmcap").textContent=!f?"":
+    (f.c===0?"No cycles measured in the last frame. ":"")+
+    (f.d>0?"No V crossings: spans are free-running, so the phase axis is arbitrary.":"One mains cycle, 0° = the rising voltage crossing. "+(f.c*2)+" cycles/s folded.");
+}
+function setConn(){
+  const c=$("conn"),age=Date.now()-okAt;
+  if(!okAt||age>3500){c.className="pill off";c.textContent=okAt?"no answer":"connecting";}
+  else if(d&&(d.age>2500||!d.have)){c.className="pill stale";c.textContent="no new readings";}
+  else{c.className="pill live";c.textContent="live";}
+}
+async function poll(){
+  clearTimeout(timer);
+  if(busy)return;
+  if(document.hidden){timer=setTimeout(poll,1000);return;}
+  busy=true;const t0=performance.now();let again=1000;
+  try{
+    const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),4000);
+    const r=await fetch("/api/live"+(next>=0?"?since="+next:""),{cache:"no-store",signal:ctl.signal});
+    const j=await r.json();clearTimeout(to);
+    if(j.pmx&&(j.pmx!==PX||j.pmy!==PY)){PX=j.pmx;PY=j.pmy;alloc();}
+    if(j.pmn<next){next=-1;lastN=-1;}          // the board restarted
+    for(const f of j.fr||[])if(f.n>=next){addFrame(f);next=f.n+1;}
+    d=j;okAt=Date.now();fails=0;
+    if(j.more)again=60;
+  }catch(e){fails++;}
+  busy=false;
+  render();setConn();draw();
+  timer=setTimeout(poll,Math.max(60,again-(performance.now()-t0)));
+}
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)poll();});
+
+// ---- relay: open in one tap, close in two
+let armT=0;
+function disarm(){clearTimeout(armT);armT=0;const b=$("bclose");b.classList.remove("arm");render();}
+$("bclose").onclick=()=>{
+  const b=$("bclose");
+  if(!armT){armT=setTimeout(disarm,4000);b.classList.add("arm");b.textContent="Tap to confirm";return;}
+  disarm();relay(1);
+};
+$("bopen").onclick=()=>relay(0);
+async function relay(on){
+  $("rmsg").textContent="Sending…";
+  try{
+    const r=await fetch("/api/relay?on="+on,{method:"POST",headers:{"X-GACP":"1"},cache:"no-store"});
+    const j=await r.json();$("rmsg").textContent=j.msg||(j.ok?"Done":"Refused");
+  }catch(e){$("rmsg").textContent="No answer from the board";}
+  setTimeout(poll,150);
+}
+setInterval(setConn,1000);
+poll();
+</script>
+</body>
+</html>

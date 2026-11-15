@@ -72,3 +72,29 @@ private:
     size_t n_ = 0;
     bool over_ = false;
 };
+
+// Print into caller-owned memory (the web page's JSON replies, in SDRAM).
+// size() / setSize() let a caller roll back a part that didn't fit.
+class BufPrint : public Print {
+public:
+    void begin(char* b, size_t cap) { b_ = b; cap_ = cap; n_ = 0; over_ = false; }
+    size_t write(uint8_t c) override {
+        if (n_ < cap_) { b_[n_++] = (char)c; return 1; }
+        over_ = true; return 0;
+    }
+    size_t write(const uint8_t* p, size_t len) override {
+        size_t m = (len < cap_ - n_) ? len : cap_ - n_;
+        memcpy(b_ + n_, p, m); n_ += m;
+        if (m < len) over_ = true;
+        return m;
+    }
+    const char* data() const { return b_; }
+    size_t size() const { return n_; }
+    size_t room() const { return cap_ - n_; }
+    void setSize(size_t n) { if (n <= cap_) { n_ = n; over_ = false; } }
+    bool overflowed() const { return over_; }
+private:
+    char* b_ = nullptr;
+    size_t cap_ = 0, n_ = 0;
+    bool over_ = false;
+};

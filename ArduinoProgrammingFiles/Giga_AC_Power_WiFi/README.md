@@ -8,6 +8,7 @@ it. The GUI files here are copies of 120VMonitor's, adapted for the Giga.
 | File | |
 |---|---|
 | `Giga_AC_Power_WiFi.ino` + `ac_types.h`, `net_sink.h`, `adc_access.h` | firmware (M7, default "2MB M7 + M4 in SDRAM" split) |
+| `web_page.html` → `make_web_page.py` → `web_page.h` | the phone page the board serves; edit the .html, run `py -3 make_web_page.py`, compile |
 | `arduino_secrets.example.h` | copy to `arduino_secrets.h` (git-ignored), fill in the Wi-Fi name and password (up to five networks, see below) |
 | `monitor_gui.py` | the GUI: `py -3 monitor_gui.py` (pyserial, matplotlib, numpy) |
 | `monitor_link.py` | protocol + capture analysis, usable from scripts; serial, TCP or SIM |
@@ -27,6 +28,51 @@ it. The GUI files here are copies of 120VMonitor's, adapted for the Giga.
 `!SYNTH,1,<vrms>,<irms>,<deg>,<h3%>,<hz>` (Console tab) replaces the ADC data
 with an exact synthetic V/I, still paced by the ADC, to try everything with
 nothing connected. `!SYNTH,0` goes back.
+
+## Web page (phone)
+
+Open **`http://<ip>:8080/`** (e.g. `http://192.168.40.225:8080/`) in a browser
+on the same network. No app or PC needed; the page is served by the board.
+
+- **Readings**: V, I and W large; VA, var, PF, Hz, peaks, DC parts, Wh, THD and
+  the current range below; tags for trip, clipping, lost samples, DC mode,
+  synthetic data, a capture running, the GUI connected. In DC mode the cells
+  swap as on the GUI (V dc / I dc large, the ripple below, Freq "DC").
+- **Persistence map**: one mains cycle (0° = the rising voltage crossing), V
+  green on the left scale, I amber on the right. The board folds **every**
+  cycle (the 8 kS/s metering samples, so edges much shorter than 125 µs are
+  smoothed) into 128 × 96 counts and sends a frame every 0.5 s; the page sums
+  and fades them (1 s to no fade, chosen on the page). The scale follows the
+  signal in 1-2-5 steps, so it jumps when the signal does and the map starts
+  over. With no voltage crossings the spans are free-running and the phase
+  axis means nothing; the page says so.
+- **Load relay**: the one thing the page can change. Open is one tap. Close is
+  two taps within 4 s, clears a latched trip, and, as the IR remote's close,
+  goes HIGH range first in auto range and is refused while a capture owns the
+  relay. Each switch is logged as `$WEB,RELAY,<0|1>,<OK|REFUSED>,<client ip>`.
+- **No login yet.** Anyone on the network can open the page and switch the
+  relay. Another web site can't do it through a visitor's browser: the switch
+  is a POST that needs an `X-GACP` header, which a cross-site request can't
+  add without a preflight the board refuses. `webAuthorized()` in the sketch
+  is where a password check goes.
+
+The page polls `GET /api/live[?since=<frame>]` once a second (JSON: the last
+window's readings and any persistence frames newer than `since`). The relay
+is `POST /api/relay?on=<0|1>` with `X-GACP: 1`. Timings on this bench: the
+page loads in ~0.1 s (served gzipped), a poll takes ~60–130 ms, no samples
+lost with the GUI and the page both connected.
+
+**It shares port 8080 with the GUI.** The core's lwIP has 4 sockets and 4
+netconns in all, a listener holds one of each, and lwIP takes a netconn for
+each new connection before the sketch even sees it, resetting the connection
+when none is left. With the page on its own port 80 only two connections
+could exist at once, and a GUI connecting while two page requests ran was
+reset every time. With one listener: the GUI plus two page connections at
+once (a third is reset; the page retries next second). A new connection's
+first byte decides what it is: `!` (the GUI and the Android app send `!ID`
+straight away) makes it the GUI's connection, replacing the old one as
+before; a letter makes it an HTTP request. A connection that sends nothing
+within 1 s is closed and never taken for the GUI.
 
 ## Wiring
 
@@ -276,13 +322,28 @@ steady 0.5 A reads 0.496–0.531 A across the switch with no spike.
   `$STATUS tickoff_us` shows the offset.
 - **mbed `FlashIAP` erases with interrupts off** (~1 s stall). Calling the HAL
   erase from a thread instead hung the board.
+- **4 sockets and 4 netconns, listeners included** (`MBED_CONF_LWIP_SOCKET_MAX`,
+  `MEMP_NUM_NETCONN`, `MEMP_NUM_TCP_PCB`, all 4 and fixed in `libmbed.a`).
+  lwIP resets a new connection when no netconn is free, and
+  `WiFiServer::available()` resets the waiting connection when no socket is
+  free: accept only when one is.
+- **A short write followed by more data costs ~200 ms**: lwIP's Nagle holds
+  the second segment until the first is acknowledged, and Windows delays
+  that acknowledgement. Send a reply's header and body start in one write.
+- **`WiFiClient::stop()` joins the client's reader thread** (up to 100 ms), and
+  that thread polls every 100 ms, so a request can sit up to 100 ms before
+  `available()` sees it. The sketch stops web connections on a reaper thread.
+- **Closing right after the last `write()` loses nothing**: lwIP still
+  delivers what it has queued (40 replies of 36 KB, all whole).
 
 ## Protocol
 
 The header of `Giga_AC_Power_WiFi.ino` lists every command and line;
-120VMonitor's README explains each one in more depth. One TCP client at a
-time on port 8080; a new connection replaces the old one. As on
-120VMonitor, any command while a capture waits for its trigger aborts it.
+120VMonitor's README explains each one in more depth. One GUI client at a
+time on port 8080; a new connection that starts with `!` replaces the old
+one (the web page shares the port, see above). As on 120VMonitor, any
+command while a capture waits for its trigger aborts it. `$STATUS web=` is
+`<connections>:<page requests>:<relay switches>:<timeouts>:<taken as the GUI>`.
 
 ## Safety
 
