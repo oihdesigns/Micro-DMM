@@ -48,7 +48,7 @@ struct PowerResult {
 };
 
 /*! A command line being assembled from one input (USB serial or TCP). */
-struct RxLine { char b[160]; uint8_t n; };
+struct RxLine { char b[240]; uint8_t n; };
 
 /*!
  * Every setting, as the 120VMonitor protocol names them (!CFG / !SET / !SAVE).
@@ -115,6 +115,23 @@ struct Mirror {
 
 /*! One Wi-Fi network from arduino_secrets.h. */
 struct WifiNet { const char* ssid; const char* pass; };
+
+/*! A Wi-Fi network saved at run time (!NETADD or the web page), tried after
+ *  the ones built in from arduino_secrets.h. */
+struct NetEntry { char ssid[33]; char pass[64]; uint8_t pad[3]; };
+#define NET_SAVED_MAX 5
+/*! The saved networks and the hotspot password: their own block with its own
+ *  CRC in the config sector (NET_FLASH_OFF in the .ino). */
+struct NetStore {
+  uint32_t magic;
+  uint16_t version, size;
+  char     apPass[64];
+  uint8_t  n, pad[3];
+  NetEntry e[NET_SAVED_MAX];
+  uint32_t crc;
+};
+/*! One network seen by a scan. */
+struct ScanAp { char ssid[33]; int8_t rssi; uint8_t enc; };
 
 enum : uint8_t { FT_FLOAT, FT_U8, FT_U16, FT_U32 };
 

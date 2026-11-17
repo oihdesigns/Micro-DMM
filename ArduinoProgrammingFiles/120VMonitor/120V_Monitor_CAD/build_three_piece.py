@@ -3,8 +3,8 @@ import bpy, bmesh, os
 from mathutils import Vector, Matrix
 ROOT=os.path.dirname(os.path.abspath(__file__))
 bpy.ops.object.select_all(action='SELECT'); bpy.ops.object.delete(use_global=False)
-W,D,H=134.9,108,25.4
-posts=[(x,y) for x in (4,130.9) for y in (4,104)]
+W,D,H=134.9,108+25.4,25.4
+posts=[(x,y) for x in (4,W-4) for y in (4,D-4)]
 def box(name, center, size):
     bpy.ops.mesh.primitive_cube_add(size=1,location=center)
     obj=bpy.context.object; obj.name=name; obj.dimensions=size
@@ -57,7 +57,7 @@ for x,y in posts:
     boolean(frame,cylinder(x,y,H/2,3,H),'UNION')
     boolean(frame,cylinder(x,y,4.95,1.25,10.1),'DIFFERENCE')
     boolean(frame,cylinder(x,y,H-4.95,1.25,10.1),'DIFFERENCE')
-slots=[(7,18,107,False),(32,108.5,107,False),(15,1,23,True),(15,133.9,23,True)]
+slots=[(7,18,D-1,False),(32,108.5,D-1,False),(15,1,D-85,True),(15,W-1,D-85,True)]
 for width,x,y,side in slots:
     size=(4,width,H/2+1) if side else (width,4,H/2+1)
     boolean(frame,box('Rectangular wire notch',(x,y,3*H/4+0.5),size),'DIFFERENCE')
@@ -87,12 +87,12 @@ scene.display.shading.show_shadows=True; scene.display.shading.show_cavity=True
 scene.render.resolution_x=1200; scene.render.resolution_y=1100; scene.render.resolution_percentage=100
 base.hide_render=True; top.hide_render=True
 bpy.ops.object.camera_add(location=(205,250,210)); camera=bpy.context.object
-camera.rotation_euler=(Vector((67,54,10))-camera.location).to_track_quat('-Z','Y').to_euler()
-camera.data.type='ORTHO'; camera.data.ortho_scale=190; scene.camera=camera
+camera.rotation_euler=(Vector((W/2,D/2,10))-camera.location).to_track_quat('-Z','Y').to_euler()
+camera.data.type='ORTHO'; camera.data.ortho_scale=210; scene.camera=camera
 scene.render.filepath=os.path.join(ROOT,'wall_frame_preview.png'); bpy.ops.render.render(write_still=True)
 frame.hide_render=True; top.hide_render=False
 camera.location=(205,-160,250)
-camera.rotation_euler=(Vector((67,80,1))-camera.location).to_track_quat('-Z','Y').to_euler()
+camera.rotation_euler=(Vector((W/2,D/2,1))-camera.location).to_track_quat('-Z','Y').to_euler()
 camera.data.ortho_scale=225
 scene.render.filepath=os.path.join(ROOT,'top_plate_preview.png'); bpy.ops.render.render(write_still=True)
 frame.hide_render=False
@@ -100,8 +100,8 @@ frame.data.transform(Matrix(((1,0,0,0),(0,-1,0,D),(0,0,-1,H),(0,0,0,1))))
 frame.location.z=17; top.location.z=58
 base.hide_render=False; top.hide_render=False
 camera.location=(220,-210,195)
-camera.rotation_euler=(Vector((67,80,29))-camera.location).to_track_quat('-Z','Y').to_euler()
-camera.data.ortho_scale=260
+camera.rotation_euler=(Vector((W/2,(D+61.34)/2,29))-camera.location).to_track_quat('-Z','Y').to_euler()
+camera.data.ortho_scale=275
 scene.render.filepath=os.path.join(ROOT,'three_piece_preview.png')
 bpy.context.preferences.filepaths.save_version=0
 bpy.ops.wm.save_as_mainfile(filepath=os.path.join(ROOT,'three_piece_enclosure.blend'))

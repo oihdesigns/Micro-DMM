@@ -11,3 +11,8 @@
 //#define SECRET_PASS2 "SecondPassword"
 //#define SECRET_SSID3 "PhoneHotspot"
 //#define SECRET_PASS3 "HotspotPassword"
+
+// More networks can be added without reflashing (fw 2.5): the GUI's Wi-Fi tab,
+// the web page's Wi-Fi card or !NETADD save up to five in the board's flash,
+// tried after these. With no known network in range the board starts its own
+// hotspot GigaPower-XXXX at 192.168.3.1 (password on the OLED).

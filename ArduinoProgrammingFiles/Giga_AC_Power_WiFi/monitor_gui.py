@@ -28,7 +28,7 @@ import threading
 import time
 import tkinter as tk
 from collections import deque
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
 import numpy as np
 from matplotlib import colormaps
@@ -40,7 +40,7 @@ import bench_psu
 import calibrate as cal
 from monitor_link import (CLOSE_TRIGS, CURRENT_TRIGS, CFG_GROUPS, GROUP_INFO, GROUP_OF, RANGE_MODES, RANGE_NAMES, SAFE_WHY,
                           TRIG_MODES, LinkError, MonitorLink, Snapshot, Persistence, capture_stats, cycle_heatmap, cycle_phase, flag_text, live_capture_args, slip_mask,
-                          log_snapshot, same_value)
+                          is_network_addr, log_snapshot, same_value)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CFG_LOG_DIR = os.path.join(HERE, "config_log")   # a snapshot per board on connect and on save
@@ -207,6 +207,7 @@ class App(tk.Tk):
         self._build_capture()
         self._build_cal()
         self._build_config()
+        self._build_wifi()
         self._build_console()
 
     # ── Meter ───────────────────────────────────────────────────────────────
@@ -502,6 +503,188 @@ class App(tk.Tk):
         ttk.Label(f, text="Double-click a value to change it (RAM, takes effect at once); "
                           "Save to flash keeps it.").pack(anchor="w", padx=6, pady=4)
 
+    # ── Wi-Fi ───────────────────────────────────────────────────────────────
+    def _build_wifi(self):
+        f = ttk.Frame(self.nb, padding=6)
+        self.nb.add(f, text="Wi-Fi")
+        self.wifi_now = tk.Label(f, text="—", anchor="w", font=("Segoe UI", 11, "bold"))
+        self.wifi_now.pack(fill="x")
+
+        nets = ttk.LabelFrame(f, text="Known networks (tried in this order)", padding=4)
+        nets.pack(fill="x", pady=(6, 4))
+        self.wifi_tree = ttk.Treeview(nets, columns=("kind", "seen", "use"), show="tree headings", height=6)
+        self.wifi_tree.heading("#0", text="Network")
+        self.wifi_tree.heading("kind", text="Kind")
+        self.wifi_tree.heading("seen", text="In range")
+        self.wifi_tree.heading("use", text="Connected")
+        self.wifi_tree.column("#0", width=260)
+        for c in ("kind", "seen", "use"):
+            self.wifi_tree.column(c, width=100, anchor="center", stretch=False)
+        self.wifi_tree.pack(fill="x")
+        bar = ttk.Frame(nets)
+        bar.pack(fill="x", pady=(4, 0))
+        ttk.Button(bar, text="Refresh", command=self._wifi_refresh).pack(side="left", padx=3)
+        ttk.Button(bar, text="Delete selected", command=self._wifi_delete).pack(side="left", padx=3)
+        ttk.Button(bar, text="Rejoin (from the top)", command=self._wifi_rejoin).pack(side="left", padx=3)
+
+        add = ttk.LabelFrame(f, text="Add a network (or a saved one's new password)", padding=4)
+        add.pack(fill="x", pady=4)
+        ttk.Label(add, text="Name").grid(row=0, column=0, sticky="w")
+        self.wifi_ssid = tk.StringVar()
+        self.wifi_ssid_cb = ttk.Combobox(add, textvariable=self.wifi_ssid, width=34)
+        self.wifi_ssid_cb.grid(row=0, column=1, sticky="w", padx=4)
+        ttk.Button(add, text="Scan", command=lambda: self._cmd("!SCAN")).grid(row=0, column=2, padx=3)
+        ttk.Label(add, text="Password").grid(row=1, column=0, sticky="w")
+        self.wifi_pass = tk.StringVar()
+        self.wifi_pass_e = ttk.Entry(add, textvariable=self.wifi_pass, width=36, show="•")
+        self.wifi_pass_e.grid(row=1, column=1, sticky="w", padx=4, pady=2)
+        self.wifi_show = tk.BooleanVar(value=False)
+        ttk.Checkbutton(add, text="Show", variable=self.wifi_show,
+                        command=lambda: self.wifi_pass_e.configure(show="" if self.wifi_show.get() else "•")
+                        ).grid(row=1, column=2, sticky="w")
+        ttk.Button(add, text="Save network", command=self._wifi_add).grid(row=2, column=1, sticky="w", padx=4)
+        self.wifi_scan_lbl = ttk.Label(add, text="", foreground="#666")
+        self.wifi_scan_lbl.grid(row=3, column=0, columnspan=3, sticky="w")
+
+        hot = ttk.LabelFrame(f, text="The board's own hotspot", padding=4)
+        hot.pack(fill="x", pady=4)
+        self.wifi_ap = ttk.Label(hot, text="—")
+        self.wifi_ap.pack(anchor="w")
+        hb = ttk.Frame(hot)
+        hb.pack(fill="x", pady=(4, 0))
+        self.wifi_ap_show = tk.BooleanVar(value=False)
+        ttk.Checkbutton(hb, text="Show password", variable=self.wifi_ap_show,
+                        command=self._wifi_ap_draw).pack(side="left", padx=3)
+        ttk.Button(hb, text="Start hotspot now…", command=self._wifi_ap_start).pack(side="left", padx=3)
+        ttk.Button(hb, text="Change hotspot password…", command=self._wifi_ap_pass).pack(side="left", padx=3)
+        ttk.Label(f, foreground="#555", justify="left", wraplength=900, text=(
+            "Built-in networks come from arduino_secrets.h; saved ones are kept in the board's flash (saving "
+            "pauses the board for about 1 s and needs the load relay open). The board joins the first known "
+            "network in range. With none in range it starts its hotspot: join it and use 192.168.3.1 as the "
+            "address here, or http://192.168.3.1:8080/ in a browser. It looks for a known network once a "
+            "minute while nobody uses the hotspot.")).pack(anchor="w", pady=(6, 0))
+        self._wifi_rows = []
+        self._wifi_apinfo = None
+        self._wifi_scan = []
+
+    def _wifi_refresh(self):
+        self._cmd("!NETS")
+        self._cmd("!AP")
+
+    def _wifi_selected(self):
+        sel = self.wifi_tree.selection()
+        return int(sel[0]) if sel else None
+
+    def _wifi_delete(self):
+        k = self._wifi_selected()
+        row = next((r for r in self._wifi_rows if r[0] == k), None)
+        if row is None:
+            messagebox.showinfo("Wi-Fi", "Select a saved network first.")
+            return
+        if row[1] == "B":
+            messagebox.showinfo("Wi-Fi", "That one is built in (arduino_secrets.h); change it there.")
+            return
+        if row[3]:
+            if not messagebox.askyesno("Wi-Fi", f"The board is connected through {row[4]}. Delete it anyway? "
+                                                "(it stays connected until the link drops)"):
+                return
+        elif not messagebox.askyesno("Wi-Fi", f"Delete {row[4]}?"):
+            return
+        self._cmd(f"!NETDEL,{k}")
+
+    def _wifi_rejoin(self):
+        if self.link and is_network_addr(self.port_var.get()) and not messagebox.askyesno(
+                "Wi-Fi", "Rejoining drops this Wi-Fi connection to the board; reconnect afterwards. Go on?"):
+            return
+        self._cmd("!WIFI")
+
+    def _wifi_add(self):
+        ssid, pw = self.wifi_ssid.get(), self.wifi_pass.get()
+        if not 1 <= len(ssid.encode("utf-8")) <= 32:
+            messagebox.showerror("Wi-Fi", "The network name must be 1-32 bytes.")
+            return
+        if pw and not 8 <= len(pw) <= 63:
+            messagebox.showerror("Wi-Fi", "The password must be 8-63 characters (empty for an open network).")
+            return
+        if any(not (32 <= ord(c) <= 126) for c in pw):
+            messagebox.showerror("Wi-Fi", "The password must be printable ASCII.")
+            return
+        esc = ssid.replace("\\", "\\\\").replace(",", "\\,")
+        self._cmd(f"!NETADD,{esc},{pw}")
+        self.wifi_pass.set("")
+
+    def _wifi_ap_draw(self):
+        a = self._wifi_apinfo
+        if not a:
+            self.wifi_ap.configure(text="—")
+            return
+        on, joined, ip, ssid, pw = a
+        shown = pw if self.wifi_ap_show.get() else "•" * len(pw)
+        state = ("ON" + (" (a device has joined)" if joined else "")) if on else "off"
+        self.wifi_ap.configure(text=f"{ssid}    password {shown}    {ip}    — {state}")
+
+    def _wifi_ap_start(self):
+        if not messagebox.askyesno("Wi-Fi", "Start the hotspot now? The board leaves its network (a Wi-Fi "
+                                            "connection from here drops) and stays on the hotspot until "
+                                            "Rejoin or a reboot."):
+            return
+        self._cmd("!AP,1")
+
+    def _wifi_ap_pass(self):
+        pw = simpledialog.askstring("Hotspot password", "New hotspot password (8-63 printable characters).\n"
+                                    "It takes effect the next time the hotspot starts.", parent=self)
+        if pw is None:
+            return
+        if not 8 <= len(pw) <= 63 or any(not (32 <= ord(c) <= 126) for c in pw):
+            messagebox.showerror("Wi-Fi", "8-63 printable ASCII characters, please.")
+            return
+        self._cmd(f"!APPASS,{pw}")
+        self.after(2500, lambda: self._cmd("!AP"))
+
+    def _wifi_line(self, line):
+        """The board's Wi-Fi lines. Returns True if handled."""
+        if line.startswith("$NETS,"):
+            self._wifi_rows = []
+            self.wifi_tree.delete(*self.wifi_tree.get_children())
+        elif line.startswith("$NETW,"):
+            p = line[6:].split(",", 4)
+            if len(p) == 5:
+                k, kind, seen, use, ssid = int(p[0]), p[1], p[2] == "1", p[3] == "1", p[4]
+                self._wifi_rows.append((k, kind, seen, use, ssid))
+                self.wifi_tree.insert("", "end", iid=str(k), text=f"{k}. {ssid}",
+                                      values=("built in" if kind == "B" else "saved",
+                                              "yes" if seen else "", "●" if use else ""))
+        elif line.startswith("$APST,"):
+            p = line[6:].split(",", 4)
+            if len(p) == 5:
+                self._wifi_apinfo = (p[0] == "1", p[1] == "1", p[2], p[3], p[4])
+                self._wifi_ap_draw()
+        elif line.startswith("$SCAN,"):
+            self._wifi_scan = []
+        elif line.startswith("$AP,"):
+            p = line[4:].rsplit(",", 3)
+            if len(p) == 4:
+                self._wifi_scan.append((p[0], int(p[1]), p[2] == "7"))
+                self.wifi_ssid_cb.configure(values=[s for s, _, _ in self._wifi_scan])
+                self.wifi_scan_lbl.configure(text="Seen: " + ",  ".join(
+                    f"{s} ({r} dBm{', open' if o else ''})" for s, r, o in self._wifi_scan))
+        elif line.startswith("$NET,"):
+            # ip,port,rssi,status,powersave,<ssid, may hold commas>,net,count,seen,mode
+            p = line[5:].rsplit(",", 4)
+            head, mode = (p[0], p[4]) if len(p) == 5 else (line[5:], "")
+            q = head.split(",", 5)
+            if len(q) == 6:
+                ip, _port, rssi, _st, _ps, ssid = q
+                self.wifi_now.configure(
+                    text=f"Hotspot {ssid}  ·  {ip}" if mode == "2" else
+                    f"Connected to {ssid}  ({rssi} dBm)  ·  {ip}" if mode == "1" or (mode == "" and ssid) else
+                    f"No network ({ip})")
+        elif line == "$OK,nets":
+            self._wifi_refresh()
+        else:
+            return False
+        return True
+
     # ── Console ─────────────────────────────────────────────────────────────
     def _build_console(self):
         f = ttk.Frame(self.nb)
@@ -560,6 +743,7 @@ class App(tk.Tk):
         self._range_ui(st.get("rng"), st.get("rngmode"))
         self._fill_cfg()
         self._log_config("connect")
+        self._wifi_refresh()
         if self.port_var.get().upper() == "SIM":
             self.sim_cb.pack(anchor="w", pady=4)
             self.psu_mode.set("sim")
@@ -667,7 +851,7 @@ class App(tk.Tk):
                     elif kind == "line":
                         self._on_line(obj)
                     elif kind == "tx":
-                        self._con_add("> " + obj)
+                        self._con_add("> " + mask_secret(obj))
                     elif kind == "error":
                         self._con_add("!! " + obj)
                         self.status_lbl.configure(text=obj)
@@ -676,7 +860,8 @@ class App(tk.Tk):
         self.after(100, self._pump)
 
     def _on_line(self, line):
-        self._con_add(line)
+        self._con_add(mask_secret(line))
+        self._wifi_line(line)
         if line.startswith("$RLY,"):
             self._set_relay_ui(line.endswith("1"))
         elif line.startswith("$RNG,"):
@@ -1511,6 +1696,22 @@ class App(tk.Tk):
             self.ui(ApplyDialog, self, snap, here, os.path.basename(path))
         threading.Thread(target=work, daemon=True).start()
 
+
+
+def mask_secret(line):
+    """A command or reply with its password hidden (the console shows both)."""
+    if line.startswith("!NETADD,"):
+        k = 8
+        while k < len(line) and line[k] != ",":
+            k += 2 if line[k] == "\\" else 1
+        return line[:k] + ",••••" if k < len(line) else line
+    if line.startswith("!APPASS,"):
+        return "!APPASS,••••"
+    if line.startswith("$APST,"):
+        p = line.split(",", 5)
+        if len(p) == 6:
+            return ",".join(p[:5]) + ",••••"
+    return line
 
 class ApplyDialog(tk.Toplevel):
     """Copy chosen groups of a snapshot onto the connected board (RAM, then

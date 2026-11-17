@@ -45,9 +45,27 @@ select,.btn{font:inherit;font-size:13px;color:var(--tx);background:#232a30;borde
 .rb button{font:600 15px system-ui,sans-serif;padding:12px 16px;border-radius:10px;border:1px solid var(--line);background:#232a30;color:var(--tx);min-width:118px}
 #bclose.arm{background:#9a3412;border-color:#c2410c;color:#fff}
 .rb button:disabled{opacity:.38}
-#rmsg{font-size:12.5px;color:var(--mut);margin-top:8px;min-height:1.2em}
+#rmsg,#gmsg{font-size:12.5px;color:var(--mut);margin-top:8px;min-height:1.2em}
+#rngm{display:flex;width:100%;margin-top:10px}
+#rngm button{flex:1;padding:11px 6px;font-size:14px}
+#rngm button:disabled{opacity:.38}
+#gnow{font-size:20px;font-weight:600;margin-top:2px}
+.whead{display:flex;align-items:center;justify-content:space-between;gap:12px}
+#wnow{font-size:17px;font-weight:600;margin-top:2px;word-break:break-word}
+#wbody{margin-top:10px;border-top:1px solid var(--line);padding-top:6px}
+.wn{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+.wn .nm{flex:1;min-width:0;word-break:break-word}
+.wn .k{font-size:11.5px}
+.dot{width:8px;height:8px;border-radius:50%;background:#3a444c;flex:none}.dot.on{background:var(--v)}
+input.t{flex:1;min-width:0;font:inherit;font-size:15px;color:var(--tx);background:#0f1315;border:1px solid var(--line);border-radius:8px;padding:9px 10px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.chips:empty{display:none}
+.chip{font:inherit;font-size:12.5px;color:var(--tx);background:#232a30;border:1px solid var(--line);border-radius:99px;padding:5px 10px}
+.btn.arm{background:#9a3412;border-color:#c2410c;color:#fff}
+.btn:disabled{opacity:.38}
+#wmsg{font-size:12.5px;color:var(--mut);margin-top:8px;min-height:1.2em}
+.hot{background:#1e3a5f;border-color:#2b5a8f}
 footer{font-size:12px;color:var(--mut);line-height:1.5}
-@media (max-width:430px){.big .n{font-size:21px}.grid{grid-template-columns:repeat(3,minmax(0,1fr))}.rb{width:100%}.rb button{flex:1}}
+@media (max-width:430px){#rngm button{font-size:13px;padding:11px 2px}.big .n{font-size:21px}.grid{grid-template-columns:repeat(3,minmax(0,1fr))}.rb{width:100%}.rb button{flex:1}}
 </style>
 </head>
 <body>
@@ -85,7 +103,30 @@ footer{font-size:12px;color:var(--mut);line-height:1.5}
  <div id="rmsg"></div>
 </section>
 
-<footer><span id="foot"></span><br>Read-only except the load relay. There is no login yet: anyone on this network can open this page and switch the relay.</footer>
+<section class="card">
+ <div class="k">Current range</div><div id="gnow">&mdash;</div><div id="gwhy" class="k"></div>
+ <div class="seg" id="rngm"><button data-m="0" disabled>Auto</button><button data-m="3" disabled>Delayed</button><button data-m="1" disabled>HIGH</button><button data-m="2" disabled>LOW</button></div>
+ <div id="gmsg"></div>
+</section>
+
+<section class="card" id="wcard">
+ <div class="whead">
+  <div><div class="k">Wi-Fi</div><div id="wnow">&mdash;</div><div id="wwhy" class="k"></div></div>
+  <button class="btn" id="wtog">Networks</button>
+ </div>
+ <div id="wbody" hidden>
+  <div id="wlist"></div>
+  <div class="k" style="margin-top:14px">Add a network</div>
+  <div class="row"><input class="t" id="wssid" placeholder="Network name" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="32"><button class="btn" id="wscanb">Scan</button></div>
+  <div class="chips" id="wchips"></div>
+  <div class="row"><input class="t" id="wpass" type="password" placeholder="Password (empty if open)" autocomplete="new-password" maxlength="63"><label class="k"><input type="checkbox" id="wshow"> show</label></div>
+  <div class="row"><button class="btn" id="wadd">Save network</button><span class="sp"></span><button class="btn" id="wjoin">Reconnect</button></div>
+  <div id="wmsg"></div>
+  <div class="note">The board tries the built-in networks (arduino_secrets.h) first, then the saved ones, and joins the first one in range. Saving writes the board's flash: it pauses for about 1&nbsp;s and needs the load relay open. With no known network in range it starts its own hotspot <b id="waps">GigaPower</b>: join that and open <b>http://192.168.3.1:8080/</b>. The hotspot password is on the board's OLED.</div>
+ </div>
+</section>
+
+<footer><span id="foot"></span><br>Read-only except the load relay, the current range and the Wi-Fi networks. There is no login yet: anyone on this network can open this page and change them.</footer>
 </main>
 <script>
 "use strict";
@@ -174,6 +215,7 @@ setShow(show);
 
 // ---- live data
 let d=null,okAt=0,fails=0,timer=0,busy=false;
+let wSeenHot=false;   // the hotspot opens the Wi-Fi card once
 function render(){
   if(!d)return;
   const dc=!!d.dc,have=!!d.have;
@@ -200,6 +242,7 @@ function render(){
   if(fl&128)t.push(["info","Range switched"]);
   if(d.cap)t.push(["info","Capture running"]);
   if(d.gui)t.push(["","GUI connected"]);
+  if(d.wm===2)t.push(["info","Hotspot mode"]);
   $("tags").innerHTML="";
   for(const [c,s] of t){const e=document.createElement("span");e.className="tag "+c;e.textContent=s;$("tags").appendChild(e);}
   // relay
@@ -212,6 +255,18 @@ function render(){
   $("bopen").disabled=!live||!(d.rly||d.pend);
   $("bclose").disabled=!live||d.rly||d.pend||d.cap;
   if(!armT)$("bclose").textContent=d.trip?"Reset & close":"Close";
+  // current range
+  const two=!!d.r2;
+  $("gnow").textContent=!two?"Single range":(d.rw!==d.rng?"Switching to "+(d.rw?"LOW":"HIGH")+"…":(d.rng?"LOW":"HIGH"));
+  $("gwhy").textContent=!two?"RNGPIN 0: no range relay":d.cap?"a capture owns the range":(RDESC[d.rm]||"")+(d.rm===2&&d.rl?" Held HIGH after an overload; tap LOW to go back.":"");
+  for(const b of $("rngm").children){b.classList.toggle("on",two&&+b.dataset.m===d.rm);b.disabled=!live||!two||!!d.cap||rngBusy;}
+  // wi-fi summary (the card's list loads on demand)
+  if(d.wm===1){$("wnow").textContent=d.ws;$("wwhy").textContent=d.ip;store.set("gacp.lanip",d.ip);}
+  else if(d.wm===2){$("wnow").textContent="Hotspot "+d.ws;$("wwhy").textContent="No known network in range. The board looks for one every minute while nobody uses this page.";}
+  else{$("wnow").textContent="—";$("wwhy").textContent="";}
+  $("wcard").classList.toggle("hot",d.wm===2);
+  if(wAuto||(d.wm===2&&!wSeenHot)){wAuto=false;wSeenHot=d.wm===2;if($("wbody").hidden)wopen(true);}
+  $("wjoin").textContent=d.wm===2?"Leave hotspot & join":"Reconnect";
   $("foot").textContent="fw "+d.fw+" · "+d.ip+" · up "+fmtUp(d.up);
   const f=lastFrame;
   $("pmcap").textContent=!f?"":
@@ -262,6 +317,89 @@ async function relay(on){
   }catch(e){$("rmsg").textContent="No answer from the board";}
   setTimeout(poll,150);
 }
+// ---- current range: one tap (an overload on LOW always goes HIGH at once)
+const RDESC={0:"Auto: LOW for small loads, HIGH at once on an overload.",
+  3:"Delayed: starts LOW, HIGH only after several overloaded cycles in a row; a relay close stays LOW.",
+  1:"HIGH only.",2:"LOW: an overload goes HIGH and stays there."};
+let rngBusy=false;
+for(const b of $("rngm").children)b.onclick=()=>range(+b.dataset.m);
+async function range(m){
+  rngBusy=true;render();$("gmsg").textContent="Sending…";
+  try{
+    const r=await fetch("/api/range?mode="+m,{method:"POST",headers:{"X-GACP":"1"},cache:"no-store"});
+    const j=await r.json();$("gmsg").textContent=j.msg||(j.ok?"Done":"Refused");
+    if(d&&j.ok){d.rm=j.rm;d.rw=j.rw;d.rng=j.rng;d.rl=0;}
+  }catch(e){$("gmsg").textContent="No answer from the board";}
+  rngBusy=false;render();
+  setTimeout(poll,150);
+}
+// ---- wi-fi: list, scan, add, delete, rejoin
+let W=null,delArm=0,delT=0;
+const post=(path,body)=>fetch(path,{method:"POST",headers:Object.assign({"X-GACP":"1"},body?{"Content-Type":"application/x-www-form-urlencoded"}:{}),body:body||undefined,cache:"no-store"}).then(r=>r.json());
+function wsay(t){$("wmsg").textContent=t;}
+async function wload(){
+  try{const r=await fetch("/api/wifi",{cache:"no-store"});W=await r.json();wdraw();}
+  catch(e){wsay("No answer from the board");}
+}
+function wdraw(){
+  if(!W)return;
+  $("waps").textContent=W.aps;
+  const L=$("wlist");L.innerHTML="";
+  for(const n of W.nets){
+    const row=document.createElement("div");row.className="wn";
+    const dot=document.createElement("span");dot.className="dot"+(n.use?" on":"");
+    const nm=document.createElement("div");nm.className="nm";
+    const t1=document.createElement("div");t1.textContent=n.s;
+    const t2=document.createElement("div");t2.className="k";
+    t2.textContent=(n.b?"built in":"saved")+(n.open?" · open":"")+(n.use?" · connected":n.seen?" · in range":W.scanAge>=0?" · not seen":"");
+    nm.append(t1,t2);row.append(dot,nm);
+    if(!n.b){
+      const b=document.createElement("button");b.className="btn"+(delArm===n.k?" arm":"");
+      b.textContent=delArm===n.k?"Tap to delete":"Delete";
+      b.onclick=()=>wdel(n.k);row.append(b);
+    }
+    L.append(row);
+  }
+  const C=$("wchips");C.innerHTML="";
+  for(const a of W.scan||[]){
+    const c=document.createElement("button");c.className="chip";
+    c.textContent=a.s+" "+(a.o?"(open) ":"")+a.r+" dBm";
+    c.onclick=()=>{$("wssid").value=a.s;$("wpass").value="";$("wpass").focus();};
+    C.append(c);
+  }
+  $("wadd").disabled=!!W.saving;
+}
+function wopen(on){const b=$("wbody");b.hidden=!on;$("wtog").textContent=on?"Hide":"Networks";if(on)wload();}
+$("wtog").onclick=()=>wopen($("wbody").hidden);
+let wAuto=location.hash==="#wifi";
+$("wshow").onchange=e=>{$("wpass").type=e.target.checked?"text":"password";};
+$("wscanb").onclick=async()=>{
+  $("wscanb").disabled=true;wsay("Scanning… the page pauses for a few seconds");
+  try{const j=await post("/api/wifi/scan");wsay(j.msg);}catch(e){wsay("No answer from the board");}
+  setTimeout(async()=>{await wload();$("wscanb").disabled=false;wsay(W&&W.scan&&W.scan.length?"Tap a network to fill in its name":"Nothing found");},6000);
+};
+$("wadd").onclick=async()=>{
+  const ssid=$("wssid").value,pass=$("wpass").value;
+  if(!ssid){wsay("Enter the network name");return;}
+  if(pass&&(pass.length<8||pass.length>63)){wsay("The password must be 8-63 characters (empty for an open network)");return;}
+  $("wadd").disabled=true;wsay("Saving…");
+  try{const j=await post("/api/wifi/add",new URLSearchParams({ssid,pass}).toString());wsay(j.msg);if(j.ok){$("wpass").value="";}}
+  catch(e){wsay("No answer from the board");}
+  setTimeout(wload,1800);
+};
+async function wdel(k){
+  if(delArm!==k){clearTimeout(delT);delArm=k;wdraw();delT=setTimeout(()=>{delArm=0;wdraw();},4000);return;}
+  clearTimeout(delT);delArm=0;wsay("Deleting…");
+  try{const j=await post("/api/wifi/del?k="+k);wsay(j.msg);}catch(e){wsay("No answer from the board");}
+  setTimeout(wload,1800);
+}
+$("wjoin").onclick=async()=>{
+  const hot=d&&d.wm===2,lan=store.get("gacp.lanip","");
+  try{const j=await post("/api/wifi/join");
+    wsay(j.msg+(hot?". Switch your phone back to your network"+(lan?" and open http://"+lan+":8080/ (its last address there)":"; the board's address shows on its OLED for 10 s after it joins")+".":""));}
+  catch(e){wsay("No answer from the board");}
+};
+
 setInterval(setConn,1000);
 poll();
 </script>

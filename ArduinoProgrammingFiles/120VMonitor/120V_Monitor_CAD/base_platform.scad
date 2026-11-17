@@ -4,6 +4,7 @@ corner_radius = 1;
 cover_hole_diameter = 3.2; // M3 clearance; mates to future shell bosses.
 cover_hole_inset = 4;
 base_thickness = 3;
+right_extension = 38.1; // Extra uncovered width; platform_size still defines the enclosure and hole locations.
 standoff_height = 4;
 standoff_diameter = 5.5;
 m2_pilot_diameter = 1.7; // Tap M2 or use suitable plastic-threading screws; tune for printer.
@@ -12,7 +13,7 @@ board_gap = 12.7; // Edge-to-edge gap, based on assumed PCB outlines.
 edge_margin = 6;
 relay_holes = [66.7, 45];
 sensor_holes = [31.5, 61];
-free_space = 45;
+free_space = 45 + 25.4;
 future_interior_height = 25.4; // From top of platform, including standoffs. Shell not modeled.
 relay_size = relay_holes + [2*pcb_edge_offset, 2*pcb_edge_offset];
 sensor_size = sensor_holes + [2*pcb_edge_offset, 2*pcb_edge_offset];
@@ -30,7 +31,7 @@ module mounting_points() {
     }
     // Four common outer mounting positions, Mega 2560 Rev3 / GIGA R1 WiFi.
     for(p=[[13.97,2.54],[15.24,50.8],[90.17,50.8],[96.52,2.54]])
-        translate([118.25-p.x,165.34-p.y,0]) children();
+        translate([118.25-p.x,platform_size.y+57.34-p.y,0]) children();
 }
 difference() {
     union() {
@@ -38,9 +39,10 @@ difference() {
           union() {
             translate([corner_radius, corner_radius])
                 offset(r=corner_radius)
-                    square([platform_size.x-2*corner_radius,
+                    square([platform_size.x+right_extension-2*corner_radius,
                             platform_size.y-2*corner_radius]);
-            polygon([[2.45,107.5],[132.45,107.5],[124.45,169.34],[10.45,169.34]]);
+            polygon([[2.45,platform_size.y-0.5],[132.45,platform_size.y-0.5],
+                     [124.45,platform_size.y+61.34],[10.45,platform_size.y+61.34]]);
           }
         mounting_points() translate([0,0,base_thickness-0.1])
             cylinder(d=standoff_diameter, h=standoff_height+0.1);

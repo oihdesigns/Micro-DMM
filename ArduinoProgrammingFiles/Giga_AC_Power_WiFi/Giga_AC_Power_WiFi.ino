@@ -83,19 +83,31 @@
  *     a new remote; repeat frames (button held) are ignored.
  *
  * ── Wi-Fi networks ──────────────────────────────────────────────────────────
- *   arduino_secrets.h lists up to five: SECRET_SSID/SECRET_PASS, then
- *   optionally SECRET_SSID2/SECRET_PASS2 ... SECRET_SSID5/SECRET_PASS5. Each
- *   join scans, then tries the listed networks that are in range, in list
- *   order; a refused password falls through to the next. Lost or never
- *   joined: the whole list again every 20 s. Hidden SSIDs are not supported.
+ *   Built in: arduino_secrets.h lists up to five, SECRET_SSID/SECRET_PASS,
+ *   then optionally SECRET_SSID2/SECRET_PASS2 ... SECRET_SSID5/SECRET_PASS5.
+ *   Saved: up to five more added at run time (!NETADD, the web page, the GUI's
+ *   Wi-Fi tab), kept in flash beside the config and tried after the built-in
+ *   ones. Each join scans, then tries the known networks that are in range,
+ *   in list order; a refused password falls through to the next. Lost or
+ *   never joined: the whole list again every 20 s. Hidden SSIDs are not
+ *   supported.
+ *   Hotspot: when a join round finds no known network in range, or two rounds
+ *   in a row fail, the board starts its own WPA2 network GigaPower-XXXX
+ *   (XXXX from the chip ID; password made at random on first boot, shown on
+ *   the OLED, by !AP and in the GUI; !APPASS changes it) and serves the same
+ *   page and GUI port there: http://192.168.3.1:8080/. Once a minute, when no
+ *   page or GUI has used it for a minute, it scans and leaves for a known
+ *   network in range (and comes back if that join fails). !AP,1 holds it up.
  *
  * ── Web page (HTTP on the command port, 8080) ───────────────────────────────
  *   http://<ip>:8080/ from a phone or a browser on the same network shows the
  *   readings, a V / I persistence map of the mains cycle (every cycle folded
- *   on the board, faded on the page) and the load relay. The page is
- *   read-only except for the relay, and has no login yet. GET /api/live
- *   [?since=<frame>] is the JSON the page polls. POST /api/relay?on=<0|1>
- *   with an X-GACP header switches the relay as the IR remote does. The GUI
+ *   on the board, faded on the page), the load relay and the current range.
+ *   The page is read-only except for those two and the Wi-Fi networks (its
+ *   Wi-Fi card: /api/wifi), and has no login yet.
+ *   GET /api/live[?since=<frame>] is the JSON the page polls. With an X-GACP
+ *   header, POST /api/relay?on=<0|1> switches the relay as the IR remote
+ *   does and POST /api/range?mode=<0-3> sets RNGMODE as !RANGE does. The GUI
  *   and the page share port 8080: a connection whose first byte is '!' is the
  *   GUI, one that starts with an HTTP method is a browser (see the web section).
  *
@@ -138,9 +150,23 @@
  *   !HGET / !AVGW             one $HARM / $AVG from the last window
  *   !SYNTH,<on>[,vrms,irms,deg,h3%,hz]  exact synthetic V/I instead of the
  *                             ADC (still paced by it); !SYNTH,0 to stop
- *   !WIFI / !SCAN             rejoin Wi-Fi (from the top of the list) /
- *                             $SCAN,<module fw>,<n> then $AP,<ssid>,<rssi>,<enc>,
- *                             <place in arduino_secrets.h, 0 = not listed>
+ *   !WIFI / !SCAN             rejoin Wi-Fi (from the top of the list; leaves the
+ *                             hotspot) / $SCAN,<module fw>,<n> then one
+ *                             $AP,<ssid>,<rssi>,<enc>,<place in the list, 0 none>
+ *                             per name (the strongest), strongest first
+ *   !NETS                     $NETS,<count>,<saved>,<max saved>,<mode 0 none,
+ *                             1 network, 2 hotspot> then per network
+ *                             $NETW,<n>,<B built in|S saved>,<seen>,<in use>,<ssid>
+ *   !NETADD,<ssid>,<password> save a network (or a saved one's new password).
+ *                             The first comma ends the name (\, and \\ inside
+ *                             it); the password is the rest of the line, empty
+ *                             for an open network. Writes flash ($OK,nets), so
+ *                             refused with the load relay closed.
+ *   !NETDEL,<n>               delete saved network n (its number in !NETS)
+ *   !AP                       $APST,<on>,<a phone joined>,<ip>,<ssid>,<password>
+ *   !AP,1 / !AP,0             start the hotspot now and hold it / leave it and
+ *                             join a known network (back to it if none joins)
+ *   !APPASS,<password>        the hotspot's password, 8-63 characters (next start)
  *
  * ── Output ──────────────────────────────────────────────────────────────────
  *   $PWR,<vrms>,<irms>,<w>,<va>,<var>,<pf>,<hz>,<vpk>,<ipk>,<wh>,<t_s>,<n>,
@@ -161,9 +187,13 @@
  *   $TRIP,<RMS|PK>,<value>,<limit>   $RLY,<0|1>   $CAPTMO,<TIMEOUT|ABORT>
  *   $IR,<addr>,<cmd>   $REMOTE,<PRIMED|CANCEL|TIMEOUT|CLOSE|OPEN>
  *   $WEB,RELAY,<0|1>,<OK|REFUSED>,<client ip>   the web page switched the relay
+ *   $WEB,RANGE,<0-3>,<OK|REFUSED>,<client ip>   the web page set RNGMODE (a
+ *                             $RNG,...,CMD,<mode> line follows, as for !RANGE)
  *   $OK,<what>   $ERR,<message>
- *   $NET,<ip>,<port>,<rssi>,<status>,<powersave>,<ssid>,<net 1-5, 0 none>,
- *        <networks listed>,<bit mask of those seen in the last scan>
+ *   $NET,<ip>,<port>,<rssi>,<status>,<powersave>,<ssid>,<net 1-10, 0 none>,
+ *        <networks known>,<bit mask of those seen in the last scan>,
+ *        <mode 0 none, 1 network, 2 hotspot (ssid is then the hotspot's)>
+ *   $WEB,WIFI,<SCAN|ADD|DEL|JOIN>,<OK|REFUSED>,<client ip>   the page's Wi-Fi card
  *   $CYC $HARM $AVG $INFO (extras, !SMASK): see README.
  */
 
@@ -174,6 +204,7 @@
 #include "whd_wifi_api.h"
 #include "FlashIAP.h"
 #include "hal/us_ticker_api.h"
+#include "hal/trng_api.h"            // the hotspot password
 #include "SDRAM.h"
 #include <Wire.h>
 #include <Adafruit_GFX.h>
@@ -188,7 +219,7 @@
 #error "Copy arduino_secrets.example.h to arduino_secrets.h and put your Wi-Fi name/password in it"
 #endif
 
-#define FW_VERSION   "2.3"
+#define FW_VERSION   "2.5"
 #define CFG_VERSION  2
 #define CFG_MAGIC    0x50434147UL   // "GACP"
 static const uint16_t CMD_PORT = 8080;
@@ -492,9 +523,9 @@ static int        g_wifiStatus = 0;     // last WiFi.status(): 3 = connected, 25
 static int        g_wifiPs = -1;        // radio power-save mode after the join
 static volatile bool g_wifiBusy = false, g_wifiDone = false, g_wifiDisc = false;   // join thread, see wifiTask()
 static volatile int  g_wifiResult = 0;
-static volatile int  g_wifiJoined = -1;     // the join thread's pick, WIFI_NETS index
-static volatile uint8_t g_wifiSeen = 0;     // bit j: WIFI_NETS[j] was in the last scan
-static int           g_wifiNet = -1;        // the network in use, -1 none
+static volatile int  g_wifiJoined = -1;     // the join thread's pick (in its list), -1 none, -2 no change
+static int           g_wifiNet = -1;        // the network in use (index in the list), -1 none
+static char          g_wifiSsidNow[33] = "";   // its name, or the hotspot's
 
 // The networks to try, in order (arduino_secrets.h: SECRET_SSID/PASS, then
 // optionally SECRET_SSID2/PASS2 ... SECRET_SSID5/PASS5).
@@ -514,7 +545,47 @@ static const WifiNet WIFI_NETS[] = {
 #endif
 };
 static const int N_WIFI = sizeof(WIFI_NETS) / sizeof(WIFI_NETS[0]);
-static const char* wifiSsid() { return g_wifiNet >= 0 ? WIFI_NETS[g_wifiNet].ssid : ""; }
+static const char* wifiSsid() { return g_wifiSsidNow; }
+
+// ── networks saved at run time, and the board's own hotspot ──────────────────
+// Up to NET_SAVED_MAX networks added by !NETADD / the page / the GUI, tried
+// after the built-in ones; kept in the config sector at NET_FLASH_OFF. With no
+// known network to join the board starts its own hotspot (see wifiTask).
+static NetStore g_nets;                       // the RAM copy of the flash block
+static int         netCount()     { return N_WIFI + g_nets.n; }
+static const char* netSsid(int j) { return j < N_WIFI ? WIFI_NETS[j].ssid : g_nets.e[j - N_WIFI].ssid; }
+static const char* netPass(int j) { return j < N_WIFI ? WIFI_NETS[j].pass : g_nets.e[j - N_WIFI].pass; }
+
+static const char     AP_IP[] = DEFAULT_IP_ADDRESS;   // the core's hotspot address, 192.168.3.1
+static const uint32_t AP_CHECK_MS = 60000;   // hotspot: look for a known network this often ...
+static const uint32_t AP_IDLE_MS  = 60000;   // ... once no page or GUI has used it for this long
+static char          g_apSsid[20] = "";       // GigaPower-XXXX, from the chip's unique ID
+static volatile bool g_apOn = false;          // the hotspot is up
+static bool          g_apHold = false;        // !AP,1 started it: stay until told otherwise
+static volatile bool g_joinFromAp = false;    // this join left the hotspot: back at once if it fails
+static volatile uint8_t g_joinFails = 0;      // join rounds failed in a row
+static uint32_t      g_netActMs = 0;          // millis: the last page request or GUI connection
+static bool          g_scanWanted = false, g_joinWanted = false;   // the page's: started once its reply is out
+static uint32_t      g_wantMs = 0;
+
+enum { WJ_JOIN = 1, WJ_SCAN, WJ_AP, WJ_APCHECK };   // the Wi-Fi thread's jobs (wifiTask)
+static volatile uint8_t g_wifiJob = 0;
+
+#define SCAN_MAX 16
+static ScanAp            g_aps[SCAN_MAX];    // the last scan: one row per name, strongest first
+static volatile int      g_scanN = -1;        // rows; -1 never scanned, or it failed
+static volatile uint32_t g_scanMs = 0;
+static bool scanSaw(const char* ssid) {
+  for (int q = 0; q < g_scanN; q++) if (strcmp(g_aps[q].ssid, ssid) == 0) return true;
+  return false;
+}
+static uint32_t seenMask() {
+  uint32_t m = 0;
+  for (int j = 0; j < netCount(); j++) if (scanSaw(netSsid(j))) m |= 1UL << j;
+  return m;
+}
+// 0 no network, 1 joined one, 2 the hotspot
+static int wifiMode() { return !g_wifiOk ? 0 : g_apOn ? 2 : 1; }
 // On this core Serial is a UART wrapper around _SerialUSB (a USBSerial), and
 // `if (Serial)` runs delay(1) before it answers (operator bool in
 // PluggableUSBSerial.h). Asked once per emitted line, that throttled the loop
@@ -2466,6 +2537,13 @@ static bool drawAlert() {
   else if (g_trip_latch)                         d.print("TRIPPED");
   else if (g_lastFl & (FLG_VCLIP | FLG_ICLIP))   d.print("CLIP");
   else if (g_cs == 2 && g_cTrig != 0)            d.print("ARMED");
+  else if (g_apOn && g_wifiOk) {                 // the hotspot: its name, password and address in turn
+    switch ((millis() / 2500) % 3) {
+      case 0:  d.print("WiFi "); d.print(g_apSsid); break;
+      case 1:  d.print("pw "); d.print(g_nets.apPass); break;
+      default: d.print(AP_IP); d.print(":8080"); break;
+    }
+  }
   else if ((int32_t)(g_ipShowUntil - millis()) > 0) { d.print("IP "); d.print(g_ipStr); }
   else return false;
   return true;
@@ -2685,7 +2763,13 @@ static void applyConfig(uint16_t what) {
 // holding something other than an erased block or our own config is never
 // erased: that would be another core's code.
 static const uint32_t CFG_FLASH_ADDR = 0x081E0000UL;
-static uint8_t  g_saveBuf[256] __attribute__((aligned(32)));
+// The networks block sits NET_FLASH_OFF into the same sector: one erase, and
+// each save writes both (see saveImage).
+static const uint32_t NET_FLASH_OFF = 1024;
+static const uint32_t NET_MAGIC = 0x54454E47UL;   // "GNET"
+static_assert(sizeof(Config) <= NET_FLASH_OFF, "the config must end before the networks block");
+static uint8_t  g_saveBuf[NET_FLASH_OFF + (sizeof(NetStore) + 31) / 32 * 32] __attribute__((aligned(32)));
+static uint8_t  g_saveWhat = 0;              // 0 a !SAVE (config and networks), 1 the networks only
 static volatile uint8_t g_saveState = 0;      // 1 running, 2 done ok, 3 failed
 static char     g_saveErr[48] = "";
 static rtos::Thread* g_saveThread = nullptr;
@@ -2727,7 +2811,7 @@ static void saveTask() {
   if (f.init() != 0) { strcpy(g_saveErr, "flash init failed"); g_saveState = 3; return; }
   const uint32_t sec = f.get_sector_size(CFG_FLASH_ADDR);
   const uint32_t page = f.get_page_size();
-  uint32_t len = (sizeof(Config) + page - 1) / page * page;
+  uint32_t len = (sizeof(g_saveBuf) + page - 1) / page * page;
   if (len > sizeof(g_saveBuf)) { strcpy(g_saveErr, "config too big"); f.deinit(); g_saveState = 3; return; }
   if (f.erase(CFG_FLASH_ADDR, sec) != 0) { strcpy(g_saveErr, "flash erase failed"); f.deinit(); g_saveState = 3; return; }
   if (f.program(g_saveBuf, CFG_FLASH_ADDR, len) != 0) { strcpy(g_saveErr, "flash program failed"); f.deinit(); g_saveState = 3; return; }
@@ -2742,15 +2826,135 @@ static void startSave() {
   if (g_saveThread) { g_saveThread->join(); delete g_saveThread; g_saveThread = nullptr; }
   cfg.magic = CFG_MAGIC; cfg.version = CFG_VERSION; cfg.size = sizeof(Config);
   cfg.crc = crc32((const uint8_t*)&cfg, offsetof(Config, crc));
-  memset(g_saveBuf, 0xFF, sizeof(g_saveBuf));
-  memcpy(g_saveBuf, &cfg, sizeof(Config));
+  saveImage(true);
+  g_saveWhat = 0;
   g_saveState = 1;
   g_saveThread = new rtos::Thread(osPriorityNormal, 4096, nullptr, "cfgsave");
   g_saveThread->start(saveTask);
 }
 
+static void netSeal() {
+  g_nets.magic = NET_MAGIC; g_nets.version = 1; g_nets.size = sizeof(NetStore);
+  g_nets.crc = crc32((const uint8_t*)&g_nets, offsetof(NetStore, crc));
+}
+
+// The sector image: the config from RAM (!SAVE) or as it is in flash (a
+// networks change must not keep config edits nobody asked to save), then the
+// networks block from RAM.
+static void saveImage(bool cfgFromRam) {
+  memset(g_saveBuf, 0xFF, sizeof(g_saveBuf));
+  if (cfgFromRam) memcpy(g_saveBuf, &cfg, sizeof(Config));
+  else {
+    mbed::FlashIAP f;
+    if (f.init() == 0) { f.read(g_saveBuf, CFG_FLASH_ADDR, NET_FLASH_OFF); f.deinit(); }
+  }
+  netSeal();
+  memcpy(g_saveBuf + NET_FLASH_OFF, &g_nets, sizeof(NetStore));
+}
+
+static void flashReadNets() {
+  NetStore b;
+  bool ok = false;
+  mbed::FlashIAP f;
+  if (f.init() == 0) {
+    ok = f.read(&b, CFG_FLASH_ADDR + NET_FLASH_OFF, sizeof(b)) == 0;
+    f.deinit();
+  }
+  ok = ok && b.magic == NET_MAGIC && b.version == 1 && b.size == sizeof(NetStore) &&
+       b.n <= NET_SAVED_MAX && b.crc == crc32((const uint8_t*)&b, offsetof(NetStore, crc));
+  if (ok) g_nets = b; else memset(&g_nets, 0, sizeof(g_nets));
+  g_nets.apPass[63] = 0;
+  for (int k = 0; k < NET_SAVED_MAX; k++) { g_nets.e[k].ssid[32] = 0; g_nets.e[k].pass[63] = 0; }
+}
+
+// why a networks save can't run now, or nullptr
+static const char* netSaveBlocked() {
+  if (g_saveState == 1) return "A save is running; try again in a moment";
+  if (g_relay || g_closePending) return "Open the load relay first: saving pauses the board for about 1 s";
+  if (!flashSectorOurs()) return "The config sector holds other data; not erasing it";
+  return nullptr;
+}
+
+static void startNetSave() {
+  if (g_saveThread) { g_saveThread->join(); delete g_saveThread; g_saveThread = nullptr; }
+  saveImage(false);
+  g_saveWhat = 1;
+  g_saveState = 1;
+  g_saveThread = new rtos::Thread(osPriorityNormal, 4096, nullptr, "cfgsave");
+  g_saveThread->start(saveTask);
+}
+
+static bool netCtl(const char* s, bool asciiOnly) {
+  for (const unsigned char* p = (const unsigned char*)s; *p; p++)
+    if (*p < 0x20 || *p == 0x7F || (asciiOnly && *p > 0x7E)) return true;
+  return false;
+}
+
+// Add a network, or give a saved one a new password; starts the flash save.
+// nullptr, or why not.
+static const char* netAdd(const char* ssid, const char* pass) {
+  const size_t sl = strlen(ssid), pl = strlen(pass);
+  if (sl < 1 || sl > 32) return "The network name must be 1-32 bytes";
+  if (pl && (pl < 8 || pl > 63)) return "The password must be 8-63 characters (empty for an open network)";
+  if (netCtl(ssid, false)) return "The network name has a control character";
+  if (netCtl(pass, true)) return "The password must be printable ASCII";
+  int at = -1;
+  for (int k = 0; k < g_nets.n; k++) if (strcmp(g_nets.e[k].ssid, ssid) == 0) at = k;
+  if (at < 0 && g_nets.n >= NET_SAVED_MAX) return "5 networks are saved already: delete one first";
+  if (const char* why = netSaveBlocked()) return why;
+  if (at < 0) at = g_nets.n++;
+  memset(&g_nets.e[at], 0, sizeof(NetEntry));
+  memcpy(g_nets.e[at].ssid, ssid, sl);
+  memcpy(g_nets.e[at].pass, pass, pl);
+  startNetSave();
+  return nullptr;
+}
+
+// k: the network's number in the whole list (!NETS), built-in ones first
+static const char* netDel(int k) {
+  if (k >= 1 && k <= N_WIFI) return "That network is built in (arduino_secrets.h)";
+  const int i = k - 1 - N_WIFI;
+  if (i < 0 || i >= g_nets.n) return "No saved network with that number";
+  if (const char* why = netSaveBlocked()) return why;
+  for (int q = i; q + 1 < g_nets.n; q++) g_nets.e[q] = g_nets.e[q + 1];
+  g_nets.n--;
+  memset(&g_nets.e[g_nets.n], 0, sizeof(NetEntry));
+  startNetSave();
+  return nullptr;
+}
+
+static const char* netApPass(const char* pass) {
+  const size_t pl = strlen(pass);
+  if (pl < 8 || pl > 63) return "The hotspot password must be 8-63 characters";
+  if (netCtl(pass, true)) return "The password must be printable ASCII";
+  if (const char* why = netSaveBlocked()) return why;
+  memset(g_nets.apPass, 0, sizeof(g_nets.apPass));
+  memcpy(g_nets.apPass, pass, pl);
+  startNetSave();
+  return nullptr;
+}
+
+// a hotspot password from the chip's random number generator: 10 characters
+// that can't be mistaken for each other on the OLED (~49 bits)
+static void randomApPass(char* out) {
+  static const char A[] = "abcdefghjkmnpqrstuvwxyz23456789";
+  uint8_t b[16] = {0};
+  size_t got = 0;
+  trng_t t;
+  trng_init(&t);
+  for (int tries = 0; tries < 8 && got < sizeof(b); tries++) {
+    size_t n = 0;
+    trng_get_bytes(&t, b + got, sizeof(b) - got, &n);
+    got += n;
+  }
+  trng_free(&t);
+  for (int k = 0; k < 10; k++) out[k] = A[(b[k] ^ (uint8_t)(micros() >> (k & 7))) % (sizeof(A) - 1)];
+  out[10] = 0;
+}
+
 static void serviceSave() {
-  if (g_saveState == 2) { g_saveState = 0; g_dirty = false; g_cfgOld = false; g_cfgSrc = "SAVED"; emitOk("save"); }
+  if (g_saveState == 2 && g_saveWhat == 1) { g_saveState = 0; emitOk("nets"); }
+  else if (g_saveState == 2) { g_saveState = 0; g_dirty = false; g_cfgOld = false; g_cfgSrc = "SAVED"; emitOk("save"); }
   else if (g_saveState == 3) { g_saveState = 0; emitErr(g_saveErr); }
 }
 
@@ -2795,10 +2999,28 @@ static void printDump(const Config& c, const char* src) {
 static void printNet() {
   g_ln.reset();
   g_ln.print("$NET,"); g_ln.print(g_ipStr); g_ln.print(','); g_ln.print(CMD_PORT); g_ln.print(',');
-  g_ln.print(g_wifiOk ? (int)WiFi.RSSI() : 0); g_ln.print(',');
+  g_ln.print(wifiMode() == 1 ? (int)WiFi.RSSI() : 0); g_ln.print(',');
   g_ln.print(g_wifiStatus); g_ln.print(','); g_ln.print(g_wifiPs); g_ln.print(',');
   g_ln.print(wifiSsid()); g_ln.print(','); g_ln.print(g_wifiNet + 1); g_ln.print(',');
-  g_ln.print(N_WIFI); g_ln.print(','); g_ln.println((int)g_wifiSeen); emit();
+  g_ln.print(netCount()); g_ln.print(','); g_ln.print(seenMask()); g_ln.print(',');
+  g_ln.println(wifiMode()); emit();
+}
+
+static void printNets() {
+  g_ln.reset(); g_ln.print("$NETS,"); g_ln.print(netCount()); g_ln.print(','); g_ln.print(g_nets.n);
+  g_ln.print(','); g_ln.print(NET_SAVED_MAX); g_ln.print(','); g_ln.println(wifiMode()); emit();
+  for (int j = 0; j < netCount(); j++) {
+    g_ln.reset(); g_ln.print("$NETW,"); g_ln.print(j + 1); g_ln.print(j < N_WIFI ? ",B," : ",S,");
+    g_ln.print(scanSaw(netSsid(j)) ? 1 : 0); g_ln.print(',');
+    g_ln.print(wifiMode() == 1 && strcmp(netSsid(j), g_wifiSsidNow) == 0 ? 1 : 0); g_ln.print(',');
+    g_ln.println(netSsid(j)); emit();
+  }
+}
+
+static void printAp() {
+  g_ln.reset(); g_ln.print("$APST,"); g_ln.print(g_apOn ? 1 : 0); g_ln.print(',');
+  g_ln.print(g_apOn && WiFi.status() == WL_AP_CONNECTED ? 1 : 0); g_ln.print(',');
+  g_ln.print(AP_IP); g_ln.print(','); g_ln.print(g_apSsid); g_ln.print(','); g_ln.println(g_nets.apPass); emit();
 }
 
 static void printStatus() {
@@ -2825,16 +3047,16 @@ static void printStatus() {
   g_ln.print(",synth="); g_ln.print(g_synth ? 1 : 0);
   g_ln.print(",gaps="); g_ln.print(g_gaps); g_ln.print(",lostms="); g_ln.print((uint32_t)(g_lostUs / 1000ULL));
   g_ln.print(",loopms="); g_ln.print(g_loopMaxMs, 2);
-  g_ln.print(",ip="); g_ln.print(g_ipStr); g_ln.print(",rssi="); g_ln.print(g_wifiOk ? (int)WiFi.RSSI() : 0);
+  g_ln.print(",ip="); g_ln.print(g_ipStr); g_ln.print(",rssi="); g_ln.print(wifiMode() == 1 ? (int)WiFi.RSSI() : 0);
   g_ln.print(",ssid="); g_ln.print(wifiSsid()); g_ln.print(",net="); g_ln.print(g_wifiNet + 1);
-  g_ln.print(",nets="); g_ln.print(N_WIFI);
+  g_ln.print(",nets="); g_ln.print(netCount()); g_ln.print(",wmode="); g_ln.print(wifiMode());
   g_ln.print(",oled="); g_ln.print(g_oledOk ? 1 : 0); g_ln.print(",ir="); g_ln.print(g_irAttached >= 0 ? g_irAttached : 0);
   g_ln.print(",cfgold="); g_ln.print(g_cfgOld ? 1 : 0);
   g_ln.print(",led=");
   g_ln.print(g_led == L_RED ? "red" : g_led == L_GREEN ? "green" : g_led == L_BLUE ? "blue" : "off");
   g_ln.print(",vabspk="); g_ln.print(g_cycAbsPk, 2);
   g_ln.print(",tickoff_us="); g_ln.print((int32_t)(tickUs() - micros()));
-  // connections on CMD_PORT: accepted, page requests, relay commands, timeouts, taken as the GUI
+  // connections on CMD_PORT: accepted, page requests, relay and range commands, timeouts, taken as the GUI
   g_ln.print(",web="); g_ln.print(g_webConns); g_ln.print(':'); g_ln.print(g_webReqs);
   g_ln.print(':'); g_ln.print(g_webRelays); g_ln.print(':'); g_ln.print(g_webTimeouts);
   g_ln.print(':'); g_ln.print(g_webGui);
@@ -2863,6 +3085,22 @@ static void printBanner() {
 // ═════════════════════════════════════════════════════════════════════════════
 //  commands
 // ═════════════════════════════════════════════════════════════════════════════
+
+// !NETADD's "<ssid>,<password>": the first comma not after a backslash ends the
+// name (\, and \\ inside it); the password is the rest of the line as it is
+static bool parseNetArgs(const char* a, char* ssid, char* pass) {
+  size_t n = 0;
+  while (*a && *a != ',') {
+    char c = *a++;
+    if (c == '\\' && (*a == ',' || *a == '\\')) c = *a++;
+    if (n >= 32) return false;
+    ssid[n++] = c;
+  }
+  ssid[n] = 0;
+  if (*a != ',' || strlen(a + 1) > 63) return false;
+  strcpy(pass, a + 1);
+  return true;
+}
 
 // up to n comma-separated floats; returns how many were present
 static int parseFloats(const char* args, float* out, int n) {
@@ -3023,22 +3261,47 @@ static void handleCommand(const char* cmd) {
   } else if (strcmp(cmd, "!AVGW") == 0) {
     emitAvg(false);
 
-  } else if (strcmp(cmd, "!WIFI") == 0) {
-    if (g_wifiBusy) emitErr("Already joining");
-    else { dropClient(); g_wifiOk = false; g_wifiReconnects++; startWifiConnect(true); printNet(); }
+  } else if (strcmp(cmd, "!WIFI") == 0 || strcmp(cmd, "!AP,0") == 0) {
+    if (g_wifiBusy) emitErr("Wi-Fi is busy; try again");
+    else { wifiRejoin(); printNet(); }
+
+  } else if (strcmp(cmd, "!AP,1") == 0) {
+    if (g_wifiBusy) emitErr("Wi-Fi is busy; try again");
+    else if (g_apOn) { g_apHold = true; printAp(); }
+    else { emitOk("ap"); dropClient(); webDrop(); g_wifiOk = false; g_apHold = true; startWifiJob(WJ_AP, true); printNet(); }
+
+  } else if (strcmp(cmd, "!AP") == 0) {
+    printAp();
+
+  } else if (strncmp(cmd, "!APPASS,", 8) == 0) {
+    const char* why = netApPass(cmd + 8);
+    if (why) emitErr(why);                  // else $OK,nets once it is in flash
+
+  } else if (strcmp(cmd, "!NETS") == 0) {
+    printNets();
+
+  } else if (strncmp(cmd, "!NETADD,", 8) == 0) {
+    char ssid[33], pass[64];
+    const char* why = parseNetArgs(cmd + 8, ssid, pass) ? netAdd(ssid, pass)
+                    : "NETADD,<ssid>,<password>: name 1-32 bytes (\\, for a comma in it), password 0 or 8-63";
+    if (why) emitErr(why);
+
+  } else if (strncmp(cmd, "!NETDEL,", 8) == 0) {
+    const char* why = netDel(atoi(cmd + 8));
+    if (why) emitErr(why);
 
   } else if (strcmp(cmd, "!SCAN") == 0 && g_wifiBusy) {
-    emitErr("Wi-Fi is joining; try again");
+    emitErr("Wi-Fi is busy; try again");
 
   } else if (strcmp(cmd, "!SCAN") == 0) {
     const char* fw = WiFi.firmwareVersion();
-    int n = WiFi.scanNetworks();
+    const int n = wifiScan();
     g_ln.reset(); g_ln.print("$SCAN,"); g_ln.print(fw); g_ln.print(','); g_ln.println(n); emit();
-    for (int k = 0; k < n && k < 30; k++) {
-      g_ln.reset(); g_ln.print("$AP,"); g_ln.print(WiFi.SSID(k)); g_ln.print(',');
-      g_ln.print((int)WiFi.RSSI(k)); g_ln.print(','); g_ln.print((int)WiFi.encryptionType(k)); g_ln.print(',');
-      int listed = 0;                        // 1-based place in arduino_secrets.h, 0 = not listed
-      for (int j = 0; j < N_WIFI && !listed; j++) if (strcmp(WiFi.SSID(k), WIFI_NETS[j].ssid) == 0) listed = j + 1;
+    for (int q = 0; q < g_scanN; q++) {
+      g_ln.reset(); g_ln.print("$AP,"); g_ln.print(g_aps[q].ssid); g_ln.print(',');
+      g_ln.print((int)g_aps[q].rssi); g_ln.print(','); g_ln.print((int)g_aps[q].enc); g_ln.print(',');
+      int listed = 0;                        // 1-based place in the list (!NETS), 0 = not known
+      for (int j = 0; j < netCount() && !listed; j++) if (strcmp(g_aps[q].ssid, netSsid(j)) == 0) listed = j + 1;
       g_ln.println(listed); emit();
     }
     markGap();
@@ -3100,46 +3363,163 @@ static void setLeds() {
 // g_wifiBusy is set; it picks up the result once the thread is done.
 static rtos::Thread*  g_wifiThread = nullptr;
 
-// Each join scans once, then tries the listed networks it can see, in list
-// order (SECRET_SSID first), twice each. WiFi.begin() on this core scans
+// Each join scans once, then tries the known networks it saw (built in first,
+// then the saved ones), in order, twice each. WiFi.begin() on this core scans
 // again and is synchronous: it returns connected or failed, never pending.
 // It fails at once for a network the scan didn't see (a hidden SSID would need
 // its security type given), so only a failed scan falls back to trying all.
+//
+// The hotspot. A join round that fails starts it when no known network was
+// in range, when it is the second failure in a row, or when the round left
+// the hotspot (!AP,0, the page's Join). WiFi.beginAP() on this core is WPA2
+// with its own DHCP server at 192.168.3.1, in AP+STA coexistence, and the
+// server keeps listening (both interfaces are the one lwIP stack). The DHCP
+// server holds a UDP socket, one of the 4 (see socketsFree). Every
+// AP_CHECK_MS, once no page or GUI has used it for AP_IDLE_MS, WJ_APCHECK
+// scans with the hotspot up and leaves it only for a known network in range,
+// starting it again if that join fails. Leaving: WiFi.disconnect() stops the
+// hotspot, WiFi.end() makes the station the network again.
+static WifiNet  g_jobNets[N_WIFI + NET_SAVED_MAX];   // the job's own copy of the list:
+static NetStore g_jobStore;                          // the loop may edit g_nets meanwhile
+static int      g_jobN = 0;
+
+// a scan into g_scan; WiFi's count, < 0 failed
+static int wifiScan() {
+  const int n = WiFi.scanNetworks();
+  int m = 0;
+  for (int k = 0; k < n && k < 255; k++) {
+    const char* s = WiFi.SSID((uint8_t)k);
+    if (!s || !*s) continue;                    // hidden: no name to join by
+#ifdef WIFI_TEST_OUTAGE_MS
+    // test builds: the built-in networks are "out of range" for a while after boot
+    bool hide = false;
+    for (int j = 0; j < N_WIFI; j++) if (millis() < WIFI_TEST_OUTAGE_MS && strcmp(s, WIFI_NETS[j].ssid) == 0) hide = true;
+    if (hide) continue;
+#endif
+    const int8_t r = (int8_t)WiFi.RSSI((uint8_t)k);
+    int at = -1;
+    for (int q = 0; q < m; q++) if (strcmp(g_aps[q].ssid, s) == 0) { at = q; break; }
+    if (at >= 0) { if (r > g_aps[at].rssi) g_aps[at].rssi = r; continue; }
+    if (m < SCAN_MAX) at = m++;
+    else {                                      // full: replace the weakest, if weaker
+      at = 0;
+      for (int q = 1; q < m; q++) if (g_aps[q].rssi < g_aps[at].rssi) at = q;
+      if (r <= g_aps[at].rssi) continue;
+    }
+    strncpy(g_aps[at].ssid, s, 32); g_aps[at].ssid[32] = 0;
+    g_aps[at].rssi = r; g_aps[at].enc = WiFi.encryptionType((uint8_t)k);
+  }
+  for (int a = 1; a < m; a++)                   // strongest first
+    for (int b = a; b > 0 && g_aps[b].rssi > g_aps[b - 1].rssi; b--) {
+      ScanAp t = g_aps[b]; g_aps[b] = g_aps[b - 1]; g_aps[b - 1] = t;
+    }
+  g_scanN = n < 0 ? -1 : m;
+  g_scanMs = millis();
+  return n;
+}
+
+static bool jobAnySeen() {
+  for (int j = 0; j < g_jobN; j++) if (scanSaw(g_jobNets[j].ssid)) return true;
+  return false;
+}
+
+// the job's networks the scan saw (all when it failed), twice each: the one joined, or -1
+static int joinKnown(bool scanned) {
+  for (int j = 0; j < g_jobN; j++) {
+    if (scanned && !scanSaw(g_jobNets[j].ssid)) continue;
+    for (int t = 0; t < 2; t++) {
+      WiFi.begin(g_jobNets[j].ssid, g_jobNets[j].pass);
+      if (WiFi.status() == WL_CONNECTED) return j;
+    }
+  }
+  return -1;
+}
+
+static void apStart() {
+  WiFi.disconnect();                            // what is left of the station side
+  const int st = WiFi.beginAP(g_apSsid, g_jobStore.apPass);
+  g_apOn = (st == WL_AP_LISTENING || st == WL_AP_CONNECTED);
+  if (!g_apOn) WiFi.end();                      // the station is the network again
+}
+
+static void apStop() {
+  if (!g_apOn) return;
+  WiFi.disconnect();                            // stops the hotspot and its DHCP server
+  WiFi.end();                                   // and forgets it
+  g_apOn = false;
+}
+
 static void wifiTask() {
   int st = WiFi.status();
   int joined = -1;
   if (st != WL_NO_MODULE) {
-    if (g_wifiDisc) { WiFi.disconnect(); g_wifiDisc = false; }
-    uint8_t seen = 0;
-    const int n = WiFi.scanNetworks();
-    for (int k = 0; k < n; k++) {
-      const char* s = WiFi.SSID(k);
-      for (int j = 0; j < N_WIFI; j++) if (s && strcmp(s, WIFI_NETS[j].ssid) == 0) seen |= (uint8_t)(1u << j);
-    }
-    if (n < 0) seen = 0xFF;
-    g_wifiSeen = seen;
-    for (int j = 0; j < N_WIFI && st != WL_CONNECTED; j++) {
-      if (!(seen & (1u << j))) continue;
-      for (int t = 0; t < 2 && st != WL_CONNECTED; t++) {
-        WiFi.begin(WIFI_NETS[j].ssid, WIFI_NETS[j].pass);
-        st = WiFi.status();
+    switch (g_wifiJob) {
+      case WJ_SCAN:
+        wifiScan();
+        joined = -2;
+        break;
+      case WJ_AP:
+        apStop();
+        WiFi.disconnect();
+        apStart();
+        break;
+      case WJ_APCHECK: {
+        const int n = wifiScan();
+        if (n >= 0 && !jobAnySeen()) { joined = -2; break; }   // nothing known in range: stay
+        apStop();
+        joined = joinKnown(n >= 0);
+        if (joined < 0) apStart();
+        break;
       }
-      if (st == WL_CONNECTED) joined = j;
+      default: {                                // WJ_JOIN
+        if (g_apOn) apStop();
+        else if (g_wifiDisc) WiFi.disconnect();
+        const int n = wifiScan();
+        joined = joinKnown(n >= 0);
+        if (joined < 0) {
+          if (g_joinFails < 255) g_joinFails++;
+          if (g_joinFromAp || g_joinFails >= 2 || (n >= 0 && !jobAnySeen())) apStart();
+        }
+        break;
+      }
     }
+    if (joined >= 0) g_joinFails = 0;
+    st = WiFi.status();
   }
+  g_wifiDisc = false;
+  g_joinFromAp = false;
   g_wifiJoined = joined;
   g_wifiResult = st;
   g_wifiDone = true;
   g_wifiBusy = false;
 }
 
-static void startWifiConnect(bool disconnectFirst) {
+static void startWifiConnect(bool disconnectFirst) { startWifiJob(WJ_JOIN, disconnectFirst); }
+
+// !WIFI, !AP,0, the page's Join: from the top of the list, leaving the hotspot
+static void wifiRejoin() {
+  dropClient(); webDrop();
+  g_joinFromAp = g_apOn;
+  g_apHold = false;
+  g_wifiOk = false;
+  g_wifiReconnects++;
+  startWifiConnect(true);
+  setLeds(); oledPoke();
+}
+
+static void startWifiJob(uint8_t job, bool disconnectFirst) {
   if (g_wifiBusy) return;
   if (g_wifiThread) { g_wifiThread->join(); delete g_wifiThread; g_wifiThread = nullptr; }
+  g_jobStore = g_nets;
+  g_jobN = 0;
+  for (int j = 0; j < N_WIFI; j++) g_jobNets[g_jobN++] = WIFI_NETS[j];
+  for (int k = 0; k < g_jobStore.n; k++) g_jobNets[g_jobN++] = { g_jobStore.e[k].ssid, g_jobStore.e[k].pass };
+  g_wifiJob = job;
   g_wifiDisc = disconnectFirst;
   g_wifiBusy = true;
   g_lastWifiTry = millis();
-  strcpy(g_ipStr, "joining");
+  if (job == WJ_JOIN) strcpy(g_ipStr, "joining");
+  else if (job == WJ_AP) strcpy(g_ipStr, "hotspot...");
   // same priority as the loop: RTX round-robins equal priorities, and the loop
   // never sleeps, so a lower priority would starve the join
   g_wifiThread = new rtos::Thread(osPriorityNormal, 8192, nullptr, "wifijoin");
@@ -3162,18 +3542,32 @@ static void disableWifiPowerSave() {
 static void finishWifiConnect() {
   g_wifiDone = false;
   g_wifiStatus = g_wifiResult;
-  if (g_wifiStatus == WL_CONNECTED) {
+  if (g_wifiJoined == -2) { oledPoke(); return; }   // a scan, or the hotspot saw nothing to leave for
+  if (g_wifiJoined >= 0 && g_wifiStatus == WL_CONNECTED) {
     IPAddress ip = WiFi.localIP();
     snprintf(g_ipStr, sizeof(g_ipStr), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
     g_server.begin();
     disableWifiPowerSave();
     g_wifiOk = true;
     g_wifiNet = g_wifiJoined;
+    strncpy(g_wifiSsidNow, g_jobNets[g_wifiJoined].ssid, 32); g_wifiSsidNow[32] = 0;
+    g_apHold = false;
     g_ipShowUntil = millis() + 10000;      // the OLED shows where to connect for 10 s
+  } else if (g_apOn) {
+    IPAddress ip = WiFi.localIP();         // the hotspot's (getNetwork() is the AP now)
+    snprintf(g_ipStr, sizeof(g_ipStr), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+    g_server.begin();
+    g_wifiPs = -1;
+    g_wifiOk = true;
+    g_wifiNet = -1;
+    strcpy(g_wifiSsidNow, g_apSsid);
+    g_netActMs = millis();
+    g_ipShowUntil = 0;
   } else {
     strcpy(g_ipStr, g_wifiStatus == WL_NO_MODULE ? "no-module" : "none");
     g_wifiOk = false;
     g_wifiNet = -1;
+    g_wifiSsidNow[0] = 0;
   }
   setLeds();
   oledPoke();
@@ -3187,9 +3581,10 @@ static void finishWifiConnect() {
 // A phone or browser on the same network opens http://<ip>:8080/ and gets
 // web_page.h. The page polls GET /api/live once a second for the last
 // window's readings and any persistence frames it hasn't seen yet. It can
-// change only the load relay: POST /api/relay?on=0|1 acts as the IR remote
-// does. A close clears a latched trip and is refused while a capture owns
-// the relay. An open during a capture is a safe-start REMOTE open.
+// change the load relay (POST /api/relay?on=0|1, as the IR remote: a close
+// clears a latched trip and is refused while a capture owns the relay; an
+// open during a capture is a safe-start REMOTE open), RNGMODE (POST
+// /api/range) and the saved Wi-Fi networks (/api/wifi, see webWifiPost).
 //
 // One port for the GUI and the page. lwIP on this core has 4 sockets AND 4
 // netconns in all (MBED_CONF_LWIP_SOCKET_MAX; MEMP_NUM_NETCONN is the same
@@ -3233,6 +3628,7 @@ struct WebConn {
   uint32_t   t = 0;                     // millis: the state began, or the last progress
   char       req[1024];
   uint16_t   reqN = 0;
+  uint16_t   bodyAt = 0, bodyLen = 0;     // a request body (Content-Length) after the headers
   char       hdr[256];
   size_t     hdrN = 0, off = 0;         // off runs over the header, then the body
   uint8_t    stage[1436];               // the header plus the body's start, sent as one segment
@@ -3286,7 +3682,8 @@ static void webDrop() { for (int w = 0; w < WEB_SLOTS; w++) webClose(w); }
 static void webReply(int code, const char* type, const void* body, size_t n, const char* extra) {
   const char* why = code == 200 ? "OK" : code == 400 ? "Bad Request" : code == 403 ? "Forbidden" :
                     code == 404 ? "Not Found" : code == 405 ? "Method Not Allowed" :
-                    code == 409 ? "Conflict" : code == 431 ? "Request Header Fields Too Large" :
+                    code == 409 ? "Conflict" : code == 413 ? "Payload Too Large" :
+                    code == 431 ? "Request Header Fields Too Large" :
                     "Service Unavailable";
   int h = snprintf(g_w->hdr, sizeof(g_w->hdr),
                    "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length: %u\r\n"
@@ -3302,6 +3699,16 @@ static void jkey(const char* k) { g_wo.print(",\""); g_wo.print(k); g_wo.print("
 static void jnum(const char* k, double v, int dp) { jkey(k); if (isfinite(v)) g_wo.print(v, dp); else g_wo.print("null"); }
 static void jint(const char* k, long v) { jkey(k); g_wo.print(v); }
 static void jstr(const char* k, const char* v) { jkey(k); g_wo.print('"'); g_wo.print(v); g_wo.print('"'); }
+// a string that may hold anything (a network name): quotes, backslashes and control characters escaped
+static void jstrE(const char* k, const char* v) {
+  jkey(k); g_wo.print('"');
+  for (const unsigned char* p = (const unsigned char*)v; *p; p++) {
+    if (*p == '"' || *p == '\\') { g_wo.print('\\'); g_wo.print((char)*p); }
+    else if (*p < 0x20) { char e[8]; snprintf(e, sizeof(e), "\\u%04x", *p); g_wo.print(e); }
+    else g_wo.print((char)*p);
+  }
+  g_wo.print('"');
+}
 
 // a map as bytes: a count 1-255 as itself, a run of n empty cells as 0, n
 static size_t pmRle(const uint8_t* m, uint8_t* out) {
@@ -3349,11 +3756,13 @@ static void webLive(const char* query) {
   jnum("vdc", r.vdc, 4);  jnum("idc", r.idc, 5);  jnum("wh", g_wh, 6);
   jnum("thv", g_hVthd, 2); jnum("thi", g_hIthd, 2);
   jint("dc", g_lastDc ? 1 : 0); jint("fl", g_lastOut);
-  jint("rng", g_irCur);
+  jint("rng", g_irCur); jint("rw", g_irWant); jint("rm", cfg.rngMode);
+  jint("r2", g_rngPin ? 1 : 0); jint("rl", g_rngLatchHigh ? 1 : 0);
   jint("rly", g_relay ? 1 : 0); jint("pend", g_closePending ? 1 : 0);
   jint("trip", g_trip_latch ? 1 : 0);
   jstr("tw", g_tripWhy); jnum("tv", g_tripVal, 4); jnum("tl", g_tripLim, 4);
   jint("cap", g_cs ? 1 : 0); jint("gui", g_clientOn ? 1 : 0);
+  jint("wm", wifiMode()); jstrE("ws", wifiSsid());
   jint("pmx", PM_X); jint("pmy", PM_Y); jint("pmn", (long)g_pmSeq);
   uint32_t from = g_pmSeq > PM_FRAMES ? g_pmSeq - PM_FRAMES : 0;
   if (since >= 0 && (uint32_t)since > from && (uint32_t)since <= g_pmSeq) from = (uint32_t)since;
@@ -3401,13 +3810,29 @@ static bool webAuthorized(const char* head) {
   return true;     // none yet: anyone on the network may switch the relay
 }
 
+// the reply to a control request: what happened, and the state after it
 static void webRelayReply(int code, bool ok, const char* msg) {
   g_wo.begin(g_w->buf, WEB_BUF);
   g_wo.print("{\"ok\":"); g_wo.print(ok ? "true" : "false");
   jstr("msg", msg);
   jint("rly", g_relay ? 1 : 0); jint("pend", g_closePending ? 1 : 0); jint("trip", g_trip_latch ? 1 : 0);
+  jint("rng", g_irCur); jint("rw", g_irWant); jint("rm", cfg.rngMode);
   g_wo.print('}');
   webReply(code, "application/json", g_w->buf, g_wo.size(), "");
+}
+
+// the checks every control request passes: the X-GACP header (a cross-site
+// page can't send it without a preflight, which gets a 405) and the credential
+static bool webControlAllowed(const char* head) {
+  if (!webHeader(head, "x-gacp")) { webRelayReply(403, false, "Missing the X-GACP header"); return false; }
+  if (!webAuthorized(head)) { webRelayReply(403, false, "Not authorized"); return false; }
+  return true;
+}
+
+static void webLogControl(const char* what, int arg, bool ok) {
+  g_ln.reset(); g_ln.print("$WEB,"); g_ln.print(what); g_ln.print(','); g_ln.print(arg); g_ln.print(',');
+  g_ln.print(ok ? "OK" : "REFUSED"); g_ln.print(','); g_ln.println(g_w->c.remoteIP()); emit();
+  oledPoke();
 }
 
 // POST /api/relay?on=0|1, as the IR remote: an open always goes through (during
@@ -3418,8 +3843,7 @@ static void webRelay(const char* query, const char* head) {
   const char* q = query ? strstr(query, "on=") : nullptr;
   const int on = (q && (q[3] == '0' || q[3] == '1')) ? q[3] - '0' : -1;
   if (on < 0) { webRelayReply(400, false, "Use on=0 or on=1"); return; }
-  if (!webHeader(head, "x-gacp")) { webRelayReply(403, false, "Missing the X-GACP header"); return; }
-  if (!webAuthorized(head)) { webRelayReply(403, false, "Not authorized"); return; }
+  if (!webControlAllowed(head)) return;
   g_webRelays++;
   bool ok = true;
   const char* msg;
@@ -3440,16 +3864,145 @@ static void webRelay(const char* query, const char* head) {
     msg = g_closePending ? "Closing: the current range goes to HIGH first"
         : wasTrip ? "Trip cleared, closed" : "Closed";
   }
-  g_ln.reset(); g_ln.print("$WEB,RELAY,"); g_ln.print(on); g_ln.print(',');
-  g_ln.print(ok ? "OK" : "REFUSED"); g_ln.print(','); g_ln.println(g_w->c.remoteIP()); emit();
-  oledPoke();
+  webLogControl("RELAY", on, ok);
   webRelayReply(ok ? 200 : 409, ok, msg);
+}
+
+// POST /api/range?mode=0-3: RNGMODE in RAM, as !RANGE (the GUI's Save keeps
+// it). Selecting a mode again clears mode 2's overload latch. Refused while a
+// capture or a zero runs, because both pin the range for their own use.
+static void webRange(const char* query, const char* head) {
+  if (!g_w->buf) { webText(503, "no memory for the web page\n"); return; }
+  const char* q = query ? strstr(query, "mode=") : nullptr;
+  const int m = (q && q[5] >= '0' && q[5] <= '3' && (q[6] < '0' || q[6] > '9')) ? q[5] - '0' : -1;
+  if (m < 0) { webRelayReply(400, false, "Use mode=0 (auto), 1 (HIGH), 2 (LOW) or 3 (auto-delayed)"); return; }
+  if (!webControlAllowed(head)) return;
+  g_webRelays++;
+  bool ok = false;
+  const char* msg;
+  if (!g_rngPin) msg = "This unit has one current range (RNGPIN 0)";
+  else if (g_cs || g_capForce >= 0) msg = "Refused: a capture owns the range right now";
+  else if (g_zeroStep) msg = "Refused: zeroing the current offsets";
+  else {
+    ok = true;
+    cfg.rngMode = (uint8_t)m; g_dirty = true;
+    applyRangeMode(RW_CMD);
+    g_ln.reset(); g_ln.print("$RNG,"); g_ln.print(g_irWant); g_ln.print(",CMD,"); g_ln.println(m); emit();
+    static const char* const MSG[] = { "Auto range", "HIGH range only",
+      "LOW range (an overload goes HIGH and stays there)", "Auto range, delayed going HIGH" };
+    msg = MSG[m];
+  }
+  webLogControl("RANGE", m, ok);
+  webRelayReply(ok ? 200 : 409, ok, msg);
+}
+
+// GET /api/wifi: the networks (never their passwords), the last scan, the mode
+static void webWifi() {
+  if (!g_w->buf) { webText(503, "no memory for the web page\n"); return; }
+  g_wo.begin(g_w->buf, WEB_BUF);
+  g_wo.print("{\"mode\":"); g_wo.print(wifiMode());
+  jstrE("ssid", wifiSsid()); jstr("ip", g_ipStr);
+  jint("rssi", wifiMode() == 1 ? (long)WiFi.RSSI() : 0L);
+  jstr("aps", g_apSsid); jstr("apip", AP_IP); jint("hold", g_apHold ? 1 : 0);
+  jint("max", NET_SAVED_MAX); jint("saved", g_nets.n);
+  jint("saving", g_saveState == 1 ? 1 : 0); jint("pend", (g_scanWanted || g_joinWanted) ? 1 : 0);
+  jint("scanAge", g_scanN >= 0 ? (long)(millis() - g_scanMs) : -1L);
+  g_wo.print(",\"nets\":[");
+  for (int j = 0; j < netCount(); j++) {
+    if (j) g_wo.print(',');
+    g_wo.print("{\"k\":"); g_wo.print(j + 1);
+    jstrE("s", netSsid(j)); jint("b", j < N_WIFI ? 1 : 0);
+    jint("seen", scanSaw(netSsid(j)) ? 1 : 0);
+    jint("use", wifiMode() == 1 && strcmp(netSsid(j), g_wifiSsidNow) == 0 ? 1 : 0);
+    jint("open", netPass(j)[0] ? 0 : 1);
+    g_wo.print('}');
+  }
+  g_wo.print("],\"scan\":[");
+  for (int q = 0; q < g_scanN; q++) {
+    if (q) g_wo.print(',');
+    g_wo.print("{\"r\":"); g_wo.print((int)g_aps[q].rssi);
+    jstrE("s", g_aps[q].ssid); jint("o", g_aps[q].enc == ENC_TYPE_NONE ? 1 : 0);
+    g_wo.print('}');
+  }
+  g_wo.print("]}");
+  webReply(200, "application/json", g_w->buf, g_wo.size(), "");
+}
+
+static int hexVal(char c) { return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1; }
+
+// one field of a form body (a=b&c=d), URL-decoded; false if absent or longer than cap - 1
+static bool formGet(const char* s, const char* name, char* out, size_t cap) {
+  const size_t nl = strlen(name);
+  for (const char* p = s; p && *p; ) {
+    if (strncmp(p, name, nl) == 0 && p[nl] == '=') {
+      p += nl + 1;
+      size_t o = 0;
+      while (*p && *p != '&') {
+        int c = (unsigned char)*p++;
+        if (c == '+') c = ' ';
+        else if (c == '%' && hexVal(p[0]) >= 0 && hexVal(p[1]) >= 0) { c = hexVal(p[0]) * 16 + hexVal(p[1]); p += 2; }
+        if (o + 1 >= cap) return false;
+        out[o++] = (char)c;
+      }
+      out[o] = 0;
+      return true;
+    }
+    p = strchr(p, '&');
+    if (p) p++;
+  }
+  return false;
+}
+
+static void webOkReply(int code, bool ok, const char* msg) {
+  g_wo.begin(g_w->buf, WEB_BUF);
+  g_wo.print("{\"ok\":"); g_wo.print(ok ? "true" : "false");
+  jstrE("msg", msg);
+  g_wo.print('}');
+  webReply(code, "application/json", g_w->buf, g_wo.size(), "");
+}
+
+// POST /api/wifi/<scan|add|del|join>, with the X-GACP header as the relay.
+// add: a form body ssid=...&pass=... (not the URL: a password stays out of logs).
+// scan and join start once this reply is out (a Wi-Fi job stops the serving).
+static void webWifiPost(const char* act, const char* query, const char* head, const char* body) {
+  if (!g_w->buf) { webText(503, "no memory for the web page\n"); return; }
+  const char* what = strcmp(act, "scan") == 0 ? "SCAN" : strcmp(act, "add") == 0 ? "ADD" :
+                     strcmp(act, "del") == 0 ? "DEL" : strcmp(act, "join") == 0 ? "JOIN" : nullptr;
+  if (!what) { webText(404, "not found\n"); return; }
+  if (!webControlAllowed(head)) return;
+  g_webRelays++;
+  char msg[112];
+  const char* why = nullptr;
+  if (what[0] == 'S') {
+    g_scanWanted = true; g_wantMs = millis();
+    strcpy(msg, "Scanning: a few seconds");
+  } else if (what[0] == 'A') {
+    char ssid[33], pass[64];
+    if (!body || !formGet(body, "ssid", ssid, sizeof(ssid)) || !formGet(body, "pass", pass, sizeof(pass)))
+      why = "Send the name (up to 32 bytes) and the password (up to 63)";
+    else if (!(why = netAdd(ssid, pass)))
+      snprintf(msg, sizeof(msg), "Saved %s", ssid);
+  } else if (what[0] == 'D') {
+    const char* q = query ? strstr(query, "k=") : nullptr;
+    if (!(why = netDel(q ? atoi(q + 2) : 0))) strcpy(msg, "Deleted");
+  } else {
+    g_joinWanted = true; g_wantMs = millis();
+    strcpy(msg, g_apOn ? "Leaving the hotspot for a known network; if none joins, the hotspot is back in under a minute"
+                       : "Rejoining from the top of the list");
+  }
+  g_ln.reset(); g_ln.print("$WEB,WIFI,"); g_ln.print(what); g_ln.print(',');
+  g_ln.print(why ? "REFUSED" : "OK"); g_ln.print(','); g_ln.println(g_w->c.remoteIP()); emit();
+  webOkReply(why ? 409 : 200, !why, why ? why : msg);
 }
 
 static void webHandle() {
   g_webReqs++;
   char* req = g_w->req;
   req[g_w->reqN] = 0;
+  g_netActMs = millis();
+  // a body ends the headers' string where it starts (webHeader must not read into it)
+  const char* body = nullptr;
+  if (g_w->bodyAt >= 2) { body = req + g_w->bodyAt; req[g_w->bodyAt - 2] = 0; }
   char* sp1 = strchr(req, ' ');
   char* sp2 = sp1 ? strchr(sp1 + 1, ' ') : nullptr;
   if (!sp1 || !sp2) { webText(400, "bad request\n"); return; }
@@ -3475,6 +4028,15 @@ static void webHandle() {
   } else if (strcmp(path, "/api/relay") == 0) {
     if (!post) { webText(405, "POST only\n"); return; }
     webRelay(query, head);
+  } else if (strcmp(path, "/api/range") == 0) {
+    if (!post) { webText(405, "POST only\n"); return; }
+    webRange(query, head);
+  } else if (strcmp(path, "/api/wifi") == 0) {
+    if (!get) { webText(405, "GET only\n"); return; }
+    webWifi();
+  } else if (strncmp(path, "/api/wifi/", 10) == 0) {
+    if (!post) { webText(405, "POST only\n"); return; }
+    webWifiPost(path + 10, query, head, body);
   } else {
     webText(404, "not found\n");
   }
@@ -3508,7 +4070,18 @@ static void serviceWebSlot(int w, uint32_t now) {
       if (s.reqN == 0 && !(ch >= 'A' && ch <= 'Z')) { s.req[s.reqN++] = (char)ch; webToGui(w); return; }
       if (s.reqN >= sizeof(s.req) - 1) { webText(431, "request too large\n"); break; }
       s.req[s.reqN++] = (char)ch;
-      if (s.reqN >= 4 && memcmp(s.req + s.reqN - 4, "\r\n\r\n", 4) == 0) { webHandle(); break; }
+      if (s.bodyAt) {                     // the body: until Content-Length bytes are in
+        if (s.reqN >= s.bodyAt + s.bodyLen) { webHandle(); break; }
+        continue;
+      }
+      if (s.reqN >= 4 && memcmp(s.req + s.reqN - 4, "\r\n\r\n", 4) == 0) {
+        s.req[s.reqN] = 0;
+        const char* cl = webHeader(s.req, "content-length");
+        const long n = cl ? atol(cl) : 0;
+        if (n <= 0) { webHandle(); break; }
+        if (n > (long)(sizeof(s.req) - 1 - s.reqN)) { webText(413, "body too large\n"); break; }
+        s.bodyAt = s.reqN; s.bodyLen = (uint16_t)n;
+      }
     }
     if (s.state == 0) {
       if (now - s.t > WEB_REQ_MS) { g_webTimeouts++; webClose(w); }
@@ -3550,10 +4123,11 @@ static void serviceWebSlot(int w, uint32_t now) {
   }
 }
 
-// Sockets free of MBED_CONF_LWIP_SOCKET_MAX: the listener, the GUI's client,
-// the web slots and the closes still with the reaper all hold one.
+// Sockets free of MBED_CONF_LWIP_SOCKET_MAX: the listener, the hotspot's DHCP
+// server, the GUI's client, the web slots and the closes still with the
+// reaper all hold one.
 static int socketsFree() {
-  int used = 1 + (g_clientOn ? 1 : 0);
+  int used = 1 + (g_apOn ? 1 : 0) + (g_clientOn ? 1 : 0);
   for (int w = 0; w < WEB_SLOTS; w++) if (g_wcs[w].on) used++;
   for (int k = 0; k < REAP_N; k++) if (g_reapSt[k]) used++;
   return MBED_CONF_LWIP_SOCKET_MAX - used;
@@ -3573,7 +4147,7 @@ static void serviceWeb() {
       if (!c) continue;
       s.c = c;
       s.c.setSocketTimeout(0);            // non-blocking send, as the GUI's client
-      s.on = true; s.state = 0; s.reqN = 0; s.t = now;
+      s.on = true; s.state = 0; s.reqN = 0; s.bodyAt = 0; s.bodyLen = 0; s.t = now;
       g_webConns++;
     }
     serviceWebSlot(w, now);
@@ -3591,10 +4165,12 @@ static void serviceNet() {
   uint32_t now = millis();
   if (g_wifiBusy) return;                 // the join thread owns WiFi right now
   if (g_wifiDone) finishWifiConnect();
-  if (g_wifiOk && now - g_lastWifiCheck > 2000) {
+  if (g_clientOn) g_netActMs = now;
+  if (g_wifiOk && !g_apOn && now - g_lastWifiCheck > 2000) {
     g_lastWifiCheck = now;
     if (WiFi.status() != WL_CONNECTED) {
-      g_wifiOk = false; g_wifiNet = -1; dropClient(); webDrop(); strcpy(g_ipStr, "none"); setLeds(); oledPoke(); printNet();
+      g_wifiOk = false; g_wifiNet = -1; g_wifiSsidNow[0] = 0;
+      dropClient(); webDrop(); strcpy(g_ipStr, "none"); setLeds(); oledPoke(); printNet();
     }
   }
   if (!g_wifiOk) {
@@ -3602,6 +4178,20 @@ static void serviceNet() {
       g_wifiReconnects++;
       startWifiConnect(true);
     }
+    return;
+  }
+  // what the page asked for, once no reply is in flight
+  bool webOn = false;
+  for (int w = 0; w < WEB_SLOTS; w++) if (g_wcs[w].on) webOn = true;
+  if ((g_scanWanted || g_joinWanted) && !webOn && now - g_wantMs > 200) {
+    if (g_joinWanted) { g_joinWanted = g_scanWanted = false; wifiRejoin(); printNet(); }
+    else { g_scanWanted = false; startWifiJob(WJ_SCAN, false); }
+    return;
+  }
+  // the hotspot: look for a known network now and then, while nobody uses it
+  if (g_apOn && !g_apHold && !g_clientOn && !webOn &&
+      now - g_lastWifiTry > AP_CHECK_MS && now - g_netActMs > AP_IDLE_MS) {
+    startWifiJob(WJ_APCHECK, false);
     return;
   }
   // new connections are accepted and sorted (GUI or browser) in serviceWeb
@@ -3661,6 +4251,24 @@ void setup() {
   g_reapSem = new rtos::Semaphore(0);
   g_reapTh = new rtos::Thread(osPriorityNormal, 4096, nullptr, "webreap");
   g_reapTh->start(reapTask);
+
+  // the saved networks, the hotspot's name and (made once, then kept) password
+  flashReadNets();
+  {
+    char uid[26]; uidStr(uid);
+    snprintf(g_apSsid, sizeof(g_apSsid), "GigaPower-%04X", (unsigned)(crc32((const uint8_t*)uid, strlen(uid)) & 0xFFFF));
+  }
+  if (strlen(g_nets.apPass) < 8) {
+    randomApPass(g_nets.apPass);
+    // the one flash write at boot (first boot of fw 2.5): the relay is open and
+    // nothing is measured yet, so the ~1 s erase costs nothing
+    if (flashSectorOurs()) {
+      saveImage(false);
+      saveTask();
+      if (g_saveState == 3) { Serial.print("$ERR,hotspot password not saved: "); Serial.println(g_saveErr); }
+      g_saveState = 0;
+    }
+  }
 
   // measuring starts at once; the network joins in the background
   applyConfig(0);

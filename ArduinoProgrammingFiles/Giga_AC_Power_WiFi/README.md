@@ -23,7 +23,8 @@ it. The GUI files here are copies of 120VMonitor's, adapted for the Giga.
 3. `py -3 monitor_gui.py`, type the IP (default `192.168.40.225`) or a COM
    port in the port box, Connect. Every tab works as on 120VMonitor; see
    [its README](../120VMonitor/README.md) for the Capture, Meter (live
-   persistence), Calibration and Config tabs.
+   persistence), Calibration and Config tabs. The Wi-Fi tab (fw 2.5) is this
+   board's own: see "Wi-Fi networks" below.
 
 `!SYNTH,1,<vrms>,<irms>,<deg>,<h3%>,<hz>` (Console tab) replaces the ADC data
 with an exact synthetic V/I, still paced by the ADC, to try everything with
@@ -46,19 +47,36 @@ on the same network. No app or PC needed; the page is served by the board.
   signal in 1-2-5 steps, so it jumps when the signal does and the map starts
   over. With no voltage crossings the spans are free-running and the phase
   axis means nothing; the page says so.
-- **Load relay**: the one thing the page can change. Open is one tap. Close is
+- **Load relay**: one of the two things the page can change. Open is one tap. Close is
   two taps within 4 s, clears a latched trip, and, as the IR remote's close,
   goes HIGH range first in auto range and is refused while a capture owns the
   relay. Each switch is logged as `$WEB,RELAY,<0|1>,<OK|REFUSED>,<client ip>`.
+- **Current range** (fw 2.4): Auto / Delayed / HIGH / LOW, one tap, the same
+  as the GUI's range box (`!RANGE`: RNGMODE 0 / 3 / 1 / 2, in RAM until the
+  GUI saves). The card shows the range in use and "Switching to ..." until the
+  relay has moved; LOW is safe to pick under load because an overload still
+  goes HIGH at once (and stays HIGH in LOW mode until LOW is tapped again).
+  Refused while a capture or a zero runs (both pin the range), or with
+  RNGPIN 0. Logged as `$WEB,RANGE,<mode>,<OK|REFUSED>,<client ip>` followed
+  by the usual `$RNG,...,CMD,<mode>`, so the GUI's range box follows.
+- **Wi-Fi** (fw 2.5): the network in use; **Networks** opens the list (built in
+  and saved, which are in range, which is connected), Scan (tap a result to
+  fill in its name), Save network, Delete (two taps) and Reconnect / Leave
+  hotspot & join. In hotspot mode the card turns blue and opens by itself;
+  `http://<ip>:8080/#wifi` opens it too. The page never sees a password: they
+  go to the board in the POST body and nothing sends them back.
 - **No login yet.** Anyone on the network can open the page and switch the
-  relay. Another web site can't do it through a visitor's browser: the switch
+  relay or the range, or change the networks. Another web site can't do it through a visitor's browser: the switch
   is a POST that needs an `X-GACP` header, which a cross-site request can't
   add without a preflight the board refuses. `webAuthorized()` in the sketch
   is where a password check goes.
 
 The page polls `GET /api/live[?since=<frame>]` once a second (JSON: the last
 window's readings and any persistence frames newer than `since`). The relay
-is `POST /api/relay?on=<0|1>` with `X-GACP: 1`. Timings on this bench: the
+is `POST /api/relay?on=<0|1>` and the range `POST /api/range?mode=<0-3>`,
+both with `X-GACP: 1`. Wi-Fi: `GET /api/wifi`, and `POST /api/wifi/scan`,
+`/api/wifi/add` (form body `ssid=...&pass=...`), `/api/wifi/del?k=<n>`,
+`/api/wifi/join`, also with the header. Timings on this bench: the
 page loads in ~0.1 s (served gzipped), a poll takes ~60–130 ms, no samples
 lost with the GUI and the page both connected.
 
@@ -72,7 +90,9 @@ once (a third is reset; the page retries next second). A new connection's
 first byte decides what it is: `!` (the GUI and the Android app send `!ID`
 straight away) makes it the GUI's connection, replacing the old one as
 before; a letter makes it an HTTP request. A connection that sends nothing
-within 1 s is closed and never taken for the GUI.
+within 1 s is closed and never taken for the GUI. In hotspot mode the
+hotspot's DHCP server holds one of the four sockets too, so there it is the
+GUI plus one page connection (or two page connections without the GUI).
 
 ## Wiring
 
@@ -159,7 +179,14 @@ in the Config tab's UI group (`OLED`, `OLEDADDR`, `OLEDROT`, `IRADDR`, `IROK`,
   is PI8, so a Px8 pin (D4 = PJ8, D8 = PB8) can't have one. `!SET` refuses
   them.
 
-**Wi-Fi networks.** `arduino_secrets.h` can list up to five, tried in order:
+**Wi-Fi networks.** Two lists, tried in this order: the **built-in** ones in
+`arduino_secrets.h` (up to five, compiled in), then up to five **saved** ones
+added without reflashing, from the GUI's Wi-Fi tab, the web page's Wi-Fi card
+or `!NETADD,<ssid>,<password>`. Saved networks live in the config sector
+next to the calibration, in their own CRC-checked block, so `!SAVE` and a
+network change never disturb each other; like `!SAVE`, a change pauses the
+board for ~1 s (one flash erase) and is refused with the load relay closed.
+Built-in ones, in `arduino_secrets.h`:
 
 ```c
 #define SECRET_SSID  "Lab"          // first choice
@@ -173,9 +200,35 @@ that order; one out of range costs nothing, one that refuses the password
 falls through to the next. If the link drops (or nothing was found) the whole
 list is tried again every 20 s, and `!WIFI` starts over from the top. It
 doesn't move back to a higher-priority network on its own while connected.
-`$STATUS` reports `ssid=` and `net=` (1-5, 0 none); `!SCAN` marks each
-network it sees with its place in the list. Hidden SSIDs aren't supported:
-this core's `WiFi.begin()` only joins networks the scan saw.
+`$STATUS` reports `ssid=`, `net=` (its place in the list, 0 none) and
+`wmode=` (0 none, 1 network, 2 hotspot); `!NETS` lists them all and `!SCAN`
+marks each network it sees with its place in the list. Hidden SSIDs aren't
+supported: this core's `WiFi.begin()` only joins networks the scan saw.
+
+**Hotspot** (fw 2.5). When a join round finds no known network in range, or
+two rounds in a row fail, the board starts its own WPA2 network
+**`GigaPower-XXXX`** (XXXX from the chip's ID; this board's is
+`GigaPower-B162`). Join it from a phone or PC and use **192.168.3.1**: the
+page at `http://192.168.3.1:8080/`, or that address in the GUI's port box.
+The password is made at random (10 characters, no look-alikes) on the first
+boot of fw 2.5 and kept in flash; the OLED shows the hotspot's name, password
+and address in turn on its bottom line, the GUI's Wi-Fi tab and `!AP` show it
+too, and `!APPASS,<password>` changes it (from the next start). Add your
+network on the page's Wi-Fi card and press **Leave hotspot & join**: the
+board tries the list and comes back to the hotspot within a minute if
+nothing joins.
+
+On its own it leaves the hotspot only when nobody is using it: once a minute,
+when no page request or GUI connection has come for a minute, it scans with
+the hotspot still up and leaves only if a known network is in range (and
+starts the hotspot again if the join fails). `!AP,1` starts the hotspot at
+once and holds it (no automatic leaving) until `!AP,0`, `!WIFI` or a reboot.
+Measured with a test build that hid the built-in network for 100 s after
+boot: hotspot within ~5 s of boot, stayed through the first check, back on
+the network at the second (126 s), no samples lost through any of it.
+Leaving and rejoining (`!AP,1` / `!AP,0`) took under 1 s / 5 s. Not yet
+tried: a phone actually joining the hotspot (this bench PC's only Wi-Fi
+adapter is its LAN link).
 
 **DC mode** (fw 2.2). A metering window with not one voltage zero crossing
 (no AC above `VMIN` / 20 % of the peak) is reported as DC: `$PWR` gains a last
@@ -335,6 +388,12 @@ steady 0.5 A reads 0.496–0.531 A across the switch with no spike.
   `available()` sees it. The sketch stops web connections on a reaper thread.
 - **Closing right after the last `write()` loses nothing**: lwIP still
   delivers what it has queued (40 replies of 36 KB, all whole).
+- **The hotspot (`WiFi.beginAP`) runs its DHCP server on a `UDPSocket`**, one of
+  the 4 sockets, for as long as the hotspot is up. Leaving it takes
+  `WiFi.disconnect()` (stops the AP) *and* `WiFi.end()`: until `end()`,
+  `getNetwork()` still returns the AP and the station can't be used. A
+  listening `WiFiServer` keeps working across the switch (both interfaces are
+  the same lwIP stack). `WiFi.scanNetworks()` works with the hotspot up.
 
 ## Protocol
 
@@ -343,7 +402,7 @@ The header of `Giga_AC_Power_WiFi.ino` lists every command and line;
 time on port 8080; a new connection that starts with `!` replaces the old
 one (the web page shares the port, see above). As on 120VMonitor, any
 command while a capture waits for its trigger aborts it. `$STATUS web=` is
-`<connections>:<page requests>:<relay switches>:<timeouts>:<taken as the GUI>`.
+`<connections>:<page requests>:<relay and range commands>:<timeouts>:<taken as the GUI>`.
 
 ## Safety
 

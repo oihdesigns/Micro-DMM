@@ -1,7 +1,7 @@
 // All units mm. Select wall, top, or assembly.
 $fn=64;
 part="wall";
-width=134.9; depth=108; wall_height=25.4;
+width=134.9; depth=108+25.4; wall_height=25.4;
 wall_thickness=2; top_thickness=2; corner_radius=1;
 hole_inset=4; post_diameter=6; m3_pilot=2.5; pilot_depth=10;
 notch_height=wall_height/2;

@@ -62,6 +62,12 @@ DRATE_TABLE = {
 }
 DRATE_NAMES = {v: k for k, v in DRATE_TABLE.items()}
 
+
+def drate_sps(name):
+    """'7.5k SPS' -> 7500.0"""
+    num = name.split()[0]
+    return float(num[:-1]) * 1000 if num.endswith("k") else float(num)
+
 GAIN_TABLE = {
     "1x": 0,
     "2x": 1,
@@ -479,6 +485,31 @@ class App:
         self.gain_menu.grid(row=2, column=1, sticky="w", padx=4, pady=4)
         self.gain_menu.bind("<<ComboboxSelected>>", lambda _e: self.on_gain())
         self.pga = GAIN_TABLE.get(self.gain_var.get(), 0)
+        # what the current settings mean for the input (ADS1256 datasheet, SBAS288K)
+        self.input_info = tk.Label(frame, font=("TkDefaultFont", 9), fg="#555555", justify="left",
+                                   anchor="w", wraplength=380)
+        self.input_info.grid(row=3, column=0, columnspan=2, sticky="w", padx=4, pady=(0, 4))
+        self.update_input_info()
+
+    def update_input_info(self):
+        """Full scale, input impedance and allowed input voltage for the chosen
+        gain / buffer / rate. No combination is forbidden by the datasheet; these
+        are the conditions the signal itself has to meet."""
+        pga = GAIN_TABLE.get(self.gain_var.get(), 0)
+        sps = drate_sps(self.drate_var.get())
+        fs_mv = 2000.0 * VREF / (1 << pga)
+        if self.buffer_var.get():
+            # Table 7: Zeff with buffer on vs data rate (fCLKIN 7.68 MHz)
+            z = "10 MΩ" if sps >= 2000 else "20 MΩ" if sps >= 1000 else "40 MΩ" if sps > 50 else "80 MΩ"
+            rng = "each input 0 V to AVDD-2 V (0-3 V) vs AGND"
+            warn = ""
+        else:
+            # Electrical characteristics: 150 kΩ/PGA for PGA 1-16, 4.7 kΩ for 32 and 64
+            z = f"{150 / (1 << pga):g} kΩ" if pga <= 4 else "4.7 kΩ"
+            rng = "each input -0.1 V to AVDD+0.1 V vs AGND"
+            warn = "\nBuffer off: gain error ≈ source R / input Z (enable the buffer for high-impedance sources)."
+        self.input_info.config(text=f"Full scale ±{fs_mv:g} mV · input Z {z} differential\n{rng}{warn}",
+                               fg="#B05000" if warn and pga >= 5 else "#555555")
 
     def _build_math(self, parent):
         frame = ttk.LabelFrame(parent, text="DMM Math")
@@ -834,14 +865,17 @@ class App:
 
     def on_buffer(self):
         self.send(f"!BUF,{1 if self.buffer_var.get() else 0}")
+        self.update_input_info()
 
     def on_drate(self):
         self.send(f"!DRATE,0x{DRATE_TABLE.get(self.drate_var.get(), 0xF0):02X}")
+        self.update_input_info()
 
     def on_gain(self):
         self.pga = GAIN_TABLE.get(self.gain_var.get(), 0)
         self.send(f"!GAIN,{self.pga}")
         self.update_trigger_units()
+        self.update_input_info()
 
     def request_calibration(self):
         if self.send("!CAL"):

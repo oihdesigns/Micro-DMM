@@ -6,13 +6,13 @@ Current printable parts (millimeters):
 2. `wall_frame.stl`: separate 25.4 mm tall wall frame, 2 mm walls, with screw posts at both ends.
 3. `top_plate.stl`: separate 2 mm top, with four 3.2 mm M3 clearance holes.
 
-The wall frame and plain top retain the 134.9 x 108 mm footprint and 1 mm rounded vertical corners. The base has a coplanar trapezoid extension, giving it a 134.9 x 169.34 mm overall footprint. Straight top and bottom perimeter edges are square. Assembled height is 30.4 mm, excluding screw heads. Interior height above the base is 25.4 mm, including the board standoffs.
+The wall frame and plain top have a 134.9 x 133.4 mm footprint and 1 mm rounded vertical corners. Viewed from the standoff side with the GIGA at the top, the base adds a 38.1 mm uncovered strip to the right of the wall frame. The GIGA extension and all mounting holes stay in place. The overall base footprint is 173 x 194.74 mm. Straight top and bottom perimeter edges are square. Assembled height is 30.4 mm, excluding screw heads. Interior height above the base is 25.4 mm, including the board standoffs.
 
 ## Assembly and screws
 
 The top and base screw independently into the wall frame. Four 6 mm diameter corner posts have 2.5 mm diameter, 10 mm deep blind pilots from each end. A 5.4 mm solid section separates opposing pilots. Tap M3 before assembly; adjust the pilot diameter for your printer as needed. These are pilot holes, not modeled threads or insert pockets.
 
-Use four M3 x 10 mm screws through the 3 mm base (7 mm engagement), and four M3 x 8 mm screws through the 2 mm top (6 mm engagement). The clearance holes are not countersunk; heads project outside the plates. Screw-center pattern is 126.9 x 100 mm, with centers 4 mm from adjacent outer edges. The joints are flat with no locating lip or seal.
+Use four M3 x 10 mm screws through the 3 mm base (7 mm engagement), and four M3 x 8 mm screws through the 2 mm top (6 mm engagement). The clearance holes are not countersunk; heads project outside the plates. Screw-center pattern is 126.9 x 125.4 mm, with centers 4 mm from adjacent outer edges. The joints are flat with no locating lip or seal.
 
 ## Wire openings
 
@@ -28,7 +28,7 @@ Coordinates above use the assembled base layout, with origin at the lower-left c
 
 Sensor hole centers: 31.5 mm horizontally x 61 mm vertically. Relay hole centers: 66.7 mm horizontally x 45 mm vertically. Standoffs are 5.5 mm diameter, 4 mm tall, with 1.7 mm M2 pilot holes, 5 mm deep. A 2 mm solid floor remains under them.
 
-Actual PCB outside dimensions were not supplied. The model assumes edges 3 mm beyond mounting-hole centers: sensor 37.5 x 67 mm; relay 72.7 x 51 mm. In the original layout both lower edges align; the latest layout rotates both boards together by 180 degrees, so their upper edges align, with a 12.7 mm gap between assumed outlines, 45 mm free area above the relay and 6 mm outer layout margin. Confirm actual PCB outlines and component heights for final fit.
+Actual PCB outside dimensions were not supplied. The model assumes edges 3 mm beyond mounting-hole centers: sensor 37.5 x 67 mm; relay 72.7 x 51 mm. In the original layout both lower edges align; the latest layout rotates both boards together by 180 degrees, so their upper edges align, with a 12.7 mm gap between assumed outlines, 70.4 mm of wiring area below the relay plus the original 6 mm edge margin. Confirm actual PCB outlines and component heights for final fit.
 
 ## Sources and validation
 
@@ -49,7 +49,7 @@ This remains a mechanical fit draft, not a verified mains-voltage enclosure. Mat
 
 All three boards now mount on the same base surface. All twelve standoffs point in +Z, with their mounting faces 4 mm above the 3 mm base. There are no board mounts or extensions on the lid. The three-piece construction, screw pattern and rectangular wire notches are retained.
 
-The flat base extension projects 61.34 mm from the long edge at Y=108 mm, with a 130 mm root and 114 mm flat end. It is 3 mm thick and supports a standard 101.6 x 53.34 mm Arduino Mega 2560 Rev3 or GIGA R1 WiFi, long axis parallel to the enclosure edge. Board envelope remains X=16.65..118.25, Y=112..165.34 mm, with a 4 mm gap outside the wall frame. The board is rotated 180 degrees in that envelope, placing USB/power toward the right as in the latest photo. The Arduino remains exposed outside the wall frame, as with the previous Feather extension.
+The flat base extension projects 61.34 mm from the long edge at Y=133.4 mm, with a 130 mm root and 114 mm flat end. It is 3 mm thick and supports a standard 101.6 x 53.34 mm Arduino Mega 2560 Rev3 or GIGA R1 WiFi, long axis parallel to the enclosure edge. Board envelope remains X=16.65..118.25, Y=137.4..190.74 mm, with a 4 mm gap outside the wall frame. The board is rotated 180 degrees in that envelope, placing USB/power toward the right as in the latest photo. The Arduino remains exposed outside the wall frame, as with the previous Feather extension.
 
 Four common outer mounting centers are used (board-relative X,Y in mm): (13.97,2.54), (15.24,50.8), (90.17,50.8), (96.52,2.54). These mounts use the same 5.5 mm diameter, 4 mm tall standoffs and 1.7 mm M2 pilot bores as the other boards. Pilot depth is 5 mm, leaving 2 mm of solid base below. Use M2 screws with suitable engagement, e.g. M2 x 6 through a nominal 1.6 mm PCB (4.4 mm engagement); tune pilot fit to your printer. The internal mounting positions of the Arduino are intentionally unused.
 
@@ -65,6 +65,6 @@ Verification: revised base is a single connected closed manifold with positive v
 
 Matches the latest reference photo when viewed from the standoff side: GIGA/MEGA across the top, relay below-left, sensor below-right. Both lower board patterns are rotated together 180 degrees relative to the preceding base, bringing their flush edges next to the GIGA instead of the free-space edge. All twelve 4 mm standoffs still point upward. GIGA connectors face right. Board footprints are shown in base_layout_preview.png; the lower-board outlines retain the earlier assumed edge offsets.
 
-The wall frame is rotated with the lower-board layout, preserving wire-opening alignment. Reprint the revised base; the existing wall can be reused by rotating it 180 degrees in its own plane (not flipping it). The plain lid fits either orientation. The frame STL and editable source have been regenerated in the new orientation. Back-up: revisions/before_giga_above.zip.
+The wall frame is rotated with the lower-board layout, preserving wire-opening alignment. The current revision adds 25.4 mm at the wiring end, opposite the GIGA. The board patterns and wire openings retain their offsets from the GIGA-side edge. Print the updated base, frame, and lid together; the previous shorter frame and lid no longer fit. Back-up: revisions/before_giga_above.zip.
 
-Latest assembled wire opening centers: 7 mm opening at X=116.9 on the top wall (Y=108); 32 mm opening at X=26.4 on that wall; two 15 mm side openings centered Y=23. All remain 12.7 mm tall. Earlier photo-oriented coordinates above describe the historical layout.
+Latest assembled wire opening centers: 7 mm opening at X=116.9 on the top wall (Y=133.4); 32 mm opening at X=26.4 on that wall; two 15 mm side openings centered Y=23. All remain 12.7 mm tall. Earlier photo-oriented coordinates above describe the historical layout.

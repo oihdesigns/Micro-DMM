@@ -2,6 +2,10 @@
 import bpy, math, os
 from mathutils import Vector
 ROOT = os.path.dirname(os.path.abspath(__file__))
+W, D = 134.9, 108 + 25.4
+EXTENSION = 61.34
+RIGHT_EXTENSION = 38.1
+BASE_WIDTH = W + RIGHT_EXTENSION
 bpy.ops.object.select_all(action='SELECT')
 bpy.ops.object.delete(use_global=False)
 def box(name, location, dimensions):
@@ -17,7 +21,7 @@ def boolean(target, other, operation):
     mod=target.modifiers.new(operation,'BOOLEAN'); mod.operation=operation; mod.solver='EXACT'; mod.object=other
     bpy.ops.object.modifier_apply(modifier=mod.name)
     bpy.data.objects.remove(other, do_unlink=True)
-base=box('Base platform mm',(134.9/2,108/2,1.5),(134.9,108,3))
+base=box('Base platform mm',(BASE_WIDTH/2,D/2,1.5),(BASE_WIDTH,D,3))
 bpy.context.view_layer.objects.active=base
  # Bevel only vertical edges: rounded plan-view corners, square top/bottom edges.
 for edge in base.data.edges:
@@ -27,22 +31,22 @@ fillet=base.modifiers.new('1 mm corner radius','BEVEL')
 fillet.limit_method='WEIGHT'
 fillet.width=1; fillet.segments=8
 bpy.ops.object.modifier_apply(modifier=fillet.name)
-outline=[(2.45,107.5),(132.45,107.5),(124.45,169.34),(10.45,169.34)]
+outline=[(2.45,D-0.5),(132.45,D-0.5),(124.45,D+EXTENSION),(10.45,D+EXTENSION)]
 verts=[(x,y,z) for z in (0,3) for x,y in outline]
 faces=[(3,2,1,0),(4,5,6,7)]+[(i,(i+1)%4,(i+1)%4+4,i+4) for i in range(4)]
 mesh=bpy.data.meshes.new('Mega GIGA extension'); mesh.from_pydata(verts,[],faces); mesh.update()
 extension=bpy.data.objects.new('Flat base extension',mesh); bpy.context.collection.objects.link(extension)
 boolean(base,extension,'UNION')
-cover_points=[(x,y) for x in (4,130.9) for y in (4,104)]
+cover_points=[(x,y) for x in (4,W-4) for y in (4,D-4)]
 for x,y in cover_points:
     boolean(base,cylinder('M3 cover clearance',x,y,1.5,1.6,5),'DIFFERENCE')
 points=[(x,y) for x in (9,40.5) for y in (9,70)]+[(x,y) for x in (59.2,125.9) for y in (9,54)]
 # Rotate the lower-board layout 180 degrees: relay left, sensor right,
 # flush board edges adjacent to the GIGA extension, matching the latest photo.
-points=[(134.9-x,108-y) for x,y in points]
+points=[(W-x,D-y) for x,y in points]
 arduino_holes=[(13.97,2.54),(15.24,50.8),(90.17,50.8),(96.52,2.54)]
 # GIGA USB/power connectors toward the right, as in the photo.
-points += [(118.25-x,165.34-y) for x,y in arduino_holes]
+points += [(118.25-x,D+57.34-y) for x,y in arduino_holes]
 for x,y in points:
     boolean(base,cylinder('Boss',x,y,4.95,2.75,4.1),'UNION')
     boolean(base,cylinder('M2 pilot',x,y,5,0.85,6),'DIFFERENCE')
@@ -68,8 +72,8 @@ mat=bpy.data.materials.new('Blue polymer'); mat.diffuse_color=(0.075,0.29,0.46,1
 scene=bpy.context.scene
 scene.world.color=(0.65,0.65,0.65)
 bpy.ops.object.camera_add(location=(205,-150,215))
-camera=bpy.context.object; camera.rotation_euler=(Vector((67,83,0))-camera.location).to_track_quat('-Z','Y').to_euler()
-camera.data.type='ORTHO'; camera.data.ortho_scale=235; scene.camera=camera
+camera=bpy.context.object; camera.rotation_euler=(Vector((BASE_WIDTH/2,(D+EXTENSION)/2,0))-camera.location).to_track_quat('-Z','Y').to_euler()
+camera.data.type='ORTHO'; camera.data.ortho_scale=260; scene.camera=camera
 scene.render.engine='BLENDER_WORKBENCH'; scene.display.shading.light='STUDIO'; scene.display.shading.color_type='MATERIAL'
 scene.display.shading.show_shadows=True; scene.display.shading.show_cavity=True
 scene.render.resolution_x=1200; scene.render.resolution_y=1000; scene.render.resolution_percentage=100
@@ -78,9 +82,9 @@ bpy.context.preferences.filepaths.save_version=0
 bpy.ops.wm.save_as_mainfile(filepath=os.path.join(ROOT,'base_platform.blend'))
 bpy.ops.render.render(write_still=True)
 # Top-down layout diagram with approximate PCB outlines; not exported to STL.
-for label,center,size in [('GIGA / MEGA',(67.45,138.67),(101.6,53.34)),
-                          ('RELAY',(42.35,76.5),(72.7,51)),
-                          ('SENSOR',(110.15,68.5),(37.5,67))]:
+for label,center,size in [('GIGA / MEGA',(67.45,D+30.67),(101.6,53.34)),
+                          ('RELAY',(42.35,D-31.5),(72.7,51)),
+                          ('SENSOR',(110.15,D-39.5),(37.5,67))]:
     x,y=center; w,h=size
     curve=bpy.data.curves.new(label+' outline','CURVE'); curve.dimensions='3D'; curve.bevel_depth=0.2
     spline=curve.splines.new('POLY'); spline.points.add(3)
@@ -89,8 +93,8 @@ for label,center,size in [('GIGA / MEGA',(67.45,138.67),(101.6,53.34)),
     obj=bpy.data.objects.new(label+' outline',curve); bpy.context.collection.objects.link(obj)
     bpy.ops.object.text_add(location=(x,y,7.5))
     text=bpy.context.object; text.data.body=label; text.data.align_x='CENTER'; text.data.align_y='CENTER'; text.data.size=4
-camera.location=(67.45,84.67,400); camera.rotation_euler=(0,0,0); camera.data.ortho_scale=210
+camera.location=(BASE_WIDTH/2,(D+EXTENSION)/2,400); camera.rotation_euler=(0,0,0); camera.data.ortho_scale=225
 scene.display.shading.show_shadows=False
 scene.render.resolution_x=1100; scene.render.resolution_y=1200
 scene.render.filepath=os.path.join(ROOT,'base_layout_preview.png'); bpy.ops.render.render(write_still=True)
-print('PASS: one closed manifold base, positive volume; 134.9 x 169.34 x 3 mm; twelve 4 mm bosses all face +Z; height 7 mm.')
+print(f'PASS: one closed manifold base, positive volume; {BASE_WIDTH:g} x {D+EXTENSION:g} x 3 mm; twelve 4 mm bosses all face +Z; height 7 mm.')
