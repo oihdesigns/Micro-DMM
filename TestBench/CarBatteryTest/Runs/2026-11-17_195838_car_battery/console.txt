@@ -1,0 +1,85 @@
+2026-11-17 20:02:49  charge: start, target 14.4 V at battery, 5.0 A, end at < 0.65 A
+2026-11-17 20:03:39  charge: absorption reached after 0.01 h, 0.07 Ah in, I 5.19 A
+2026-11-17 20:04:42  charge: start, target 14.4 V at battery, 5.0 A, end at < 0.65 A
+2026-11-17 20:11:14  charge: absorption reached after 0.11 h, 0.69 Ah in, I 4.82 A
+2026-11-17 20:14:45  charge: 0.17 h  Vbat 14.403  Vset 14.605  I 4.248 A  0.95 Ah in
+2026-11-17 20:24:43  charge: 0.33 h  Vbat 14.404  Vset 14.535  I 2.814 A  1.53 Ah in
+2026-11-17 20:34:46  charge: 0.50 h  Vbat 14.404  Vset 14.497  I 2.030 A  1.93 Ah in
+2026-11-17 20:44:43  charge: 0.67 h  Vbat 14.404  Vset 14.477  I 1.622 A  2.23 Ah in
+2026-11-17 20:54:46  charge: 0.83 h  Vbat 14.404  Vset 14.463  I 1.386 A  2.48 Ah in
+2026-11-17 21:04:43  charge: 1.00 h  Vbat 14.403  Vset 14.457  I 1.233 A  2.70 Ah in
+2026-11-17 21:14:45  charge: 1.17 h  Vbat 14.404  Vset 14.453  I 1.135 A  2.89 Ah in
+2026-11-17 21:24:47  charge: 1.33 h  Vbat 14.404  Vset 14.449  I 1.058 A  3.08 Ah in
+2026-11-17 21:34:45  charge: 1.50 h  Vbat 14.402  Vset 14.445  I 1.008 A  3.25 Ah in
+2026-11-17 21:44:47  charge: 1.67 h  Vbat 14.403  Vset 14.443  I 0.960 A  3.41 Ah in
+2026-11-17 21:54:44  charge: 1.83 h  Vbat 14.402  Vset 14.441  I 0.929 A  3.57 Ah in
+2026-11-17 22:04:47  charge: 2.00 h  Vbat 14.404  Vset 14.441  I 0.890 A  3.72 Ah in
+2026-11-17 22:14:44  charge: 2.17 h  Vbat 14.403  Vset 14.439  I 0.868 A  3.87 Ah in
+2026-11-17 22:24:46  charge: 2.33 h  Vbat 14.404  Vset 14.439  I 0.846 A  4.01 Ah in
+2026-11-17 22:34:43  charge: 2.50 h  Vbat 14.403  Vset 14.437  I 0.823 A  4.15 Ah in
+2026-11-17 22:44:46  charge: 2.67 h  Vbat 14.404  Vset 14.437  I 0.806 A  4.28 Ah in
+2026-11-17 22:54:43  charge: 2.83 h  Vbat 14.403  Vset 14.435  I 0.786 A  4.42 Ah in
+2026-11-17 23:04:46  charge: 3.00 h  Vbat 14.404  Vset 14.435  I 0.769 A  4.54 Ah in
+2026-11-17 23:14:43  charge: 3.17 h  Vbat 14.402  Vset 14.433  I 0.753 A  4.67 Ah in
+2026-11-17 23:24:45  charge: 3.33 h  Vbat 14.403  Vset 14.433  I 0.734 A  4.79 Ah in
+2026-11-17 23:34:43  charge: 3.50 h  Vbat 14.404  Vset 14.431  I 0.722 A  4.92 Ah in
+2026-11-17 23:44:45  charge: 3.67 h  Vbat 14.402  Vset 14.431  I 0.699 A  5.03 Ah in
+2026-11-17 23:54:47  charge: 3.83 h  Vbat 14.403  Vset 14.431  I 0.687 A  5.15 Ah in
+2026-11-18 00:04:45  charge: 4.00 h  Vbat 14.404  Vset 14.431  I 0.672 A  5.26 Ah in
+2026-11-18 00:14:47  charge: 4.17 h  Vbat 14.403  Vset 14.429  I 0.660 A  5.37 Ah in
+2026-11-18 00:24:44  charge: 4.33 h  Vbat 14.404  Vset 14.429  I 0.641 A  5.48 Ah in
+2026-11-18 00:34:46  charge: 4.50 h  Vbat 14.402  Vset 14.427  I 0.632 A  5.59 Ah in
+2026-11-18 00:37:32  charge: done -- current 0.626 A below 0.65 A for 10 min; 4.55 h, 5.62 Ah in total
+2026-11-18 00:37:32  rest1: open-circuit rest 3.0 h
+2026-11-18 01:07:34  rest1: 0.50 h  OCV 12.5784
+2026-11-18 01:37:35  rest1: 1.00 h  OCV 12.5546
+2026-11-18 02:07:36  rest1: 1.50 h  OCV 12.5392
+2026-11-18 02:37:37  rest1: 2.00 h  OCV 12.5276
+2026-11-18 03:07:38  rest1: 2.50 h  OCV 12.5192
+2026-11-18 03:37:40  rest1: 3.00 h  OCV 12.5107
+2026-11-18 03:37:50  rest1: OCV after rest 12.5105 V
+2026-11-18 03:37:50  ir_full: pulse test
+  2.0 A: rest 12.5107 V  end 12.4319 V  R_fast 18.91 mOhm (@1.38s)  R_5s 39.29 mOhm  load-lead drop 8 mV
+  5.0 A: rest 12.4902 V  end 12.3406 V  R_fast 16.84 mOhm (@1.36s)  R_5s 29.90 mOhm  load-lead drop 24 mV
+ 10.0 A: rest 12.4630 V  end 12.2166 V  R_fast 14.53 mOhm (@1.39s)  R_5s 24.62 mOhm  load-lead drop 50 mV
+ 15.0 A: rest 12.4306 V  end 12.1135 V  R_fast 13.64 mOhm (@1.42s)  R_5s 21.14 mOhm  load-lead drop 80 mV
+slope R (5 s, all steps): 18.28 mOhm; 7584 samples (67.7/s)
+2026-11-18 03:39:44  ir_full: R_slope 18.28 mOhm; 2A R_fast 18.9, 5A R_fast 16.8, 10A R_fast 14.5, 15A R_fast 13.6
+2026-11-18 03:39:44  ir_recover: open-circuit rest 0.2 h
+2026-11-18 03:54:55  ir_recover: OCV after rest 12.4944 V
+2026-11-18 03:54:55  discharge: 3.25 A until 32.5 Ah or Vbat <= 11.75 V (Von backstop 11.5 V)
+2026-11-18 04:24:57  discharge: 0.50 h  Vbat 12.185  I 3.255  1.63 Ah out
+2026-11-18 04:54:59  discharge: 1.00 h  Vbat 12.091  I 3.255  3.26 Ah out
+2026-11-18 05:24:55  discharge: 1.50 h  Vbat 11.920  I 3.255  4.88 Ah out
+2026-11-18 05:54:57  discharge: 2.00 h  Vbat 11.802  I 3.256  6.51 Ah out
+2026-11-18 06:24:59  discharge: 2.50 h  Vbat 11.769  I 3.256  8.14 Ah out
+2026-11-18 06:40:53  discharge: done -- battery reached 11.749 V after 9.00 Ah
+2026-11-18 06:40:53  rest2: open-circuit rest 2.0 h
+2026-11-18 07:10:54  rest2: 0.50 h  OCV 12.0958
+2026-11-18 07:40:55  rest2: 1.00 h  OCV 12.1081
+2026-11-18 08:10:56  rest2: 1.50 h  OCV 12.1135
+2026-11-18 08:40:58  rest2: 2.00 h  OCV 12.1173
+2026-11-18 08:41:08  rest2: OCV after rest 12.1168 V
+2026-11-18 08:41:08  recharge: start, target 14.4 V at battery, 5.0 A, end at < 0.65 A
+2026-11-18 08:51:11  recharge: 0.17 h  Vbat 12.987  Vset 14.800  I 5.187 A  6.49 Ah in
+2026-11-18 09:01:13  recharge: 0.33 h  Vbat 12.949  Vset 14.800  I 5.188 A  7.35 Ah in
+2026-11-18 09:11:10  recharge: 0.50 h  Vbat 12.948  Vset 14.800  I 5.187 A  8.21 Ah in
+2026-11-18 09:21:13  recharge: 0.67 h  Vbat 12.964  Vset 14.800  I 5.187 A  9.08 Ah in
+2026-11-18 09:31:10  recharge: 0.83 h  Vbat 12.993  Vset 14.800  I 5.187 A  9.94 Ah in
+2026-11-18 09:41:12  recharge: 1.00 h  Vbat 13.044  Vset 14.800  I 5.187 A  10.81 Ah in
+2026-11-18 09:51:10  recharge: 1.17 h  Vbat 13.179  Vset 14.800  I 5.186 A  11.67 Ah in
+2026-11-18 10:01:12  recharge: 1.33 h  Vbat 14.425  Vset 14.668  I 5.052 A  12.54 Ah in
+2026-11-18 10:02:33  recharge: absorption reached after 1.36 h, 12.65 Ah in, I 4.82 A
+2026-11-18 10:11:10  recharge: 1.50 h  Vbat 14.404  Vset 14.581  I 3.558 A  13.25 Ah in
+2026-11-18 10:31:11  recharge: 1.83 h  Vbat 14.404  Vset 14.491  I 1.840 A  14.11 Ah in
+2026-11-18 10:41:09  recharge: 2.00 h  Vbat 14.404  Vset 14.471  I 1.426 A  14.38 Ah in
+2026-11-18 10:51:11  recharge: 2.17 h  Vbat 14.404  Vset 14.457  I 1.153 A  14.59 Ah in
+2026-11-18 11:01:08  recharge: 2.33 h  Vbat 14.402  Vset 14.447  I 0.987 A  14.77 Ah in
+2026-11-18 11:11:11  recharge: 2.50 h  Vbat 14.404  Vset 14.443  I 0.871 A  14.92 Ah in
+2026-11-18 11:21:13  recharge: 2.67 h  Vbat 14.402  Vset 14.437  I 0.792 A  15.06 Ah in
+2026-11-18 11:31:10  recharge: 2.83 h  Vbat 14.403  Vset 14.435  I 0.735 A  15.19 Ah in
+2026-11-18 11:41:13  recharge: 3.00 h  Vbat 14.403  Vset 14.433  I 0.690 A  15.31 Ah in
+2026-11-18 11:51:10  recharge: 3.17 h  Vbat 14.403  Vset 14.431  I 0.658 A  15.42 Ah in
+2026-11-18 12:01:12  recharge: 3.33 h  Vbat 14.404  Vset 14.431  I 0.625 A  15.53 Ah in
+2026-11-18 12:05:19  recharge: done -- current 0.622 A below 0.65 A for 10 min; 3.40 h, 15.57 Ah in total
+2026-11-18 12:05:19  sequence finished

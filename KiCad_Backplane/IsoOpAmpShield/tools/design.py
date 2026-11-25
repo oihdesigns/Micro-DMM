@@ -1,12 +1,14 @@
 """IsoOpAmpShield -- single source of truth for the circuit.
 
-Arduino Giga R1 shield with three isolated channels, each read differentially on two analog pins:
+Arduino R3-header shield (UNO-R3 / Mega / Giga / Due pin positions) with three isolated channels, each read differentially on two analog pins:
   * Current   : 10 mOhm shunt -> AMC3301 (+/-250 mV)          -> A4(+)/A5(-)
-  * +/-200 V  : 2x499k per leg + 10k sense -> AMC3330 (+/-1 V) -> A0(+)/A1(-)   (Giga HW diff pair)
-  * High-Z    : 3-op-amp INA (unity, RG pad) -> /10 diff amp -> AMC3330 -> A3(+)/A2(-) (Giga HW diff pair)
+  * +/-200 V  : 2x499k per leg + 10k sense -> AMC3330 (+/-1 V) -> A0(+)/A1(-)   (H747 HW diff pair on a Giga)
+  * High-Z    : 3-op-amp INA (unity, RG pad) -> /10 diff amp -> AMC3330 -> A3(+)/A2(-) (H747 HW diff pair on a Giga)
 The High-Z front end runs on +/-11 V from a TDK CCG3-12-12DF (+/-12 V, 1.5 kVDC) through
 10 uH/22 uF LC filters and TPS7A4901/TPS7A3001 low-noise LDOs.
-All three AMC DIAG outputs are wired-OR onto A6 (ISO_FAULT, low = fault).
+All three AMC DIAG outputs are wired-OR onto A6 (ISO_FAULT, low = fault) = J2 pin 7
+(A6 only exists on Mega-size boards; clip that pin on UNO-size boards).
+Only the header pins actually used are fitted; four corner M3 holes (use nylon hardware).
 
 Each part: ref -> dict(lib, value, fp, pins{pin: net}, fields, dnp, block)
 Pins that are absent from `pins` get a no-connect flag.
@@ -23,11 +25,12 @@ L12 = 'Inductor_SMD:L_1210_3225Metric_Pad1.42x2.65mm_HandSolder'
 SO16W = 'Package_SO:SOIC-16W_7.5x10.3mm_P1.27mm'
 SO8 = 'Package_SO:SOIC-8_3.9x4.9mm_P1.27mm'
 HVSSOP = 'Package_SO:HVSSOP-8-1EP_3x3mm_P0.65mm_EP1.57x1.89mm'
-TB = 'TerminalBlock_RND:TerminalBlock_RND_205-00232_1x02_P5.08mm_Horizontal'
-HDR8 = 'Connector_PinHeader_2.54mm:PinHeader_1x08_P2.54mm_Vertical'
+TB = 'IsoOpAmpShield:TerminalBlock_5.08mm_1x02_Horizontal_D1.6'  # RND 205-00232 outline, 1.6 mm holes for Dorabo DB128L
+HDR4 = 'Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical'
+HDR7 = 'Connector_PinHeader_2.54mm:PinHeader_1x07_P2.54mm_Vertical'
 CCG = 'IsoOpAmpShield:TDK_CCG3_Dual_THT'
 JP3 = 'Jumper:SolderJumper-3_P1.3mm_Bridged12_RoundedPad1.0x1.5mm'
-MH = 'IsoOpAmpShield:MountingHole_3.2mm_M3_Giga'
+MH = 'IsoOpAmpShield:MountingHole_3.2mm_M3_NPTH'
 
 RLIB = 'Device:R_Small_US'
 CLIB = 'Device:C_Small'
@@ -59,22 +62,23 @@ def AMC(ref, value, pn, pre, hgnd, inp, inn, outp, outn, block):
         pn, '', block=block)
 
 
-# ---------------------------------------------------------------- Giga interface / low side
+# ---------------------------------------------------------------- Arduino R3 headers / low side
 B = 'giga'
-add('J1', 'Connector_Generic:Conn_01x08', 'Giga POWER', HDR8,
-    {'4': '+3V3', '5': '+5V', '6': 'GND', '7': 'GND'},
-    'TSW-108-07-G-S', 'Giga power header: NC, IOREF, RESET, 3V3, 5V, GND, GND, VIN', block=B)
-add('J2', 'Connector_Generic:Conn_01x08', 'Giga A0-A7', HDR8,
-    {'1': 'ADC_A0', '2': 'ADC_A1', '3': 'ADC_A2', '4': 'ADC_A3', '5': 'ADC_A4', '6': 'ADC_A5',
-     '7': 'ISO_FAULT'},
-    'TSW-108-07-G-S', 'Giga analog header A0..A7', block=B)
+add('J1', 'Connector_Generic:Conn_01x04', 'R3 POWER 3V3/5V/GND/GND', HDR4,
+    {'1': '+3V3', '2': '+5V', '3': 'GND', '4': 'GND'},
+    'TSW-104-07-G-S', 'Pins 4-7 of the R3 power header (3V3, 5V, GND, GND); NC/IOREF/RESET/VIN not fitted', block=B)
+add('J2', 'Connector_Generic:Conn_01x07', 'R3 A0-A6', HDR7,
+    {'1': 'ADC_A0', '2': 'ADC_A1', '3': 'ADC_A2', '4': 'ADC_A3', '5': 'ADC_A4', '6': 'ADC_A5', '7': 'ISO_FAULT'},
+    'TSW-107-07-G-S', 'R3 analog header A0..A6. Pin 7 (A6 = ISO_FAULT) exists only on Mega-size hosts: '
+    'clip it off the strip on UNO-size boards (fault line then unmonitored).', block=B)
 add('JP1', 'Jumper:SolderJumper_3_Bridged12', 'AMC VDD 3V3|5V', JP3,
     {'1': '+3V3', '2': 'VDD_AMC', '3': '+5V'}, '',
-    'AMC low-side supply select. Default 1-2 bridged = 3.3 V (outputs can never exceed the Giga ADC rail)', block=B)
+    'AMC low-side supply select. Default 1-2 = 3V3 (outputs can never exceed a 3.3 V ADC rail). '
+    'Use 2-3 = 5V on boards whose 3V3 pin is weak (UNO R3: 50 mA; AMCs draw up to ~125 mA).', block=B)
 C('C1', '22uF', 'VDD_AMC', 'GND', fp=C08, pn='CL21A226MAYNNNE', block=B)
 R('R1', '10k', 'ISO_FAULT', '+3V3', pn='ERJ-6ENF1002V', desc='DIAG wired-OR pull-up (open drain, low = fault)', block=B)
-for i in range(1, 4):
-    add('H%d' % i, 'Mechanical:MountingHole', 'MountingHole', MH, {}, '', 'Giga/Mega hole (low-voltage side only)', block=B)
+for i in range(1, 5):
+    add('H%d' % i, 'Mechanical:MountingHole', 'MountingHole', MH, {}, '', 'Corner M3 hole. NYLON hardware (top holes sit in isolated areas)', block=B)
 
 # ---------------------------------------------------------------- ADC output RC (low side, at J2)
 B = 'adc'
@@ -88,7 +92,7 @@ for r, c, src, dst in [('R5', 'C13', 'I_OUTP', 'ADC_A4'), ('R6', 'C14', 'I_OUTN'
 B = 'cur'
 add('J3', 'Connector:Screw_Terminal_01x02', 'CURRENT', TB, {'1': 'I_SHP', '2': 'I_SHN'},
     'TBJ05-02-1-G-G', 'Current in/out through the on-board shunt', block=B)
-R('R2', '10m', 'I_SHN', 'I_SHP', fp=R20, pn='TLRP2H20WR010FTE', desc='Shunt, 10 mOhm 2 W (+/-25 A linear range of AMC3301)', block=B)
+R('R2', '10m', 'I_SHN', 'I_SHP', fp=R20, pn='TLRP2H20WR010FTE', desc='Shunt, 10 mOhm 2 W (+/-25 A linear range of AMC3301); DNP - fitted by hand for the range wanted', dnp=True, block=B)
 add('FB1', FLIB, 'FerriteBead', FBF, {'1': 'I_SHP', '2': 'I_FP'}, '74269244182', block=B)
 add('FB2', FLIB, 'FerriteBead', FBF, {'1': 'I_SHN', '2': 'I_FN'}, '74269244182', block=B)
 add('FB3', FLIB, 'FerriteBead', FBF, {'1': 'I_SHN', '2': 'HGND_I'}, '74269244182', block=B)
@@ -119,7 +123,7 @@ add('FB5', FLIB, 'FerriteBead', FBF, {'1': 'V_DN', '2': 'VAMC_N'}, '74269244182'
 add('FB6', FLIB, 'FerriteBead', FBF, {'1': 'V_DN', '2': 'HGND_V'}, '74269244182', block=B)
 C('C15', '1nF C0G', 'VAMC_P', 'VAMC_N', fp=C08, pn='C0805C102J5GACTU',
   desc='FIXED: was 10 nF. TI AMC3330 Fig 7-2/7-5 = 1 nF; with ~10k source -> ~16 kHz', block=B)
-AMC('U2', 'AMC3330QDWERQ1', 'AMC3330QDWERQ1', 'V_', 'HGND_V', 'VAMC_P', 'VAMC_N', 'V_OUTP', 'V_OUTN', B)
+AMC('U2', 'AMC3330DWER', 'AMC3330DWER', 'V_', 'HGND_V', 'VAMC_P', 'VAMC_N', 'V_OUTP', 'V_OUTN', B)
 C('C16', '1nF', 'V_DCDC_OUT', 'HGND_V', pn='C0603C102K5RACTU', block=B)
 C('C17', '100nF', 'V_DCDC_OUT', 'HGND_V', pn='C0603C104K5RACAUTO', block=B)
 C('C18', '1uF', 'V_DCDC_OUT', 'HGND_V', pn='CGA3E1X7R1E105K080AC', block=B)
@@ -139,16 +143,16 @@ R('R16', '100k', 'ZIN_P', 'Z_P', fp=R12, pn='ERJ-8ENF1003V', desc='Input protect
 R('R17', '100k', 'ZIN_N', 'Z_N', fp=R12, pn='ERJ-8ENF1003V', desc='Input protection (op-amp clamp current limit)', block=B)
 C('C26', '10pF C0G', 'Z_P', 'HGND_Z', pn='C0603C100J5GACTU', dnp=True, desc='Optional RF filter', block=B)
 C('C27', '10pF C0G', 'Z_N', 'HGND_Z', pn='C0603C100J5GACTU', dnp=True, desc='Optional RF filter', block=B)
-add('U3', 'Amplifier_Operational:OPA2197xD', 'OPA2191IDR', SO8,
+add('U3', 'Amplifier_Operational:OPA2197xD', 'OPA2192IDR', SO8,
     {'1': 'Z_PBUF', '2': 'Z_PFB', '3': 'Z_P', '5': 'Z_N', '6': 'Z_NFB', '7': 'Z_NBUF', '8': 'P11', '4': 'N11'},
-    'OPA2191IDR', 'INA input stage', block=B)
+    'OPA2192IDR', 'INA input stage', block=B)
 R('R18', '15k 0.1%', 'Z_PBUF', 'Z_PFB', pn='RG2012P-153-B-T5', block=B)
 R('R19', '15k 0.1%', 'Z_NBUF', 'Z_NFB', pn='RG2012P-153-B-T5', block=B)
 R('R20', 'RG (DNP)', 'Z_PFB', 'Z_NFB', dnp=True,
   desc='Gain pad: G = 0.1*(1+30k/RG). Open = +/-10 V FS; 30k = +/-5 V; 3.33k = +/-1 V', block=B)
-add('U4', 'Amplifier_Operational:OPA2197xD', 'OPA2191IDR', SO8,
+add('U4', 'Amplifier_Operational:OPA2197xD', 'OPA2192IDR', SO8,
     {'1': 'Z_DIFF', '2': 'Z_DN', '3': 'Z_DP', '5': 'HGND_Z', '6': 'U4B_OUT', '7': 'U4B_OUT', '8': 'P11', '4': 'N11'},
-    'OPA2191IDR', 'Difference amp, gain 0.1 (B half parked as grounded follower)', block=B)
+    'OPA2192IDR', 'Difference amp, gain 0.1 (B half parked as grounded follower)', block=B)
 R('R21', '100k 0.1%', 'Z_NBUF', 'Z_DN', pn='RG2012P-104-B-T5', block=B)
 R('R23', '10k 0.1%', 'Z_DN', 'Z_DIFF', pn='RG2012P-103-B-T5', block=B)
 R('R22', '100k 0.1%', 'Z_PBUF', 'Z_DP', pn='RG2012P-104-B-T5', block=B)
@@ -156,7 +160,7 @@ R('R24', '10k 0.1%', 'Z_DP', 'HGND_Z', pn='RG2012P-103-B-T5', block=B)
 R('R25', '4.99k 0.1%', 'Z_DIFF', 'ZAMC_P', pn='RG2012P-4991-B-T5', block=B)
 R('R26', '4.99k 0.1%', 'HGND_Z', 'ZAMC_N', pn='RG2012P-4991-B-T5', block=B)
 C('C28', '1nF C0G', 'ZAMC_P', 'ZAMC_N', fp=C08, pn='C0805C102J5GACTU', desc='Same ~16 kHz pole as the 200 V channel', block=B)
-AMC('U5', 'AMC3330QDWERQ1', 'AMC3330QDWERQ1', 'Z_', 'HGND_Z', 'ZAMC_P', 'ZAMC_N', 'Z_OUTP', 'Z_OUTN', B)
+AMC('U5', 'AMC3330DWER', 'AMC3330DWER', 'Z_', 'HGND_Z', 'ZAMC_P', 'ZAMC_N', 'Z_OUTP', 'Z_OUTN', B)
 C('C29', '1nF', 'Z_DCDC_OUT', 'HGND_Z', pn='C0603C102K5RACTU', block=B)
 C('C30', '100nF', 'Z_DCDC_OUT', 'HGND_Z', pn='C0603C104K5RACAUTO', block=B)
 C('C31', '1uF', 'Z_DCDC_OUT', 'HGND_Z', pn='CGA3E1X7R1E105K080AC', block=B)
@@ -186,18 +190,18 @@ C('C45', '22uF', 'P12_F', 'HGND_Z', fp=C08, pn='CL21A226MAYNNNE', block=B)
 C('C46', '22uF', 'HGND_Z', 'N12_F', fp=C08, pn='CL21A226MAYNNNE', block=B)
 add('U7', 'IsoOpAmpShield:TPS7A4901DGN', 'TPS7A4901DGNR', HVSSOP,
     {'8': 'P12_F', '5': 'P12_F', '1': 'P11', '2': 'FB_P', '6': 'NR_P', '4': 'HGND_Z', '9': 'HGND_Z'},
-    'TPS7A4901DGNR', '+11 V (1.185*(1+82.5/10) = 10.96 V)', block=B)
-R('R29', '82.5k', 'P11', 'FB_P', pn='ERJ-6ENF8252V', block=B)
+    'TPS7A4901DGNR', '+11 V (1.185*(1+82/10) = 10.90 V)', block=B)
+R('R29', '82k', 'P11', 'FB_P', pn='0805W8F8202T5E', block=B)
 R('R30', '10k', 'FB_P', 'HGND_Z', pn='ERJ-6ENF1002V', block=B)
-C('C47', '10nF C0G', 'P11', 'FB_P', pn='C0603C103J5GACTU', desc='CFF', block=B)
+C('C47', '10nF', 'P11', 'FB_P', pn='C0603C103K5RACTU', desc='CFF', block=B)
 C('C48', '10nF', 'NR_P', 'HGND_Z', pn='C0603C103K5RACTU', desc='CNR/SS', block=B)
 C('C49', '22uF', 'P11', 'HGND_Z', fp=C08, pn='CL21A226MAYNNNE', block=B)
 add('U8', 'IsoOpAmpShield:TPS7A3001DGN', 'TPS7A3001DGNR', HVSSOP,
     {'8': 'N12_F', '5': 'N12_F', '1': 'N11', '2': 'FB_N', '6': 'NR_N', '4': 'HGND_Z', '9': 'HGND_Z'},
-    'TPS7A3001DGNR', '-11 V (-1.176*(1+82.5/10) = -10.88 V)', block=B)
-R('R31', '82.5k', 'N11', 'FB_N', pn='ERJ-6ENF8252V', block=B)
+    'TPS7A3001DGNR', '-11 V (-1.176*(1+82/10) = -10.82 V)', block=B)
+R('R31', '82k', 'N11', 'FB_N', pn='0805W8F8202T5E', block=B)
 R('R32', '10k', 'FB_N', 'HGND_Z', pn='ERJ-6ENF1002V', block=B)
-C('C50', '10nF C0G', 'N11', 'FB_N', pn='C0603C103J5GACTU', desc='CFF', block=B)
+C('C50', '10nF', 'N11', 'FB_N', pn='C0603C103K5RACTU', desc='CFF', block=B)
 C('C51', '10nF', 'NR_N', 'HGND_Z', pn='C0603C103K5RACTU', desc='CNR/SS', block=B)
 C('C52', '22uF', 'HGND_Z', 'N11', fp=C08, pn='CL21A226MAYNNNE', block=B)
 

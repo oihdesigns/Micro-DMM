@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "LightBoard")(type "KiCad")(uri "${KIPRJMOD}/LightBoard.kicad_sym")(options "")(descr "Project symbols: MIC4801, Samsung LH351D"))
+)

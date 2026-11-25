@@ -1,0 +1,50 @@
+{
+  "spec": 1,
+  "title": "IsoOpAmpShield - isolated measurement shield for Arduino R3 headers",
+  "ship_to": "US",
+  "parts": [
+    {
+      "name": "IsoOpAmpShield",
+      "kind": "pcb",
+      "qty": 5,
+      "options": {
+        "layers": 4,
+        "thickness_mm": 1.6,
+        "color": "green",
+        "finish": "hasl_lead_free",
+        "copper_oz": 1
+      },
+      "features": {
+        "width_mm": 101.6,
+        "height_mm": 53.34,
+        "min_drill_mm": 0.3
+      },
+      "files": {
+        "gerbers": "IsoOpAmpShield/gerbers",
+        "bom": "IsoOpAmpShield/bom.csv",
+        "positions": "IsoOpAmpShield/positions.csv"
+      },
+      "assemble": 5
+    }
+  ],
+  "files": {
+    "IsoOpAmpShield/bom.csv": "16a4b0e429c3afc82c15f23f569e1fc7e8310611acdb5116bf643afa67d18173",
+    "IsoOpAmpShield/gerbers/IsoOpAmpShield-B_Cu.gbl": "7db2554702f2aa5a975ba875fda93bfad3faa072d75c32317c796336aeefd04b",
+    "IsoOpAmpShield/gerbers/IsoOpAmpShield-B_Mask.gbs": "d78f11ca265e2fb9b6cd6ba3a109c4e69951bcbc0ee4c7a098664b8c15d623f0",
+    "IsoOpAmpShield/gerbers/IsoOpAmpShield-B_Paste.gbp": "9e6480c8cbc1d48699881e8ce83938e5f1ea93fc923f3a8c1dc026b42de5defe",
+    "IsoOpAmpShield/gerbers/IsoOpAmpShield-B_Silkscreen.gbo": "bb2c7d06fed99a7133df1c39d3d840c41cb8e720d369e48d17b5e6f19da8cc87",
+    "IsoOpAmpShield/gerbers/IsoOpAmpShield-Edge_Cuts.gm1": "89f274b7792aa27602403cde173008be558f097fff473e38714f00616711458d",
+    "IsoOpAmpShield/gerbers/IsoOpAmpShield-F_Cu.gtl": "e13c7de0e7822ec45a0207f6455b18db22c2c8323787bd5e45fca8b5320e93b6",
+    "IsoOpAmpShield/gerbers/IsoOpAmpShield-F_Mask.gts": "86f5a4a9f2132f02ebc9bc44ab9a63e7a61d843fd53b4305447cd547080258eb",
+    "IsoOpAmpShield/gerbers/IsoOpAmpShield-F_Paste.gtp": "cb58cf408332249fac16d33054b7be3254f3124161d6e0b00ae58446139c8624",
+    "IsoOpAmpShield/gerbers/IsoOpAmpShield-F_Silkscreen.gto": "4bbf546c66dc9a3517417a853968be223d18b7734408aadd858f1dc245507c9a",
+    "IsoOpAmpShield/gerbers/IsoOpAmpShield-In1_Cu.g1": "8f317f7e8d11ab5052cf8acb08d2a250704078422b7796d2deb4e607f1b6a9b2",
+    "IsoOpAmpShield/gerbers/IsoOpAmpShield-In2_Cu.g2": "d7edc2aae2fc7de4d2d62395193c25f0610f76582ed1cbb0b0aec59cd37e1568",
+    "IsoOpAmpShield/gerbers/IsoOpAmpShield-NPTH-drl_map.gbr": "6e5208865d89f00e70364b1b07def6e41a18496cefb5676fdc41247623232e79",
+    "IsoOpAmpShield/gerbers/IsoOpAmpShield-NPTH.drl": "eaac07f6984925d899548ba7d98be6c39dbad02a4ff9c1b9a0712ad27b08dad8",
+    "IsoOpAmpShield/gerbers/IsoOpAmpShield-PTH-drl_map.gbr": "294aed1dcfa635b05900df480768a2eef65c3075ac06ed6d7e43fd3a5042580a",
+    "IsoOpAmpShield/gerbers/IsoOpAmpShield-PTH.drl": "4e42e92a5e06bd50010787188dd0c10fe352b15b2050059d4997fdcedc08659e",
+    "IsoOpAmpShield/gerbers/IsoOpAmpShield-job.gbrjob": "425d997f5951645ab676cc58fc53a6e0d2b88bd621de67910819dc31ec7f3996",
+    "IsoOpAmpShield/positions.csv": "57f105778c85123ab5158f22833305209662ffb36760921502dc66ea9d5130d0"
+  }
+}

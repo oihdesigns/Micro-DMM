@@ -1,0 +1,158 @@
+{
+    "$schema": "https://schemas.kicad.org/drc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-11-22T08:50:54",
+    "ignored_checks": [
+        {
+            "description": "Footprint has no courtyard defined",
+            "key": "missing_courtyard"
+        },
+        {
+            "description": "Track endpoint not centered on via",
+            "key": "track_not_centered_on_via"
+        },
+        {
+            "description": "Tuning profile track geometries",
+            "key": "tuning_profile_track_geometries"
+        },
+        {
+            "description": "Footprint doesn't match symbol's footprint filters",
+            "key": "footprint_filters_mismatch"
+        },
+        {
+            "description": "Footprint component type doesn't match footprint pads",
+            "key": "footprint_type_mismatch"
+        }
+    ],
+    "included_severities": [
+        "error",
+        "warning",
+        "exclusion"
+    ],
+    "kicad_version": "10.99.0",
+    "schematic_parity": [],
+    "source": "trial2.kicad_pcb",
+    "unconnected_items": [],
+    "violations": [
+        {
+            "description": "Footprint 'TerminalBlock_RND_205-00232_1x02_P5.08mm_Horizontal' does not match copy in library 'TerminalBlock_RND'",
+            "items": [
+                {
+                    "description": "Footprint J3",
+                    "pos": {
+                        "x": 191.8,
+                        "y": 105.2
+                    },
+                    "uuid": "434b81bf-e67d-5475-bf90-6c0f3fb42837"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'IsoOpAmpShield'",
+            "items": [
+                {
+                    "description": "Footprint H4",
+                    "pos": {
+                        "x": 198.1,
+                        "y": 149.84
+                    },
+                    "uuid": "49e998fd-a5c9-48bb-b13d-01de4b296233"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "Footprint 'TerminalBlock_RND_205-00232_1x02_P5.08mm_Horizontal' does not match copy in library 'TerminalBlock_RND'",
+            "items": [
+                {
+                    "description": "Footprint J5",
+                    "pos": {
+                        "x": 160.0,
+                        "y": 105.2
+                    },
+                    "uuid": "4ba5ebed-0e05-5896-895d-4899b1b4f4f6"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'IsoOpAmpShield'",
+            "items": [
+                {
+                    "description": "Footprint H1",
+                    "pos": {
+                        "x": 103.5,
+                        "y": 103.5
+                    },
+                    "uuid": "797918ef-27f8-5155-9bba-da34fd94f18a"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'IsoOpAmpShield'",
+            "items": [
+                {
+                    "description": "Footprint H2",
+                    "pos": {
+                        "x": 198.1,
+                        "y": 103.5
+                    },
+                    "uuid": "7df430f0-a652-52ee-867d-0dda16768ba1"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'IsoOpAmpShield'",
+            "items": [
+                {
+                    "description": "Footprint PS1",
+                    "pos": {
+                        "x": 134.5,
+                        "y": 135.65
+                    },
+                    "uuid": "9331bf90-5084-5168-a53c-ad1afe679c86"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'IsoOpAmpShield'",
+            "items": [
+                {
+                    "description": "Footprint H3",
+                    "pos": {
+                        "x": 103.5,
+                        "y": 149.84
+                    },
+                    "uuid": "c0fa306f-cec8-5a48-84c9-f628b3650f58"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "Footprint 'TerminalBlock_RND_205-00232_1x02_P5.08mm_Horizontal' does not match copy in library 'TerminalBlock_RND'",
+            "items": [
+                {
+                    "description": "Footprint J4",
+                    "pos": {
+                        "x": 125.5,
+                        "y": 105.2
+                    },
+                    "uuid": "c7e0d9e9-534c-5970-9ddb-19daae2584d1"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        }
+    ]
+}

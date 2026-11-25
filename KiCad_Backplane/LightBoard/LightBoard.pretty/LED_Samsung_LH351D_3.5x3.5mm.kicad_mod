@@ -1,0 +1,203 @@
+(footprint "LED_Samsung_LH351D_3.5x3.5mm"
+	(version 20241229)
+	(generator "pcbnew")
+	(generator_version "9.0")
+	(layer "F.Cu")
+	(descr "Samsung LH351D 3535 high-power LED, land pattern per datasheet Rev 9.1 p.16; pad 1 = cathode, 2 = anode, 3 = isolated thermal pad")
+	(tags "LED 3535 Samsung LH351D")
+	(property "Reference" "REF**"
+		(at 0 -3 0)
+		(layer "F.SilkS")
+		(uuid "66daff2a-149a-57ac-b66a-a526b86d0dac")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(property "Value" "LH351D"
+		(at 0 3 0)
+		(layer "F.Fab")
+		(uuid "063122ce-2abe-597e-939a-ded2705d12cd")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(attr smd)
+	(fp_line
+		(start -1.75 -1.75)
+		(end 1.75 -1.75)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "5b9cebf1-7674-5119-b9dc-bf86d894a684")
+	)
+	(fp_line
+		(start 1.75 -1.75)
+		(end 1.75 1.75)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "18f37f55-dc81-50c4-842d-bd74c6bc6125")
+	)
+	(fp_line
+		(start 1.75 1.75)
+		(end -1.75 1.75)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "93a79d63-f68f-5951-b99e-df29f6891493")
+	)
+	(fp_line
+		(start -1.75 1.75)
+		(end -1.75 -1.75)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "b4d0ddda-7922-505e-907e-f7527fc902ea")
+	)
+	(fp_circle
+		(center 0 0)
+		(end 1.65 0)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "0d5a4a1e-ff21-5c1a-80f0-c3d7f4429f59")
+	)
+	(fp_line
+		(start -1.9 -1.9)
+		(end -1.9 -1)
+		(stroke
+			(width 0.15)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "790d835f-a320-5425-88bf-5ccd541d684b")
+	)
+	(fp_line
+		(start 1.9 -1.9)
+		(end 1.9 -1)
+		(stroke
+			(width 0.15)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "5dce9c0a-fb62-5314-bbce-043a4ada60e4")
+	)
+	(fp_line
+		(start -1.9 1.9)
+		(end -1.9 1)
+		(stroke
+			(width 0.15)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "dc5178ab-3e13-579b-b041-1ba7e8317f0d")
+	)
+	(fp_line
+		(start 1.9 1.9)
+		(end 1.9 1)
+		(stroke
+			(width 0.15)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "b2b95ebf-fa4f-5f53-a9ba-67f7206bd7ee")
+	)
+	(fp_line
+		(start -1.9 2.35)
+		(end 1.9 2.35)
+		(stroke
+			(width 0.15)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "e39247f1-f1b6-52b1-8991-8cd491abaf23")
+	)
+	(fp_line
+		(start -2.6 -2.6)
+		(end 2.6 -2.6)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "06db938e-efc6-5f8d-be8e-828271e1c043")
+	)
+	(fp_line
+		(start 2.6 -2.6)
+		(end 2.6 2.6)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "3f0e3310-444b-57c9-b4ad-a2cf62cb5311")
+	)
+	(fp_line
+		(start 2.6 2.6)
+		(end -2.6 2.6)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "f2465a91-7e9f-5af5-8a0f-ef3c5456b79b")
+	)
+	(fp_line
+		(start -2.6 2.6)
+		(end -2.6 -2.6)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "d5f74ab2-571a-5f45-8857-5693a3bc46aa")
+	)
+	(pad "2" smd rect
+		(at 0 -1.4)
+		(size 3.3 0.5)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(uuid "11ca3cc6-460c-51fd-b511-d194de7e15c3")
+	)
+	(pad "2" smd rect
+		(at 0 -1.85)
+		(size 0.5 0.4)
+		(layers "F.Cu" "F.Mask")
+		(uuid "e05d2daf-af20-5105-b6ad-499523dda51d")
+	)
+	(pad "1" smd rect
+		(at 0 1.4)
+		(size 3.3 0.5)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(uuid "0ee42cf2-2aa9-5a4f-a418-8a33324898cb")
+	)
+	(pad "1" smd rect
+		(at 0 1.85)
+		(size 0.5 0.4)
+		(layers "F.Cu" "F.Mask")
+		(uuid "5e575cd4-1f3d-56a3-ad72-0f62ba61c974")
+	)
+	(pad "3" smd rect
+		(at 0 0)
+		(size 3.3 1.3)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(uuid "36f48776-246d-56c9-821f-adce7b94ab88")
+	)
+	(embedded_fonts no)
+)

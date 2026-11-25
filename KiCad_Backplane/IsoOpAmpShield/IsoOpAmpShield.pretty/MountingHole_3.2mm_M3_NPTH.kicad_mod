@@ -1,10 +1,10 @@
-(footprint "MountingHole_3.2mm_M3_Giga"
+(footprint "MountingHole_3.2mm_M3_NPTH"
 	(version 20241229)
 	(generator "pcbnew")
 	(generator_version "9.0")
 	(layer "F.Cu")
-	(descr "M3 NPTH for Arduino Giga/Mega standoffs; courtyard = M3 pan head (5.5 mm) + 0.25 mm. Use NYLON hardware.")
-	(tags "mounting hole 3.2mm m3 giga")
+	(descr "M3 NPTH corner hole; courtyard = M3 pan head (5.5 mm) + 0.25 mm. Use NYLON hardware.")
+	(tags "mounting hole 3.2mm m3")
 	(property "Reference" "REF**" (at 0 -3.6 0) (layer "F.Fab") (effects (font (size 1 1) (thickness 0.15))))
 	(property "Value" "MountingHole" (at 0 3.6 0) (layer "F.Fab") (effects (font (size 1 1) (thickness 0.15))))
 	(property "Datasheet" "" (at 0 0 0) (layer "F.Fab") (hide yes) (effects (font (size 1.27 1.27) (thickness 0.15))))

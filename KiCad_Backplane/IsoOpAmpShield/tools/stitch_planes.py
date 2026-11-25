@@ -16,7 +16,7 @@ REGION = {  # allowed via area per plane net (KiCad mm), inset from zone edges
 HV = {'/VIN_P', '/VIN_N', '/V_MP', '/V_MN'}
 VIA_R = 0.3
 CLR = 0.2
-HOLES = [(113.97, 150.8), (166.04, 145.72), (196.52, 150.8)]
+HOLES = [(103.5, 103.5), (198.1, 103.5), (103.5, 149.84), (198.1, 149.84)]
 
 
 def mm(v):
@@ -43,7 +43,7 @@ def d_seg_box(ax, ay, bx, by, b, n=12):
     return min(d_pt_box(ax + (bx - ax) * t / n, ay + (by - ay) * t / n, b) for t in range(n + 1))
 
 
-def main():
+def main(refs=None):
     c = kipc.Client()
     pads = c.call('kiapi.common.commands.GetItems', {'header': {'document': DOC}, 'types': ['KOT_PCB_PAD']})['items']
     fps = c.call('kiapi.common.commands.GetItems', {'header': {'document': DOC}, 'types': ['KOT_PCB_FOOTPRINT']})['items']
@@ -51,6 +51,12 @@ def main():
     boxes = [(pad_box(p), p.get('net', {}).get('name', ''), p['id']['value']) for p in pads]
     placed = []  # (x, y, net)
     todo = [p for p in pads if p.get('net', {}).get('name') in REGION and p['type'] == 'PT_SMD']
+    if refs:
+        refof = {f['id']['value']: f['reference_field']['text']['text'].get('text', '') for f in fps}
+        todo = [p for p in todo if refof.get(p['parent']['value']) in refs]
+    for v in c.call('kiapi.common.commands.GetItems', {'header': {'document': DOC}, 'types': ['KOT_PCB_VIA']}).get('items', []):
+        x, y = mm(v['position'])
+        placed.append((x, y, v.get('net', {}).get('name', '')))
     created = 0
     fails = []
     cm = c.call('kiapi.common.commands.BeginCommit', {'header': {'document': DOC}})
@@ -135,4 +141,5 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    import sys
+    main(set(sys.argv[1:]) or None)

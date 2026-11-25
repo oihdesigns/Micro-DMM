@@ -1,0 +1,91 @@
+{
+  "spec": 1,
+  "title": "IsoOpAmpShield split into IsoHiZShield + IsoVIShield",
+  "ship_to": "US",
+  "parts": [
+    {
+      "name": "IsoHiZShield",
+      "kind": "pcb",
+      "qty": 5,
+      "options": {
+        "layers": 4,
+        "thickness_mm": 1.6,
+        "color": "green",
+        "finish": "hasl_lead_free",
+        "copper_oz": 1
+      },
+      "features": {
+        "width_mm": 56.5,
+        "height_mm": 53.34,
+        "min_drill_mm": 0.3
+      },
+      "files": {
+        "gerbers": "IsoHiZShield/gerbers",
+        "bom": "IsoHiZShield/bom.csv",
+        "positions": "IsoHiZShield/positions.csv"
+      },
+      "assemble": 5
+    },
+    {
+      "name": "IsoVIShield",
+      "kind": "pcb",
+      "qty": 5,
+      "options": {
+        "layers": 4,
+        "thickness_mm": 1.6,
+        "color": "green",
+        "finish": "hasl_lead_free",
+        "copper_oz": 1
+      },
+      "features": {
+        "width_mm": 68.58,
+        "height_mm": 53.34,
+        "min_drill_mm": 0.3
+      },
+      "files": {
+        "gerbers": "IsoVIShield/gerbers",
+        "bom": "IsoVIShield/bom.csv",
+        "positions": "IsoVIShield/positions.csv"
+      },
+      "assemble": 5
+    }
+  ],
+  "files": {
+    "IsoHiZShield/bom.csv": "eea676a8f912729ba6d74355f5f4cd737324be9666d0246d5d4f3762dd387fe7",
+    "IsoHiZShield/gerbers/IsoHiZShield-B_Cu.gbl": "1494ba2cd1eb656bb9d1f8f311e6385f945eb0e3e2948c6c29a7f300553bb389",
+    "IsoHiZShield/gerbers/IsoHiZShield-B_Mask.gbs": "9b9b553fe5dac4b4329edd962208441f32c53133696d9aed861a37ba77e307a4",
+    "IsoHiZShield/gerbers/IsoHiZShield-B_Paste.gbp": "99aa544c477c324eb9d5e4a7f74981c3f08dc19f517abb75baac73c0156346fc",
+    "IsoHiZShield/gerbers/IsoHiZShield-B_Silkscreen.gbo": "5451afcf33986867191c5b97ca11d6092626a6227d20a08a916aea4f248626e5",
+    "IsoHiZShield/gerbers/IsoHiZShield-Edge_Cuts.gm1": "f4adcf4f9b3785fb2d089c1c9ec0edc2530a989c062457e420acee2e2a1d8d76",
+    "IsoHiZShield/gerbers/IsoHiZShield-F_Cu.gtl": "5cff32f98c07892a0d6591284caa77caabae1606cffe5ea4aaa98db3c143ec54",
+    "IsoHiZShield/gerbers/IsoHiZShield-F_Mask.gts": "604dd7138536c0c5cce24c1acb676d942fd267af3ef5e0cfe9f2c97bcdf1cafa",
+    "IsoHiZShield/gerbers/IsoHiZShield-F_Paste.gtp": "1f3d6cb3f2af9297c8092a56c3285c9f51f57e79818b1745b8ecfc44e3d5bb96",
+    "IsoHiZShield/gerbers/IsoHiZShield-F_Silkscreen.gto": "34a46b473fc5468689b347c4dd1f3f8b1b72f1fa706ea70dd862d2d35296ca59",
+    "IsoHiZShield/gerbers/IsoHiZShield-In1_Cu.g1": "5e64dd3f378c0db46995bb441bd388c3958c06138041bb546c0442d0a92ecc5b",
+    "IsoHiZShield/gerbers/IsoHiZShield-In2_Cu.g2": "eb0ad1c8cc1380e35a604a431f3e19b24caae9def1f6f873e65c45dd3e766f79",
+    "IsoHiZShield/gerbers/IsoHiZShield-NPTH-drl_map.gbr": "7e5f369c530091d13635066162a55d84dc4642275c76378443c08b37138a9916",
+    "IsoHiZShield/gerbers/IsoHiZShield-NPTH.drl": "ea9e4932493c24e1758d309a3095492e5666d1cb0821b970a291c3724b149db6",
+    "IsoHiZShield/gerbers/IsoHiZShield-PTH-drl_map.gbr": "831b2c004e1ba001683f9acec93e0d506717949449a7ea258b6e2e788cf9bf97",
+    "IsoHiZShield/gerbers/IsoHiZShield-PTH.drl": "d3a16a9aa21a8bec154741bb12d3b710d03a512fafe7a8d0a8314a9161d54b23",
+    "IsoHiZShield/gerbers/IsoHiZShield-job.gbrjob": "5c2b8785795af6162ccf709e50cac4887a5af7218bfb6548814b450c7a9abc0b",
+    "IsoHiZShield/positions.csv": "3c6d4a0243d4432e8e9fb87737af0d6108d6859850b40c0aa839f734ceef201c",
+    "IsoVIShield/bom.csv": "3016e33279569f687fbd51ba391ae4fab8183d5c4c4e684fc18e8b949cb3e3d8",
+    "IsoVIShield/gerbers/IsoVIShield-B_Cu.gbl": "948ddde801adbb99482fa90a99a0e1b82ba781499f38dcfdc052b05d348af6da",
+    "IsoVIShield/gerbers/IsoVIShield-B_Mask.gbs": "5dbf41a8c5d3bbaeae2f5ac9fb2b2abd7ebdd2910053397d897dd851400e3727",
+    "IsoVIShield/gerbers/IsoVIShield-B_Paste.gbp": "e9bbb6146f3d25fbabfd86410fd86da38401c35d177dacbb58a8f5ff094fbf10",
+    "IsoVIShield/gerbers/IsoVIShield-B_Silkscreen.gbo": "9c82b2f33d41bd481a3946beac686da1915cb33a06611bb7bf0c0f8aeac45b80",
+    "IsoVIShield/gerbers/IsoVIShield-Edge_Cuts.gm1": "a25582978bb65fa1a385dbf1e0d144af520628b84f9b2118234b72d696136bb7",
+    "IsoVIShield/gerbers/IsoVIShield-F_Cu.gtl": "469ad40e07d52a4136bfb531f578be63c197236dd7aa1847c71ed62e598b66db",
+    "IsoVIShield/gerbers/IsoVIShield-F_Mask.gts": "92ff1aab7c2b60252af167571a48c335046839fb682029c181ac955ff2509108",
+    "IsoVIShield/gerbers/IsoVIShield-F_Paste.gtp": "21dd1c5b3efadeb210feefc8467ee42e61a678d1d456cc6d72c8a02f2bead323",
+    "IsoVIShield/gerbers/IsoVIShield-F_Silkscreen.gto": "443077cbe797cf2f938385ac5283771973e498a4ebc17da616fd17217b5bae83",
+    "IsoVIShield/gerbers/IsoVIShield-In1_Cu.g1": "8e3222636a83485561fe248e8bdef0404e7f8398820462c16ae47ea4f9d8d1e1",
+    "IsoVIShield/gerbers/IsoVIShield-In2_Cu.g2": "49f952b2bbd66b6b647d89ba7a446868948208b91490d8887d11640f3d46a6cd",
+    "IsoVIShield/gerbers/IsoVIShield-NPTH-drl_map.gbr": "20296375567f54d34244c9483c477d12f2d099e3d2cafb44b7baf07aef495ea6",
+    "IsoVIShield/gerbers/IsoVIShield-NPTH.drl": "f7297b78684cdeb0fdc7f8721ef7a30eaefc9a5af902afa0b0b2341b4b90159f",
+    "IsoVIShield/gerbers/IsoVIShield-PTH-drl_map.gbr": "8df32bfa462e4e7b90c7aeee343845da5e63b6a5de136a1cbc66019b5ac5c417",
+    "IsoVIShield/gerbers/IsoVIShield-PTH.drl": "1385214240c014456856deddc7be27c16932912650f78ea8c54a817c4c7087e5",
+    "IsoVIShield/gerbers/IsoVIShield-job.gbrjob": "65c1caf9160c8bd132f0fc12d001529a3f4a9fb1c7308ea535b02099df985109",
+    "IsoVIShield/positions.csv": "e8c287cbeb52e0e38e56218c094797e05874daf2d8851b98126354e5a161b9d3"
+  }
+}

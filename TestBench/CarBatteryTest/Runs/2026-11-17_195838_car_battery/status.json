@@ -1,0 +1,37 @@
+{
+  "phase": "finished",
+  "updated": "2026-11-18 12:05:19",
+  "ah_in": 15.567987958694735,
+  "ah_out": 9.017057956046918,
+  "wh_in": 214.64821735221912,
+  "wh_out": 108.00532865528967,
+  "notes": {
+    "ah_rated": 65.0,
+    "charge_t_bulk_h": 0.10882960438728333,
+    "charge_end": {
+      "reason": "current 0.626 A below 0.65 A for 10 min",
+      "hours": 4.547193190190527,
+      "final_i": 0.6257969999999999,
+      "ah_in_total": 5.618050654950965
+    },
+    "rest1_ocv": 12.510545,
+    "ir_full_r_slope_mohm": 18.277157828883855,
+    "ir_recover_ocv": 12.494378800000002,
+    "discharge": {
+      "reason": "battery reached 11.749 V after 9.00 Ah",
+      "ah": 9.0026463131381,
+      "amps": 3.25,
+      "hours": 2.7660778973499935,
+      "v_end_loaded": 11.749319
+    },
+    "rest2_ocv": 12.116767999999999,
+    "recharge_t_bulk_h": 1.3567321619060304,
+    "recharge_end": {
+      "reason": "current 0.622 A below 0.65 A for 10 min",
+      "hours": 3.4028766579098173,
+      "final_i": 0.622416,
+      "ah_in_total": 15.567987958694735
+    }
+  },
+  "last": null
+}

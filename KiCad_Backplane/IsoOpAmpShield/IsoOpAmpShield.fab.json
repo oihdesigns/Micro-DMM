@@ -1,0 +1,18 @@
+{
+  "kind": "pcb",
+  "name": "IsoOpAmpShield",
+  "source": "IsoOpAmpShield.kicad_pcb",
+  "qty": 5,
+  "options": {
+    "layers": 4,
+    "thickness_mm": 1.6,
+    "color": "green",
+    "finish": "hasl_lead_free",
+    "copper_oz": 1
+  },
+  "features": {
+    "width_mm": 101.6,
+    "height_mm": 53.34,
+    "min_drill_mm": 0.3
+  }
+}

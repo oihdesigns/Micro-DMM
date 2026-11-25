@@ -54,7 +54,8 @@ def is_old(blk):
         return True
     if blk.startswith('(gr_text') and any(t in blk for t in ('"+/-200V MAX"', '"HI-Z +/-10V"', '"CURRENT 10m"',
                                                              '"ISOLATION BARRIER - NO COPPER"', '"VDD 3V3|5V"', '"RG"',
-                                                             '"HI-Z 10V"', '"I 10 mOhm"')):
+                                                             '"HI-Z 10V"', '"I 10 mOhm"', '"10 mOhm"',
+                                                             '"IsoOpAmpShield rev A"', '"IsoOpAmpShield rev B"')):
         return True
     return False
 
@@ -81,9 +82,10 @@ for y in (127.5, 134.5):
     for x0, x1 in [(100.5, 107.9), (119.1, 131.5), (142.6, 166.4), (177.6, 186.4), (197.6, 201.1)]:
         new += gl(x0, y, x1, y)
 new += gt('ISOLATION BARRIER - NO COPPER', 154.4, 131.0, 0.8)
-new += gt('+/-200V MAX', 109.5, 102.4, 0.9)
+new += gt('+/-200V MAX', 112.4, 102.4, 0.8)
 new += gt('HI-Z 10V', 164.0, 104.0, 0.8, 90)
-new += gt('I 10 mOhm', 186.4, 105.2, 0.8, 90)
+new += gt('10 mOhm', 200.3, 109.4, 0.8, 90)
+new += gt('IsoOpAmpShield rev B', 116.0, 151.6, 1.0)
 new += gt('VDD 3V3|5V', 130.5, 143.9, 0.8)
 new += gt('RG', 159.9, 123.3, 0.8)
 i = s.rindex('\t(embedded_fonts')
@@ -100,5 +102,10 @@ for ref in ('J3', 'J4', 'J5', 'U3', 'U4', 'R20', 'JP1'):
 
 # 3. PS1 'ISO OUT' / 'IN' footprint text clear of the pads
 s = s.replace('(fp_text user "ISO OUT"\n\t\t\t(at 11.7 1.52 ', '(fp_text user "ISO OUT"\n\t\t\t(at 10.4 1.52 ')
+# 4. title block: generic R3 shield, rev B
+s = re.sub(r'\(rev "[A-Z]"\)', '(rev "B")', s, count=1)
+s = re.sub(r'\(date "[0-9-]+"\)', '(date "2026-11-21")', s, count=1)
+s = s.replace('Arduino Giga R1 shield: isolated current / +-200 V / Hi-Z channels',
+              'Arduino R3-header shield: isolated current / +-200 V / Hi-Z channels')
 open(PCB, 'w', encoding='utf-8', newline='').write(s)
 print('ok')

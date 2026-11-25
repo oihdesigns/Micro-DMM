@@ -1,0 +1,19 @@
+{
+  "kind": "pcb",
+  "name": "IsoVIShield",
+  "source": "IsoVIShield.kicad_pcb",
+  "qty": 5,
+  "order": false,
+  "options": {
+    "layers": 4,
+    "thickness_mm": 1.6,
+    "color": "green",
+    "finish": "hasl_lead_free",
+    "copper_oz": 1
+  },
+  "features": {
+    "width_mm": 68.58,
+    "height_mm": 53.34,
+    "min_drill_mm": 0.3
+  }
+}

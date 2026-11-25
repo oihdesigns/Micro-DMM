@@ -1,11 +1,11 @@
 """Generate IsoOpAmpShield.kicad_pcb (placement, nets, outline, zones, isolation keepouts) from design.py.
 
-Board = Arduino Mega/Giga outline, 101.6 x 53.34 mm, KiCad origin of the board's top-left corner at (100,100).
+Board = 101.6 x 53.34 mm (Mega-size), R3 header positions (fits UNO-R3/Mega/Giga/Due), KiCad origin of the board's top-left corner at (100,100).
 Board coords: X from the left edge (USB side), Y up from the bottom edge.  KiCad: x = 100 + X, y = 153.34 - Y.
-Low-voltage side = bottom strip with the Giga POWER and A0-A7 headers.  Isolated islands along the top:
+Low-voltage side = bottom strip with only the header pins used (3V3/5V/GND/GND, A0-A6).  Isolated islands along the top:
     V200 x 100.3-127, HI-Z x 131-179, CURRENT x 183-201.3.
 Barrier band y 127.5-134.5 under every AMC (pad rows at y 126.35 / 135.65) and the CCG3.
-No through-hole parts left of x=118 (Giga USB-A/USB-C sit under that corner).
+No through-hole parts left of x=118 (host USB connectors sit under that corner). M3 holes in all four corners.
 
 Routing is NOT done here (see route_ipc.py); this script only (re)builds placement + zones.
 """
@@ -38,12 +38,13 @@ def B(Xb, Yb):
 
 # ------------------------------------------------------------------ placement  ref: (x, y, rot)
 P = {}
-# --- Giga headers & holes (Mega R3 geometry)
-P['J1'] = (*B(27.94, 2.54), 90)     # POWER: NC IOREF RESET 3V3 5V GND GND VIN, pins go +x
-P['J2'] = (*B(50.80, 2.54), 90)     # A0..A7
-P['H1'] = (*B(13.97, 2.54), 0)
-P['H2'] = (*B(66.04, 7.62), 0)
-P['H3'] = (*B(96.52, 2.54), 0)
+# --- R3 headers (only used pins) & corner holes
+P['J1'] = (*B(35.56, 2.54), 90)     # 1x04 = R3 power pins 4-7: 3V3 5V GND GND, pins go +x
+P['J2'] = (*B(50.80, 2.54), 90)     # 1x07 = A0..A6 (A6 = ISO_FAULT, Mega-size hosts only)
+P['H1'] = (103.5, 103.5, 0)
+P['H2'] = (198.1, 103.5, 0)
+P['H3'] = (103.5, 149.84, 0)
+P['H4'] = (198.1, 149.84, 0)
 # --- AMCs straddling the barrier (rot 270: pins 1-8 = high side on top row)
 P['U2'] = (113.5, 131.0, 270)
 P['U5'] = (172.0, 131.0, 270)
@@ -90,11 +91,11 @@ P['C19'] = (113.6, 117.6, 0)
 P['C20'] = (113.6, 114.6, 0)
 
 # --- current island (x 183-201.3)
-P['J3'] = (196.5, 105.2, 180)          # pin1 I_SHP x196.5, pin2 I_SHN x191.42
-P['R2'] = (194.0, 112.2, 0)            # pad1 I_SHN (x191.6), pad2 I_SHP (x196.4)
-P['FB1'] = (196.4, 116.0, 270)
-P['FB2'] = (191.6, 116.0, 270)
-P['FB3'] = (189.6, 116.0, 270)
+P['J3'] = (191.8, 105.2, 180)          # pin1 I_SHP x191.8, pin2 I_SHN x186.72 (clear of the H2 corner hole)
+P['R2'] = (189.3, 112.2, 0)            # pad1 I_SHN (x186.9), pad2 I_SHP (x191.7)
+P['FB1'] = (191.7, 116.0, 270)
+P['FB2'] = (186.9, 116.0, 270)
+P['FB3'] = (185.0, 116.0, 270)
 P['R3'] = (193.4, 119.4, 180)
 P['R4'] = (188.6, 119.4, 180)
 P['C4'] = (189.46, 123.9, 180)
@@ -311,7 +312,7 @@ def gline(x0, y0, x1, y1, layer='F.SilkS', w=0.15):
 HEADER = r'''(kicad_pcb (version 20241229) (generator "pcbnew") (generator_version "9.0")
  (general (thickness 1.6) (legacy_teardrops no))
  (paper "A4")
- (title_block (title "IsoOpAmpShield") (date "2026-11-07") (rev "A") (company "OIH Designs") (comment 1 "Arduino Giga R1 shield: isolated current / +-200 V / Hi-Z channels"))
+ (title_block (title "IsoOpAmpShield") (date "2026-11-07") (rev "B") (company "OIH Designs") (comment 1 "Arduino R3-header shield: isolated current / +-200 V / Hi-Z channels"))
  (layers
   (0 "F.Cu" signal) (4 "In1.Cu" signal) (6 "In2.Cu" signal) (2 "B.Cu" signal)
   (9 "F.Adhes" user "F.Adhesive") (11 "B.Adhes" user "B.Adhesive") (13 "F.Paste" user) (15 "B.Paste" user)
@@ -357,8 +358,8 @@ def build():
     for n, (xa, xb) in ISL.items():
         items.append(zone(n, netcode[n], L4, rect_pts(max(xa, X0 + m), Y0 + m, min(xb, X0 + W - m), BAND[0])))
     # shunt current path: J3 pin -> R2 pad pours on F/B (Kelvin taps FB1/FB2 are routed thin from R2 pads)
-    items.append(zone('I_SHP', netcode['I_SHP'], ['F.Cu', 'B.Cu'], rect_pts(195.0, 101.0, 198.6, 113.5), prio=2))
-    items.append(zone('I_SHN', netcode['I_SHN'], ['F.Cu', 'B.Cu'], rect_pts(189.6, 101.0, 193.0, 113.5), prio=2))
+    items.append(zone('I_SHP', netcode['I_SHP'], ['F.Cu', 'B.Cu'], rect_pts(190.1, 101.0, 193.5, 113.5), prio=2))
+    items.append(zone('I_SHN', netcode['I_SHN'], ['F.Cu', 'B.Cu'], rect_pts(185.2, 101.0, 188.5, 113.5), prio=2))
     # isolation keepouts
     items.append(keepout('ISO_BARRIER', rect_pts(X0, BAND[0], X0 + W, BAND[1])))
     items.append(keepout('GAP_V_Z', rect_pts(127.0, Y0, 131.0, BAND[0])))

@@ -1,0 +1,4 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "LightBoard")(type "KiCad")(uri "${KIPRJMOD}/LightBoard.pretty")(options "")(descr "Project footprints: Samsung LH351D 3535"))
+)

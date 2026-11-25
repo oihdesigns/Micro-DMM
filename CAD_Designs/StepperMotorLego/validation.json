@@ -1,0 +1,51 @@
+{
+  "mount": {
+    "valid": true,
+    "solids": 1,
+    "volume_mm3": 17989.641564518388,
+    "triangles": 19888,
+    "closed_mesh": true
+  },
+  "Fit_Test_4p70": {
+    "valid": true,
+    "solids": 1,
+    "volume_mm3": 1100.6425346535418,
+    "triangles": 2028,
+    "closed_mesh": true
+  },
+  "Fit_Test_4p80": {
+    "valid": true,
+    "solids": 1,
+    "volume_mm3": 1094.3373581977862,
+    "triangles": 2028,
+    "closed_mesh": true
+  },
+  "Fit_Test_4p90": {
+    "valid": true,
+    "solids": 1,
+    "volume_mm3": 1087.9002348505815,
+    "triangles": 2028,
+    "closed_mesh": true
+  },
+  "Fit_Test_5p00": {
+    "valid": true,
+    "solids": 1,
+    "volume_mm3": 1081.3311646119244,
+    "triangles": 2028,
+    "closed_mesh": true
+  },
+  "Fit_Test_5p10": {
+    "valid": true,
+    "solids": 1,
+    "volume_mm3": 1074.6301474818179,
+    "triangles": 2028,
+    "closed_mesh": true
+  },
+  "Fit_Test_5p20": {
+    "valid": true,
+    "solids": 1,
+    "volume_mm3": 1067.7971834602597,
+    "triangles": 2028,
+    "closed_mesh": true
+  }
+}

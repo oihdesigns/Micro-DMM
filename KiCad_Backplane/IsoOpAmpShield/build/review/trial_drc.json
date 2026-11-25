@@ -1,0 +1,251 @@
+{
+    "$schema": "https://schemas.kicad.org/drc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-11-21T21:27:20",
+    "ignored_checks": [
+        {
+            "description": "Footprint has no courtyard defined",
+            "key": "missing_courtyard"
+        },
+        {
+            "description": "Track endpoint not centered on via",
+            "key": "track_not_centered_on_via"
+        },
+        {
+            "description": "Tuning profile track geometries",
+            "key": "tuning_profile_track_geometries"
+        },
+        {
+            "description": "Footprint doesn't match symbol's footprint filters",
+            "key": "footprint_filters_mismatch"
+        },
+        {
+            "description": "Footprint component type doesn't match footprint pads",
+            "key": "footprint_type_mismatch"
+        }
+    ],
+    "included_severities": [
+        "error",
+        "warning",
+        "exclusion"
+    ],
+    "kicad_version": "10.99.0",
+    "schematic_parity": [],
+    "source": "trial.kicad_pcb",
+    "unconnected_items": [],
+    "violations": [
+        {
+            "description": "The current configuration does not include the footprint library 'IsoOpAmpShield'",
+            "items": [
+                {
+                    "description": "Footprint H4",
+                    "pos": {
+                        "x": 198.1,
+                        "y": 149.84
+                    },
+                    "uuid": "49e998fd-a5c9-48bb-b13d-01de4b296233"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'IsoOpAmpShield'",
+            "items": [
+                {
+                    "description": "Footprint H1",
+                    "pos": {
+                        "x": 103.5,
+                        "y": 103.5
+                    },
+                    "uuid": "797918ef-27f8-5155-9bba-da34fd94f18a"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'IsoOpAmpShield'",
+            "items": [
+                {
+                    "description": "Footprint H2",
+                    "pos": {
+                        "x": 198.1,
+                        "y": 103.5
+                    },
+                    "uuid": "7df430f0-a652-52ee-867d-0dda16768ba1"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'IsoOpAmpShield'",
+            "items": [
+                {
+                    "description": "Footprint PS1",
+                    "pos": {
+                        "x": 134.5,
+                        "y": 135.65
+                    },
+                    "uuid": "9331bf90-5084-5168-a53c-ad1afe679c86"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "The current configuration does not include the footprint library 'IsoOpAmpShield'",
+            "items": [
+                {
+                    "description": "Footprint H3",
+                    "pos": {
+                        "x": 103.5,
+                        "y": 149.84
+                    },
+                    "uuid": "c0fa306f-cec8-5a48-84c9-f628b3650f58"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_issues"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "Rectangle of PS1 on F.Silkscreen",
+                    "pos": {
+                        "x": 131.72,
+                        "y": 120.73
+                    },
+                    "uuid": "b084aa04-34ef-4834-b4cb-7549e8e3e6f7"
+                },
+                {
+                    "description": "PTH pad 6 [/N12_RAW] of PS1",
+                    "pos": {
+                        "x": 138.56,
+                        "y": 121.75
+                    },
+                    "uuid": "036fca61-ff61-59af-8c9b-0e400e9a9bb4"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "Rectangle of PS1 on F.Silkscreen",
+                    "pos": {
+                        "x": 131.72,
+                        "y": 120.73
+                    },
+                    "uuid": "b084aa04-34ef-4834-b4cb-7549e8e3e6f7"
+                },
+                {
+                    "description": "PTH pad 5 [/HGND_Z] of PS1",
+                    "pos": {
+                        "x": 136.02,
+                        "y": 121.75
+                    },
+                    "uuid": "dc5f33ce-664d-56a5-8bc7-36777877e06c"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "Rectangle of PS1 on F.Silkscreen",
+                    "pos": {
+                        "x": 131.72,
+                        "y": 120.73
+                    },
+                    "uuid": "b084aa04-34ef-4834-b4cb-7549e8e3e6f7"
+                },
+                {
+                    "description": "PTH pad 4 [/P12_RAW] of PS1",
+                    "pos": {
+                        "x": 133.48,
+                        "y": 121.75
+                    },
+                    "uuid": "cc4a4330-8747-58b8-8ff6-3dbdf8c580ce"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "Rectangle of PS1 on F.Silkscreen",
+                    "pos": {
+                        "x": 131.72,
+                        "y": 120.73
+                    },
+                    "uuid": "b084aa04-34ef-4834-b4cb-7549e8e3e6f7"
+                },
+                {
+                    "description": "PTH pad 3 [/GND] of PS1",
+                    "pos": {
+                        "x": 139.58,
+                        "y": 135.65
+                    },
+                    "uuid": "4b95f51d-b4dc-5167-a58d-a15e437a547d"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "Rectangle of PS1 on F.Silkscreen",
+                    "pos": {
+                        "x": 131.72,
+                        "y": 120.73
+                    },
+                    "uuid": "b084aa04-34ef-4834-b4cb-7549e8e3e6f7"
+                },
+                {
+                    "description": "PTH pad 2 [/GND] of PS1",
+                    "pos": {
+                        "x": 137.04,
+                        "y": 135.65
+                    },
+                    "uuid": "b78f862a-9930-5ae2-bbbd-3f70e83a85f6"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        },
+        {
+            "description": "Silkscreen clipped by solder mask",
+            "items": [
+                {
+                    "description": "Rectangle of PS1 on F.Silkscreen",
+                    "pos": {
+                        "x": 131.72,
+                        "y": 120.73
+                    },
+                    "uuid": "b084aa04-34ef-4834-b4cb-7549e8e3e6f7"
+                },
+                {
+                    "description": "PTH pad 1 [/P5_DC] of PS1",
+                    "pos": {
+                        "x": 134.5,
+                        "y": 135.65
+                    },
+                    "uuid": "09bd2961-dcb5-5228-842e-ca7a8863b1b6"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_over_copper"
+        }
+    ]
+}
